@@ -6,7 +6,8 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.rycalories.app.ai.AnalysisException
-import com.rycalories.app.ai.ClaudeMealAnalyzer
+import com.rycalories.app.ai.ModelState
+import com.rycalories.app.ai.OnDeviceMealAnalyzer
 import com.rycalories.app.data.AppSettings
 import com.rycalories.app.data.Meal
 import com.rycalories.app.data.MealAnalysis
@@ -42,6 +43,10 @@ data class DraftState(
 class MainViewModel(app: Application) : AndroidViewModel(app) {
     val repository = MealRepository(app)
     val settings = AppSettings(app)
+    private val analyzer = OnDeviceMealAnalyzer()
+
+    private val _modelState = MutableStateFlow<ModelState>(ModelState.Checking)
+    val modelState: StateFlow<ModelState> = _modelState.asStateFlow()
 
     private val _screen = MutableStateFlow<Screen>(Screen.Home)
     val screen: StateFlow<Screen> = _screen.asStateFlow()
@@ -54,6 +59,31 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch { repository.load() }
+        refreshModelState()
+    }
+
+    override fun onCleared() {
+        analyzer.close()
+        super.onCleared()
+    }
+
+    fun refreshModelState() {
+        viewModelScope.launch {
+            _modelState.value = ModelState.Checking
+            _modelState.value = analyzer.checkState()
+        }
+    }
+
+    fun downloadModel() {
+        if (_modelState.value is ModelState.Downloading) return
+        viewModelScope.launch {
+            _modelState.value = ModelState.Downloading(0, 0)
+            analyzer.download().collect { _modelState.value = it }
+            if (_modelState.value !is ModelState.Ready) {
+                // Re-check in case AICore finished in the background without reporting.
+                _modelState.value = analyzer.checkState()
+            }
+        }
     }
 
     fun navigate(to: Screen) {
@@ -109,8 +139,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _draft.update { it.copy(analyzing = true, error = null) }
         viewModelScope.launch {
             try {
-                val analyzer = ClaudeMealAnalyzer(settings.state.value.apiKey)
-                val analysis = analyzer.analyze(d.jpeg, d.description.ifBlank { null })
+                val analysis = analyzer.analyze(d.bitmap, d.description.ifBlank { null })
                 _draft.update { it.copy(analyzing = false, analysis = analysis, portionMultiplier = 1f) }
                 _screen.value = Screen.Result
             } catch (e: AnalysisException) {
@@ -165,8 +194,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun saveSettings(apiKey: String, goal: Int) {
-        settings.save(apiKey, goal)
+    fun saveSettings(goal: Int) {
+        settings.save(goal)
         _screen.value = Screen.Home
     }
 

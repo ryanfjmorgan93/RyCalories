@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -70,14 +71,14 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.rycalories.app.ai.ModelState
+import com.rycalories.app.ai.OnDeviceMealAnalyzer
 import com.rycalories.app.data.FoodItem
 import com.rycalories.app.data.Meal
 import kotlinx.coroutines.Dispatchers
@@ -113,6 +114,7 @@ private fun HomeScreen(vm: MainViewModel) {
     val meals by vm.repository.meals.collectAsStateWithLifecycle()
     val settings by vm.settings.state.collectAsStateWithLifecycle()
     val day by vm.selectedDay.collectAsStateWithLifecycle()
+    val modelState by vm.modelState.collectAsStateWithLifecycle()
 
     val dayMeals = remember(meals, day) {
         meals.filter { it.timestampMillis >= day && it.timestampMillis < day + MainViewModel.DAY_MS }
@@ -138,17 +140,12 @@ private fun HomeScreen(vm: MainViewModel) {
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
-            if (settings.apiKey.isBlank()) {
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp).clickable { vm.navigate(Screen.Settings) },
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-                ) {
-                    Text(
-                        "Tap here to add your Anthropic API key before logging meals.",
-                        modifier = Modifier.padding(16.dp),
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                    )
-                }
+            if (modelState !is ModelState.Ready) {
+                ModelStatusCard(
+                    state = modelState,
+                    onDownload = { vm.downloadModel() },
+                    onRetry = { vm.refreshModelState() },
+                )
             }
 
             DayHeader(
@@ -178,6 +175,63 @@ private fun HomeScreen(vm: MainViewModel) {
                         MealRow(meal) { vm.navigate(Screen.Detail(meal.id)) }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModelStatusCard(state: ModelState, onDownload: () -> Unit, onRetry: () -> Unit) {
+    val isError = state is ModelState.Unavailable
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isError) MaterialTheme.colorScheme.errorContainer
+            else MaterialTheme.colorScheme.secondaryContainer
+        ),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            when (state) {
+                ModelState.Checking -> {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(12.dp))
+                        Text("Checking the on-device model…")
+                    }
+                }
+                ModelState.Downloadable -> {
+                    Text("Gemini Nano needs a one-time download before it can look at your meals.", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "It runs entirely on this phone. Wi-Fi recommended.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Button(onClick = onDownload) { Text("Download model") }
+                }
+                is ModelState.Downloading -> {
+                    Text("Downloading Gemini Nano…", fontWeight = FontWeight.SemiBold)
+                    if (state.totalBytes > 0) {
+                        val frac = (state.downloadedBytes.toFloat() / state.totalBytes).coerceIn(0f, 1f)
+                        LinearProgressIndicator(progress = { frac }, modifier = Modifier.fillMaxWidth())
+                        Text(
+                            "${state.downloadedBytes / 1_000_000} / ${state.totalBytes / 1_000_000} MB",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    } else {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
+                }
+                is ModelState.Unavailable -> {
+                    Text("On-device model unavailable", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onErrorContainer)
+                    Text(state.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilledTonalButton(onClick = onRetry) {
+                            Icon(Icons.Default.Refresh, contentDescription = null)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Check again")
+                        }
+                    }
+                }
+                ModelState.Ready -> Unit
             }
         }
     }
@@ -283,6 +337,8 @@ private fun Thumbnail(path: String?, size: androidx.compose.ui.unit.Dp) {
 private fun AddMealScreen(vm: MainViewModel) {
     val context = LocalContext.current
     val draft by vm.draft.collectAsStateWithLifecycle()
+    val modelState by vm.modelState.collectAsStateWithLifecycle()
+    val modelReady = modelState is ModelState.Ready
 
     var pendingCaptureUri by remember { mutableStateOf<Uri?>(null) }
 
@@ -369,22 +425,30 @@ private fun AddMealScreen(vm: MainViewModel) {
                 Text(it, color = MaterialTheme.colorScheme.error)
             }
 
+            if (!modelReady) {
+                ModelStatusCard(
+                    state = modelState,
+                    onDownload = { vm.downloadModel() },
+                    onRetry = { vm.refreshModelState() },
+                )
+            }
+
             Button(
                 onClick = { vm.analyze() },
-                enabled = !draft.analyzing && (draft.jpeg != null || draft.description.isNotBlank()),
+                enabled = modelReady && !draft.analyzing && (draft.jpeg != null || draft.description.isNotBlank()),
                 modifier = Modifier.fillMaxWidth().height(56.dp),
             ) {
                 if (draft.analyzing) {
                     CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                     Spacer(Modifier.width(12.dp))
-                    Text("Asking Claude…")
+                    Text("Thinking on-device…")
                 } else {
                     Text("Estimate calories", fontSize = 16.sp)
                 }
             }
 
             Text(
-                "Photos are sent to Anthropic's API for analysis and stored only on this phone.",
+                "Analysis runs on this phone with Gemini Nano. Nothing is uploaded anywhere.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -622,9 +686,8 @@ private fun DetailScreen(vm: MainViewModel, mealId: String) {
 @Composable
 private fun SettingsScreen(vm: MainViewModel) {
     val current by vm.settings.state.collectAsStateWithLifecycle()
-    var apiKey by remember { mutableStateOf(current.apiKey) }
+    val modelState by vm.modelState.collectAsStateWithLifecycle()
     var goal by remember { mutableStateOf(current.dailyGoal.toString()) }
-    var showKey by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -641,21 +704,6 @@ private fun SettingsScreen(vm: MainViewModel) {
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             OutlinedTextField(
-                value = apiKey,
-                onValueChange = { apiKey = it },
-                label = { Text("Anthropic API key") },
-                placeholder = { Text("sk-ant-…") },
-                singleLine = true,
-                visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
-                trailingIcon = { TextButton(onClick = { showKey = !showKey }) { Text(if (showKey) "Hide" else "Show") } },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Text(
-                "Create a key at console.anthropic.com. It is stored only on this phone and sent only to api.anthropic.com.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            OutlinedTextField(
                 value = goal,
                 onValueChange = { goal = it.filter(Char::isDigit).take(5) },
                 label = { Text("Daily calorie goal") },
@@ -663,15 +711,28 @@ private fun SettingsScreen(vm: MainViewModel) {
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth(),
             )
-            Text(
-                "Estimates come from ${com.rycalories.app.ai.ClaudeMealAnalyzer.MODEL}. Each meal costs a few cents of API usage.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
             Button(
-                onClick = { vm.saveSettings(apiKey, goal.toIntOrNull() ?: 2000) },
+                onClick = { vm.saveSettings(goal.toIntOrNull() ?: 2000) },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
             ) { Text("Save") }
+
+            HorizontalDivider()
+
+            Text("Model", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Estimates come from ${OnDeviceMealAnalyzer.MODEL_NAME}, the same model Galaxy AI uses. " +
+                    "It runs on the phone, works offline, and costs nothing.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            when (modelState) {
+                ModelState.Ready -> Text("Status: ready", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                else -> ModelStatusCard(
+                    state = modelState,
+                    onDownload = { vm.downloadModel() },
+                    onRetry = { vm.refreshModelState() },
+                )
+            }
         }
     }
 }

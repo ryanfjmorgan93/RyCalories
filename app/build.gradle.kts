@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.google.devtools.ksp")
 }
 
 android {
@@ -10,15 +11,15 @@ android {
 
     defaultConfig {
         applicationId = "com.rycalories.app"
-        minSdk = 26
+        // ML Kit GenAI (Gemini Nano via AICore) needs Android 12+.
+        minSdk = 31
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "2.0"
     }
 
     buildTypes {
         release {
-            // Keep reflection-heavy libraries (Jackson) intact; this is a personal sideloaded app.
             isMinifyEnabled = false
             signingConfig = signingConfigs.getByName("debug")
         }
@@ -40,13 +41,8 @@ android {
                 "META-INF/LICENSE*",
                 "META-INF/NOTICE*",
                 "META-INF/INDEX.LIST",
-                "META-INF/*.kotlin_module",
-                "META-INF/versions/9/module-info.class",
-                "META-INF/versions/**",
                 "META-INF/AL2.0",
                 "META-INF/LGPL2.1",
-                "META-INF/services/javax.annotation.processing.Processor",
-                "kotlin/**",
                 "**/module-info.class"
             )
         }
@@ -74,6 +70,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
     implementation("androidx.exifinterface:exifinterface:1.4.1")
 
-    // Official Anthropic Java SDK (works from Kotlin on Android API 26+).
-    implementation("com.anthropic:anthropic-java:2.61.0")
+    // On-device Gemini Nano through ML Kit's GenAI Prompt API. No API key, no cloud.
+    implementation("com.google.mlkit:genai-prompt:1.0.0-beta4")
+    // Generates the structured-output schema providers for @Generable classes.
+    ksp("com.google.mlkit:genai-schema-compiler:1.0.0-alpha1")
 }

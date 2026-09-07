@@ -31,7 +31,7 @@ data class FoodItem(
     }
 }
 
-/** What Claude returns for one meal, before the user confirms or tweaks it. */
+/** What the model returns for one meal, before the user confirms or tweaks it. */
 data class MealAnalysis(
     val mealName: String,
     val items: List<FoodItem>,

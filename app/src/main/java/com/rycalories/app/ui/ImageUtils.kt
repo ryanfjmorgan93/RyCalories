@@ -11,8 +11,8 @@ import java.io.File
 import java.io.FileOutputStream
 
 object ImageUtils {
-    /** Longest edge Claude sees. Larger images are downscaled server-side anyway. */
-    private const val MAX_EDGE = 1568
+    /** Longest edge handed to the on-device model. Keeps memory and inference time sane. */
+    private const val MAX_EDGE = 1024
 
     /** Decode a content Uri to a right-side-up bitmap no larger than [MAX_EDGE] on its longest edge. */
     fun loadScaled(context: Context, uri: Uri): Bitmap? {
