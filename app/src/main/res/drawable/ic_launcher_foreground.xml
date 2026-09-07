@@ -1,0 +1,25 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- plate -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,30 m-26,0 a26,26 0 1,1 52,0 a26,26 0 1,1 -52,0" />
+    <path
+        android:fillColor="#A5D6A7"
+        android:pathData="M54,30 m-18,0 a18,18 0 1,1 36,0 a18,18 0 1,1 -36,0" />
+    <!-- flame / calorie mark -->
+    <path
+        android:fillColor="#FF7043"
+        android:pathData="M54,17 C58,23 61,26 61,32 C61,36.5 57.5,40 54,40 C50.5,40 47,36.5 47,32 C47,29 48.5,27 50,25 C50,28 51.5,29.5 53,29.5 C53,25 53,21 54,17 Z" />
+    <!-- fork -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M20,62 h4 v14 h-4 z M26,62 h4 v14 h-4 z M32,62 h4 v14 h-4 z M20,76 h16 v6 h-6 v16 h-4 v-16 h-6 z" />
+    <!-- knife -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M78,62 c8,0 10,10 10,18 h-6 v18 h-4 z" />
+</vector>
