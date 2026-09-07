@@ -80,6 +80,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.rycalories.app.ai.GemmaMealAnalyzer
 import com.rycalories.app.ai.ModelState
 import com.rycalories.app.ai.OnDeviceMealAnalyzer
 import com.rycalories.app.data.FoodItem
@@ -118,6 +119,8 @@ private fun HomeScreen(vm: MainViewModel) {
     val settings by vm.settings.state.collectAsStateWithLifecycle()
     val day by vm.selectedDay.collectAsStateWithLifecycle()
     val modelState by vm.modelState.collectAsStateWithLifecycle()
+    val gemmaState by vm.gemmaState.collectAsStateWithLifecycle()
+    val gemmaReady = gemmaState is GemmaState.Ready
 
     val dayMeals = remember(meals, day) {
         meals.filter { it.timestampMillis >= day && it.timestampMillis < day + MainViewModel.DAY_MS }
@@ -143,11 +146,19 @@ private fun HomeScreen(vm: MainViewModel) {
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
-            if (modelState !is ModelState.Ready) {
+            if (modelState !is ModelState.Ready && !gemmaReady) {
                 ModelStatusCard(
                     state = modelState,
                     onDownload = { vm.downloadModel() },
                     onRetry = { vm.refreshModelState() },
+                    onSettings = { vm.navigate(Screen.Settings) },
+                )
+            } else if (modelState !is ModelState.Ready && gemmaReady) {
+                Text(
+                    "Using ${GemmaMealAnalyzer.MODEL_NAME}. Gemini Nano still unavailable.",
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
@@ -184,7 +195,7 @@ private fun HomeScreen(vm: MainViewModel) {
 }
 
 @Composable
-private fun ModelStatusCard(state: ModelState, onDownload: () -> Unit, onRetry: () -> Unit) {
+private fun ModelStatusCard(state: ModelState, onDownload: () -> Unit, onRetry: () -> Unit, onSettings: (() -> Unit)? = null) {
     val isError = state is ModelState.Unavailable
     Card(
         modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp),
@@ -239,6 +250,14 @@ private fun ModelStatusCard(state: ModelState, onDownload: () -> Unit, onRetry: 
                                 Text(if (showDetails) "Hide details" else "Details")
                             }
                         }
+                    }
+                    if (onSettings != null) {
+                        Text(
+                            "Plan B: import a Gemma 3n model file in Settings and the app will use that instead.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        TextButton(onClick = onSettings) { Text("Open Settings") }
                     }
                     if (showDetails && state.details.isNotBlank()) {
                         Text(
@@ -357,7 +376,13 @@ private fun AddMealScreen(vm: MainViewModel) {
     val context = LocalContext.current
     val draft by vm.draft.collectAsStateWithLifecycle()
     val modelState by vm.modelState.collectAsStateWithLifecycle()
-    val modelReady = modelState is ModelState.Ready
+    val gemmaState by vm.gemmaState.collectAsStateWithLifecycle()
+    val engine = when {
+        modelState is ModelState.Ready -> Engine.NANO
+        gemmaState is GemmaState.Ready -> Engine.GEMMA
+        else -> Engine.NONE
+    }
+    val modelReady = engine != Engine.NONE
 
     var pendingCaptureUri by remember { mutableStateOf<Uri?>(null) }
 
@@ -449,6 +474,7 @@ private fun AddMealScreen(vm: MainViewModel) {
                     state = modelState,
                     onDownload = { vm.downloadModel() },
                     onRetry = { vm.refreshModelState() },
+                    onSettings = { vm.navigate(Screen.Settings) },
                 )
             }
 
@@ -467,7 +493,10 @@ private fun AddMealScreen(vm: MainViewModel) {
             }
 
             Text(
-                "Analysis runs on this phone with Gemini Nano. Nothing is uploaded anywhere.",
+                when (engine) {
+                    Engine.GEMMA -> "Analysis runs on this phone with Gemma 3n. The first estimate takes longer while the model loads. Nothing is uploaded anywhere."
+                    else -> "Analysis runs on this phone with Gemini Nano. Nothing is uploaded anywhere."
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -706,7 +735,11 @@ private fun DetailScreen(vm: MainViewModel, mealId: String) {
 private fun SettingsScreen(vm: MainViewModel) {
     val current by vm.settings.state.collectAsStateWithLifecycle()
     val modelState by vm.modelState.collectAsStateWithLifecycle()
+    val gemmaState by vm.gemmaState.collectAsStateWithLifecycle()
     var goal by remember { mutableStateOf(current.dailyGoal.toString()) }
+    val pickModel = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) vm.importGemmaModel(uri)
+    }
 
     Scaffold(
         topBar = {
@@ -754,6 +787,45 @@ private fun SettingsScreen(vm: MainViewModel) {
                     onDownload = { vm.downloadModel() },
                     onRetry = { vm.refreshModelState() },
                 )
+            }
+
+            HorizontalDivider()
+
+            Text("Fallback model: Gemma 3n", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "If Gemini Nano stays unavailable, the app can run Google's open Gemma 3n model instead. " +
+                    "Download gemma-3n-E2B-it-int4.litertlm (about 3 GB) from huggingface.co/google/gemma-3n-E2B-it-litert-lm " +
+                    "in your browser (you'll need to log in and accept Google's licence once), then import it here. " +
+                    "It is copied into the app's private storage, so you can delete the download afterwards.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            when (val gs = gemmaState) {
+                GemmaState.None -> FilledTonalButton(onClick = { pickModel.launch(arrayOf("*/*")) }) { Text("Import model file") }
+                is GemmaState.Importing -> {
+                    Text("Copying model…", fontWeight = FontWeight.SemiBold)
+                    if (gs.totalBytes > 0) {
+                        LinearProgressIndicator(
+                            progress = { (gs.copiedBytes.toFloat() / gs.totalBytes).coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Text("${gs.copiedBytes / 1_000_000} / ${gs.totalBytes / 1_000_000} MB", style = MaterialTheme.typography.bodySmall)
+                    } else {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        Text("${gs.copiedBytes / 1_000_000} MB copied", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                is GemmaState.Ready -> {
+                    Text("Status: ready (${gs.sizeBytes / 1_000_000} MB)", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilledTonalButton(onClick = { pickModel.launch(arrayOf("*/*")) }) { Text("Replace") }
+                        TextButton(onClick = { vm.removeGemmaModel() }) { Text("Remove") }
+                    }
+                }
+                is GemmaState.Error -> {
+                    Text(gs.message, color = MaterialTheme.colorScheme.error)
+                    FilledTonalButton(onClick = { pickModel.launch(arrayOf("*/*")) }) { Text("Try another file") }
+                }
             }
         }
     }

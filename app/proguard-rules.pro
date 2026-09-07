@@ -19,3 +19,8 @@
 -keep class com.google.mlkit.genai.** { *; }
 -keep class com.google.android.gms.internal.mlkit_genai_** { *; }
 -dontwarn com.google.mlkit.genai.**
+
+# MediaPipe LLM Inference talks to native code via JNI and protobuf-lite; keep it whole.
+-keep class com.google.mediapipe.** { *; }
+-keep class com.google.protobuf.** { *; }
+-dontwarn com.google.mediapipe.**

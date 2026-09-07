@@ -5,7 +5,9 @@ import android.graphics.Bitmap
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import android.provider.OpenableColumns
 import com.rycalories.app.ai.AnalysisException
+import com.rycalories.app.ai.GemmaMealAnalyzer
 import com.rycalories.app.ai.ModelState
 import com.rycalories.app.ai.OnDeviceMealAnalyzer
 import com.rycalories.app.data.AppSettings
@@ -19,7 +21,18 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.UUID
+
+/** State of the imported Gemma 3n fallback model. */
+sealed interface GemmaState {
+    data object None : GemmaState
+    data class Importing(val copiedBytes: Long, val totalBytes: Long) : GemmaState
+    data class Ready(val path: String, val sizeBytes: Long) : GemmaState
+    data class Error(val message: String) : GemmaState
+}
+
+enum class Engine { NANO, GEMMA, NONE }
 
 sealed interface Screen {
     data object Home : Screen
@@ -48,6 +61,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _modelState = MutableStateFlow<ModelState>(ModelState.Checking)
     val modelState: StateFlow<ModelState> = _modelState.asStateFlow()
 
+    private var gemma: GemmaMealAnalyzer? = null
+    private val _gemmaState = MutableStateFlow<GemmaState>(GemmaState.None)
+    val gemmaState: StateFlow<GemmaState> = _gemmaState.asStateFlow()
+
+    /** Which engine a new analysis would use right now. Nano when AICore allows it, else Gemma. */
+    fun activeEngine(): Engine = when {
+        _modelState.value is ModelState.Ready -> Engine.NANO
+        _gemmaState.value is GemmaState.Ready -> Engine.GEMMA
+        else -> Engine.NONE
+    }
+
     private val _screen = MutableStateFlow<Screen>(Screen.Home)
     val screen: StateFlow<Screen> = _screen.asStateFlow()
 
@@ -60,11 +84,82 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     init {
         viewModelScope.launch { repository.load() }
         refreshModelState()
+        settings.state.value.gemmaModelPath?.let { path ->
+            val f = File(path)
+            if (f.exists() && f.length() > 0) {
+                _gemmaState.value = GemmaState.Ready(path, f.length())
+            } else {
+                settings.saveGemmaModelPath(null)
+            }
+        }
     }
 
     override fun onCleared() {
         analyzer.close()
+        gemma?.close()
         super.onCleared()
+    }
+
+    /** Copies a user-picked Gemma 3n .litertlm file into private storage so MediaPipe can open it by path. */
+    fun importGemmaModel(uri: Uri) {
+        if (_gemmaState.value is GemmaState.Importing) return
+        viewModelScope.launch {
+            val ctx = getApplication<Application>()
+            val dir = File(ctx.filesDir, "models").apply { mkdirs() }
+            val target = File(dir, GemmaMealAnalyzer.MODEL_FILE_NAME)
+            val tmp = File(dir, GemmaMealAnalyzer.MODEL_FILE_NAME + ".part")
+            _gemmaState.value = GemmaState.Importing(0, 0)
+            gemma?.close(); gemma = null
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val total = ctx.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { c ->
+                        if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else 0L
+                    } ?: 0L
+                    val free = dir.usableSpace
+                    if (total > 0 && free < total + 200L * 1024 * 1024) {
+                        error("Not enough free storage: need ${total / 1_000_000} MB, have ${free / 1_000_000} MB")
+                    }
+                    ctx.contentResolver.openInputStream(uri)?.use { input ->
+                        tmp.outputStream().use { out ->
+                            val buf = ByteArray(1 shl 20)
+                            var copied = 0L
+                            var lastReport = 0L
+                            while (true) {
+                                val n = input.read(buf)
+                                if (n < 0) break
+                                out.write(buf, 0, n)
+                                copied += n
+                                if (copied - lastReport > 8L * 1024 * 1024) {
+                                    lastReport = copied
+                                    _gemmaState.value = GemmaState.Importing(copied, total)
+                                }
+                            }
+                        }
+                    } ?: error("Could not open that file")
+                    if (tmp.length() < 100L * 1024 * 1024) error("That file is too small to be a Gemma model")
+                    target.delete()
+                    if (!tmp.renameTo(target)) error("Could not move the model into place")
+                    target
+                }
+            }
+            result.onSuccess { f ->
+                settings.saveGemmaModelPath(f.absolutePath)
+                _gemmaState.value = GemmaState.Ready(f.absolutePath, f.length())
+            }.onFailure { e ->
+                tmp.delete()
+                _gemmaState.value = GemmaState.Error(e.message ?: "Import failed")
+            }
+        }
+    }
+
+    fun removeGemmaModel() {
+        viewModelScope.launch {
+            gemma?.close(); gemma = null
+            val path = settings.state.value.gemmaModelPath
+            settings.saveGemmaModelPath(null)
+            _gemmaState.value = GemmaState.None
+            if (path != null) withContext(Dispatchers.IO) { File(path).delete() }
+        }
     }
 
     fun refreshModelState() {
@@ -139,7 +234,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _draft.update { it.copy(analyzing = true, error = null) }
         viewModelScope.launch {
             try {
-                val analysis = analyzer.analyze(d.bitmap, d.description.ifBlank { null })
+                val analysis = when (activeEngine()) {
+                    Engine.NANO -> analyzer.analyze(d.bitmap, d.description.ifBlank { null })
+                    Engine.GEMMA -> {
+                        val path = (gemmaState.value as GemmaState.Ready).path
+                        val g = gemma?.takeIf { it.modelPathMatches(path) } ?: GemmaMealAnalyzer(getApplication(), path).also {
+                            gemma?.close()
+                            gemma = it
+                        }
+                        g.analyze(d.bitmap, d.description.ifBlank { null })
+                    }
+                    Engine.NONE -> throw AnalysisException(
+                        "No on-device model is ready. Wait for Gemini Nano, or import a Gemma 3n model file in Settings."
+                    )
+                }
                 _draft.update { it.copy(analyzing = false, analysis = analysis, portionMultiplier = 1f) }
                 _screen.value = Screen.Result
             } catch (e: AnalysisException) {
@@ -195,7 +303,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun saveSettings(goal: Int) {
-        settings.save(goal)
+        settings.saveGoal(goal)
         _screen.value = Screen.Home
     }
 

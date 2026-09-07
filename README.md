@@ -7,6 +7,17 @@ Analysis runs **on the phone** using Gemini Nano through ML Kit's GenAI Prompt A
 the same on-device model Galaxy AI uses. There is no API key, no account, no cost, and no
 upload: photos and the meal log never leave the device.
 
+## Two engines, both on the phone
+
+1. **Gemini Nano** through ML Kit's Prompt API. Zero download for the app, but Google's
+   AICore service decides whether a given phone may use it. The app probes every model
+   variant AICore offers and shows a diagnostics report if none is available.
+2. **Gemma 3n** through MediaPipe's LLM Inference API, as a fallback. Google's open
+   multimodal model, imported once from a `.litertlm` file (about 3 GB) via Settings.
+   Works on any recent flagship regardless of AICore.
+
+The app uses Nano when AICore allows it and Gemma otherwise.
+
 ## Requirements
 
 - A phone on Google's supported list for Gemini Nano (Galaxy Z Fold 7/8, S25/S26 series,
@@ -18,11 +29,12 @@ upload: photos and the meal log never leave the device.
 
 ## Get the APK
 
-1. Push to GitHub. The **Build APK** workflow runs on every push.
-2. Open the workflow run under the repo's **Actions** tab and download the
-   `RyCalories-apk` artifact. It contains `app-release.apk`.
-3. Copy the APK to the phone (or download it straight from GitHub on the phone),
-   open it, and allow installs from that source when Android asks.
+Every push builds the app and updates a rolling GitHub release, so on the phone just open:
+
+https://github.com/ryanfjmorgan93/RyCalories/releases/latest/download/RyCalories.apk
+
+Open the downloaded file and allow installs from that source when Android asks.
+The same APK is also attached to each run under the repo's **Actions** tab.
 
 Or build locally with Android Studio / the Android SDK installed:
 
@@ -34,13 +46,20 @@ Or build locally with Android Studio / the Android SDK installed:
 ## First run
 
 1. If the home screen shows a **Download model** card, tap it and wait (Wi-Fi recommended).
+   If it shows **On-device model unavailable** instead, either wait a few minutes and tap
+   Check again (AICore fetches configuration lazily), or go to Settings and import a Gemma 3n
+   model: download `gemma-3n-E2B-it-int4.litertlm` from
+   https://huggingface.co/google/gemma-3n-E2B-it-litert-lm (log in, accept the licence),
+   then tap **Import model file**.
 2. Tap **+**, take a photo or pick one from the gallery, or just type the ingredients.
 3. Tap **Estimate calories**, review the breakdown, pick how much you ate, and **Save**.
 
 ## How it works
 
-- `app/src/main/java/com/rycalories/app/ai/OnDeviceMealAnalyzer.kt` checks whether Gemini
-  Nano is available, drives the download, and runs inference.
+- `app/src/main/java/com/rycalories/app/ai/OnDeviceMealAnalyzer.kt` probes Gemini Nano
+  variants, drives the download, runs inference, and builds the diagnostics report.
+- `ai/GemmaMealAnalyzer.kt` loads the imported Gemma 3n file with MediaPipe (GPU first, CPU
+  fallback), prompts for JSON, and parses it leniently.
 - `ai/NanoSchema.kt` declares the answer shape with `@Generable` / `@Guide` annotations.
   ML Kit's schema compiler turns that into constrained decoding, so the model can only reply
   with a well-formed list of items, each with calories, protein, carbs and fat. Totals are

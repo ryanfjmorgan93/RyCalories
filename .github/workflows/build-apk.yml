@@ -5,6 +5,9 @@ on:
     branches: ["**"]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -25,9 +28,23 @@ jobs:
       - name: Build release APK (debug-signed)
         run: ./gradlew --no-daemon assembleRelease
 
-      - name: Upload APK
+      - name: Rename APK
+        run: cp app/build/outputs/apk/release/app-release.apk RyCalories.apk
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: RyCalories-apk
-          path: app/build/outputs/apk/release/app-release.apk
+          path: RyCalories.apk
           if-no-files-found: error
+
+      # A rolling "latest" release so the APK has a stable direct-download link on the phone:
+      # https://github.com/<owner>/<repo>/releases/latest/download/RyCalories.apk
+      - name: Publish latest release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: RyCalories (latest build)
+          body: "Built from ${{ github.sha }} on branch ${{ github.ref_name }}."
+          prerelease: true
+          files: RyCalories.apk
