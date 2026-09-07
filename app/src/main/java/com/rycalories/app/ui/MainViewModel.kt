@@ -43,7 +43,7 @@ data class DraftState(
 class MainViewModel(app: Application) : AndroidViewModel(app) {
     val repository = MealRepository(app)
     val settings = AppSettings(app)
-    private val analyzer = OnDeviceMealAnalyzer()
+    private val analyzer = OnDeviceMealAnalyzer(app)
 
     private val _modelState = MutableStateFlow<ModelState>(ModelState.Checking)
     val modelState: StateFlow<ModelState> = _modelState.asStateFlow()
@@ -70,7 +70,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun refreshModelState() {
         viewModelScope.launch {
             _modelState.value = ModelState.Checking
-            _modelState.value = analyzer.checkState()
+            _modelState.value = analyzer.probe()
         }
     }
 
@@ -81,7 +81,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             analyzer.download().collect { _modelState.value = it }
             if (_modelState.value !is ModelState.Ready) {
                 // Re-check in case AICore finished in the background without reporting.
-                _modelState.value = analyzer.checkState()
+                _modelState.value = analyzer.probe()
             }
         }
     }

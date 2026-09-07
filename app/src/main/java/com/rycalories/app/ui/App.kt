@@ -68,7 +68,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -199,7 +202,7 @@ private fun ModelStatusCard(state: ModelState, onDownload: () -> Unit, onRetry: 
                         Text("Checking the on-device model…")
                     }
                 }
-                ModelState.Downloadable -> {
+                is ModelState.Downloadable -> {
                     Text("Gemini Nano needs a one-time download before it can look at your meals.", fontWeight = FontWeight.SemiBold)
                     Text(
                         "It runs entirely on this phone. Wi-Fi recommended.",
@@ -223,15 +226,31 @@ private fun ModelStatusCard(state: ModelState, onDownload: () -> Unit, onRetry: 
                 is ModelState.Unavailable -> {
                     Text("On-device model unavailable", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onErrorContainer)
                     Text(state.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
+                    var showDetails by remember { mutableStateOf(false) }
+                    val clipboard = LocalClipboardManager.current
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilledTonalButton(onClick = onRetry) {
                             Icon(Icons.Default.Refresh, contentDescription = null)
                             Spacer(Modifier.width(6.dp))
                             Text("Check again")
                         }
+                        if (state.details.isNotBlank()) {
+                            TextButton(onClick = { showDetails = !showDetails }) {
+                                Text(if (showDetails) "Hide details" else "Details")
+                            }
+                        }
+                    }
+                    if (showDetails && state.details.isNotBlank()) {
+                        Text(
+                            state.details,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        TextButton(onClick = { clipboard.setText(AnnotatedString(state.details)) }) { Text("Copy details") }
                     }
                 }
-                ModelState.Ready -> Unit
+                is ModelState.Ready -> Unit
             }
         }
     }
@@ -725,8 +744,11 @@ private fun SettingsScreen(vm: MainViewModel) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            when (modelState) {
-                ModelState.Ready -> Text("Status: ready", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+            when (val ms = modelState) {
+                is ModelState.Ready -> {
+                    Text("Status: ready", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                    Text(ms.details, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 else -> ModelStatusCard(
                     state = modelState,
                     onDownload = { vm.downloadModel() },
