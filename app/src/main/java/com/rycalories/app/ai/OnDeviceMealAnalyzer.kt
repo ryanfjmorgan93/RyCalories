@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.withContext
+import android.util.Log
 
 /** Thrown with a message that is safe to show directly in the UI. */
 class AnalysisException(message: String, cause: Throwable? = null) : Exception(message, cause)
@@ -53,6 +54,9 @@ class OnDeviceMealAnalyzer(context: Context) : AutoCloseable {
     private val appContext = context.applicationContext
     private var model: GenerativeModel? = null
     private var modelLabel: String = "none"
+
+    /** Some Nano builds (e.g. Samsung's Nano-v4) reject constrained decoding; remembered after the first refusal. */
+    @Volatile private var structuredOutputUnsupported = false
 
     private data class Variant(val label: String, val preference: Int, val releaseStage: Int)
 
@@ -172,32 +176,62 @@ class OnDeviceMealAnalyzer(context: Context) : AutoCloseable {
             }
 
             val system = SystemInstruction(SYSTEM_PROMPT)
-            val text = TextPart(buildUserPrompt(image != null, description))
-            val request = if (image != null) {
-                generateContentRequest(system, ImagePart(image), text) {
-                    temperature = 0.2f
-                    maxOutputTokens = 1024
-                }
-            } else {
-                generateContentRequest(system, text) {
-                    temperature = 0.2f
-                    maxOutputTokens = 1024
+            val userText = buildUserPrompt(image != null, description)
+
+            if (!structuredOutputUnsupported) {
+                val request = buildRequest(system, image, userText)
+                val typed = generateTypedContentRequest(request, NanoMealEstimate::class, true)
+                try {
+                    val response = m.generateContent(typed)
+                    val estimate = response.candidates.firstOrNull()?.response
+                        ?: throw AnalysisException("The model returned nothing. Try a clearer photo or more detail.")
+                    return@withContext toAnalysis(estimate)
+                } catch (e: GenAiException) {
+                    if (isStructuredOutputRefusal(e)) {
+                        Log.w(TAG, "Structured output unsupported on this device; using plain JSON", e)
+                        structuredOutputUnsupported = true
+                    } else {
+                        throw AnalysisException("The on-device model failed (code ${e.errorCode}): ${e.message}", e)
+                    }
+                } catch (e: Exception) {
+                    throw AnalysisException("Something went wrong running the model: ${e.message}", e)
                 }
             }
 
-            val typed = generateTypedContentRequest(request, NanoMealEstimate::class, true)
-            val response = try {
-                m.generateContent(typed)
+            // Plain-text path: ask for JSON in the prompt and parse leniently.
+            val request = buildRequest(system, image, userText + "\n\n" + NutritionJson.FORMAT_INSTRUCTIONS)
+            val raw = try {
+                m.generateContent(request).candidates.firstOrNull()?.text ?: ""
             } catch (e: GenAiException) {
                 throw AnalysisException("The on-device model failed (code ${e.errorCode}): ${e.message}", e)
             } catch (e: Exception) {
                 throw AnalysisException("Something went wrong running the model: ${e.message}", e)
             }
-
-            val estimate = response.candidates.firstOrNull()?.response
-                ?: throw AnalysisException("The model returned nothing. Try a clearer photo or more detail.")
-            toAnalysis(estimate)
+            Log.d(TAG, "Nano raw response: $raw")
+            NutritionJson.parse(raw)
         }
+
+    private fun buildRequest(system: SystemInstruction, image: Bitmap?, text: String) =
+        if (image != null) {
+            generateContentRequest(system, ImagePart(image), TextPart(text)) {
+                temperature = 0.2f
+                maxOutputTokens = 1024
+            }
+        } else {
+            generateContentRequest(system, TextPart(text)) {
+                temperature = 0.2f
+                maxOutputTokens = 1024
+            }
+        }
+
+    private fun isStructuredOutputRefusal(e: GenAiException): Boolean {
+        val code = e.errorCode
+        if (code == GenAiException.ErrorCode.STRUCTURED_OUTPUT_REQUEST_ERROR ||
+            code == GenAiException.ErrorCode.STRUCTURED_OUTPUT_RESPONSE_ERROR ||
+            code == GenAiException.ErrorCode.NOT_SUPPORTED
+        ) return true
+        return e.message?.contains("structured output", ignoreCase = true) == true
+    }
 
     override fun close() {
         runCatching { model?.close() }
@@ -265,6 +299,7 @@ class OnDeviceMealAnalyzer(context: Context) : AutoCloseable {
     }
 
     companion object {
+        private const val TAG = "OnDeviceMealAnalyzer"
         const val MODEL_NAME = "Gemini Nano (on-device)"
 
         private val SYSTEM_PROMPT = """
