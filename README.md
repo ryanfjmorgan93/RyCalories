@@ -20,15 +20,15 @@ upload: photos and the meal log never leave the device.
 
 1. Push to GitHub. The **Build APK** workflow runs on every push.
 2. Open the workflow run under the repo's **Actions** tab and download the
-   `RyCalories-debug-apk` artifact. It contains `app-debug.apk`.
+   `RyCalories-apk` artifact. It contains `app-release.apk`.
 3. Copy the APK to the phone (or download it straight from GitHub on the phone),
    open it, and allow installs from that source when Android asks.
 
 Or build locally with Android Studio / the Android SDK installed:
 
 ```
-./gradlew assembleDebug
-# -> app/build/outputs/apk/debug/app-debug.apk
+./gradlew assembleRelease
+# -> app/build/outputs/apk/release/app-release.apk
 ```
 
 ## First run

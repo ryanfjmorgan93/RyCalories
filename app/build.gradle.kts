@@ -20,7 +20,11 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8 shrinks the unminified ~65 MB APK down to a sane size for sideloading.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Personal sideloaded app: sign with the debug key so it installs without a keystore.
             signingConfig = signingConfigs.getByName("debug")
         }
     }
