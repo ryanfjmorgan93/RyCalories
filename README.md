@@ -33,8 +33,10 @@ Every push builds the app and updates a rolling GitHub release, so on the phone 
 
 https://github.com/ryanfjmorgan93/RyCalories/releases/latest/download/RyCalories.apk
 
-Open the downloaded file and allow installs from that source when Android asks.
-The same APK is also attached to each run under the repo's **Actions** tab.
+Open the downloaded file and allow installs from that source when Android asks. Every build
+is signed with the same key (`app/keystore/rycalories.jks`, committed on purpose for this
+personal app) and carries an increasing version number, so new builds install straight over
+old ones. Avoid the Actions tab for downloads: GitHub always wraps artifacts in a zip.
 
 Or build locally with Android Studio / the Android SDK installed:
 

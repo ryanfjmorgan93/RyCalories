@@ -14,11 +14,22 @@ android {
         // ML Kit GenAI (Gemini Nano via AICore) needs Android 12+.
         minSdk = 31
         targetSdk = 36
-        versionCode = 6
-        versionName = "2.4"
+        // CI passes its run number so every published build outranks the previous one;
+        // local builds use a high fixed number so they can be installed over CI builds too.
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()?.plus(100) ?: 9000
+        versionName = "2.5"
 
         // The MediaPipe runtime ships native code for four ABIs; the phone only needs arm64.
         ndk { abiFilters += "arm64-v8a" }
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = file("keystore/rycalories.jks")
+            storePassword = "rycalories"
+            keyAlias = "rycalories"
+            keyPassword = "rycalories"
+        }
     }
 
     buildTypes {
@@ -27,8 +38,8 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Personal sideloaded app: sign with the debug key so it installs without a keystore.
-            signingConfig = signingConfigs.getByName("debug")
+            // One fixed key for every build, so updates install over each other.
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 

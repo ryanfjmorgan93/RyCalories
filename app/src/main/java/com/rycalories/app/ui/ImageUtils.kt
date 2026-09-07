@@ -50,8 +50,11 @@ object ImageUtils {
 
     private fun decodeLegacy(context: Context, uri: Uri): Bitmap? {
         val resolver = context.contentResolver
+        // With inJustDecodeBounds the decode call returns null on purpose; only the
+        // measured size tells us whether the image was readable.
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) } ?: return null
+        val stream = resolver.openInputStream(uri) ?: return null
+        stream.use { BitmapFactory.decodeStream(it, null, bounds) }
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
         var sample = 1
         var w = bounds.outWidth

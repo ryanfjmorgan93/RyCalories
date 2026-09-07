@@ -12,3 +12,6 @@
 *.aab
 *.keystore
 *.jks
+
+# Personal-app signing key: committed on purpose so every build (local or CI) installs over the last.
+!app/keystore/*.jks

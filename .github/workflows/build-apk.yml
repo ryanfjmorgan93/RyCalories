@@ -44,7 +44,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: RyCalories (latest build)
-          body: "Built from ${{ github.sha }} on branch ${{ github.ref_name }}."
-          prerelease: true
+          name: "RyCalories build ${{ github.run_number }}"
+          body: "Built from ${{ github.sha }} on branch ${{ github.ref_name }}. Install over the previous version; no uninstall needed."
+          prerelease: false
+          make_latest: true
           files: RyCalories.apk
