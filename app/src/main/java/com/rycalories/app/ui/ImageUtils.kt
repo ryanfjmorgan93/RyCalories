@@ -3,22 +3,56 @@ package com.rycalories.app.ui
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.graphics.Matrix
 import android.net.Uri
+import android.util.Log
 import androidx.exifinterface.media.ExifInterface
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 
 object ImageUtils {
+    private const val TAG = "ImageUtils"
     /** Longest edge handed to the on-device model. Keeps memory and inference time sane. */
     private const val MAX_EDGE = 1024
 
-    /** Decode a content Uri to a right-side-up bitmap no larger than [MAX_EDGE] on its longest edge. */
-    fun loadScaled(context: Context, uri: Uri): Bitmap? {
+    /**
+     * Decode a content Uri to a right-side-up software bitmap no larger than [MAX_EDGE] on its
+     * longest edge. ImageDecoder handles HEIF (Samsung's default camera format), WebP and EXIF
+     * rotation; the BitmapFactory path is kept as a fallback for anything it chokes on.
+     */
+    fun loadScaled(context: Context, uri: Uri): Bitmap {
+        val modern = runCatching { decodeModern(context, uri) }
+        modern.getOrNull()?.let { return it }
+        Log.w(TAG, "ImageDecoder failed for $uri, falling back", modern.exceptionOrNull())
+        return decodeLegacy(context, uri)
+            ?: throw IllegalStateException(
+                "Couldn't decode that image (${modern.exceptionOrNull()?.message ?: "unknown format"})"
+            )
+    }
+
+    private fun decodeModern(context: Context, uri: Uri): Bitmap {
+        val source = ImageDecoder.createSource(context.contentResolver, uri)
+        return ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+            // Software allocation: hardware bitmaps can't be compressed to JPEG or read back.
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            decoder.isMutableRequired = false
+            val w = info.size.width
+            val h = info.size.height
+            val longest = maxOf(w, h)
+            if (longest > MAX_EDGE) {
+                val scale = MAX_EDGE.toFloat() / longest
+                decoder.setTargetSize((w * scale).toInt().coerceAtLeast(1), (h * scale).toInt().coerceAtLeast(1))
+            }
+        }
+    }
+
+    private fun decodeLegacy(context: Context, uri: Uri): Bitmap? {
         val resolver = context.contentResolver
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) } ?: return null
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
         var sample = 1
         var w = bounds.outWidth
         var h = bounds.outHeight
@@ -30,14 +64,16 @@ object ImageUtils {
         val opts = BitmapFactory.Options().apply { inSampleSize = sample }
         val decoded = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) } ?: return null
 
-        val rotation = resolver.openInputStream(uri)?.use { stream ->
-            when (ExifInterface(stream).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
-                ExifInterface.ORIENTATION_ROTATE_90 -> 90f
-                ExifInterface.ORIENTATION_ROTATE_180 -> 180f
-                ExifInterface.ORIENTATION_ROTATE_270 -> 270f
-                else -> 0f
+        val rotation = runCatching {
+            resolver.openInputStream(uri)?.use { stream ->
+                when (ExifInterface(stream).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
+                    ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                    ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                    ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                    else -> 0f
+                }
             }
-        } ?: 0f
+        }.getOrNull() ?: 0f
 
         val upright = if (rotation != 0f) {
             val m = Matrix().apply { postRotate(rotation) }

@@ -14,8 +14,8 @@ android {
         // ML Kit GenAI (Gemini Nano via AICore) needs Android 12+.
         minSdk = 31
         targetSdk = 36
-        versionCode = 5
-        versionName = "2.3"
+        versionCode = 6
+        versionName = "2.4"
 
         // The MediaPipe runtime ships native code for four ABIs; the phone only needs arm64.
         ndk { abiFilters += "arm64-v8a" }

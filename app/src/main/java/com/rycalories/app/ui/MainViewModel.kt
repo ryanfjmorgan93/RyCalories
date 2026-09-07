@@ -220,7 +220,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     val bmp = ImageUtils.loadScaled(getApplication(), uri)
-                        ?: error("Could not read that image")
                     bmp to ImageUtils.toJpeg(bmp)
                 }
             }
