@@ -200,6 +200,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _selectedDay.value = startOfToday()
     }
 
+    fun selectDay(dayStartMillis: Long) {
+        if (dayStartMillis <= startOfToday()) _selectedDay.value = dayStartMillis
+    }
+
     fun startNewMeal() {
         _draft.value = DraftState()
         _screen.value = Screen.AddMeal
