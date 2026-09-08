@@ -10,6 +10,7 @@ import com.rycalories.app.ai.AnalysisException
 import com.rycalories.app.ai.GemmaMealAnalyzer
 import com.rycalories.app.ai.ModelState
 import com.rycalories.app.ai.OnDeviceMealAnalyzer
+import com.rycalories.app.ai.ProductLookup
 import com.rycalories.app.data.AppSettings
 import com.rycalories.app.data.Meal
 import com.rycalories.app.data.MealAnalysis
@@ -45,8 +46,11 @@ sealed interface Screen {
 data class DraftState(
     val bitmap: Bitmap? = null,
     val jpeg: ByteArray? = null,
+    /** Source of the photo, kept so a higher-resolution copy can be decoded for barcode reading. */
+    val uri: Uri? = null,
     val description: String = "",
     val analyzing: Boolean = false,
+    val stage: String = "",
     val error: String? = null,
     val analysis: MealAnalysis? = null,
     /** User-adjustable multiplier applied to the estimate when saving (e.g. ate half = 0.5). */
@@ -57,6 +61,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val repository = MealRepository(app)
     val settings = AppSettings(app)
     private val analyzer = OnDeviceMealAnalyzer(app)
+    private val lookup = ProductLookup(app)
 
     private val _modelState = MutableStateFlow<ModelState>(ModelState.Checking)
     val modelState: StateFlow<ModelState> = _modelState.asStateFlow()
@@ -213,7 +218,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setPortionMultiplier(m: Float) = _draft.update { it.copy(portionMultiplier = m) }
 
-    fun clearPhoto() = _draft.update { it.copy(bitmap = null, jpeg = null) }
+    fun clearPhoto() = _draft.update { it.copy(bitmap = null, jpeg = null, uri = null) }
 
     fun setPhoto(uri: Uri) {
         viewModelScope.launch {
@@ -224,7 +229,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
             result.onSuccess { (bmp, jpeg) ->
-                _draft.update { it.copy(bitmap = bmp, jpeg = jpeg, error = null) }
+                _draft.update { it.copy(bitmap = bmp, jpeg = jpeg, uri = uri, error = null) }
             }.onFailure { e ->
                 _draft.update { it.copy(error = e.message ?: "Could not read that image") }
             }
@@ -234,10 +239,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun analyze() {
         val d = _draft.value
         if (d.analyzing) return
-        _draft.update { it.copy(analyzing = true, error = null) }
+        _draft.update { it.copy(analyzing = true, error = null, stage = "Looking at it…") }
         viewModelScope.launch {
             try {
-                val analysis = when (activeEngine()) {
+                val raw = when (activeEngine()) {
                     Engine.NANO -> analyzer.analyze(d.bitmap, d.description.ifBlank { null })
                     Engine.GEMMA -> {
                         val path = (gemmaState.value as GemmaState.Ready).path
@@ -251,12 +256,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         "No on-device model is ready. Wait for Gemini Nano, or import a Gemma 3n model file in Settings."
                     )
                 }
-                _draft.update { it.copy(analyzing = false, analysis = analysis, portionMultiplier = 1f) }
+                // Packaged products: swap the model's guess for the real label numbers.
+                _draft.update { it.copy(stage = "Checking labels…") }
+                val hiRes = d.uri?.let { uri ->
+                    withContext(Dispatchers.IO) { runCatching { ImageUtils.loadScaled(getApplication(), uri, 2048) }.getOrNull() }
+                } ?: d.bitmap
+                val analysis = runCatching { lookup.enrich(raw, hiRes) }.getOrDefault(raw)
+                _draft.update { it.copy(analyzing = false, stage = "", analysis = analysis, portionMultiplier = 1f) }
                 _screen.value = Screen.Result
             } catch (e: AnalysisException) {
-                _draft.update { it.copy(analyzing = false, error = e.message) }
+                _draft.update { it.copy(analyzing = false, stage = "", error = e.message) }
             } catch (e: Exception) {
-                _draft.update { it.copy(analyzing = false, error = "Something went wrong: ${e.message}") }
+                _draft.update { it.copy(analyzing = false, stage = "", error = "Something went wrong: ${e.message}") }
             }
         }
     }

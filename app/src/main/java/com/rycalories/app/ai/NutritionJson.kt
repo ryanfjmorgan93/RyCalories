@@ -12,7 +12,8 @@ import org.json.JSONObject
 object NutritionJson {
 
     const val FORMAT_INSTRUCTIONS = """Reply with ONLY a JSON object, no markdown fences, no commentary, in exactly this shape:
-{"meal_name":"short name","items":[{"name":"food","portion":"1 cup","calories":250,"protein_g":10,"carbs_g":30,"fat_g":8}],"confidence":"low|medium|high","notes":"one sentence on assumptions"}"""
+{"meal_name":"short name","items":[{"name":"food","portion":"1 cup","grams":150,"calories":250,"protein_g":10,"carbs_g":30,"fat_g":8,"brand":"","product":""}],"confidence":"low|medium|high","notes":"one sentence on assumptions"}
+Rules: "grams" is the weight of the portion (use the weight printed on the pack if visible). For a packaged product, copy the brand and product name exactly as printed into "brand" and "product" and treat the whole pack as the portion; for unpackaged food leave both as empty strings."""
 
     fun parse(raw: String): MealAnalysis {
         val start = raw.indexOf('{')
@@ -35,6 +36,9 @@ object NutritionJson {
                 proteinG = o.optDouble("protein_g", 0.0).coerceIn(0.0, 500.0),
                 carbsG = o.optDouble("carbs_g", 0.0).coerceIn(0.0, 1000.0),
                 fatG = o.optDouble("fat_g", 0.0).coerceIn(0.0, 500.0),
+                grams = o.optDouble("grams", 0.0).takeIf { it > 0 },
+                brand = o.optString("brand", "").trim(),
+                product = o.optString("product", "").trim(),
             )
         }
         if (items.isEmpty()) throw AnalysisException("The model couldn't identify any food. Try a clearer photo or more detail.")

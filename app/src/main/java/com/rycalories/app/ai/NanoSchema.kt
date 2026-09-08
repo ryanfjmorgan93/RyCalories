@@ -22,6 +22,12 @@ data class NanoFoodItem(
     val carbsG: Int,
     @Guide(description = "Fat in grams", minimum = 0.0, maximum = 300.0)
     val fatG: Int,
+    @Guide(description = "Weight of this portion in grams; use the weight printed on the pack if visible", minimum = 1.0, maximum = 3000.0)
+    val grams: Int,
+    @Guide(description = "Brand name printed on the packaging, or empty string if this is not a packaged product")
+    val brand: String,
+    @Guide(description = "Product name printed on the packaging, or empty string if this is not a packaged product")
+    val product: String,
 )
 
 @Generable(description = "Nutrition estimate for one meal")

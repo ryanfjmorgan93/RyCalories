@@ -10,7 +10,16 @@ data class FoodItem(
     val proteinG: Double,
     val carbsG: Double,
     val fatG: Double,
+    /** Estimated weight of this portion in grams, if the model gave one. */
+    val grams: Double? = null,
+    /** Brand and product as read off packaging; blank for unpackaged food. */
+    val brand: String = "",
+    val product: String = "",
+    /** "model" for an estimate, "label" when the numbers came from the product's nutrition label. */
+    val source: String = "model",
 ) {
+    val isPackaged: Boolean get() = product.isNotBlank() || brand.isNotBlank()
+
     fun toJson(): JSONObject = JSONObject()
         .put("name", name)
         .put("portion", portion)
@@ -18,6 +27,10 @@ data class FoodItem(
         .put("protein_g", proteinG)
         .put("carbs_g", carbsG)
         .put("fat_g", fatG)
+        .put("grams", grams ?: JSONObject.NULL)
+        .put("brand", brand)
+        .put("product", product)
+        .put("source", source)
 
     companion object {
         fun fromJson(o: JSONObject) = FoodItem(
@@ -27,6 +40,10 @@ data class FoodItem(
             proteinG = o.optDouble("protein_g", 0.0),
             carbsG = o.optDouble("carbs_g", 0.0),
             fatG = o.optDouble("fat_g", 0.0),
+            grams = if (o.isNull("grams")) null else o.optDouble("grams"),
+            brand = o.optString("brand", ""),
+            product = o.optString("product", ""),
+            source = o.optString("source", "model"),
         )
     }
 }
@@ -42,6 +59,17 @@ data class MealAnalysis(
     val confidence: String,
     val notes: String,
 ) {
+    /** Rebuild totals after items change. */
+    fun withItems(newItems: List<FoodItem>, confidence: String = this.confidence, notes: String = this.notes) = copy(
+        items = newItems,
+        totalCalories = newItems.sumOf { it.calories },
+        proteinG = newItems.sumOf { it.proteinG },
+        carbsG = newItems.sumOf { it.carbsG },
+        fatG = newItems.sumOf { it.fatG },
+        confidence = confidence,
+        notes = notes,
+    )
+
     companion object {
         fun fromJson(o: JSONObject): MealAnalysis {
             val itemsArr = o.optJSONArray("items") ?: JSONArray()

@@ -755,7 +755,7 @@ private fun AddMealScreen(vm: MainViewModel) {
 
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 8.dp).navigationBarsPadding().padding(bottom = 12.dp)) {
             PrimaryButton(
-                if (draft.analyzing) "Thinking on-device…" else "Count it",
+                if (draft.analyzing) draft.stage.ifBlank { "Thinking on-device…" } else "Count it",
                 onClick = { vm.analyze() },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = modelReady && (draft.jpeg != null || draft.description.isNotBlank()),
@@ -893,7 +893,17 @@ private fun ItemsCard(items: List<FoodItem>, multiplier: Double) {
         items.forEachIndexed { i, item ->
             Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(item.name, style = MaterialTheme.typography.titleMedium, color = Palette.Text)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(item.name, style = MaterialTheme.typography.titleMedium, color = Palette.Text, modifier = Modifier.weight(1f, fill = false))
+                        if (item.source == "label") {
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "LABEL",
+                                style = MaterialTheme.typography.labelSmall, color = Palette.Ink,
+                                modifier = Modifier.clip(PillShape).background(Palette.Mint).padding(horizontal = 7.dp, vertical = 2.dp),
+                            )
+                        }
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         if (item.portion.isNotBlank()) Text(item.portion, style = MaterialTheme.typography.labelSmall, color = Palette.TextDim)
                         MacroTag("P", item.proteinG * multiplier, Palette.Mint)

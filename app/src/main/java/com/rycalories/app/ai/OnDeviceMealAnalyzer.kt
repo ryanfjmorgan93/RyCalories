@@ -269,6 +269,9 @@ class OnDeviceMealAnalyzer(context: Context) : AutoCloseable {
                 proteinG = it.proteinG.toDouble(),
                 carbsG = it.carbsG.toDouble(),
                 fatG = it.fatG.toDouble(),
+                grams = it.grams.toDouble().takeIf { g -> g > 0 },
+                brand = it.brand.trim(),
+                product = it.product.trim(),
             )
         }
         // Totals are summed here rather than asked of the model, so they always add up.
@@ -307,7 +310,8 @@ class OnDeviceMealAnalyzer(context: Context) : AutoCloseable {
             Identify each food item, estimate a realistic portion size, and give calories plus
             protein, carbohydrates and fat in grams using standard USDA-style nutrition values.
             When something is ambiguous, pick the most likely interpretation and mention it in notes.
-            Keep item names short.
+            Keep item names short. If an item is a packaged product, read the brand and product
+            name exactly as printed and use the pack weight printed on it for the portion.
         """.trimIndent()
     }
 }

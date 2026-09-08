@@ -94,6 +94,10 @@ dependencies {
     implementation("com.google.mlkit:genai-image-description:1.0.0-beta1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.10.2")
 
+    // Reads barcodes off the meal photo on-device; product numbers then come from Open Food Facts.
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
+
     // Fallback engine: Gemma 3n via MediaPipe LLM Inference, for phones where AICore says no.
     implementation("com.google.mediapipe:tasks-genai:0.10.35")
     implementation("com.google.mediapipe:tasks-core:0.10.35")

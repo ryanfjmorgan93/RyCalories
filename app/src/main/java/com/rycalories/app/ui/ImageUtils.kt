@@ -22,17 +22,17 @@ object ImageUtils {
      * longest edge. ImageDecoder handles HEIF (Samsung's default camera format), WebP and EXIF
      * rotation; the BitmapFactory path is kept as a fallback for anything it chokes on.
      */
-    fun loadScaled(context: Context, uri: Uri): Bitmap {
-        val modern = runCatching { decodeModern(context, uri) }
+    fun loadScaled(context: Context, uri: Uri, maxEdge: Int = MAX_EDGE): Bitmap {
+        val modern = runCatching { decodeModern(context, uri, maxEdge) }
         modern.getOrNull()?.let { return it }
         Log.w(TAG, "ImageDecoder failed for $uri, falling back", modern.exceptionOrNull())
-        return decodeLegacy(context, uri)
+        return decodeLegacy(context, uri, maxEdge)
             ?: throw IllegalStateException(
                 "Couldn't decode that image (${modern.exceptionOrNull()?.message ?: "unknown format"})"
             )
     }
 
-    private fun decodeModern(context: Context, uri: Uri): Bitmap {
+    private fun decodeModern(context: Context, uri: Uri, maxEdge: Int): Bitmap {
         val source = ImageDecoder.createSource(context.contentResolver, uri)
         return ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
             // Software allocation: hardware bitmaps can't be compressed to JPEG or read back.
@@ -41,14 +41,14 @@ object ImageUtils {
             val w = info.size.width
             val h = info.size.height
             val longest = maxOf(w, h)
-            if (longest > MAX_EDGE) {
-                val scale = MAX_EDGE.toFloat() / longest
+            if (longest > maxEdge) {
+                val scale = maxEdge.toFloat() / longest
                 decoder.setTargetSize((w * scale).toInt().coerceAtLeast(1), (h * scale).toInt().coerceAtLeast(1))
             }
         }
     }
 
-    private fun decodeLegacy(context: Context, uri: Uri): Bitmap? {
+    private fun decodeLegacy(context: Context, uri: Uri, maxEdge: Int): Bitmap? {
         val resolver = context.contentResolver
         // With inJustDecodeBounds the decode call returns null on purpose; only the
         // measured size tells us whether the image was readable.
@@ -59,7 +59,7 @@ object ImageUtils {
         var sample = 1
         var w = bounds.outWidth
         var h = bounds.outHeight
-        while (maxOf(w, h) / 2 >= MAX_EDGE) {
+        while (maxOf(w, h) / 2 >= maxEdge) {
             sample *= 2
             w /= 2
             h /= 2
@@ -84,8 +84,8 @@ object ImageUtils {
         } else decoded
 
         val longest = maxOf(upright.width, upright.height)
-        return if (longest > MAX_EDGE) {
-            val scale = MAX_EDGE.toFloat() / longest
+        return if (longest > maxEdge) {
+            val scale = maxEdge.toFloat() / longest
             Bitmap.createScaledBitmap(
                 upright,
                 (upright.width * scale).toInt().coerceAtLeast(1),
