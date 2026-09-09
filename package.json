@@ -14,6 +14,11 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@capacitor/android": "^7.6.9",
+    "@capacitor/core": "^7.6.9",
+    "@capacitor/filesystem": "^7.1.8",
+    "@capacitor/local-notifications": "^7.0.7",
+    "@capacitor/share": "^7.0.4",
     "dexie": "^4.4.5",
     "dexie-react-hooks": "^4.4.0",
     "papaparse": "^5.7.0",
@@ -23,6 +28,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@capacitor/cli": "^7.6.9",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^24.0.0",

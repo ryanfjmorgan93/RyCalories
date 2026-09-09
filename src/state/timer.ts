@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { cancelRestNotification, scheduleRestNotification } from './native';
 
 /**
  * Rest timer. Driven by an absolute deadline (`endsAt`) rather than a counting interval so it
@@ -29,15 +30,22 @@ export const useTimer = create<TimerState>()(
       firedFor: null,
       start: (sec, label) => {
         const now = Date.now();
-        set({ endsAt: now + Math.max(0, sec) * 1000, startedAt: now, totalSec: Math.max(0, sec), label, firedFor: null });
+        const endsAt = now + Math.max(0, sec) * 1000;
+        set({ endsAt, startedAt: now, totalSec: Math.max(0, sec), label, firedFor: null });
+        void scheduleRestNotification(endsAt, label);
       },
       add: (sec) => {
-        const { endsAt, totalSec } = get();
+        const { endsAt, totalSec, label } = get();
         if (endsAt === null) return;
         const base = Math.max(endsAt, Date.now());
-        set({ endsAt: base + sec * 1000, totalSec: totalSec + sec, firedFor: null });
+        const next = base + sec * 1000;
+        set({ endsAt: next, totalSec: totalSec + sec, firedFor: null });
+        void scheduleRestNotification(next, label);
       },
-      skip: () => set({ endsAt: null, startedAt: null, totalSec: 0, label: '', firedFor: null }),
+      skip: () => {
+        set({ endsAt: null, startedAt: null, totalSec: 0, label: '', firedFor: null });
+        void cancelRestNotification();
+      },
       markFired: (endsAt) => set({ firedFor: endsAt }),
     }),
     { name: 'iron-rest-timer' },

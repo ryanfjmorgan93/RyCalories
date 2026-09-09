@@ -1,0 +1,67 @@
+name: Build APK
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools platforms;android-35 build-tools;35.0.0
+
+      - name: Install
+        run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build web assets
+        run: npm run build
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Build signed release APK
+        working-directory: android
+        run: ./gradlew --no-daemon assembleRelease
+
+      - name: Rename
+        run: cp android/app/build/outputs/apk/release/app-release.apk iron-${{ github.sha }}.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iron-apk
+          path: iron-*.apk
+          retention-days: 90
+
+      # Every push also refreshes a rolling "latest" release so the APK has a stable download link.
+      - name: Publish latest release
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/claude/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Iron (latest build)
+          prerelease: true
+          files: iron-*.apk
+          body: |
+            Signed release APK built from ${{ github.sha }}.
+            Download, open on the phone, allow installs from this source, done.

@@ -2,6 +2,7 @@ import Papa from 'papaparse';
 import { db, TABLE_NAMES, type TableName } from './db';
 import { nowIso } from '@/domain/dates';
 import { DEFAULT_SETTINGS } from '@/domain/types';
+import { isNative, shareTextFile } from '@/state/native';
 import type {
   Bodyweight,
   Exercise,
@@ -151,6 +152,8 @@ export function csvFilename(): string {
  * fall back to a download link elsewhere.
  */
 export async function deliverFile(filename: string, text: string, mime: string): Promise<'shared' | 'downloaded' | 'cancelled'> {
+  // Inside the Android shell, write to the app cache and hand it to the system share sheet.
+  if (isNative()) return shareTextFile(filename, text);
   const blob = new Blob([text], { type: mime });
   const nav = typeof navigator !== 'undefined' ? navigator : undefined;
   if (nav && 'share' in nav && typeof File !== 'undefined') {

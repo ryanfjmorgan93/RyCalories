@@ -5,6 +5,7 @@ import './index.css';
 import { App } from './App';
 import { ensureSeeded, getSettings } from './db/repo';
 import { applyTheme } from './ui/theme';
+import { isNative } from './state/native';
 
 async function boot() {
   await ensureSeeded();
@@ -15,7 +16,9 @@ async function boot() {
       <App />
     </StrictMode>,
   );
-  if (import.meta.env.PROD) {
+  // The service worker is what makes the web install work offline. Inside the Android shell the
+  // assets are already on disk, so skip it there.
+  if (import.meta.env.PROD && !isNative()) {
     registerSW({ immediate: true });
   }
 }
