@@ -98,3 +98,37 @@ export function decisionLine(d: Decision, kind: ExerciseKind): string {
       return `locked in at ${w(d.toWeight)}`;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Nutrition
+
+export function fmtKcal(n: number): string {
+  return `${Math.round(n)} kcal`;
+}
+
+/** Macro grams, one decimal at most: 24 g, 5.4 g. */
+export function fmtGrams(n: number): string {
+  return `${fmtNum(Math.round(n * 10) / 10)} g`;
+}
+
+/** A YYYY-MM-DD day key as a heading: "Today", "Yesterday", or "Sat 7 Mar". */
+export function fmtDayKey(key: string, today: string, yesterday: string): string {
+  if (key === today) return 'Today';
+  if (key === yesterday) return 'Yesterday';
+  const d = new Date(`${key}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return key;
+  const sameYear = d.getFullYear() === new Date(`${today}T00:00:00`).getFullYear();
+  return new Intl.DateTimeFormat('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    ...(sameYear ? {} : { year: 'numeric' }),
+  }).format(d);
+}
+
+/** Time of day from an ISO timestamp: "08:14". */
+export function fmtTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(d);
+}

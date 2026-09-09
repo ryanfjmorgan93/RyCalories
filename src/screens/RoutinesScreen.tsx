@@ -20,6 +20,8 @@ export function RoutinesScreen() {
   const [menuFor, setMenuFor] = useState<Routine | null>(null);
   const [deleteFor, setDeleteFor] = useState<Routine | null>(null);
 
+  const exerciseCount = useLiveQuery(() => db.exercises.count(), []);
+
   const rxCounts = useLiveQuery(async () => {
     const all = await db.routineExercises.toArray();
     const m = new Map<string, number>();
@@ -82,6 +84,15 @@ export function RoutinesScreen() {
             ))}
           </Card>
         )}
+        <div className="h-4" />
+        <Card>
+          <Row
+            onClick={() => nav('/exercises')}
+            left={<DumbbellIcon />}
+            title="Exercise library"
+            subtitle={exerciseCount === undefined ? undefined : `${exerciseCount} exercises`}
+          />
+        </Card>
         <div className="h-6" />
       </div>
 
@@ -193,6 +204,15 @@ function DownIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
+/** Moved here from the bottom navigation when the Food tab took its place. */
+function DumbbellIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="text-muted">
+      <path d="M6 7v10M18 7v10M3 9v6M21 9v6M6 12h12" />
     </svg>
   );
 }

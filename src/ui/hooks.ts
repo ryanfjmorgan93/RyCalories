@@ -2,6 +2,8 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useState } from 'react';
 import { db } from '@/db/db';
 import { getActiveSession, lastCompletedSession, recentSessions, routineItems, type RoutineItem } from '@/db/repo';
+import { getMeal, loggedDays, mealsOnDay, type MealWithItems } from '@/db/foodRepo';
+import { toDateKey } from '@/domain/dates';
 import type { Exercise, Routine, Session, Settings } from '@/domain/types';
 
 /** Live settings row (undefined while loading). */
@@ -78,4 +80,36 @@ export function useOffline(): boolean {
     };
   }, []);
   return off;
+}
+
+// ---------------------------------------------------------------------------
+// Nutrition
+
+/** Every meal on a day with its items and derived macros. */
+export function useDayMeals(date: string): MealWithItems[] | undefined {
+  return useLiveQuery(() => mealsOnDay(date), [date]);
+}
+
+export function useMeal(id: string | undefined): MealWithItems | null | undefined {
+  return useLiveQuery(async () => (id ? ((await getMeal(id)) ?? null) : null), [id]);
+}
+
+/** Days with anything logged, newest first. */
+export function useLoggedDays(limit = 30): string[] | undefined {
+  return useLiveQuery(() => loggedDays(limit), [limit]);
+}
+
+/** Today's date key, re-read when the tab regains focus so a session over midnight rolls over. */
+export function useToday(): string {
+  const [key, setKey] = useState(() => toDateKey());
+  useEffect(() => {
+    const check = () => setKey(toDateKey());
+    document.addEventListener('visibilitychange', check);
+    const id = window.setInterval(check, 60_000);
+    return () => {
+      document.removeEventListener('visibilitychange', check);
+      window.clearInterval(id);
+    };
+  }, []);
+  return key;
 }

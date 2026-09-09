@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom';
 const tabs = [
   { to: '/', label: 'Home', icon: HomeIcon },
   { to: '/routines', label: 'Routines', icon: ListIcon },
-  { to: '/exercises', label: 'Exercises', icon: DumbbellIcon },
+  { to: '/food', label: 'Food', icon: FoodIcon },
   { to: '/body', label: 'Body', icon: ScaleIcon },
   { to: '/settings', label: 'Settings', icon: GearIcon },
 ];
@@ -44,10 +44,10 @@ function ListIcon() {
     </svg>
   );
 }
-function DumbbellIcon() {
+function FoodIcon() {
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M6 7v10M18 7v10M3 9v6M21 9v6M6 12h12" />
+      <path d="M6 3v8a2 2 0 0 0 4 0V3M8 11v10M16 3c-1.5 1.5-2 3.5-2 5.5 0 1.4.8 2.5 2 2.5v10" />
     </svg>
   );
 }

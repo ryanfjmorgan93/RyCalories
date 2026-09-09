@@ -18,6 +18,8 @@ import { SessionDetailScreen } from './screens/SessionDetailScreen';
 import { BodyweightScreen } from './screens/BodyweightScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { CheckInScreen } from './screens/CheckInScreen';
+import { FoodScreen } from './screens/FoodScreen';
+import { MealEditScreen } from './screens/MealEditScreen';
 
 function Shell() {
   return (
@@ -79,6 +81,9 @@ export function App() {
           <Route path="exercises/new" element={<ExerciseEditScreen />} />
           <Route path="exercises/:id" element={<ExerciseDetailScreen />} />
           <Route path="exercises/:id/edit" element={<ExerciseEditScreen />} />
+          <Route path="food" element={<FoodScreen />} />
+          <Route path="food/new" element={<MealEditScreen />} />
+          <Route path="food/:id" element={<MealEditScreen />} />
           <Route path="history" element={<HistoryScreen />} />
           <Route path="history/:id" element={<SessionDetailScreen />} />
           <Route path="body" element={<BodyweightScreen />} />

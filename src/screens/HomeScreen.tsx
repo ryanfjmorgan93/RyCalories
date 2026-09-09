@@ -3,8 +3,9 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
 import { db } from '@/db/db';
 import { discardSession, logBodyweight, startSession } from '@/db/repo';
+import { dayView } from '@/db/todayQueries';
+import { ZERO } from '@/domain/food';
 import { fmtDateTime, fmtKg, fmtMinutes, fmtNum } from '@/domain/format';
-import { calorieTargetOn, proteinTarget } from '@/domain/nutrition';
 import { isConsecutiveLower, suggestNextRoutine } from '@/domain/schedule';
 import { toDateKey } from '@/domain/dates';
 import { useTimer } from '@/state/timer';
@@ -39,14 +40,6 @@ export function HomeScreen() {
 
   const suggested = routines && last !== undefined ? suggestNextRoutine(routines, last?.routineId ?? null, { avoidConsecutiveLower: true }) : null;
   const todayKey = toDateKey();
-  const todayRoutineLower = useLiveQuery(async () => {
-    const start = todayKey;
-    const todays = (await db.sessions.toArray()).filter((s) => s.startedAt.slice(0, 10) === start || toDateKey(new Date(s.startedAt)) === start);
-    if (todays.length === 0) return null;
-    const ids = [...new Set(todays.map((s) => s.routineId).filter(Boolean))];
-    const rs = await db.routines.bulkGet(ids);
-    return rs.some((r) => r?.isLowerBody);
-  }, [todayKey]);
 
   const starting = useRef(false);
   const start = async (r: Routine) => {
@@ -66,8 +59,12 @@ export function HomeScreen() {
     }
   };
 
-  const kcal = settings ? calorieTargetOn(todayKey, settings) : null;
-  const protein = settings ? proteinTarget(settings, todayRoutineLower ?? suggested?.isLowerBody ?? false) : null;
+  // One query for both halves of the day, shared with the Food screen so the two can never
+  // disagree about the protein target.
+  const view = useLiveQuery(async () => (settings ? dayView(todayKey, settings, todayKey) : undefined), [todayKey, settings]);
+  const eaten = view?.eaten ?? ZERO;
+  const kcal = view?.calories ?? null;
+  const protein = view?.proteinTarget ?? null;
 
   return (
     <div>
@@ -122,13 +119,27 @@ export function HomeScreen() {
         )}
 
         {settings && (kcal || protein !== null) && (
-          <Card className="mt-3 flex items-center gap-6 px-4 py-3">
-            {kcal ? (
-              <Stat label="Today" value={`${fmtNum(kcal.kcal)} kcal`} sub={kcal.nextStepOn ? `+${settings.calorieStep} in ${kcal.daysUntilNextStep} d` : 'at ceiling'} />
-            ) : (
-              <Stat label="Calories" value="—" sub="save Settings to start" />
-            )}
-            {protein !== null && <Stat label="Protein" value={`${protein} g`} sub={protein === settings.proteinTargetLegDay ? 'lower-body day' : 'default'} />}
+          // Eaten against target, and a tap through to the day. The targets alone were only ever
+          // half the number worth knowing.
+          <Card className="mt-3">
+            <button type="button" onClick={() => nav('/food')} className="flex w-full items-center gap-6 px-4 py-3 text-left active:bg-surface-2" data-testid="today-food">
+              {kcal ? (
+                <Stat
+                  label="Calories"
+                  value={`${fmtNum(Math.round(eaten.kcal))} / ${fmtNum(kcal.kcal)}`}
+                  sub={kcal.nextStepOn ? `+${settings.calorieStep} in ${kcal.daysUntilNextStep} d` : 'at ceiling'}
+                />
+              ) : (
+                <Stat label="Calories" value={fmtNum(Math.round(eaten.kcal))} sub="no target set" />
+              )}
+              {protein !== null && (
+                <Stat
+                  label="Protein"
+                  value={`${fmtNum(Math.round(eaten.protein))} / ${protein} g`}
+                  sub={view?.legDay ? (view.legDayBasis === 'planned' ? 'lower-body planned' : 'lower-body day') : 'default'}
+                />
+              )}
+            </button>
           </Card>
         )}
 
