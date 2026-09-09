@@ -4,6 +4,8 @@ buildscript {
     
     repositories {
         google()
+        // Google's public mirror of Maven Central: same artifacts, no rate limiting from CI/proxy egress.
+        maven { url 'https://maven-central.storage-download.googleapis.com/maven2/' }
         mavenCentral()
     }
     dependencies {
@@ -20,6 +22,8 @@ apply from: "variables.gradle"
 allprojects {
     repositories {
         google()
+        // Google's public mirror of Maven Central: same artifacts, no rate limiting from CI/proxy egress.
+        maven { url 'https://maven-central.storage-download.googleapis.com/maven2/' }
         mavenCentral()
     }
 }
