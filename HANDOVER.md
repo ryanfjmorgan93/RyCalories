@@ -10,6 +10,10 @@ This branch has been the working branch for the whole project so far — check
 with the user whether to keep developing on it or cut a new one before the
 merge work starts.
 
+**Companion document**: `ROADMAP.md` — what to build next and in what order,
+including a list of real bugs in the currently-shipped code that should be
+fixed before any new feature work. Read this file first, then that one.
+
 **Owner's phone**: Samsung Galaxy Z Fold 8. Every design and compatibility
 decision below is tuned for that specific device. If the merged app is meant
 to run more broadly, re-verify the Gemini Nano device list and screen-size
