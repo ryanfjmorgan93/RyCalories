@@ -6,3 +6,4 @@ playwright-report
 .vercel
 *.local
 .DS_Store
+shots

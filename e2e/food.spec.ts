@@ -1,31 +1,15 @@
 import { expect, test, type Page } from '@playwright/test';
+import { fresh } from './fresh';
 
 /**
  * Manual nutrition logging through the real UI. This is the path that has to work before the
  * app can take daily food logging at all — no camera, no model, no network.
+ *
+ * Every save is followed by waiting for the navigation the save performs. A click resolves when
+ * the DOM event dispatches, not when the write commits, so navigating away first aborts the
+ * IndexedDB transaction and the meal is silently lost — which is what made two of these tests
+ * fail roughly one run in three.
  */
-
-async function fresh(page: Page) {
-  await page.goto('/');
-  await page.evaluate(async () => {
-    const dbs = await indexedDB.databases();
-    await Promise.all(
-      dbs.map(
-        (d) =>
-          new Promise<void>((resolve) => {
-            if (!d.name) return resolve();
-            const req = indexedDB.deleteDatabase(d.name);
-            req.onsuccess = () => resolve();
-            req.onerror = () => resolve();
-            req.onblocked = () => resolve();
-          }),
-      ),
-    );
-    localStorage.clear();
-  });
-  await page.reload();
-  await expect(page.getByTestId('next-up')).toBeVisible();
-}
 
 /** Fill the food sheet and save. Nutrition figures are per 100 g when `grams` is given. */
 async function addFood(
@@ -119,6 +103,7 @@ test.describe('nutrition', () => {
     await page.getByTestId('empty-add-food').click();
     await addFood(page, { name: 'Curry', portion: '1 plate', kcal: 700, protein: 40, carbs: 60, fat: 30 });
     await page.getByTestId('save-meal').click();
+    await page.waitForURL(/\/food\/[0-9a-f-]+$/);
 
     await page.goto('/food');
     await expect(page.getByTestId('day-label')).toHaveText('Today');
@@ -152,6 +137,7 @@ test.describe('nutrition', () => {
     // Comfortably past the 1900 kcal starting target.
     await addFood(page, { name: 'Takeaway', portion: '1', kcal: 2400, protein: 90, carbs: 250, fat: 100 });
     await page.getByTestId('save-meal').click();
+    await page.waitForURL(/\/food\/[0-9a-f-]+$/);
 
     await page.goto('/food');
     await expect(page.getByTestId('remaining')).toHaveText('500 kcal over');
@@ -167,6 +153,7 @@ test.describe('nutrition', () => {
     await page.getByTestId('empty-add-food').click();
     await addFood(page, { name: 'Eggs', portion: '3 eggs', kcal: 240, protein: 20, carbs: 1, fat: 18 });
     await page.getByTestId('save-meal').click();
+    await page.waitForURL(/\/food\/[0-9a-f-]+$/);
 
     await page.goto('/');
     await expect(page.getByTestId('today-food')).toContainText('240 / 1,900');
@@ -175,5 +162,19 @@ test.describe('nutrition', () => {
     await expect(page.getByTestId('today-food')).toContainText('20 / 200 g');
     await page.goto('/food');
     await expect(page.getByTestId('protein-bar')).toContainText('20 g / 200 g');
+  });
+
+  test('Settings reports the live schema version and the meal count', async ({ page }) => {
+    await page.goto('/food/new');
+    await page.getByTestId('meal-name').fill('Snack');
+    await page.getByTestId('empty-add-food').click();
+    await addFood(page, { name: 'Yoghurt', grams: 150, kcal: 60, protein: 10, carbs: 4, fat: 0.2 });
+    await page.getByTestId('save-meal').click();
+    await page.waitForURL(/\/food\/[0-9a-f-]+$/);
+
+    await page.goto('/settings');
+    // The line to check on the phone after a schema bump: history intact, version current.
+    await expect(page.getByTestId('data-counts')).toContainText('1 meals');
+    await expect(page.getByTestId('db-version')).toHaveText('Database v2');
   });
 });

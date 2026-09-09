@@ -5,6 +5,7 @@ import { backupFilename, csvFilename, deliverFile, exportBackup, exportBodyweigh
 import { parseHevyCsv, reconcileWeights, type HevyParsed, type WeightReconcileRow } from '@/db/hevy';
 import { resetToSeed, saveSettings, wipeAll } from '@/db/repo';
 import { applyRestDefaults, dataCounts } from '@/db/settingsQueries';
+import { DB_VERSION } from '@/db/db';
 import { dateKeyToDate, toDateKey } from '@/domain/dates';
 import { fmtNum } from '@/domain/format';
 import { calorieTargetOn } from '@/domain/nutrition';
@@ -401,9 +402,20 @@ function DeveloperCard() {
 
   return (
     <Card className="p-4">
-      <div className="num text-sm text-muted">
-        {counts ? `${counts.exercises} exercises · ${counts.routines} routines · ${counts.sessions} sessions · ${counts.sets} sets` : 'Counting…'}
+      {/* Live row counts and the schema version the database is actually open at. This is the
+          line to check on the phone after a version bump: the sandbox cannot prove a migration
+          completed on a real WebView, only that it completed under fake-indexeddb. */}
+      <div className="num text-sm text-muted" data-testid="data-counts">
+        {counts
+          ? `${counts.exercises} exercises · ${counts.routines} routines · ${counts.sessions} sessions · ${counts.sets} sets · ${counts.meals} meals`
+          : 'Counting…'}
       </div>
+      {counts && (
+        <div className={`num mt-1 text-sm ${counts.behind ? 'text-danger' : 'text-dim'}`} data-testid="db-version">
+          Database v{counts.dbVersion}
+          {counts.behind ? ` — build expects v${DB_VERSION}` : ''}
+        </div>
+      )}
       <div className="mt-3 grid gap-2">
         <Button full variant="danger" onClick={() => setResetOpen(true)}>
           Reset to seed data

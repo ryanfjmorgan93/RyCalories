@@ -220,18 +220,52 @@ Also measure, because nobody has a number: wall-clock latency of inference, and 
 of `@capacitor/camera`'s own full-resolution decode-and-re-encode, which runs on that same
 shared thread inside third-party code you cannot move.
 
-### P3 — Nutrition UI, manual entry first · **M**
+### P3 — Nutrition UI, manual entry first · **M** · ✅ core shipped (`a1c53b9`)
 
-**The phase that makes the merged app usable.** Deliberately **no AI**: Today screen, Food
-tab, manual add and edit, day navigation.
+**The phase that makes the merged app usable.** Deliberately **no AI**: Food tab, manual add
+and edit, day navigation.
 
-Manual entry early is not a consolation prize, and with no meal history to import it is now
-the *only* route by which a single calorie reaches the database. It is also the honest floor
-of §2.3: a food logger that needs a working on-device model to record what you ate is not
+Manual entry early is not a consolation prize, and with no meal history to import it is the
+*only* route by which a single calorie reaches the database. It is also the honest floor of
+§2.3: a food logger that needs a working on-device model to record what you ate is not
 seamless. Everything in P4 is an accelerator on top of this.
 
-Editing any number, before and after saving, is the top-wanted feature in both handovers and
-lands here.
+Shipped:
+
+- ✅ Food tab: day navigation (capped at today), calories and protein against target, macro
+  split, meal list. Home shows eaten against target and links through.
+- ✅ Meal composer and editor. A new meal is held in local state until Save, so a half-typed
+  meal is never written; a saved meal edits in place. **Editing any number, before and after
+  saving** — the top-wanted feature in both handovers — needs no recalculation step, because
+  totals are derived rather than stored.
+- ✅ Food entry in either form the world supplies: a weight against per-100g label values, or
+  macros for a whole portion. The Atwater check surfaces as one tappable line offering the
+  implied calorie figure.
+- ✅ Logging to a past day, and copying a meal to today.
+- ✅ Settings reports the live schema version and the meal count — **the line to check on the
+  phone** after the version 2 bump, which the sandbox cannot verify.
+
+Still open in this phase:
+
+- ⬜ The additive route table of §5.1 in full. Food was added alongside every existing path,
+  and Exercises moved from the bottom bar to the Routines screen to make room; `Today` and
+  `Train` as distinct hubs are not built.
+- ⬜ Food memory: `foods` is still written by nothing. Re-typing a repeated food is currently
+  answered by "copy meal to today", which covers the common case but not a single item.
+- ⬜ Weekly and trend views (P5).
+
+**Two verification findings from this phase, both worth keeping:**
+
+1. The end-to-end helper cleared IndexedDB but not the service worker or its precache. Since
+   the app registers a service worker with `immediate: true`, the first navigation after a
+   rebuild could be served the *previous* build's bundle — a green run against code no longer
+   in the repository. `e2e/fresh.ts` now unregisters and clears caches, and is shared by every
+   spec.
+2. A Playwright `click()` resolves when the DOM event dispatches, not when the handler's write
+   commits. Navigating immediately afterwards aborts the IndexedDB transaction and the record
+   is silently lost. Two tests failed about one run in three until every save waited for the
+   navigation the save performs; three latent instances of the same pattern in the existing
+   suite were given explicit waits too.
 
 ### P4 — The AI plugin · **L**
 

@@ -1,38 +1,16 @@
 import { expect, test, type Page } from '@playwright/test';
+import { clickIfPresent, fresh } from './fresh';
 
 /**
  * Acceptance criteria §11, driven through the real UI in Chromium (mobile viewport).
  * Each test starts from a fresh IndexedDB (seed data only).
  */
 
-async function fresh(page: Page) {
-  await page.goto('/');
-  await page.evaluate(async () => {
-    const dbs = await indexedDB.databases();
-    await Promise.all(
-      dbs.map(
-        (d) =>
-          new Promise<void>((resolve) => {
-            if (!d.name) return resolve();
-            const req = indexedDB.deleteDatabase(d.name);
-            req.onsuccess = () => resolve();
-            req.onerror = () => resolve();
-            req.onblocked = () => resolve();
-          }),
-      ),
-    );
-    localStorage.clear();
-  });
-  await page.reload();
-  await expect(page.getByTestId('next-up')).toBeVisible();
-}
-
 async function startRoutine(page: Page, name: string) {
   // Use the routine list's Start button so the test doesn't depend on the suggestion.
   await page.getByTestId(`start-${name}`).click();
   // §8 soft warning when picking a lower day straight after a lower day: one tap, then let me.
-  const anyway = page.getByRole('button', { name: 'Start anyway' });
-  if (await anyway.isVisible({ timeout: 800 }).catch(() => false)) await anyway.click();
+  await clickIfPresent(page.getByRole('button', { name: 'Start anyway' }));
   await expect(page).toHaveURL(/\/session\//);
 }
 

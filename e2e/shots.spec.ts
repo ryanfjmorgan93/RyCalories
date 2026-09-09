@@ -1,27 +1,9 @@
 import { test, type Page } from '@playwright/test';
+import { fresh } from './fresh';
 
-const OUT = process.env.SHOT_DIR ?? 'shots';
-
-async function fresh(page: Page) {
-  await page.goto('/');
-  await page.evaluate(async () => {
-    const dbs = await indexedDB.databases();
-    await Promise.all(
-      dbs.map(
-        (d) =>
-          new Promise<void>((resolve) => {
-            if (!d.name) return resolve();
-            const req = indexedDB.deleteDatabase(d.name);
-            req.onsuccess = () => resolve();
-            req.onerror = () => resolve();
-            req.onblocked = () => resolve();
-          }),
-      ),
-    );
-  });
-  await page.reload();
-  await page.getByTestId('next-up').waitFor();
-}
+// Screenshots for design work. SHOT_DIR points them anywhere; the default keeps them out of
+// the repository.
+const OUT = process.env.SHOT_DIR ?? 'test-results/shots';
 
 async function food(
   page: Page,

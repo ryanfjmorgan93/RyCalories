@@ -1,30 +1,9 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { clickIfPresent, fresh } from './fresh';
 import { fileURLToPath } from 'node:url';
 
 const HEVY_CSV = fileURLToPath(new URL('../hevy_export.csv', import.meta.url));
 const HEVY_MEASUREMENTS = fileURLToPath(new URL('../hevy_measurements.csv', import.meta.url));
-
-async function fresh(page: Page) {
-  await page.goto('/');
-  await page.evaluate(async () => {
-    const dbs = await indexedDB.databases();
-    await Promise.all(
-      dbs.map(
-        (d) =>
-          new Promise<void>((resolve) => {
-            if (!d.name) return resolve();
-            const req = indexedDB.deleteDatabase(d.name);
-            req.onsuccess = () => resolve();
-            req.onerror = () => resolve();
-            req.onblocked = () => resolve();
-          }),
-      ),
-    );
-    localStorage.clear();
-  });
-  await page.reload();
-  await expect(page.getByTestId('next-up')).toBeVisible();
-}
 
 test.describe('Routines', () => {
   test('create a routine, add an exercise, set its weight, and it shows in a session', async ({ page }) => {
@@ -59,6 +38,9 @@ test.describe('Routines', () => {
     await page.getByTestId('new-routine').click();
     await page.getByTestId('routine-name').fill('Sixth');
     await page.getByTestId('create-routine').click();
+    // The sheet closing is the signal the write finished. A click resolves when the event
+    // dispatches, not when the transaction commits, and navigating away first can abort it.
+    await expect(page.getByRole('dialog')).toBeHidden();
     await page.goto('/');
     for (const name of ['Lower (Hinge)', 'Upper (Push)', 'Lower (Squat)', 'Upper (Pull)', 'Arms (Day 5)', 'Sixth']) {
       await expect(page.getByTestId(`start-${name}`)).toBeVisible();
@@ -127,8 +109,9 @@ test.describe('Data', () => {
     await page.goto('/settings');
     await page.locator('input[type="file"][accept*="csv"]').setInputFiles(HEVY_CSV);
     await page.getByRole('button', { name: /Import 21 sessions/ }).click();
-    const keep = page.getByRole('button', { name: 'Keep mine' });
-    if (await keep.isVisible({ timeout: 1500 }).catch(() => false)) await keep.click();
+    // The reconcile step appears again on a re-import, once the import has actually run.
+    await page.getByRole('button', { name: 'Keep mine' }).click();
+    await expect(page.getByRole('dialog')).toBeHidden();
     await page.goto('/history');
     await expect(page.getByRole('button', { name: /Routine \d - / })).toHaveCount(21);
 
@@ -136,8 +119,7 @@ test.describe('Data', () => {
     await page.goto('/');
     await expect(page.getByTestId('next-up')).toContainText('Lower (Squat)');
     await page.getByTestId('start-Lower (Hinge)').click();
-    const anyway = page.getByRole('button', { name: 'Start anyway' });
-    if (await anyway.isVisible({ timeout: 800 }).catch(() => false)) await anyway.click();
+    await clickIfPresent(page.getByRole('button', { name: 'Start anyway' }));
     const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
     await expect(card).toContainText('31 Aug');
     await expect(card.getByRole('button', { name: '90 × 8' }).first()).toBeVisible();
@@ -146,6 +128,7 @@ test.describe('Data', () => {
     await page.goto('/settings');
     await page.locator('input[type="file"][accept*="csv"]').setInputFiles(HEVY_MEASUREMENTS);
     await page.getByRole('button', { name: 'Import', exact: true }).click();
+    await expect(page.getByRole('dialog')).toBeHidden();
     await page.goto('/body');
     await expect(page.getByText('74.5 kg').first()).toBeVisible();
   });
