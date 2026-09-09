@@ -6,6 +6,11 @@ import { isNative, shareTextFile } from '@/state/native';
 import type {
   Bodyweight,
   Exercise,
+  FoodMemory,
+  Meal,
+  MealItem,
+  Phase,
+  ProductCacheEntry,
   ProgressionDecision,
   Routine,
   RoutineExercise,
@@ -14,9 +19,13 @@ import type {
   Settings,
 } from '@/domain/types';
 
+/** Bumped whenever the set of tables changes, so a restore can reason about what it is holding. */
+export const BACKUP_VERSION = 2;
+
 export interface Backup {
   app: 'iron';
-  version: 1;
+  /** 1 = workouts only (pre-merge). 2 = workouts and nutrition. */
+  version: number;
   exportedAt: string;
   tables: {
     exercises: Exercise[];
@@ -27,33 +36,68 @@ export interface Backup {
     decisions: ProgressionDecision[];
     bodyweight: Bodyweight[];
     settings: Settings[];
+    // Nutrition. Optional so a version 1 backup still satisfies the type and can be restored.
+    meals?: Meal[];
+    mealItems?: MealItem[];
+    foods?: FoodMemory[];
+    productCache?: ProductCacheEntry[];
+    phases?: Phase[];
   };
 }
 
 /** Full JSON backup of every table. */
 export async function exportBackup(): Promise<Backup> {
-  const [exercises, routines, routineExercises, sessions, setLogs, decisions, bodyweight, settings] = await Promise.all([
-    db.exercises.toArray(),
-    db.routines.toArray(),
-    db.routineExercises.toArray(),
-    db.sessions.toArray(),
-    db.setLogs.toArray(),
-    db.decisions.toArray(),
-    db.bodyweight.toArray(),
-    db.settings.toArray(),
-  ]);
+  const [exercises, routines, routineExercises, sessions, setLogs, decisions, bodyweight, settings, meals, mealItems, foods, productCache, phases] =
+    await Promise.all([
+      db.exercises.toArray(),
+      db.routines.toArray(),
+      db.routineExercises.toArray(),
+      db.sessions.toArray(),
+      db.setLogs.toArray(),
+      db.decisions.toArray(),
+      db.bodyweight.toArray(),
+      db.settings.toArray(),
+      db.meals.toArray(),
+      db.mealItems.toArray(),
+      db.foods.toArray(),
+      db.productCache.toArray(),
+      db.phases.toArray(),
+    ]);
   return {
     app: 'iron',
-    version: 1,
+    version: BACKUP_VERSION,
     exportedAt: nowIso(),
-    tables: { exercises, routines, routineExercises, sessions, setLogs, decisions, bodyweight, settings },
+    tables: {
+      exercises,
+      routines,
+      routineExercises,
+      sessions,
+      setLogs,
+      decisions,
+      bodyweight,
+      settings,
+      meals,
+      mealItems,
+      foods,
+      productCache,
+      phases,
+    },
   };
 }
 
 export function isBackup(x: unknown): x is Backup {
   if (!x || typeof x !== 'object') return false;
   const b = x as Partial<Backup>;
-  return b.app === 'iron' && typeof b.tables === 'object' && b.tables !== null;
+  if (b.app !== 'iron' || typeof b.tables !== 'object' || b.tables === null) return false;
+  // The version field was previously declared and then ignored. Read it, and refuse anything
+  // newer than this build understands rather than silently dropping the tables it does not know.
+  const v = typeof b.version === 'number' ? b.version : 1;
+  return v >= 1 && v <= BACKUP_VERSION;
+}
+
+/** Which tables a given backup actually carries rows for. */
+export function tablesInBackup(backup: Backup): TableName[] {
+  return TABLE_NAMES.filter((n) => Array.isArray(backup.tables[n]));
 }
 
 export type RestoreMode = 'merge' | 'replace';
@@ -64,10 +108,14 @@ export type RestoreMode = 'merge' | 'replace';
  */
 export async function importBackup(backup: Backup, mode: RestoreMode): Promise<Record<TableName, number>> {
   const counts = {} as Record<TableName, number>;
+  const present = tablesInBackup(backup);
   await db.transaction('rw', db.tables, async () => {
-    if (mode === 'replace') for (const t of db.tables) await t.clear();
-    for (const name of TABLE_NAMES) {
-      const rows = (backup.tables[name] ?? []) as { id: string }[];
+    // Replace clears only what this file can put back. Clearing every table and repopulating a
+    // subset would mean restoring a workouts-only backup silently destroyed all nutrition data
+    // while the restore sheet reported success.
+    if (mode === 'replace') for (const name of present) await db.table(name).clear();
+    for (const name of present) {
+      const rows = (backup.tables[name] ?? []) as unknown[];
       counts[name] = rows.length;
       if (rows.length) await db.table(name).bulkPut(rows);
     }

@@ -242,3 +242,93 @@ export const DEFAULT_SETTINGS: Omit<Settings, 'id' | 'createdAt'> = {
   restNotify: true,
   seedVersion: 1,
 };
+
+// ---------------------------------------------------------------------------
+// Nutrition (merged from the RyCalories app)
+
+/**
+ * One logged meal. `date` is the local day it counts towards and is separate from `loggedAt`,
+ * which is when it was actually recorded. Keeping them apart is what makes logging to a past day
+ * possible — the old app derived the day from the timestamp and so could only ever log to today.
+ */
+export interface Meal {
+  id: string;
+  /** Local day key (YYYY-MM-DD) this meal counts towards. */
+  date: string;
+  loggedAt: string;
+  name: string;
+  /** 'breakfast' | 'lunch' | 'dinner' | 'snack' | undefined when unlabelled. */
+  slot?: MealSlot;
+  /** Path relative to the app's data directory, never absolute: an absolute path embeds the
+   * package name and breaks on any app-id change or device transfer. */
+  photoPath?: string;
+  /** What the user typed, when the meal was entered as text rather than photographed. */
+  enteredText?: string;
+  notes?: string;
+  /** How confident the recognising model was, when a model was involved at all. */
+  confidence?: 'low' | 'medium' | 'high';
+}
+
+export type MealSlot = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+export const MEAL_SLOTS: MealSlot[] = ['breakfast', 'lunch', 'dinner', 'snack'];
+
+/**
+ * One food within a meal. Nutrition is the discriminated union from `@/domain/food`, so a
+ * portion's weight and its macros can never disagree. Totals are never stored.
+ */
+export interface MealItem {
+  id: string;
+  mealId: string;
+  /** Position within the meal. */
+  index: number;
+  name: string;
+  portion: string;
+  brand?: string;
+  product?: string;
+  source: import('./food').FoodSource;
+  nutrition: import('./food').Nutrition;
+}
+
+/**
+ * Remembered nutrition for a food eaten before, stored per 100 g so any portion is derivable.
+ * Reserved: declared so a later feature needs no migration, but nothing writes to it in v1.
+ */
+export interface FoodMemory {
+  id: string;
+  /** Normalised match key (brand + product, or the normalised name). */
+  key: string;
+  name: string;
+  brand?: string;
+  product?: string;
+  per100: import('./food').Macros;
+  /** Typical portion weight, as a suggestion only — portions genuinely vary. */
+  typicalGrams?: number;
+  source: import('./food').FoodSource;
+  timesUsed: number;
+  lastUsedAt: string;
+}
+
+/** Cached Open Food Facts result, keyed by barcode or by normalised search query. */
+export interface ProductCacheEntry {
+  key: string;
+  /** Null records a confident miss, so an unrecognised food stops re-hitting the network. */
+  per100: import('./food').Macros | null;
+  name?: string;
+  brand?: string;
+  servingGrams?: number;
+  packGrams?: number;
+  fetchedAt: string;
+}
+
+export type PhaseKind = 'cut' | 'maintain' | 'bulk';
+
+/** A training and nutrition phase. What makes the two halves one app rather than two tabs. */
+export interface Phase {
+  id: string;
+  kind: PhaseKind;
+  startDate: string;
+  endDate?: string;
+  /** Target rate of bodyweight change in kg per week. Negative when cutting. */
+  targetRateKgPerWeek?: number;
+  notes?: string;
+}
