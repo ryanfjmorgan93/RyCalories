@@ -1,6 +1,7 @@
 import Papa from 'papaparse';
 import { db, TABLE_NAMES, type TableName } from './db';
 import { nowIso } from '@/domain/dates';
+import { DEFAULT_SETTINGS } from '@/domain/types';
 import type {
   Bodyweight,
   Exercise,
@@ -68,6 +69,10 @@ export async function importBackup(backup: Backup, mode: RestoreMode): Promise<R
       const rows = (backup.tables[name] ?? []) as { id: string }[];
       counts[name] = rows.length;
       if (rows.length) await db.table(name).bulkPut(rows);
+    }
+    // A backup without a settings row must not leave the app looking unseeded (boot would reseed on top).
+    if (!(await db.settings.get('settings'))) {
+      await db.settings.put({ id: 'settings', ...DEFAULT_SETTINGS, createdAt: nowIso() });
     }
   });
   return counts;
@@ -145,7 +150,7 @@ export function csvFilename(): string {
  * Hand a file to the user. On Android PWAs the share sheet is the fastest route to Drive/Files;
  * fall back to a download link elsewhere.
  */
-export async function deliverFile(filename: string, text: string, mime: string): Promise<'shared' | 'downloaded'> {
+export async function deliverFile(filename: string, text: string, mime: string): Promise<'shared' | 'downloaded' | 'cancelled'> {
   const blob = new Blob([text], { type: mime });
   const nav = typeof navigator !== 'undefined' ? navigator : undefined;
   if (nav && 'share' in nav && typeof File !== 'undefined') {
@@ -156,7 +161,7 @@ export async function deliverFile(filename: string, text: string, mime: string):
         await nav.share({ files: [file], title: filename });
         return 'shared';
       } catch (e) {
-        if ((e as Error)?.name === 'AbortError') return 'shared';
+        if ((e as Error)?.name === 'AbortError') return 'cancelled';
         // fall through to download
       }
     }

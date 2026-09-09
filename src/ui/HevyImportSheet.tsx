@@ -35,6 +35,8 @@ export function HevyImportSheet({
   const exercises = useExercises();
   const routines = useRoutines();
   const [plan, setPlan] = useState<HevyImportPlan | null>(null);
+  // Only dumbbell lifts can have been logged as a pair total; keep the toggle off the rest.
+  const dumbbellTitles = new Set(parsed.exercises.filter((e) => e.isDumbbell).map((e) => e.title));
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<HevyImportResult | null>(null);
   const [rows, setRows] = useState<WeightReconcileRow[] | null>(null);
@@ -152,7 +154,7 @@ export function HevyImportSheet({
   return (
     <Sheet
       open={open}
-      onClose={onClose}
+      onClose={busy ? () => undefined : onClose}
       title="Import Hevy CSV"
       footer={
         <Button size="xl" variant="primary" full disabled={!plan || busy} onClick={() => void runImport()}>
@@ -209,9 +211,11 @@ export function HevyImportSheet({
                         New exercise
                       </Chip>
                     )}
-                    <Chip size="sm" tone="accent" active={p.halve} onClick={() => toggleHalve(p.title)}>
-                      ÷2 pair total
-                    </Chip>
+                    {dumbbellTitles.has(p.title) && (
+                      <Chip size="md" tone="accent" active={p.halve} onClick={() => toggleHalve(p.title)}>
+                        ÷2 pair total
+                      </Chip>
+                    )}
                   </div>
                   <div className="mt-1.5 flex items-center gap-2">
                     <Select value={p.exerciseId ?? ''} onChange={(v) => setExercise(p.title, v || null)} className="min-w-0 flex-1">
@@ -291,7 +295,7 @@ export function ReconcileSheet({
   return (
     <Sheet
       open={open}
-      onClose={onClose}
+      onClose={busy ? () => undefined : onClose}
       title="Update current weights?"
       footer={
         <div className="grid grid-cols-2 gap-3">

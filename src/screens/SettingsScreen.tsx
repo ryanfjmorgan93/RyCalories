@@ -37,10 +37,10 @@ export function SettingsScreen() {
         {settings && (
           <>
             <SectionTitle>Targets</SectionTitle>
-            <TargetsCard settings={settings} />
+            <TargetsCard key={settings.savedAt ?? 'initial'} settings={settings} />
 
             <SectionTitle>Rest timer</SectionTitle>
-            <RestCard settings={settings} />
+            <RestCard key={settings.savedAt ?? 'initial'} settings={settings} />
 
             <SectionTitle>Appearance</SectionTitle>
             <Card className="p-4">
@@ -85,7 +85,7 @@ function DataCard() {
 
   const deliver = async (name: string, text: string, mime: string) => {
     const how = await deliverFile(name, text, mime);
-    toast(how === 'shared' ? 'Shared' : 'Downloaded', 'ok');
+    if (how !== 'cancelled') toast(how === 'shared' ? 'Shared' : 'Downloaded', 'ok');
   };
 
   const guarded = (fn: () => Promise<void>) => async () => {
@@ -104,7 +104,7 @@ function DataCard() {
     if (!file) return;
     let data: unknown;
     try {
-      data = JSON.parse(await file.text());
+      data = JSON.parse((await file.text()).replace(/^\uFEFF/, ''));
     } catch {
       data = null;
     }
@@ -290,12 +290,14 @@ function RestCard({ settings }: { settings: Settings }) {
   const [applyOpen, setApplyOpen] = useState(false);
   const [perm, setPerm] = useState(() => notificationPermission());
 
+  // The numbers on screen (falling back to what is saved); a rest under 5 s would fire the cue at once.
+  const effective = () => ({
+    restCompoundSec: Math.max(5, compound ?? settings.restCompoundSec),
+    restIsolationSec: Math.max(5, isolation ?? settings.restIsolationSec),
+    restCarrySec: Math.max(5, carry ?? settings.restCarrySec),
+  });
   const save = async () => {
-    await saveSettings({
-      restCompoundSec: compound ?? settings.restCompoundSec,
-      restIsolationSec: isolation ?? settings.restIsolationSec,
-      restCarrySec: carry ?? settings.restCarrySec,
-    });
+    await saveSettings(effective());
     toast('Saved', 'ok');
   };
 
@@ -303,13 +305,13 @@ function RestCard({ settings }: { settings: Settings }) {
     <Card className="p-4">
       <div className="grid grid-cols-3 gap-3">
         <Field label="Compound (s)">
-          <NumberInput value={compound} mode="numeric" min={0} max={900} onChange={setCompound} />
+          <NumberInput value={compound} mode="numeric" min={5} max={900} onChange={setCompound} />
         </Field>
         <Field label="Isolation (s)">
-          <NumberInput value={isolation} mode="numeric" min={0} max={900} onChange={setIsolation} />
+          <NumberInput value={isolation} mode="numeric" min={5} max={900} onChange={setIsolation} />
         </Field>
         <Field label="Carry (s)">
-          <NumberInput value={carry} mode="numeric" min={0} max={900} onChange={setCarry} />
+          <NumberInput value={carry} mode="numeric" min={5} max={900} onChange={setCarry} />
         </Field>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-3">
@@ -348,7 +350,7 @@ function RestCard({ settings }: { settings: Settings }) {
             <div className="text-sm text-muted">{PERMISSION_LABEL[perm]}</div>
           </div>
           {perm !== 'granted' && perm !== 'unsupported' && (
-            <Button size="sm" variant="outline" onClick={async () => setPerm(await requestNotifications())}>
+            <Button size="md" variant="outline" onClick={async () => setPerm(await requestNotifications())}>
               Allow notifications
             </Button>
           )}
@@ -358,13 +360,19 @@ function RestCard({ settings }: { settings: Settings }) {
       <Confirm
         open={applyOpen}
         title="Apply rest defaults to every exercise?"
-        body={`Compound ${settings.restCompoundSec} s · isolation ${settings.restIsolationSec} s · carry ${settings.restCarrySec} s. Per-routine overrides are kept. Save first if you changed the numbers above.`}
+        body={`Compound ${effective().restCompoundSec} s · isolation ${effective().restIsolationSec} s · carry ${effective().restCarrySec} s. Per-routine overrides are kept.`}
         confirmLabel="Apply"
         onCancel={() => setApplyOpen(false)}
         onConfirm={async () => {
-          const n = await applyRestDefaults(settings);
           setApplyOpen(false);
-          toast(`Updated ${n} ${n === 1 ? 'exercise' : 'exercises'}`, 'ok');
+          try {
+            const values = effective();
+            await saveSettings(values);
+            const n = await applyRestDefaults({ ...settings, ...values });
+            toast(`Updated ${n} ${n === 1 ? 'exercise' : 'exercises'}`, 'ok');
+          } catch {
+            toast('Could not apply', 'danger');
+          }
         }}
       />
     </Card>
@@ -378,6 +386,18 @@ function DeveloperCard() {
   const counts = useLiveQuery(() => dataCounts(), []);
   const [resetOpen, setResetOpen] = useState(false);
   const [wipeOpen, setWipeOpen] = useState(false);
+  const pending = useRef(false);
+  const run = (fn: () => Promise<void>) => async () => {
+    if (pending.current) return;
+    pending.current = true;
+    try {
+      await fn();
+      window.location.reload();
+    } catch {
+      pending.current = false;
+      toast('Something went wrong', 'danger');
+    }
+  };
 
   return (
     <Card className="p-4">
@@ -392,7 +412,7 @@ function DeveloperCard() {
           Wipe all data
         </Button>
       </div>
-      <div className="mt-3 text-xs text-dim">Iron {import.meta.env.MODE}</div>
+      <div className="mt-3 text-xs text-dim">Iron {__APP_VERSION__}</div>
 
       <Confirm
         open={resetOpen}
@@ -401,22 +421,16 @@ function DeveloperCard() {
         confirmLabel="Reset"
         danger
         onCancel={() => setResetOpen(false)}
-        onConfirm={async () => {
-          await resetToSeed();
-          window.location.reload();
-        }}
+        onConfirm={run(resetToSeed)}
       />
       <Confirm
         open={wipeOpen}
         title="Wipe all data?"
-        body="Every routine, exercise, session and reading is deleted. Export a backup first if you want it back."
+        body="Every routine, exercise, session and reading is deleted."
         confirmLabel="Wipe"
         danger
         onCancel={() => setWipeOpen(false)}
-        onConfirm={async () => {
-          await wipeAll();
-          window.location.reload();
-        }}
+        onConfirm={run(wipeAll)}
       />
     </Card>
   );

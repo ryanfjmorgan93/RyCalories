@@ -31,7 +31,7 @@ export function Button({ variant = 'secondary', size = 'md', full, className = '
     <button
       type="button"
       {...rest}
-      className={`inline-flex items-center justify-center gap-2 select-none whitespace-nowrap transition-[filter,background-color] disabled:opacity-40 disabled:pointer-events-none ${variants[variant]} ${sizes[size]} ${full ? 'w-full' : ''} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 select-none whitespace-nowrap transition-[filter] disabled:opacity-40 disabled:pointer-events-none ${variants[variant]} ${sizes[size]} ${full ? 'w-full' : ''} ${className}`}
     >
       {children}
     </button>

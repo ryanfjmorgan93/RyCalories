@@ -12,7 +12,7 @@
  */
 import Papa from 'papaparse';
 import { db } from './db';
-import { findExerciseByName, lockInRoutineExercise, logBodyweight, normaliseName, routineItems } from './repo';
+import { findExerciseByName, lockInRoutineExercise, logBodyweight, normaliseName, routineItems, updateRoutineExercise } from './repo';
 import { stableUuid } from '@/domain/ids';
 import { roundKg } from '@/domain/engine';
 import { toDateKey } from '@/domain/dates';
@@ -543,6 +543,6 @@ export async function reconcileWeights(): Promise<WeightReconcileRow[]> {
 export async function applyReconciledWeights(rows: WeightReconcileRow[]): Promise<void> {
   for (const row of rows) {
     if (row.rx.mode === 'calibrating') await lockInRoutineExercise(row.rx.id, row.latest);
-    else await db.routineExercises.update(row.rx.id, { currentWeight: roundKg(row.latest) });
+    else await updateRoutineExercise(row.rx.id, { currentWeight: roundKg(row.latest) });
   }
 }
