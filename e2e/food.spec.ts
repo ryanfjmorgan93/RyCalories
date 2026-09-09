@@ -142,6 +142,21 @@ test.describe('nutrition', () => {
     await context.setOffline(false);
   });
 
+  test('going over the target says so rather than showing zero left', async ({ page }) => {
+    await page.goto('/settings');
+    await page.getByRole('button', { name: 'Save' }).first().click();
+
+    await page.goto('/food/new');
+    await page.getByTestId('meal-name').fill('Big one');
+    await page.getByTestId('empty-add-food').click();
+    // Comfortably past the 1900 kcal starting target.
+    await addFood(page, { name: 'Takeaway', portion: '1', kcal: 2400, protein: 90, carbs: 250, fat: 100 });
+    await page.getByTestId('save-meal').click();
+
+    await page.goto('/food');
+    await expect(page.getByTestId('remaining')).toHaveText('500 kcal over');
+  });
+
   test('the home screen shows what has been eaten against the target', async ({ page }) => {
     // A target only exists once Settings has been saved once.
     await page.goto('/settings');

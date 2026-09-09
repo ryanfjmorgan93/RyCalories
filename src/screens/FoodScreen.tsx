@@ -77,8 +77,12 @@ export function FoodScreen() {
           <div className="mt-2 flex items-center justify-between text-xs text-muted">
             <MacroLine m={view?.eaten ?? { kcal: 0, protein: 0, carbs: 0, fat: 0 }} />
             {view?.calories && (
-              <span className="num tabular-nums" data-testid="remaining">
-                {fmtKcal(Math.max(0, view.calories.kcal - view.eaten.kcal))} left
+              // Over the target says so. Clamping this at zero would have been the tidy lie the
+              // bar itself is written not to tell.
+              <span className={`num tabular-nums ${view.eaten.kcal > view.calories.kcal ? 'text-warn' : ''}`} data-testid="remaining">
+                {view.eaten.kcal > view.calories.kcal
+                  ? `${fmtKcal(view.eaten.kcal - view.calories.kcal)} over`
+                  : `${fmtKcal(view.calories.kcal - view.eaten.kcal)} left`}
               </span>
             )}
           </div>
@@ -98,7 +102,7 @@ export function FoodScreen() {
                   title={m.meal.name}
                   subtitle={
                     <span>
-                      {[m.meal.slot, fmtTime(m.meal.loggedAt)].filter(Boolean).join(' · ')} ·{' '}
+                      {[m.meal.slot ? capitalise(m.meal.slot) : '', fmtTime(m.meal.loggedAt)].filter(Boolean).join(' · ')} ·{' '}
                       {m.items.length} {m.items.length === 1 ? 'item' : 'items'}
                     </span>
                   }
@@ -172,4 +176,8 @@ export function FoodScreen() {
       />
     </div>
   );
+}
+
+function capitalise(s: string): string {
+  return s[0]!.toUpperCase() + s.slice(1);
 }
