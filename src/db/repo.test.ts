@@ -19,6 +19,7 @@ import {
   setSkipped,
   stallStatus,
   startSession,
+  updateRoutineExercise,
   updateSession,
   wipeAll,
 } from './repo';
@@ -286,6 +287,59 @@ describe('sessions and progression (acceptance §11)', () => {
     const rows = await db.bodyweight.where('date').equals('2026-09-08').toArray();
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ kg: 74.4, note: 'evening' });
+  });
+});
+
+describe('linked progression (§4.8 Phase 2)', () => {
+  const PULL = SEED_ROUTINE_IDS['Upper (Pull)'];
+  const DAY5 = SEED_ROUTINE_IDS['Arms (Day 5)'];
+  const CURL = SEED_EXERCISE_IDS['DB Curl'];
+
+  beforeEach(async () => {
+    await resetToSeed();
+  });
+
+  it('is independent by default: DB Curl on Pull and Day 5 progress separately', async () => {
+    const pullRx = await rxFor(PULL, CURL);
+    const day5Rx = await rxFor(DAY5, CURL);
+    const session = await startSession(PULL);
+    for (let i = 0; i < 3; i++) await logSet({ sessionId: session.id, routineExerciseId: pullRx.id, exerciseId: CURL, type: 'working', weight: 9, reps: 12 });
+    await finishSession(session.id, { choices: [] });
+    expect((await rxFor(PULL, CURL)).currentWeight).toBe(10);
+    expect((await rxFor(DAY5, CURL)).currentWeight).toBe(9);
+    expect(day5Rx.currentWeight).toBe(9);
+  });
+
+  it('linking mirrors accepted decisions, overrides and lock-ins across routines', async () => {
+    const pullRx = await rxFor(PULL, CURL);
+    const day5Rx = await rxFor(DAY5, CURL);
+    await updateRoutineExercise(pullRx.id, { linkProgression: true });
+    await updateRoutineExercise(day5Rx.id, { linkProgression: true });
+
+    const session = await startSession(PULL);
+    for (let i = 0; i < 3; i++) await logSet({ sessionId: session.id, routineExerciseId: pullRx.id, exerciseId: CURL, type: 'working', weight: 9, reps: 12 });
+    await finishSession(session.id, { choices: [{ routineExerciseId: pullRx.id, overrideTo: 11 }] });
+    expect((await rxFor(PULL, CURL)).currentWeight).toBe(11);
+    expect((await rxFor(DAY5, CURL)).currentWeight).toBe(11);
+
+    // Editing a linked weight mirrors too; editing an unlinked field does not.
+    await updateRoutineExercise(day5Rx.id, { currentWeight: 12, targetSets: 5 });
+    expect((await rxFor(PULL, CURL))).toMatchObject({ currentWeight: 12, targetSets: 3 });
+
+    // Lock-in from calibrating propagates mode and weight.
+    await updateRoutineExercise(pullRx.id, { mode: 'calibrating' });
+    expect((await rxFor(DAY5, CURL)).mode).toBe('calibrating');
+    await lockInRoutineExercise(day5Rx.id, 10);
+    expect((await rxFor(PULL, CURL))).toMatchObject({ mode: 'normal', currentWeight: 10 });
+  });
+
+  it('switching the link on adopts the group number instead of overwriting it', async () => {
+    const pullRx = await rxFor(PULL, CURL);
+    const day5Rx = await rxFor(DAY5, CURL);
+    await updateRoutineExercise(pullRx.id, { linkProgression: true, currentWeight: 14 });
+    await updateRoutineExercise(day5Rx.id, { linkProgression: true });
+    expect((await rxFor(DAY5, CURL)).currentWeight).toBe(14);
+    expect((await rxFor(PULL, CURL)).currentWeight).toBe(14);
   });
 });
 

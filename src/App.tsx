@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { BottomNav } from './ui/components/BottomNav';
 import { ToastHost } from './ui/components/Toast';
@@ -36,8 +37,9 @@ function SessionShell() {
 function ScrollToTop() {
   const { pathname } = useLocation();
   // Reset scroll on route change (mobile browsers keep the previous offset otherwise).
-  if (typeof window !== 'undefined') window.scrollTo({ top: 0 });
-  void pathname;
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [pathname]);
   return null;
 }
 

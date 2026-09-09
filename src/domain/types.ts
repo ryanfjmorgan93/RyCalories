@@ -101,6 +101,12 @@ export interface RoutineExercise {
   notes?: string;
   optional: boolean;
   restSecOverride?: number;
+  /**
+   * §4.8 Phase 2 — share one progression number across routines. When true, this
+   * routine-exercise's currentWeight / mode / increment are kept in sync with every other
+   * linked routine-exercise of the same exercise.
+   */
+  linkProgression?: boolean;
   /** Carry exercises: target distance range in metres (display only). */
   distanceMinM?: number;
   distanceMaxM?: number;

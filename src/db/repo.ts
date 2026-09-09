@@ -240,8 +240,48 @@ export async function addRoutineExercise(routineId: string, exerciseId: string):
   return rx;
 }
 
+type LinkedFields = Partial<Pick<RoutineExercise, 'currentWeight' | 'mode' | 'increment'>>;
+
+/** §4.8 — copy progression fields to every other linked routine-exercise of the same exercise. */
+async function propagateLinked(rx: Pick<RoutineExercise, 'id' | 'exerciseId' | 'linkProgression'>, fields: LinkedFields): Promise<void> {
+  if (!rx.linkProgression || Object.keys(fields).length === 0) return;
+  const siblings = await db.routineExercises.where('exerciseId').equals(rx.exerciseId).toArray();
+  for (const s of siblings) {
+    if (s.id === rx.id || !s.linkProgression) continue;
+    await db.routineExercises.update(s.id, fields);
+  }
+}
+
+/** Other linked routine-exercises for the same exercise (excluding `rx` itself). */
+export async function linkedSiblings(rx: Pick<RoutineExercise, 'id' | 'exerciseId'>): Promise<RoutineExercise[]> {
+  const siblings = await db.routineExercises.where('exerciseId').equals(rx.exerciseId).toArray();
+  return siblings.filter((s) => s.id !== rx.id && s.linkProgression);
+}
+
+/**
+ * Update a routine-exercise. When it is linked (§4.8), weight / mode / increment changes are
+ * mirrored to its linked siblings; switching the link on adopts the group's current numbers.
+ */
 export async function updateRoutineExercise(id: string, patch: Partial<Omit<RoutineExercise, 'id' | 'routineId'>>): Promise<void> {
-  await db.routineExercises.update(id, patch);
+  await db.transaction('rw', db.routineExercises, async () => {
+    const before = await db.routineExercises.get(id);
+    if (!before) return;
+    let next: Partial<Omit<RoutineExercise, 'id' | 'routineId'>> = { ...patch };
+    const turningOn = patch.linkProgression === true && !before.linkProgression;
+    if (turningOn) {
+      const [leader] = await linkedSiblings(before);
+      if (leader) next = { ...next, currentWeight: leader.currentWeight, mode: leader.mode, increment: leader.increment };
+    }
+    await db.routineExercises.update(id, next);
+    const after = { ...before, ...next };
+    if (after.linkProgression && !turningOn) {
+      const fields: LinkedFields = {};
+      if (patch.currentWeight !== undefined) fields.currentWeight = roundKg(patch.currentWeight);
+      if (patch.mode !== undefined) fields.mode = patch.mode;
+      if (patch.increment !== undefined) fields.increment = patch.increment;
+      await propagateLinked(after, fields);
+    }
+  });
 }
 
 export async function removeRoutineExercise(id: string): Promise<void> {
@@ -261,6 +301,7 @@ export async function lockInRoutineExercise(id: string, weight: number, sessionI
     if (!rx) return;
     const w = roundKg(weight);
     await db.routineExercises.update(id, { mode: 'normal', currentWeight: w });
+    await propagateLinked(rx, { mode: 'normal', currentWeight: w });
     await db.decisions.put({
       id: uuid(),
       sessionId,
@@ -585,6 +626,7 @@ export async function finishSession(sessionId: string, input: FinishInput): Prom
         if (choice?.lockInAt !== undefined && Number.isFinite(choice.lockInAt)) {
           const w = roundKg(choice.lockInAt);
           await db.routineExercises.update(rx.id, { mode: 'normal', currentWeight: w });
+          await propagateLinked(rx, { mode: 'normal', currentWeight: w });
           await db.decisions.put({
             id: uuid(),
             sessionId,
@@ -613,6 +655,7 @@ export async function finishSession(sessionId: string, input: FinishInput): Prom
       const to = resolveWeight(d, override);
       const accepted = override === undefined || override === d.toWeight;
       await db.routineExercises.update(rx.id, { currentWeight: to });
+      await propagateLinked(rx, { currentWeight: to });
       await db.decisions.put({
         id: uuid(),
         sessionId,
