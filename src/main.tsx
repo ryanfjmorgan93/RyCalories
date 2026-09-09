@@ -6,6 +6,8 @@ import { App } from './App';
 import { ensureSeeded, getSettings } from './db/repo';
 import { applyTheme } from './ui/theme';
 import { isNative } from './state/native';
+import { DB_VERSION } from './db/db';
+import { renderRecovery } from './boot/recovery';
 
 async function boot() {
   await ensureSeeded();
@@ -23,4 +25,13 @@ async function boot() {
   }
 }
 
-void boot();
+// A failed database upgrade must never leave a blank screen on the app holding the training
+// history. Any boot failure falls through to a recovery screen that can still export the data.
+void boot().catch((err: unknown) => {
+  console.error('[iron] boot failed', err);
+  try {
+    renderRecovery(err, DB_VERSION);
+  } catch {
+    document.body.textContent = 'Iron could not start.';
+  }
+});

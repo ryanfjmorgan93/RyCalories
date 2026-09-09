@@ -61,7 +61,10 @@ jobs:
         with:
           tag_name: iron-latest
           name: Iron (latest build)
-          prerelease: true
+          # Not a prerelease: GitHub excludes prereleases from /releases/latest resolution,
+          # which makes the stable download URL 404 forever.
+          prerelease: false
+          make_latest: true
           files: iron-*.apk
           body: |
             Signed release APK built from ${{ github.sha }}.

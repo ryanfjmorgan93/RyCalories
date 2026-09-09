@@ -14,7 +14,11 @@ android {
         applicationId "com.rycalories.iron"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
+        // Derived from the CI run number so every published build is distinguishable and
+        // rollback ordering is defined. Local builds get a high fixed number so they can be
+        // installed over any CI build for testing. Never solve an update problem by
+        // uninstalling Iron — that deletes the training history.
+        versionCode System.getenv("GITHUB_RUN_NUMBER") ? System.getenv("GITHUB_RUN_NUMBER").toInteger() + 100 : 9000
         versionName "0.1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {

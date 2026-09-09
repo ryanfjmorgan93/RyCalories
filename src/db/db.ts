@@ -14,6 +14,9 @@ import type {
  * Local-first store. Every table is keyed by a stable UUID string so that a
  * future sync layer can ship rows as-is (no autoincrement keys anywhere).
  */
+/** Current Dexie schema version. Exported so the recovery screen can report what it attempted. */
+export const DB_VERSION = 1;
+
 export class IronDB extends Dexie {
   exercises!: EntityTable<Exercise, 'id'>;
   routines!: EntityTable<Routine, 'id'>;

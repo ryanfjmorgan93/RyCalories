@@ -1,5 +1,5 @@
 ext {
-    minSdkVersion = 23
+    minSdkVersion = 31  // AICore / ML Kit GenAI needs 31+. compileSdk stays 35: CI provisions android-35 only.
     compileSdkVersion = 35
     targetSdkVersion = 35
     androidxActivityVersion = '1.9.2'
