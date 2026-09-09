@@ -59,13 +59,18 @@ jobs:
         working-directory: android
         run: ./gradlew --no-daemon assembleRelease
 
+      # Two copies: one named by commit for the workflow artifact (traceable), and one with a
+      # stable name for the release, so the download link never changes and the release page
+      # never accumulates a pile of near-identical files to choose between.
       - name: Rename
-        run: cp android/app/build/outputs/apk/release/app-release.apk iron-${{ github.sha }}.apk
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk iron-${{ github.sha }}.apk
+          cp android/app/build/outputs/apk/release/app-release.apk iron.apk
 
       - uses: actions/upload-artifact@v4
         with:
           name: iron-apk
-          path: iron-*.apk
+          path: iron-${{ github.sha }}.apk
           retention-days: 90
 
       # Every push also refreshes a rolling "iron-latest" release so the APK has a stable download link.
@@ -80,7 +85,9 @@ jobs:
           # which makes the stable download URL 404 forever.
           prerelease: false
           make_latest: true
-          files: iron-*.apk
+          files: iron.apk
           body: |
             Signed release APK built from ${{ github.sha }}.
             Download, open on the phone, allow installs from this source, done.
+
+            Stable link: https://github.com/${{ github.repository }}/releases/download/iron-latest/iron.apk

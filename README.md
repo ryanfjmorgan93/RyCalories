@@ -36,7 +36,7 @@ Seed data (the five routines from the brief) is generated from `scratch/gen/seed
 
 The same app ships as a native Android package (Capacitor shell, assets bundled, works offline, rest-timer notifications and share-sheet exports through the OS).
 
-- **Download:** every push runs the "Build APK" workflow. Grab `iron-<sha>.apk` from the workflow run's artifacts, or from the rolling [iron-latest release](https://github.com/ryanfjmorgan93/RyCalories/releases/tag/iron-latest). Open it on the phone and allow installs from that source.
+- **Download:** [github.com/ryanfjmorgan93/RyCalories/releases/download/iron-latest/iron.apk](https://github.com/ryanfjmorgan93/RyCalories/releases/download/iron-latest/iron.apk) — a stable link, refreshed by every push. Open it on the phone and allow installs from that source. The workflow run's artifacts also keep an `iron-<sha>.apk` for 90 days if a specific build is needed.
 - **Build locally:** Android SDK 35 + JDK 21, then
 
 ```bash
