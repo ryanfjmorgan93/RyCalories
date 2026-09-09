@@ -329,12 +329,14 @@ export async function getActiveSession(): Promise<Session | undefined> {
 
 /** Start a session for a routine. If one is already live, it is returned instead. */
 export async function startSession(routineId: string): Promise<Session> {
-  const active = await getActiveSession();
-  if (active) return active;
-  const routine = await db.routines.get(routineId);
-  const s: Session = { id: uuid(), routineId, title: routine?.name ?? 'Session', startedAt: nowIso() };
-  await db.sessions.put(s);
-  return s;
+  return db.transaction('rw', [db.sessions, db.routines], async () => {
+    const active = await getActiveSession();
+    if (active) return active;
+    const routine = await db.routines.get(routineId);
+    const s: Session = { id: uuid(), routineId, title: routine?.name ?? 'Session', startedAt: nowIso() };
+    await db.sessions.put(s);
+    return s;
+  });
 }
 
 /** Delete a session together with its sets and decisions. Stored weights are left as they are. */
@@ -406,23 +408,25 @@ export interface LogSetInput {
 }
 
 export async function logSet(input: LogSetInput): Promise<SetLog> {
-  const existing = await setsForSlot(input.sessionId, input.routineExerciseId, input.exerciseId);
-  const set: SetLog = {
-    id: uuid(),
-    sessionId: input.sessionId,
-    routineExerciseId: input.routineExerciseId,
-    exerciseId: input.exerciseId,
-    index: existing.length,
-    type: input.type,
-    weight: roundKg(Number.isFinite(input.weight) ? input.weight : 0),
-    reps: input.reps,
-    distanceM: input.distanceM,
-    seconds: input.seconds,
-    rir: input.rir,
-    completedAt: nowIso(),
-  };
-  await db.setLogs.put(set);
-  return set;
+  return db.transaction('rw', db.setLogs, async () => {
+    const existing = await setsForSlot(input.sessionId, input.routineExerciseId, input.exerciseId);
+    const set: SetLog = {
+      id: uuid(),
+      sessionId: input.sessionId,
+      routineExerciseId: input.routineExerciseId,
+      exerciseId: input.exerciseId,
+      index: existing.length,
+      type: input.type,
+      weight: roundKg(Number.isFinite(input.weight) ? input.weight : 0),
+      reps: input.reps,
+      distanceM: input.distanceM,
+      seconds: input.seconds,
+      rir: input.rir,
+      completedAt: nowIso(),
+    };
+    await db.setLogs.put(set);
+    return set;
+  });
 }
 
 export async function updateSet(
@@ -614,7 +618,10 @@ export async function finishSession(sessionId: string, input: FinishInput): Prom
   const summary = await buildSummary(sessionId, now);
   const byRx = new Map(input.choices.map((c) => [c.routineExerciseId, c]));
 
+  if (summary.session.endedAt) return summary;
   await db.transaction('rw', [db.sessions, db.routineExercises, db.decisions], async () => {
+    const current = await db.sessions.get(sessionId);
+    if (!current || current.endedAt) return; // already finished (double tap / retry)
     await db.decisions.where('sessionId').equals(sessionId).delete();
     for (const item of summary.items) {
       if (!item.rx || !item.decision) continue;

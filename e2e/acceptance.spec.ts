@@ -67,7 +67,7 @@ test.describe('Phase 1 acceptance', () => {
     await expect(card).toContainText('4 × 6–8 @ 110 kg');
     await expect(card).toContainText('Straps. 3-sec lower. Depth over load.');
     await logSets(page, 'Romanian Deadlift (Barbell)', 110, [8, 8, 8, 8]);
-    await expect(card).toContainText('Extra set 5');
+    await expect(card).toContainText('Set 5 (target 4)');
     await finishToSummary(page);
 
     const decision = page.getByTestId('decision-Romanian Deadlift (Barbell)');

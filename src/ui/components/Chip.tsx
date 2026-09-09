@@ -12,7 +12,7 @@ export function Chip({
   onClick?: () => void;
   children: ReactNode;
   tone?: 'neutral' | 'accent' | 'ok' | 'warn' | 'danger' | 'info';
-  size?: 'sm' | 'md';
+  size?: 'sm' | 'md' | 'lg';
   className?: string;
 }) {
   const tones: Record<string, string> = {
@@ -23,7 +23,7 @@ export function Chip({
     danger: active ? 'bg-danger text-bg border-danger' : 'bg-danger/10 text-danger border-danger/30',
     info: active ? 'bg-info text-bg border-info' : 'bg-info/10 text-info border-info/30',
   };
-  const s = size === 'sm' ? 'h-7 px-2.5 text-xs' : 'h-10 px-4 text-sm';
+  const s = size === 'sm' ? 'h-7 px-2.5 text-xs' : size === 'lg' ? 'h-11 px-4 text-sm' : 'h-10 px-4 text-sm';
   const Comp = onClick ? 'button' : 'span';
   return (
     <Comp

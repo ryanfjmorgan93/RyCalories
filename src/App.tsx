@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
-import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { fmtDuration } from './domain/format';
+import { useActiveSession, useNow } from './ui/hooks';
 import { BottomNav } from './ui/components/BottomNav';
 import { ToastHost } from './ui/components/Toast';
 import { RestTimerBar } from './ui/RestTimerBar';
@@ -20,9 +22,30 @@ import { CheckInScreen } from './screens/CheckInScreen';
 function Shell() {
   return (
     <div className="mx-auto min-h-dvh max-w-xl pb-safe-nav">
+      <LiveBanner />
       <Outlet />
       <BottomNav />
     </div>
+  );
+}
+
+/** Slim strip shown on every tab screen while a session is live: the clock stays visible (§5). */
+function LiveBanner() {
+  const active = useActiveSession();
+  const nav = useNavigate();
+  const now = useNow(1000, !!active);
+  if (!active) return null;
+  const elapsed = Math.max(0, Math.floor((now - Date.parse(active.startedAt)) / 1000));
+  return (
+    <button
+      type="button"
+      onClick={() => nav(`/session/${active.id}`)}
+      className="sticky top-0 z-40 flex h-11 w-full items-center justify-between bg-accent px-4 text-accent-fg"
+      data-testid="live-banner"
+    >
+      <span className="truncate text-sm font-bold">Live · {active.title}</span>
+      <span className="num text-sm font-extrabold">{fmtDuration(elapsed)} · Resume</span>
+    </button>
   );
 }
 

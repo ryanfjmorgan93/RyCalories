@@ -38,8 +38,12 @@ export function SummaryScreen() {
   useEffect(() => {
     let alive = true;
     if (!id) return;
-    void buildSummary(id).then((s) => {
+    void buildSummary(id).catch(() => null).then((s) => {
       if (!alive) return;
+      if (!s) {
+        nav('/', { replace: true });
+        return;
+      }
       if (s.session.endedAt) {
         nav(`/history/${s.session.id}`, { replace: true });
         return;
@@ -60,6 +64,8 @@ export function SummaryScreen() {
   }, [id, nav]);
 
   const decided = useMemo(() => (summary?.items ?? []).filter((i) => i.status === 'done' && i.decision), [summary]);
+  // Every Override / Lock in needs a number before the session can be saved.
+  const invalid = Object.values(choices).some((c) => (c.mode === 'override' && c.overrideTo === null) || (c.lockIn && c.lockInAt === null));
   const others = useMemo(() => (summary?.items ?? []).filter((i) => !(i.status === 'done' && i.decision)), [summary]);
 
   if (!summary) {
@@ -72,7 +78,7 @@ export function SummaryScreen() {
   }
 
   const save = async () => {
-    if (saving) return;
+    if (saving || invalid) return;
     setSaving(true);
     try {
       await finishSession(summary.session.id, {
@@ -87,6 +93,8 @@ export function SummaryScreen() {
       });
       toast('Session saved', 'ok');
       nav('/', { replace: true });
+    } catch {
+      toast('Could not save', 'danger');
     } finally {
       setSaving(false);
     }
@@ -169,7 +177,7 @@ export function SummaryScreen() {
         <TextInput value={notes} onChange={setNotes} placeholder="Optional" multiline />
 
         <div className="mt-6 grid gap-3">
-          <Button size="xl" variant="primary" full onClick={() => void save()} disabled={saving} data-testid="save-session">
+          <Button size="xl" variant="primary" full onClick={() => void save()} disabled={saving || invalid} data-testid="save-session">
             Save session
           </Button>
           <Button size="md" variant="ghost" full onClick={() => setDiscardOpen(true)}>
@@ -202,7 +210,10 @@ function DecisionCard({ item, choice, onChange }: { item: SummaryItem; choice: C
   const kind = item.exercise.kind;
   const c: Choice = choice ?? { mode: 'accept', overrideTo: d.toWeight, lockIn: false, lockInAt: item.lockIn?.suggested ?? null };
   const isWeightDecision = d.rule === 'increase' || d.rule === 'hold' || d.rule === 'hold_missing_sets';
-  const tone = d.rule === 'increase' ? 'text-ok' : 'text-fg';
+  // Chip and colour follow what actually happens to the prescription, not the rule name:
+  // lifting below the prescribed weight can make an "increase" a net drop.
+  const direction = !isWeightDecision ? 'none' : d.toWeight > d.fromWeight ? 'up' : d.toWeight < d.fromWeight ? 'down' : 'hold';
+  const tone = direction === 'up' ? 'text-ok' : direction === 'down' ? 'text-warn' : 'text-fg';
 
   return (
     <Card className="p-4" data-testid={`decision-${item.exercise.name}`}>
@@ -213,8 +224,9 @@ function DecisionCard({ item, choice, onChange }: { item: SummaryItem; choice: C
             {decisionLine(d, kind)}
           </div>
         </div>
-        {d.rule === 'increase' && <Chip tone="ok" size="sm">up</Chip>}
-        {(d.rule === 'hold' || d.rule === 'hold_missing_sets') && <Chip size="sm">hold</Chip>}
+        {direction === 'up' && <Chip tone="ok" size="sm">up</Chip>}
+        {direction === 'down' && <Chip tone="warn" size="sm">down</Chip>}
+        {direction === 'hold' && <Chip size="sm">hold</Chip>}
         {d.rule === 'calibrating' && <Chip tone="info" size="sm">calibrating</Chip>}
       </div>
 
@@ -317,7 +329,7 @@ function NiggleRow({ niggle, onChange }: { niggle: Niggle; onChange: (n: Niggle)
       <div className="flex items-center gap-2">
         <span className="min-w-0 flex-1 truncate font-semibold">{niggle.tag}</span>
         {[1, 2, 3].map((sev) => (
-          <Chip key={sev} size="sm" tone="danger" active={niggle.severity === sev} onClick={() => onChange({ ...niggle, severity: sev as 1 | 2 | 3 })}>
+          <Chip key={sev} size="lg" className="min-w-11 justify-center px-0" tone="danger" active={niggle.severity === sev} onClick={() => onChange({ ...niggle, severity: sev as 1 | 2 | 3 })}>
             {sev}
           </Chip>
         ))}

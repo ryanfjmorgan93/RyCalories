@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
 import { db } from '@/db/db';
@@ -7,6 +7,7 @@ import { fmtDateTime, fmtKg, fmtMinutes, fmtNum } from '@/domain/format';
 import { calorieTargetOn, proteinTarget } from '@/domain/nutrition';
 import { isConsecutiveLower, suggestNextRoutine } from '@/domain/schedule';
 import { toDateKey } from '@/domain/dates';
+import { useTimer } from '@/state/timer';
 import { weeklyDelta, bandStatus } from '@/domain/bodyweight';
 import type { Routine } from '@/domain/types';
 import { Button } from '@/ui/components/Button';
@@ -47,15 +48,22 @@ export function HomeScreen() {
     return rs.some((r) => r?.isLowerBody);
   }, [todayKey]);
 
+  const starting = useRef(false);
   const start = async (r: Routine) => {
+    if (starting.current) return;
     if (last?.routineId && isConsecutiveLower(routines ?? [], last.routineId, r.id) && pending?.id !== r.id) {
       setPending(r);
       return;
     }
-    const s = await startSession(r.id);
-    setPending(null);
-    setPickOpen(false);
-    nav(`/session/${s.id}`);
+    starting.current = true;
+    try {
+      const s = await startSession(r.id);
+      setPending(null);
+      setPickOpen(false);
+      nav(`/session/${s.id}`);
+    } finally {
+      starting.current = false;
+    }
   };
 
   const kcal = settings ? calorieTargetOn(todayKey, settings) : null;
@@ -124,7 +132,7 @@ export function HomeScreen() {
           </Card>
         )}
 
-        <SectionTitle right={<button type="button" className="text-sm font-semibold text-accent" onClick={() => nav('/routines')}>Edit</button>}>Routines</SectionTitle>
+        <SectionTitle right={<Button size="sm" variant="ghost" className="-mb-2 text-accent" onClick={() => nav('/routines')}>Edit</Button>}>Routines</SectionTitle>
         <Card>
           {(routines ?? []).map((r, i) => (
             <div key={r.id}>
@@ -156,7 +164,7 @@ export function HomeScreen() {
           {routines && routines.length === 0 && <div className="p-4"><EmptyState>No routines. Add one from the Routines tab.</EmptyState></div>}
         </Card>
 
-        <SectionTitle right={<button type="button" className="text-sm font-semibold text-accent" onClick={() => nav('/history')}>All</button>}>Recent sessions</SectionTitle>
+        <SectionTitle right={<Button size="sm" variant="ghost" className="-mb-2 text-accent" onClick={() => nav('/history')}>All</Button>}>Recent sessions</SectionTitle>
         <Card>
           {(recent ?? []).map((s, i) => (
             <div key={s.id}>
@@ -211,6 +219,7 @@ export function HomeScreen() {
         onCancel={() => setDiscardOpen(false)}
         onConfirm={async () => {
           if (active) await discardSession(active.id);
+          useTimer.getState().skip();
           setDiscardOpen(false);
           toast('Session discarded');
         }}

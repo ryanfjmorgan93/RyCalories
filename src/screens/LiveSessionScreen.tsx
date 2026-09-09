@@ -25,7 +25,7 @@ import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { CheckIcon, MoreIcon, TopBar } from '@/ui/components/TopBar';
 import { ExercisePicker } from '@/ui/ExercisePicker';
-import { useNow, useRoutine, useRoutineItems, useSession, useSettings } from '@/ui/hooks';
+import { useNow, useRoutine, useRoutineItems, useSettings } from '@/ui/hooks';
 
 interface Draft {
   weight: number | null;
@@ -46,7 +46,7 @@ interface Slot {
 export function LiveSessionScreen() {
   const { id } = useParams();
   const nav = useNavigate();
-  const session = useSession(id);
+  const session = useLiveQuery(async () => (id ? ((await db.sessions.get(id)) ?? null) : null), [id]);
   const routine = useRoutine(session?.routineId || undefined);
   const items = useRoutineItems(session?.routineId || undefined);
   const settings = useSettings();
@@ -62,7 +62,8 @@ export function LiveSessionScreen() {
   const [discardOpen, setDiscardOpen] = useState(false);
 
   useEffect(() => {
-    if (session && session.endedAt) nav(`/history/${session.id}`, { replace: true });
+    if (session === null) nav('/', { replace: true });
+    else if (session && session.endedAt) nav(`/history/${session.id}`, { replace: true });
   }, [session, nav]);
 
   const slots: Slot[] = useMemo(() => {
@@ -229,7 +230,7 @@ function SessionHeader({ session, targetMinutes, onFinish }: { session: Session;
         </span>
       }
       right={
-        <Button variant="primary" size="sm" onClick={onFinish} data-testid="finish-session" className="mr-2">
+        <Button variant="primary" size="md" onClick={onFinish} data-testid="finish-session" className="mr-2">
           Finish
         </Button>
       }
@@ -265,6 +266,7 @@ function ExerciseCard({
   const ref = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [skipConfirm, setSkipConfirm] = useState(false);
+  const [removeConfirm, setRemoveConfirm] = useState(false);
   const [editing, setEditing] = useState<SetLog | null>(null);
   const [showRir, setShowRir] = useState(false);
   const timer = useTimer();
@@ -279,10 +281,13 @@ function ExerciseCard({
 
   const defaultDraft = useCallback((): Draft => {
     const lastLogged = sets.length ? sets[sets.length - 1] : null;
+    const lastWorking = [...sets].reverse().find((s) => s.type === 'working') ?? null;
     const prevSame = prevWorking[nextIndex] ?? prevWorking[prevWorking.length - 1] ?? null;
     let weight: number | null;
-    if (rx && rx.mode === 'normal' && kind !== 'carry' && kind !== 'timed') weight = rx.currentWeight;
-    else weight = lastLogged?.weight ?? prevSame?.weight ?? null;
+    // Keep whatever was actually on the bar this session; otherwise the prescription; otherwise last time.
+    if (lastWorking) weight = lastWorking.weight;
+    else if (rx && rx.mode === 'normal' && kind !== 'carry' && kind !== 'timed') weight = rx.currentWeight;
+    else weight = prevSame?.weight ?? null;
     let reps: number | null = null;
     if (kind === 'reps' || kind === 'bodyweight_plus') {
       reps = prevSame?.reps ?? lastLogged?.reps ?? rx?.repMin ?? null;
@@ -331,11 +336,16 @@ function ExerciseCard({
         ? draft.seconds !== null
         : draft.reps !== null && (draft.weight !== null || kind === 'bodyweight_plus');
 
+  const busy = useRef(false);
+  const [busyUi, setBusyUi] = useState(false);
   const logDone = async () => {
-    if (!canLog) return;
+    if (!canLog || busy.current) return;
+    busy.current = true;
+    setBusyUi(true);
     primeAudio();
     vibrate(25);
     void requestNotificationsOnce();
+    try {
     await logSet({
       sessionId: session.id,
       routineExerciseId: rx?.id ?? null,
@@ -348,6 +358,10 @@ function ExerciseCard({
       rir: draft.rir ?? undefined,
     });
     timer.start(restSecondsFor(rx, exercise, settings), exercise.name);
+    } finally {
+      busy.current = false;
+      setBusyUi(false);
+    }
   };
 
   const fill = (s: SetLog) => {
@@ -391,7 +405,7 @@ function ExerciseCard({
                 key={s.id}
                 type="button"
                 onClick={() => fill(s)}
-                className="shrink-0 rounded-lg border border-line bg-surface-2 px-2.5 py-1 text-sm font-semibold text-muted active:bg-line"
+                className="num min-h-11 shrink-0 rounded-lg border border-line bg-surface-2 px-3 text-base font-semibold text-muted active:bg-line"
               >
                 {setLabel(s, kind)}
               </button>
@@ -425,14 +439,14 @@ function ExerciseCard({
           <div className="px-4 pb-4 pt-3">
             <div className="mb-2 flex items-center justify-between">
               <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">
-                {draft.warmup ? 'Warm-up' : complete ? `Extra set ${nextIndex + 1}` : `Set ${nextIndex + 1} of ${target}`}
+                {draft.warmup ? 'Warm-up' : complete ? `Set ${nextIndex + 1} (target ${target})` : `Set ${nextIndex + 1} of ${target}`}
               </div>
               <div className="flex gap-2">
-                <Chip size="sm" tone="warn" active={draft.warmup} onClick={() => update({ warmup: !draft.warmup })}>
+                <Chip size="lg" tone="warn" active={draft.warmup} onClick={() => update({ warmup: !draft.warmup })}>
                   Warm-up
                 </Chip>
                 {(kind === 'reps' || kind === 'bodyweight_plus') && (
-                  <Chip size="sm" active={showRir} onClick={() => setShowRir((v) => !v)}>
+                  <Chip size="lg" active={showRir} onClick={() => setShowRir((v) => !v)}>
                     RIR
                   </Chip>
                 )}
@@ -445,12 +459,13 @@ function ExerciseCard({
                   value={draft.weight}
                   onChange={(v) => update({ weight: v })}
                   step={inc}
+                  fallback={rx?.mode === 'normal' ? rx.currentWeight : 0}
                   placeholder={kind === 'bodyweight_plus' ? '0' : 'kg'}
                   testId="weight-input"
                 />
               )}
               {(kind === 'reps' || kind === 'bodyweight_plus') && (
-                <NumberField label="Reps" value={draft.reps} onChange={(v) => update({ reps: v })} step={1} mode="numeric" placeholder={rx ? `${rx.repMin}–${rx.repMax}` : 'reps'} testId="reps-input" />
+                <NumberField label="Reps" value={draft.reps} onChange={(v) => update({ reps: v })} step={1} mode="numeric" fallback={rx?.repMin ?? 1} min={0} placeholder={rx ? `${rx.repMin}–${rx.repMax}` : 'reps'} testId="reps-input" />
               )}
               {kind === 'carry' && (
                 <NumberField label="Metres" value={draft.distanceM} onChange={(v) => update({ distanceM: v })} step={5} mode="numeric" placeholder="m" testId="distance-input" />
@@ -461,7 +476,7 @@ function ExerciseCard({
               <div className="mt-2 flex items-center gap-2">
                 <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">RIR</span>
                 {[0, 1, 2, 3, 4, 5].map((n) => (
-                  <Chip key={n} size="sm" active={draft.rir === n} onClick={() => update({ rir: draft.rir === n ? null : n })}>
+                  <Chip key={n} size="lg" className="min-w-11 justify-center px-0" active={draft.rir === n} onClick={() => update({ rir: draft.rir === n ? null : n })}>
                     {n}
                   </Chip>
                 ))}
@@ -470,14 +485,14 @@ function ExerciseCard({
             <button
               type="button"
               onClick={() => void logDone()}
-              disabled={!canLog}
+              disabled={!canLog || busyUi}
               data-testid="set-done"
               className={`mt-3 flex h-16 w-full items-center justify-center gap-2 rounded-2xl text-xl font-extrabold transition-[filter] active:brightness-90 disabled:opacity-40 ${
                 complete && !draft.warmup ? 'bg-surface-2 text-fg border border-line' : 'bg-ok text-ok-fg'
               }`}
             >
               <CheckIcon />
-              {draft.warmup ? 'Warm-up done' : complete ? 'Extra set done' : 'Set done'}
+              {draft.warmup ? 'Warm-up done' : 'Set done'}
             </button>
             {slot.optional && sets.length === 0 && (
               <Button className="mt-2" full variant="ghost" onClick={() => rx && void setSkipped(session.id, rx.id, true)}>
@@ -513,8 +528,7 @@ function ExerciseCard({
               size="lg"
               onClick={() => {
                 setMenuOpen(false);
-                if (slot.optional || sets.length === 0) setSkipConfirm(true);
-                else setSkipConfirm(true);
+                setSkipConfirm(true);
               }}
             >
               Skip this exercise
@@ -537,9 +551,9 @@ function ExerciseCard({
               full
               size="lg"
               variant="danger"
-              onClick={async () => {
+              onClick={() => {
                 setMenuOpen(false);
-                await removeExtraExercise(session.id, exercise.id);
+                setRemoveConfirm(true);
               }}
             >
               Remove from session
@@ -557,6 +571,19 @@ function ExerciseCard({
         onConfirm={() => {
           setSkipConfirm(false);
           if (rx) void setSkipped(session.id, rx.id, true);
+        }}
+      />
+
+      <Confirm
+        open={removeConfirm}
+        title={`Remove ${exercise.name}?`}
+        body={sets.length > 0 ? `${sets.length} logged ${sets.length === 1 ? 'set is' : 'sets are'} deleted.` : 'It was added for this session only.'}
+        confirmLabel="Remove"
+        danger
+        onCancel={() => setRemoveConfirm(false)}
+        onConfirm={async () => {
+          setRemoveConfirm(false);
+          await removeExtraExercise(session.id, exercise.id);
         }}
       />
 

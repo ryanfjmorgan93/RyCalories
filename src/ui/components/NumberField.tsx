@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { fmtNum } from '@/domain/format';
 
 export interface NumberFieldProps {
   value: number | null;
@@ -12,6 +11,8 @@ export interface NumberFieldProps {
   placeholder?: string;
   label?: string;
   unit?: string;
+  /** Value the − / + buttons step from when the field is empty (defaults to `min`). */
+  fallback?: number;
   /** decimal (weights) or numeric (reps). */
   mode?: 'decimal' | 'numeric';
   size?: 'md' | 'lg';
@@ -34,17 +35,18 @@ export function NumberField({
   placeholder,
   label,
   unit,
+  fallback,
   mode = 'decimal',
   size = 'lg',
   disabled,
   className = '',
   testId,
 }: NumberFieldProps) {
-  const [text, setText] = useState(value === null ? '' : fmtNum(value));
+  const [text, setText] = useState(value === null ? '' : fieldText(value));
   const focused = useRef(false);
 
   useEffect(() => {
-    if (!focused.current) setText(value === null ? '' : fmtNum(value));
+    if (!focused.current) setText(value === null ? '' : fieldText(value));
   }, [value]);
 
   const commit = (raw: string) => {
@@ -59,10 +61,11 @@ export function NumberField({
   };
 
   const bump = (dir: 1 | -1) => {
-    const base = value ?? (placeholder ? Number(placeholder.replace(/[^0-9.]/g, '')) || 0 : 0);
-    const next = clamp(Math.round((base + dir * step) * 100) / 100, min, max);
+    // Empty field: step from the explicit fallback (e.g. repMin) or the minimum — never from the placeholder text.
+    const base = value ?? fallback ?? min;
+    const next = clamp(Math.round((value === null ? base : base + dir * step) * 100) / 100, min, max);
     onChange(next);
-    setText(fmtNum(next));
+    setText(fieldText(next));
   };
 
   const h = size === 'lg' ? 'h-14' : 'h-12';
@@ -97,7 +100,9 @@ export function NumberField({
             onBlur={() => {
               focused.current = false;
               commit(text);
-              setText(value === null && text.trim() === '' ? '' : text);
+              const t = text.replace(',', '.').trim();
+              const n = Number(t);
+              setText(t === '' || !Number.isFinite(n) ? '' : fieldText(clamp(mode === 'numeric' ? Math.round(n) : Math.round(n * 100) / 100, min, max)));
             }}
             onChange={(e) => {
               setText(e.target.value);
@@ -126,6 +131,11 @@ export function NumberField({
 
 function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
+}
+
+/** Plain digits for the input box (no thousands grouping, so re-parsing never breaks). */
+function fieldText(n: number): string {
+  return String(Math.round(n * 100) / 100);
 }
 
 /** Plain numeric text input for forms (no stepper). */

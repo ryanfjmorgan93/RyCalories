@@ -81,13 +81,15 @@ export function decisionLine(d: Decision, kind: ExerciseKind): string {
   const at = d.sessionWeight ?? d.fromWeight;
   const reps = d.workingReps.length ? fmtReps(d.workingReps) : 'no working sets';
   const w = (n: number) => fmtWeight(kind, n);
+  // When the session was lifted at a different weight than prescribed, say so every time.
+  const was = d.sessionWeight !== null && d.sessionWeight !== d.fromWeight ? ` (was ${w(d.fromWeight)})` : '';
   switch (d.rule) {
     case 'increase':
-      return `${reps} at ${w(at)} → ${w(d.toWeight)} next time`;
+      return `${reps} at ${w(at)} → ${w(d.toWeight)} next time${was}`;
     case 'hold':
-      return d.changesWeight ? `${reps} at ${w(at)} → hold ${w(d.toWeight)} (was ${w(d.fromWeight)})` : `${reps} at ${w(at)} → hold ${w(d.toWeight)}`;
+      return `${reps} at ${w(at)} → hold ${w(d.toWeight)}${was}`;
     case 'hold_missing_sets':
-      return `${d.workingSets}/${d.targetSets} sets (${reps}) at ${w(at)} → hold ${w(d.toWeight)}`;
+      return `${d.workingSets}/${d.targetSets} sets (${reps}) at ${w(at)} → hold ${w(d.toWeight)}${was}`;
     case 'calibrating':
       return 'calibrating — no decision';
     case 'not_applicable':

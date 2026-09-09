@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { restDone } from '@/state/notify';
 import { remainingSec, useTimer } from '@/state/timer';
 import { fmtDuration } from '@/domain/format';
@@ -11,6 +12,8 @@ import { useNow, useSettings } from './hooks';
 export function RestTimerBar() {
   const { endsAt, totalSec, label, firedFor, add, skip, markFired } = useTimer();
   const settings = useSettings();
+  const { pathname } = useLocation();
+  const inSession = pathname.startsWith('/session/');
   const active = endsAt !== null;
   const now = useNow(250, active);
 
@@ -37,7 +40,7 @@ export function RestTimerBar() {
   const pct = totalSec > 0 ? Math.max(0, Math.min(1, remaining / totalSec)) : 0;
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-xl px-3 pb-safe" data-testid="rest-timer">
+    <div className={`fixed inset-x-0 z-40 mx-auto max-w-xl px-3 ${inSession ? 'bottom-0 pb-safe' : 'bottom-16 pb-safe'}`} data-testid="rest-timer">
       <div className={`mb-3 overflow-hidden rounded-2xl border shadow-2xl ${done ? 'border-ok bg-ok text-ok-fg' : 'border-line bg-surface-2'}`}>
         {!done && (
           <div className="h-1.5 w-full bg-line">
@@ -49,11 +52,13 @@ export function RestTimerBar() {
             <div className={`truncate text-[11px] font-bold uppercase tracking-[0.12em] ${done ? 'text-ok-fg/80' : 'text-muted'}`}>{done ? 'Rest over' : label || 'Rest'}</div>
             <div className="num text-3xl font-extrabold leading-none">{done ? 'Go' : fmtDuration(remaining)}</div>
           </div>
-          {!done && (
-            <button type="button" onClick={() => add(30)} className="h-12 rounded-xl border border-line px-4 text-base font-bold active:bg-line">
-              +30 s
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => add(30)}
+            className={`h-12 rounded-xl border px-4 text-base font-bold ${done ? 'border-ok-fg/30 text-ok-fg active:bg-ok-fg/10' : 'border-line active:bg-line'}`}
+          >
+            +30 s
+          </button>
           <button
             type="button"
             onClick={skip}
