@@ -1,0 +1,388 @@
+# Merge plan — Iron + RyCalories → one fitness app
+
+Written for the owner and for any future session picking this up. It supersedes the
+sequencing and architecture sections of `ROADMAP.md` on the
+`claude/meal-calorie-tracker-apk-4g67r7` branch. That document's product thinking
+(§0 thesis, §3 what-not-to-build, the food-memory and adaptive-TDEE strategies, §5
+Today screen, §6 design analysis) remains excellent and is carried forward here.
+
+Derived from nine parallel analysis agents reading both real codebases, plus three
+adversarial verification passes. Where a verification pass overturned a research
+conclusion, the corrected version is what appears below, and the trap is recorded in
+§6 so nobody re-derives it.
+
+---
+
+## 1. Decisions already made (locked — do not relitigate)
+
+| Decision | Choice |
+|---|---|
+| Foundation | **Iron's web stack.** TypeScript, React, Dexie, Capacitor. RyCalories' Compose UI is rewritten in React; its ML Kit code becomes a Capacitor plugin. |
+| Scope for v1 | **Merge both feature sets + fix the known gaps.** Not the cross-domain intelligence tier. |
+| Data | **Preserve both.** Training history stays in place; meal history must be migrated across. |
+| AI | **Keep Gemini Nano + Open Food Facts. Drop Gemma/MediaPipe entirely.** |
+
+The decisive argument for the foundation was testability. Iron runs 120 unit tests, 17
+end-to-end tests and full screenshot capture inside a sandbox in seconds. The Kotlin app
+cannot be run, screenshotted or tested there at all — every change costs a manual APK
+install. That asymmetry compounds over a project measured in years of weekends.
+
+A second argument emerged from the analysis and is worth recording: **the workout app is
+the larger and better-tested of the two** (10,072 lines with 137 tests, versus 2,732 lines
+with none). Porting the smaller, untested half onto the larger, tested half is the correct
+direction regardless of language preference.
+
+---
+
+## 2. Do this before anything else
+
+### 2.1 Stop logging meals in the Kotlin app. Today.
+
+`MealRepository.load()` returns an empty list on **any** parse failure
+(`MealRepository.kt:27-31`). Every mutation then rewrites `meals.json` from that empty
+in-memory list via an atomic temp-file rename (`:53-61`). There is no `.bak`.
+
+**One unparseable meal means the next meal you log permanently destroys your entire
+nutrition history.** This is live on the phone right now.
+
+This inverts the usual backup argument. The risk is not that you drop your phone. The risk
+is that you keep using the app. Reading is safe; writing is not.
+
+### 2.2 Why the file cannot simply be copied out
+
+`meals.json` lives in `com.rycalories.app`'s private storage. The merged app is
+`com.rycalories.iron` — a different Android package, and app-private data cannot be read
+across that boundary. `file_paths.xml` exposes only `captures/` and `photos/`, not
+`meals.json`; the only two FileProvider references in the entire Kotlin source are both
+camera capture. `adb backup` is unavailable on Android 12+.
+
+So the file is reachable by exactly two routes, and P0 exists to take one of them.
+
+### 2.3 An unflagged privacy breach
+
+Both apps ship `android:allowBackup="true"` with no `dataExtractionRules`
+(`app/src/main/AndroidManifest.xml:11`). Google Auto Backup has therefore probably been
+copying `meals.json` and your photos to Google Drive. That contradicts the zero-cloud
+principle the whole project is built on. It is **not** a usable extraction route, and it
+does not reduce P0's urgency — but the merged app should set explicit extraction rules.
+
+---
+
+## 3. What the merge actually is
+
+### 3.1 The line between native and web
+
+Verified by reading the code, not inferred: `Generation.getClient()` takes **no Android
+Context at all** (`OnDeviceMealAnalyzer.kt:70-77`). The Context it needs internally arrives
+via `com.google.mlkit:common`'s `MlKitInitProvider`, a ContentProvider that auto-initialises
+ML Kit and merges into a Capacitor APK exactly as it does into a Compose one. Nothing in
+the AI pipeline needs Compose, an Activity, or a Service.
+
+**Stays Kotlin (~550–700 lines):**
+
+- `OnDeviceMealAnalyzer` in full — Nano probing across all four model variants, inference,
+  and the structured-output-to-plain-text fallback.
+- `NanoSchema` — unportable by nature. It is a compile-time KSP artifact, not runtime data.
+- `ProductLookup.scanBarcodes` — about 15 lines, the only part touching ML Kit.
+- `ImageUtils` decoders — needed at two resolutions, see below.
+
+**Moves to TypeScript:**
+
+- **All of `ProductLookup` except barcode scanning.** It is 260 lines of HTTP, JSON and
+  token scoring. Every tunable in it (the 0.5 overlap threshold at `:157`, the 0.3 at
+  `:225`, plural stemming at `:180`) becomes a Vitest test against recorded fixtures. In
+  Kotlin each tweak costs an APK install.
+- **`NutritionJson.parse`**, `toAnalysis`, and every prompt string. Prompts cross the
+  bridge **as data, not as compiled-in constants** — that is what makes prompt iteration
+  and the malformed-JSON auto-retry sandbox-testable.
+
+### 3.2 Three bridge facts that shape the plugin
+
+1. **Capacitor runs every plugin method on one shared background thread**
+   (`Bridge.java:138`, `:216-217`, `:863`). A synchronous multi-second inference would
+   block your rest timer's notifications, Filesystem and Share for its whole duration. The
+   plugin must own a `CoroutineScope(SupervisorJob() + Dispatchers.IO)`, launch, and return
+   immediately. Compose got this free from `viewModelScope`; here it is hand-rolled and
+   **not optional**.
+2. **Everything crossing the bridge is a JSON string** (`native-bridge.js:843`). Pass
+   photos as a **file path, never base64.** This is settled independently by the pipeline
+   needing the same source decoded twice — 1024px for the model
+   (`MainViewModel.kt:227`), 2048px for barcode reading (`:262`).
+3. **The error channel is richer than it looks.** `reject()` carries a string code *and* an
+   arbitrary data object, and every key lands on the JS Error (`PluginCall.java:74-92`,
+   `native-bridge.js:945-951`). So `STRUCTURED_OUTPUT_REQUEST_ERROR` can ride across
+   intact as `err.data.genAiErrorCode === -104`, with no stringify-and-reparse.
+
+### 3.3 Why the schema migration cannot lose your training history
+
+Verified in the shipped Dexie source (`node_modules/dexie/dist/dexie.js:4098-4107`):
+`version().stores()` **accumulates** across versions rather than redeclaring. Tables omitted
+from `version(2)` survive by construction; only an explicit `null` drops one. So a purely
+additive `version(2)` physically cannot reach the eight workout tables.
+
+The real data-loss surface is not the schema. It is **three identifiers**, any of which a
+rebrand could plausibly change:
+
+- the Dexie database name `'iron'` (`src/db/db.ts:27`)
+- the Capacitor `appId` `com.rycalories.iron` (`capacitor.config.ts:4`)
+- the WebView origin (`server.androidScheme` / `hostname`, currently unset)
+
+Changing any one orphans months of history. All three need a load-bearing comment saying so.
+
+---
+
+## 4. The sequence
+
+Every phase ends with an installable APK you can use daily. The app must never be broken
+for days.
+
+### P0 — Rescue the meal data · **S** · nothing else starts until this is green
+
+The only goal is getting `meals.json` and the photo directory off
+`com.rycalories.app` and into a file you control.
+
+Two routes, and **the choice depends on whether you have a PC with USB debugging**:
+
+- **`adb` dump** (preferred if available). Strictly safer: it never instantiates
+  `MealRepository`, so the truncation bug in §2.1 cannot fire, and it adds no R8 surface to
+  a release build that has `isMinifyEnabled = true`.
+- **A final Kotlin APK** with one export button using `ACTION_CREATE_DOCUMENT`. Needed if
+  there is no PC. Carries a small risk that building and running the app triggers the very
+  bug we are avoiding — so it must read the file bytes directly, not through the repository.
+
+**Exit criterion — this is not "a file appeared in Downloads".** The gate is a Vitest test
+in this repo that parses that exact file and matches the meal count you expect. Until that
+test is green, P2 does not start.
+
+Then: archive the export somewhere that is not the same phone, and **stop writing to the
+Kotlin app**. Keep it installed (the package IDs differ, so both can coexist) but treat it
+as read-only from that moment.
+
+### P1 — Make Iron safe to migrate · **S**
+
+None of this is visible, and all of it is load-bearing.
+
+1. **Boot error boundary and recovery screen.** `src/main.tsx:26` is a bare `void boot()`,
+   there is no error boundary anywhere in `src/`, and `index.html` has an empty `#root`. A
+   failed Dexie upgrade today is a permanent, undiagnosable white screen on the app holding
+   your training history, fixable only by a new APK. Roughly 30 lines: wrap `boot()`, render
+   a static recovery screen naming the error and the version attempted, with an "export raw
+   backup" button that opens Dexie declaring only `version(1)`. **Ship this before
+   `version(2)` exists, not alongside it.**
+2. **`versionCode` from the CI run number.** Currently hardcoded to `1`
+   (`android/app/build.gradle`). RyCalories already solved this
+   (`GITHUB_RUN_NUMBER + 100`). The honest reason is diagnosability and rollback ordering,
+   not installability. Add a note: **no Iron update problem is ever solved by uninstalling
+   Iron.**
+3. **Publish as a release, not a prerelease.** Iron currently sets `prerelease: true`,
+   which RyCalories' handover documents as the exact thing that makes
+   `/releases/latest/download/` return 404 forever.
+4. **`minSdk` 23 → 31 only.** Do **not** touch `compileSdk`. The CI workflow provisions
+   `platforms;android-35` (`build-apk.yml:29`) and AGP is pinned at 8.7.2
+   (`android/build.gradle:12`); moving to 36 would break the very install loop this phase
+   exists to repair. If the spike later proves 36 is needed, that is one atomic commit
+   changing `variables.gradle`, the CI package list and AGP together.
+5. **Adopt the additive route table** (§5.1). This is an engineering decision, not a
+   mockup decision, and P3 is blocked without it.
+6. **Add Playwright to CI**, or stop describing end-to-end tests as a gate. The workflow's
+   only test step is `npm test` (`build-apk.yml:34-35`); the e2e suite currently runs on
+   manual discipline alone.
+
+**Verify:** install over your existing Iron, confirm training history intact; then
+deliberately corrupt the database in a dev build and confirm you get the recovery screen
+rather than a white screen.
+
+### P2 — Schema v2, the importer, and the backup fix · **M** · one commit, one release
+
+These three must ship together. `TABLE_NAMES` (`src/db/db.ts:43-54`) and
+`Backup['tables']` (`src/db/backup.ts:21-30`) are hardcoded, and replace-mode restore
+(`:65-70`) clears every table in `db.tables` but repopulates only `TABLE_NAMES`. Add
+nutrition tables without fixing both and **every backup from P2 onward silently omits the
+data you just rescued, while the restore sheet reports success.**
+
+- Additive Dexie `version(2)`: `meals`, `mealItems`, `foods`, `productCache`, `mealPhotos`,
+  `phases`, `imports`. Workout tables unlisted and untouched.
+- **Never call `crypto.subtle` inside `.upgrade()`.** `stableUuid` is async
+  (`src/domain/ids.ts:22-25`), and a foreign await inside a Dexie transaction raises
+  `TransactionInactiveError` on a real WebView — while **passing under fake-indexeddb**. A
+  sandbox test would go green on a pattern that bricks the phone. Mint every id *before*
+  opening the transaction, exactly as `src/db/hevy.ts` already does (`:400`, `:428`,
+  `:457`, transaction at `:474`). Use a literal `'phase-initial'` for the seed row.
+- Extend `TABLE_NAMES` and `Backup['tables']`, bump the backup `version` to 2, make
+  `isBackup` actually read the version field it currently ignores (`backup.ts:53-57`), and
+  narrow replace-mode to clear only tables present in the file.
+- The importer ships with a **Settings import sheet** modelled on `HevyImportSheet` — file
+  input, plan preview, confirm, result line. "Headless" means no nutrition screens on the
+  daily path, not literally no UI.
+- `foods` is declared but **populated by nothing and consumed by nothing** in v1. It exists
+  only to avoid a later migration. Document that so a future session does not mistake it
+  for a half-built feature.
+
+**Verify on the phone, not in the sandbox.** The fake-indexeddb test proves the schema
+delta and row counts; it does **not** prove the upgrade completes on-device. Ship
+`version(2)` as its own release that does nothing else, with a Settings diagnostics line
+showing live session and set counts plus the Dexie version, and confirm that line before a
+single nutrition screen is written.
+
+### P2b — The Nano spike · **S** · concurrent with P2, not before it
+
+High uncertainty, low optionality: if Nano turned out to be impossible, P0 through P4 would
+be unchanged. So it runs early but it is **not** the first thing.
+
+A throwaway APK containing `probe()`, one `analyzeMeal(filePath)`, and a debug button that
+schedules a rest notification **while an analysis is in flight** — that last part is what
+proves the threading fix in §3.2.
+
+**The one question only a phone can answer:** does AICore report Gemini Nano available
+under `com.rycalories.iron` rather than `com.rycalories.app`? Nothing in the ML Kit
+artifacts suggests package-name gating, but the rollout is per-install, and you have already
+seen a Fold 8 report `UNAVAILABLE` for hours before spontaneously working. Budget for that
+possibility rather than treating it as a failure.
+
+Also measure, because nobody has a number: wall-clock latency of inference, and separately
+of `@capacitor/camera`'s own full-resolution decode-and-re-encode, which runs on that same
+shared thread inside third-party code you cannot move.
+
+### P3 — Nutrition UI, manual entry first · **M**
+
+The phase that lets you abandon the Kotlin app entirely. Deliberately **no AI**: Today
+screen, Food tab, manual add and edit, day navigation.
+
+Manual entry early is not a consolation prize. It is the thing that closes the gap between
+"stopped writing to the old app" and "the new app can take daily food logging" — and that
+gap, not the AI, is the real sequencing pressure.
+
+Editing any number, before and after saving, is the top-wanted feature in both handovers and
+lands here.
+
+### P4 — The AI plugin · **L**
+
+The Kotlin plugin, plus the TypeScript ports from §3.1, plus the malformed-JSON auto-retry
+that HANDOVER §9 flags as an open gap.
+
+### P5 — The known gaps and the design pass · **M**
+
+ROADMAP §1's bug list (§6.2 below), weekly and trend views, the design token split (§5.2),
+and implementation of whatever the commissioned mockups return.
+
+### P6 — Explicitly deferred to v1.1
+
+Food memory, adaptive TDEE, and the strength-versus-cut "Loop" chart. All three are
+excellent and all three are the cross-domain tier you did not choose for v1. Recorded here
+so they are deferred deliberately rather than forgotten.
+
+---
+
+## 5. Design and structure decisions
+
+### 5.1 Navigation — additive, not a re-path
+
+Adopt `Today / Food / Train / Progress` with Settings on a gear icon, **but keep every
+existing Iron path exactly as it is** and add `/food`, `/train`, `/progress` alongside.
+
+Re-pathing to a nested structure (`/train/routines`) would break all 17 end-to-end tests
+and, worse, silently misplace the rest timer: `src/ui/RestTimerBar.tsx:16` positions itself
+by testing for the literal `/session/` prefix.
+
+Under that scheme ten of Iron's thirteen screens survive untouched or with a one-line edit.
+Only `HomeScreen` is deleted, its parts redistributed to Today and a new Train hub. All five
+RyCalories screens are rewrites, not ports.
+
+**The live session screen changes in no way at all**, and structurally cannot be reached by
+the nav rework because it already renders in a shell with no bottom navigation.
+
+The Today hero needs no new maths: it is Iron's already-tested reverse-diet stepper
+(`src/domain/nutrition.ts:17`) minus a sum over migrated meals, with protein as a
+subordinate bar.
+
+### 5.2 Visual direction — chassis and layer, not a blend
+
+**Iron's look is the chassis. RyCalories' pastels become a bounded domain layer on top.**
+
+Iron's near-black ground, single orange accent, big tabular numbers, 44px tap floor and
+entire input vocabulary govern everywhere, unchanged. They are engineered for a screen
+glanced at between sets and nothing about the pastel treatment improves that job.
+RyCalories' pastel fills survive only as large domain-owned surfaces on dashboard and
+summary screens, and are **banned from the live session and from every input surface** —
+inverting text polarity mid-session is the worst thing you can do to a gym screen.
+
+The asymmetry is real and one-directional, which is exactly why splitting the difference
+would be wrong. The two halves stay one app because everything except the fills is
+identical, and that is a stronger unifier than hue similarity.
+
+ROADMAP §6's STATE-versus-DOMAIN colour rule is correct and, if anything, understated — the
+census confirms Mint does four jobs, Lemon four, Lavender four. Three amendments:
+
+- **Retire Iron's `--c-info`** (`#7dd3fc`). It is functionally the same blue as the proposed
+  Sky, and it is currently a *state* colour meaning "calibrating" — it would land on the
+  wrong side of the very rule being introduced.
+- **Move body/progress off Peach** (already the fat macro in five places) onto a new Sand.
+- **Enforce the split with radius as well as hue**, so the two registers cannot collide.
+
+### 5.3 What the mockups decide, and what they do not
+
+Give the design tool the tab names and a data contract, **not** the choice of tabs. The IA
+decision is an engineering deliverable in P1; the tab count is the most expensive thing to
+change late.
+
+Watch for mockups that specify colour by hue ("the lavender card") rather than by role
+("the nutrition card"). Fix the token names and domain roles first so that translation is
+mechanical.
+
+---
+
+## 6. Traps — verified, and expensive to rediscover
+
+### 6.1 Corrections to conclusions that looked right
+
+| Believed | Actually |
+|---|---|
+| `@capacitor/camera`'s FileProvider collides with Iron's | The opposite. Camera ships **no** provider and depends on Iron's existing `file_paths.xml` (`CameraPlugin.java:309`, `:860`). The instruction is **do not delete it**. |
+| Add `android.permission.CAMERA` | Do not. Leaving it undeclared removes a runtime prompt and is the supported configuration. |
+| Bump `compileSdk` to 36 to match RyCalories | Breaks CI (§P1.4). Nothing shows ML Kit needs it. |
+| A failed Dexie upgrade is a harmless no-op | It preserves the data and **bricks the app**. Hence P1.1. |
+| fake-indexeddb tests guarantee the migration | They pass on a pattern that fails on a real WebView. On-device gate required. |
+| Native surface is ~350 lines | ~550–700 once the `analyze()` signature refactor is counted. |
+| Zero cloud has one exception (Open Food Facts) | **Two.** ML Kit ships `datatransport/cct` telemetry. A working opt-out could not be verified from the artifacts — treat as an open question for the spike. |
+
+### 6.2 Bugs found in RyCalories that the handover did not list
+
+- **The portion multiplier scales calories and macros but not grams**
+  (`MainViewModel.kt:275-300`). Left in place this would have quietly poisoned the entire
+  food-memory strategy at its root, since memory stores per-100g and derives portions.
+  Making per-100g-plus-grams the only stored state, with all totals recomputed on read,
+  makes this bug unrepresentable rather than fixed.
+- The truncation path in §2.1, which is the most dangerous line in either codebase.
+
+ROADMAP §1's own list (brand-match false positives at `ProductLookup.kt:157`, the barcode
+overwriting the wrong item, the missing Atwater cross-check, schema field ordering) is
+accurate and mostly ports across as explicit fixes in the TypeScript rewrite. §1.3
+("can't log to a past day") and §1.6 (absolute photo paths) dissolve on the platform change,
+provided the model separates `date` from `loggedAt` and the importer relativises paths.
+
+---
+
+## 7. Repo and release
+
+Both branches live in `ryanfjmorgan93/RyCalories` with **no common ancestor and no `main`**.
+That should be resolved deliberately: keep this branch as the line of development, publish
+under one rolling release tag, and retire the Kotlin branch to a tag once P0 is verified
+green.
+
+Do not change the `applicationId` or the signing key. Both apps' handovers record the same
+hard-won lesson: Android treats a changed ID as a different app, with an empty data
+directory. The merged app keeps `com.rycalories.iron` and its existing keystore, regardless
+of what the app is eventually called on the launcher.
+
+---
+
+## 8. Open questions for the owner
+
+1. **Do you have a PC with USB debugging available?** It decides P0's route and the `adb`
+   path is materially safer.
+2. **Photos: Dexie blobs or Capacitor Filesystem?** Note `@capacitor/camera` returns a path
+   into `cacheDir`, so a photo must be explicitly copied to `Directory.Data` before its path
+   is durable. Note also that the PWA build has no camera, no filesystem and no Nano — so
+   browser meal entry needs a defined story either way.
+3. **Does the PWA build remain a target at all**, or is the APK now the only artifact?
+4. **What is the app called?** Naming is free; changing the package ID is not.
