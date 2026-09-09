@@ -19,7 +19,7 @@ conclusion, the corrected version is what appears below, and the trap is recorde
 |---|---|
 | Foundation | **Iron's web stack.** TypeScript, React, Dexie, Capacitor. RyCalories' Compose UI is rewritten in React; its ML Kit code becomes a Capacitor plugin. |
 | Scope for v1 | **Merge both feature sets + fix the known gaps.** Not the cross-domain intelligence tier. |
-| Data | **Preserve both.** Training history stays in place; meal history must be migrated across. |
+| Data | **Training history is preserved in place. There is no meal history to migrate** — the Kotlin app never left beta, so nutrition starts empty. |
 | AI | **Keep Gemini Nano + Open Food Facts. Drop Gemma/MediaPipe entirely.** |
 
 The decisive argument for the foundation was testability. Iron runs 120 unit tests, 17
@@ -34,37 +34,45 @@ direction regardless of language preference.
 
 ---
 
-## 2. Do this before anything else
+## 2. Before anything else
 
-### 2.1 Stop logging meals in the Kotlin app. Today.
+### 2.1 There is nothing to rescue
 
-`MealRepository.load()` returns an empty list on **any** parse failure
-(`MealRepository.kt:27-31`). Every mutation then rewrites `meals.json` from that empty
-in-memory list via an atomic temp-file rename (`:53-61`). There is no `.bak`.
+The original plan opened with a data-rescue phase. It does not apply: the Kotlin app never
+left beta and holds no meal history worth keeping. Nutrition in the merged app starts
+empty, and the Kotlin app can simply be uninstalled.
 
-**One unparseable meal means the next meal you log permanently destroys your entire
-nutrition history.** This is live on the phone right now.
+Two facts from that analysis are still worth keeping, because both would be expensive to
+rediscover:
 
-This inverts the usual backup argument. The risk is not that you drop your phone. The risk
-is that you keep using the app. Reading is safe; writing is not.
+- `MealRepository.load()` returns an empty list on **any** parse failure
+  (`MealRepository.kt:27-31`), and every mutation then rewrites `meals.json` from that empty
+  in-memory list via an atomic temp-file rename (`:53-61`). There is no `.bak`. One
+  unparseable meal would have permanently destroyed the whole history on the next write.
+  **The TypeScript rewrite must not reproduce this shape**: never let a read failure
+  silently become an empty collection that a later write then persists.
+- App-private data cannot cross a package boundary. `com.rycalories.app` and the merged
+  `com.rycalories.iron` are different Android packages, `file_paths.xml` exposes only
+  `captures/` and `photos/`, and `adb backup` is unavailable on Android 12+. If anything in
+  the old app ever *does* turn out to be worth keeping, that is the constraint to plan
+  around.
 
-### 2.2 Why the file cannot simply be copied out
-
-`meals.json` lives in `com.rycalories.app`'s private storage. The merged app is
-`com.rycalories.iron` — a different Android package, and app-private data cannot be read
-across that boundary. `file_paths.xml` exposes only `captures/` and `photos/`, not
-`meals.json`; the only two FileProvider references in the entire Kotlin source are both
-camera capture. `adb backup` is unavailable on Android 12+.
-
-So the file is reachable by exactly two routes, and P0 exists to take one of them.
-
-### 2.3 An unflagged privacy breach
+### 2.2 An unflagged privacy breach
 
 Both apps ship `android:allowBackup="true"` with no `dataExtractionRules`
 (`app/src/main/AndroidManifest.xml:11`). Google Auto Backup has therefore probably been
 copying `meals.json` and your photos to Google Drive. That contradicts the zero-cloud
-principle the whole project is built on. It is **not** a usable extraction route, and it
-does not reduce P0's urgency — but the merged app should set explicit extraction rules.
+principle the whole project is built on. The merged app should set explicit extraction
+rules, and the old app should be uninstalled rather than left dormant.
+
+### 2.3 The bar
+
+> "I'm not using this thing as my daily driver until it works seamlessly."
+
+That is the acceptance criterion for the whole plan, and it is why P3 (manual nutrition
+entry, no AI) outranks P4 (the AI plugin). A logger that needs a working model to record
+what you ate is not seamless. The AI is an accelerator on top of something that already
+works without it.
 
 ---
 
@@ -134,99 +142,68 @@ Changing any one orphans months of history. All three need a load-bearing commen
 ## 4. The sequence
 
 Every phase ends with an installable APK you can use daily. The app must never be broken
-for days.
+for days. P0 (rescue the meal data) is deleted — see §2.1.
 
-### P0 — Rescue the meal data · **S** · nothing else starts until this is green
+### P1 — Make Iron safe to migrate · **S** · ✅ shipped (`fd0b542`)
 
-The only goal is getting `meals.json` and the photo directory off
-`com.rycalories.app` and into a file you control.
+None of it visible, all of it load-bearing.
 
-Two routes, and **the choice depends on whether you have a PC with USB debugging**:
-
-- **`adb` dump** (preferred if available). Strictly safer: it never instantiates
-  `MealRepository`, so the truncation bug in §2.1 cannot fire, and it adds no R8 surface to
-  a release build that has `isMinifyEnabled = true`.
-- **A final Kotlin APK** with one export button using `ACTION_CREATE_DOCUMENT`. Needed if
-  there is no PC. Carries a small risk that building and running the app triggers the very
-  bug we are avoiding — so it must read the file bytes directly, not through the repository.
-
-**Exit criterion — this is not "a file appeared in Downloads".** The gate is a Vitest test
-in this repo that parses that exact file and matches the meal count you expect. Until that
-test is green, P2 does not start.
-
-Then: archive the export somewhere that is not the same phone, and **stop writing to the
-Kotlin app**. Keep it installed (the package IDs differ, so both can coexist) but treat it
-as read-only from that moment.
-
-### P1 — Make Iron safe to migrate · **S**
-
-None of this is visible, and all of it is load-bearing.
-
-1. **Boot error boundary and recovery screen.** `src/main.tsx:26` is a bare `void boot()`,
-   there is no error boundary anywhere in `src/`, and `index.html` has an empty `#root`. A
-   failed Dexie upgrade today is a permanent, undiagnosable white screen on the app holding
-   your training history, fixable only by a new APK. Roughly 30 lines: wrap `boot()`, render
-   a static recovery screen naming the error and the version attempted, with an "export raw
-   backup" button that opens Dexie declaring only `version(1)`. **Ship this before
-   `version(2)` exists, not alongside it.**
-2. **`versionCode` from the CI run number.** Currently hardcoded to `1`
-   (`android/app/build.gradle`). RyCalories already solved this
-   (`GITHUB_RUN_NUMBER + 100`). The honest reason is diagnosability and rollback ordering,
-   not installability. Add a note: **no Iron update problem is ever solved by uninstalling
-   Iron.**
-3. **Publish as a release, not a prerelease.** Iron currently sets `prerelease: true`,
-   which RyCalories' handover documents as the exact thing that makes
+1. ✅ **Boot error boundary and recovery screen.** `main.tsx` was a bare `void boot()` with
+   no error boundary anywhere in `src/` and an empty `#root`, so a failed Dexie upgrade
+   meant a permanent, undiagnosable white screen on the app holding the training history,
+   fixable only by a new APK. `src/boot/recovery.ts` now renders a plain-DOM screen naming
+   the error and the version attempted, with a raw-export button that opens IndexedDB
+   directly. It imports nothing from the rest of the app, so it cannot fail for the same
+   reason the app failed. Four tests in `recovery.test.ts`.
+2. ✅ **`versionCode` from the CI run number** (`GITHUB_RUN_NUMBER + 100`, else 9000).
+   The honest reason is diagnosability and rollback ordering, not installability: **no Iron
+   update problem is ever solved by uninstalling Iron.**
+3. ✅ **Published as a release, not a prerelease.** `prerelease: true` is exactly what makes
    `/releases/latest/download/` return 404 forever.
-4. **`minSdk` 23 → 31 only.** Do **not** touch `compileSdk`. The CI workflow provisions
-   `platforms;android-35` (`build-apk.yml:29`) and AGP is pinned at 8.7.2
-   (`android/build.gradle:12`); moving to 36 would break the very install loop this phase
-   exists to repair. If the spike later proves 36 is needed, that is one atomic commit
-   changing `variables.gradle`, the CI package list and AGP together.
-5. **Adopt the additive route table** (§5.1). This is an engineering decision, not a
-   mockup decision, and P3 is blocked without it.
-6. **Add Playwright to CI**, or stop describing end-to-end tests as a gate. The workflow's
-   only test step is `npm test` (`build-apk.yml:34-35`); the e2e suite currently runs on
-   manual discipline alone.
+4. ✅ **`minSdk` 23 → 31 only.** `compileSdk` deliberately untouched: CI provisions only
+   `platforms;android-35` (`build-apk.yml:29`) and AGP is pinned at 8.7.2. Moving to 36
+   would break the very install loop this phase exists to repair, and if the spike later
+   proves 36 is needed that is one atomic commit changing `variables.gradle`, the CI package
+   list and AGP together.
+5. ⬜ **The additive route table** (§5.1) — an engineering decision, not a mockup decision.
+   Lands with P3, which is blocked without it.
+6. ⬜ **Playwright in CI**, or stop describing end-to-end tests as a gate. The workflow's
+   only test step is `npm test` (`build-apk.yml:34`); the e2e suite runs on manual
+   discipline alone.
 
-**Verify:** install over your existing Iron, confirm training history intact; then
-deliberately corrupt the database in a dev build and confirm you get the recovery screen
-rather than a white screen.
+### P2 — Schema v2 and the backup fix · **M** · ✅ shipped (`14425b3`)
 
-### P2 — Schema v2, the importer, and the backup fix · **M** · one commit, one release
+Originally three things; the importer is gone with the meal history, so it shipped as two —
+still one commit, because they could not safely be separated.
 
-These three must ship together. `TABLE_NAMES` (`src/db/db.ts:43-54`) and
-`Backup['tables']` (`src/db/backup.ts:21-30`) are hardcoded, and replace-mode restore
-(`:65-70`) clears every table in `db.tables` but repopulates only `TABLE_NAMES`. Add
-nutrition tables without fixing both and **every backup from P2 onward silently omits the
-data you just rescued, while the restore sheet reports success.**
+- ✅ Additive Dexie `version(2)`: `meals`, `mealItems`, `foods`, `productCache`, `phases`.
+  `stores()` accumulates across versions rather than redeclaring, so the workout tables are
+  inherited untouched and only an explicit `null` would drop one. `mealPhotos` and `imports`
+  were dropped from the original list: photos are a path on a `Meal`, and with no import
+  there is nothing for `imports` to record.
+- ✅ **No `crypto.subtle` inside `.upgrade()`** — in fact no upgrade callback at all.
+  `stableUuid` is async, and a foreign await inside a Dexie transaction raises
+  `TransactionInactiveError` on a real WebView while **passing under fake-indexeddb**: a
+  sandbox test going green on a pattern that bricks the phone. The rule is recorded in a
+  comment at the version declaration for whoever writes the next migration.
+- ✅ Backup fixed in the same commit. Replace-mode cleared every table and repopulated only
+  the ones it knew, so adding nutrition tables without this would mean **every backup from
+  here on silently omitted nutrition data while the restore sheet reported success**.
+  Replace now clears only what the file can put back, `isBackup` reads the version field it
+  previously ignored, and a file from a newer build is refused rather than stripped.
+  Nine tests in `backup.test.ts`, one of them the exact old-file data-loss case.
+- ✅ `foods` is declared but **populated by nothing and consumed by nothing** in v1. It
+  exists only to avoid a later migration. Not a half-built feature.
 
-- Additive Dexie `version(2)`: `meals`, `mealItems`, `foods`, `productCache`, `mealPhotos`,
-  `phases`, `imports`. Workout tables unlisted and untouched.
-- **Never call `crypto.subtle` inside `.upgrade()`.** `stableUuid` is async
-  (`src/domain/ids.ts:22-25`), and a foreign await inside a Dexie transaction raises
-  `TransactionInactiveError` on a real WebView — while **passing under fake-indexeddb**. A
-  sandbox test would go green on a pattern that bricks the phone. Mint every id *before*
-  opening the transaction, exactly as `src/db/hevy.ts` already does (`:400`, `:428`,
-  `:457`, transaction at `:474`). Use a literal `'phase-initial'` for the seed row.
-- Extend `TABLE_NAMES` and `Backup['tables']`, bump the backup `version` to 2, make
-  `isBackup` actually read the version field it currently ignores (`backup.ts:53-57`), and
-  narrow replace-mode to clear only tables present in the file.
-- The importer ships with a **Settings import sheet** modelled on `HevyImportSheet` — file
-  input, plan preview, confirm, result line. "Headless" means no nutrition screens on the
-  daily path, not literally no UI.
-- `foods` is declared but **populated by nothing and consumed by nothing** in v1. It exists
-  only to avoid a later migration. Document that so a future session does not mistake it
-  for a half-built feature.
-
-**Verify on the phone, not in the sandbox.** The fake-indexeddb test proves the schema
-delta and row counts; it does **not** prove the upgrade completes on-device. Ship
-`version(2)` as its own release that does nothing else, with a Settings diagnostics line
-showing live session and set counts plus the Dexie version, and confirm that line before a
-single nutrition screen is written.
+**Still to verify on the phone, not in the sandbox.** The fake-indexeddb tests prove the
+schema delta and the row counts; they do **not** prove the upgrade completes on-device.
+`version(2)` should reach the phone as a release that does nothing else, with a Settings
+diagnostics line showing live session and set counts plus the Dexie version — confirm that
+line before a single nutrition screen is written.
 
 ### P2b — The Nano spike · **S** · concurrent with P2, not before it
 
-High uncertainty, low optionality: if Nano turned out to be impossible, P0 through P4 would
+High uncertainty, low optionality: if Nano turned out to be impossible, P1 through P3 would
 be unchanged. So it runs early but it is **not** the first thing.
 
 A throwaway APK containing `probe()`, one `analyzeMeal(filePath)`, and a debug button that
@@ -245,12 +222,13 @@ shared thread inside third-party code you cannot move.
 
 ### P3 — Nutrition UI, manual entry first · **M**
 
-The phase that lets you abandon the Kotlin app entirely. Deliberately **no AI**: Today
-screen, Food tab, manual add and edit, day navigation.
+**The phase that makes the merged app usable.** Deliberately **no AI**: Today screen, Food
+tab, manual add and edit, day navigation.
 
-Manual entry early is not a consolation prize. It is the thing that closes the gap between
-"stopped writing to the old app" and "the new app can take daily food logging" — and that
-gap, not the AI, is the real sequencing pressure.
+Manual entry early is not a consolation prize, and with no meal history to import it is now
+the *only* route by which a single calorie reaches the database. It is also the honest floor
+of §2.3: a food logger that needs a working on-device model to record what you ate is not
+seamless. Everything in P4 is an accelerator on top of this.
 
 Editing any number, before and after saving, is the top-wanted feature in both handovers and
 lands here.
@@ -292,7 +270,7 @@ RyCalories screens are rewrites, not ports.
 the nav rework because it already renders in a shell with no bottom navigation.
 
 The Today hero needs no new maths: it is Iron's already-tested reverse-diet stepper
-(`src/domain/nutrition.ts:17`) minus a sum over migrated meals, with protein as a
+(`src/domain/nutrition.ts:17`) minus a sum over the day's logged meals, with protein as a
 subordinate bar.
 
 ### 5.2 Visual direction — chassis and layer, not a blend
@@ -357,8 +335,9 @@ mechanical.
 ROADMAP §1's own list (brand-match false positives at `ProductLookup.kt:157`, the barcode
 overwriting the wrong item, the missing Atwater cross-check, schema field ordering) is
 accurate and mostly ports across as explicit fixes in the TypeScript rewrite. §1.3
-("can't log to a past day") and §1.6 (absolute photo paths) dissolve on the platform change,
-provided the model separates `date` from `loggedAt` and the importer relativises paths.
+("can't log to a past day") and §1.6 (absolute photo paths) are already dissolved: `Meal`
+separates `date` from `loggedAt`, and `photoPath` is documented as relative to the data
+directory, never absolute.
 
 ---
 
@@ -366,8 +345,8 @@ provided the model separates `date` from `loggedAt` and the importer relativises
 
 Both branches live in `ryanfjmorgan93/RyCalories` with **no common ancestor and no `main`**.
 That should be resolved deliberately: keep this branch as the line of development, publish
-under one rolling release tag, and retire the Kotlin branch to a tag once P0 is verified
-green.
+under one rolling release tag, and retire the Kotlin branch to a tag. Nothing now depends on
+that branch — with no meal history to extract, it can be tagged and abandoned today.
 
 Do not change the `applicationId` or the signing key. Both apps' handovers record the same
 hard-won lesson: Android treats a changed ID as a different app, with an empty data
@@ -378,11 +357,9 @@ of what the app is eventually called on the launcher.
 
 ## 8. Open questions for the owner
 
-1. **Do you have a PC with USB debugging available?** It decides P0's route and the `adb`
-   path is materially safer.
-2. **Photos: Dexie blobs or Capacitor Filesystem?** Note `@capacitor/camera` returns a path
+1. **Photos: Dexie blobs or Capacitor Filesystem?** Note `@capacitor/camera` returns a path
    into `cacheDir`, so a photo must be explicitly copied to `Directory.Data` before its path
    is durable. Note also that the PWA build has no camera, no filesystem and no Nano — so
    browser meal entry needs a defined story either way.
-3. **Does the PWA build remain a target at all**, or is the APK now the only artifact?
-4. **What is the app called?** Naming is free; changing the package ID is not.
+2. **Does the PWA build remain a target at all**, or is the APK now the only artifact?
+3. **What is the app called?** Naming is free; changing the package ID is not.
