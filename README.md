@@ -32,6 +32,21 @@ npm run build        # tsc + vite build → dist/
 
 Seed data (the five routines from the brief) is generated from `scratch/gen/seed.py` into `src/db/seed.ts`. Edit the script, not the generated file.
 
+## Android APK
+
+The same app ships as a native Android package (Capacitor shell, assets bundled, works offline, rest-timer notifications and share-sheet exports through the OS).
+
+- **Download:** every push runs the "Build APK" workflow. Grab `iron-<sha>.apk` from the workflow run's artifacts, or from the rolling [iron-latest release](https://github.com/ryanfjmorgan93/RyCalories/releases/tag/iron-latest). Open it on the phone and allow installs from that source.
+- **Build locally:** Android SDK 35 + JDK 21, then
+
+```bash
+npm run build && npx cap sync android
+cd android && ./gradlew assembleRelease
+# → android/app/build/outputs/apk/release/app-release.apk
+```
+
+The release build is signed with the keystore in `android/keystore/` (personal app, committed on purpose) so each new build installs over the previous one and keeps its data.
+
 ## Deploy (Vercel, static)
 
 Import the repo in Vercel with framework preset **Vite**. `vercel.json` already rewrites all routes to `index.html` and marks `sw.js` as never cached. Open the deployed URL in Chrome on the phone and choose **Add to Home screen** — the app then runs full-screen and fully offline.

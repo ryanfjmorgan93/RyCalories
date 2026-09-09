@@ -53,12 +53,13 @@ jobs:
           path: iron-*.apk
           retention-days: 90
 
-      # Every push also refreshes a rolling "latest" release so the APK has a stable download link.
+      # Every push also refreshes a rolling "iron-latest" release so the APK has a stable download link.
+      # (The "latest" tag belongs to the meal-tracker app in this repo; keep the two apart.)
       - name: Publish latest release
-        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/claude/')
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/claude/workout-logger')
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
+          tag_name: iron-latest
           name: Iron (latest build)
           prerelease: true
           files: iron-*.apk
