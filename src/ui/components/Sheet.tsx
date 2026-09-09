@@ -2,6 +2,22 @@ import { useEffect, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from './Button';
 
+// Ref-counted body scroll lock: several sheets can be open (a Confirm stacked on an editor) and
+// unmount in any order without leaving the page stuck unscrollable.
+let scrollLocks = 0;
+let savedOverflow = '';
+function lockScroll() {
+  if (scrollLocks === 0) {
+    savedOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+  }
+  scrollLocks++;
+}
+function unlockScroll() {
+  scrollLocks = Math.max(0, scrollLocks - 1);
+  if (scrollLocks === 0) document.body.style.overflow = savedOverflow;
+}
+
 /** Bottom sheet. Tap the scrim or swipe-handle area to close. Locks body scroll while open. */
 export function Sheet({
   open,
@@ -18,14 +34,13 @@ export function Sheet({
 }) {
   useEffect(() => {
     if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    lockScroll();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => {
-      document.body.style.overflow = prev;
+      unlockScroll();
       window.removeEventListener('keydown', onKey);
     };
   }, [open, onClose]);

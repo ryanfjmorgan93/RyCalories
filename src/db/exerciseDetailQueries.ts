@@ -26,7 +26,8 @@ export async function routineUsageForExercise(exerciseId: string): Promise<Routi
   for (const rx of rxs) {
     const routine = byId.get(rx.routineId);
     if (!routine) continue;
-    const [stall, decisions] = await Promise.all([stallStatus(rx.id), decisionsForRoutineExercise(rx.id)]);
+    // A stall badge only means something while a weight is prescribed.
+    const [stall, decisions] = await Promise.all([rx.mode === 'normal' ? stallStatus(rx.id) : Promise.resolve(null), decisionsForRoutineExercise(rx.id)]);
     out.push({ routine, rx, stall: stall && stall.kind === 'stalled' ? stall : null, decisions });
   }
   return out.sort((a, b) => a.routine.order - b.routine.order || a.rx.order - b.rx.order);

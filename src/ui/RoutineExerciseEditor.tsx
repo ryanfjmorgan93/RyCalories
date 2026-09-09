@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '@/db/db';
+import { flushSync } from 'react-dom';
 import { removeRoutineExercise, updateRoutineExercise, type RoutineItem } from '@/db/repo';
 import type { Exercise, ProgressionMode, RoutineExercise, Settings } from '@/domain/types';
 import { Button } from './components/Button';
@@ -49,6 +52,12 @@ export function RoutineExerciseEditor({
   const [cue, setCue] = useState(rx?.cue ?? '');
   const [notes, setNotes] = useState(rx?.notes ?? '');
   const [optional, setOptional] = useState(rx?.optional ?? false);
+  const [link, setLink] = useState(rx?.linkProgression ?? false);
+  // Other routines that also contain this exercise (the §4.8 link only means something then).
+  const others = useLiveQuery(
+    async () => (rx ? (await db.routineExercises.where('exerciseId').equals(rx.exerciseId).toArray()).filter((r) => r.id !== rx.id) : []),
+    [rx?.id, rx?.exerciseId],
+  );
 
   if (!rx || !exercise) return null;
 
@@ -101,6 +110,7 @@ export function RoutineExerciseEditor({
     patch.cue = cue.trim() || undefined;
     patch.notes = notes.trim() || undefined;
     patch.optional = optional;
+    patch.linkProgression = link;
 
     await updateRoutineExercise(rx.id, patch);
     toast(notices.length ? notices.join(' · ') : 'Saved', notices.length ? 'neutral' : 'ok');
@@ -192,6 +202,16 @@ export function RoutineExerciseEditor({
         <div className="mt-2">
           <Toggle checked={optional} onChange={setOptional} label="Optional (skippable tail)" />
         </div>
+        {others && others.length > 0 && (
+          <div className="border-t border-line">
+            <Toggle
+              checked={link}
+              onChange={setLink}
+              label="Link progression across routines"
+              sub={`Shares weight, mode and increment with ${others.filter((o) => o.linkProgression).length} of ${others.length} other ${others.length === 1 ? 'copy' : 'copies'} of this exercise`}
+            />
+          </div>
+        )}
         <div className="h-2" />
       </Sheet>
 
@@ -203,8 +223,10 @@ export function RoutineExerciseEditor({
         danger
         onCancel={() => setRemoveOpen(false)}
         onConfirm={async () => {
+          // Unmount the Confirm sheet before the editor sheet so the stacked body
+          // scroll locks unwind in order (otherwise body overflow stays 'hidden').
+          flushSync(() => setRemoveOpen(false));
           await removeRoutineExercise(rx.id);
-          setRemoveOpen(false);
           toast('Removed from routine');
           onRemoved?.();
           onClose();

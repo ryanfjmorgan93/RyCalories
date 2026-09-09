@@ -185,7 +185,7 @@ function LogCard({ latest, today }: { latest: Bodyweight | undefined; today: str
   const [note, setNote] = useState('');
 
   const save = async () => {
-    if (kg === null || !date) return;
+    if (kg === null || kg <= 0 || !date) return;
     await logBodyweight(date, kg, note);
     setKg(null);
     setNote('');
@@ -204,10 +204,10 @@ function LogCard({ latest, today }: { latest: Bodyweight | undefined; today: str
           data-testid="bw-date"
           className="num h-12 w-full min-w-0 rounded-xl border border-line bg-surface-2 px-3 text-base font-semibold outline-none focus:border-accent"
         />
-        <NumberInput value={kg} onChange={setKg} placeholder={latest ? fmtNum(latest.kg) : 'kg'} testId="bw-kg" />
+        <NumberInput value={kg} onChange={setKg} placeholder={latest ? fmtNum(latest.kg) : 'kg'} testId="bw-kg"  min={1}/>
       </div>
       <TextInput value={note} onChange={setNote} placeholder="Note (optional)" className="mt-2" testId="bw-note" />
-      <Button variant="primary" size="lg" full className="mt-3" disabled={kg === null || !date} onClick={() => void save()} data-testid="bw-save">
+      <Button variant="primary" size="lg" full className="mt-3" disabled={kg === null || kg <= 0 || !date} onClick={() => void save()} data-testid="bw-save">
         Save
       </Button>
     </Card>
@@ -230,7 +230,7 @@ function StatsCard({ entries, latest, settings, today }: { entries: Bodyweight[]
   }
 
   return (
-    <Card className="grid grid-cols-3 gap-3 px-4 py-3">
+    <Card className="flex flex-wrap items-end gap-x-6 gap-y-3 px-4 py-3">
       <Stat label="Latest" value={latest ? fmtKg(latest.kg) : '—'} sub={latest ? shortDateLabel(latest.date) : 'no readings'} />
       <Stat
         label="7-day"
@@ -289,7 +289,7 @@ function EditSheetBody({ entry, onClose }: { entry: Bodyweight; onClose: () => v
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const save = async () => {
-    if (kg === null) return;
+    if (kg === null || kg <= 0) return;
     await logBodyweight(entry.date, kg, note);
     toast(`Saved ${fmtKg(kg)}`, 'ok');
     onClose();
@@ -306,13 +306,13 @@ function EditSheetBody({ entry, onClose }: { entry: Bodyweight; onClose: () => v
             <Button size="lg" variant="danger" onClick={() => setConfirmOpen(true)}>
               Delete
             </Button>
-            <Button size="lg" variant="primary" disabled={kg === null} onClick={() => void save()} data-testid="bw-edit-save">
+            <Button size="lg" variant="primary" disabled={kg === null || kg <= 0} onClick={() => void save()} data-testid="bw-edit-save">
               Save
             </Button>
           </div>
         }
       >
-        <NumberField value={kg} onChange={setKg} step={0.1} min={0} max={500} label="Weight" unit="kg" testId="bw-edit-kg" />
+        <NumberField value={kg} onChange={setKg} step={0.1} min={1} max={500} label="Weight" unit="kg" testId="bw-edit-kg" />
         <div className="mt-3">
           <div className="mb-1 px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Note</div>
           <TextInput value={note} onChange={setNote} placeholder="Optional" />

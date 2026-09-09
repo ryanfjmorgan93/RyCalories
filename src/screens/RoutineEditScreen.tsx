@@ -70,7 +70,7 @@ export function RoutineEditScreen() {
     <div>
       <TopBar
         title={routine.name}
-        subtitle={`${routine.isLowerBody ? 'Lower body' : 'Upper body'}${routine.targetMinutes ? ` · target ${routine.targetMinutes} min` : ''}`}
+        subtitle={[routine.isLowerBody ? 'Lower body' : null, routine.targetMinutes ? `target ${routine.targetMinutes} min` : null].filter(Boolean).join(' · ') || undefined}
         back="/routines"
         right={
           <IconButton label="More" onClick={() => setMenuOpen(true)} data-testid="routine-menu">
@@ -102,7 +102,7 @@ export function RoutineEditScreen() {
 
         <div className="mt-6">
           <Button size="xl" variant="primary" full onClick={() => void start()} data-testid="start-routine">
-            {active ? 'Resume session' : 'Start this routine'}
+            {active ? `Resume ${active.title}` : 'Start this routine'}
           </Button>
         </div>
         <div className="h-6" />
@@ -152,7 +152,7 @@ export function RoutineEditScreen() {
       <Confirm
         open={deleteOpen}
         title={`Delete ${routine.name}?`}
-        body="Its exercises and settings will be removed. Past sessions are kept."
+        body="Past sessions are kept. A routine with sessions is archived rather than deleted."
         confirmLabel="Delete"
         danger
         onCancel={() => setDeleteOpen(false)}

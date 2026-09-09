@@ -83,7 +83,7 @@ export function SessionDetailScreen() {
         {groups.length === 0 && <div className="py-8 text-center text-sm text-muted">No sets logged</div>}
 
         {groups.map((g) => (
-          <GroupCard key={g.rx?.id ?? `x:${g.exercise.id}`} group={g} />
+          <GroupCard key={g.sets[0]?.routineExerciseId ?? `x:${g.exercise.id}`} group={g} />
         ))}
 
         <SessionExtras session={session} />
@@ -127,13 +127,15 @@ function GroupCard({ group }: { group: SessionGroup }) {
   const { rx, exercise, sets, decision } = group;
   const kind = exercise.kind;
   const numbers = setNumbers(sets);
+  // "Extra" means logged outside the routine; a routine-exercise deleted since is not extra.
+  const isExtra = sets[0]?.routineExerciseId === null;
 
   return (
     <Card className="mt-3 overflow-hidden">
       <button type="button" className="block w-full min-h-14 px-4 py-3 text-left active:bg-surface-2" onClick={() => nav(`/exercises/${exercise.id}`)}>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="text-lg font-extrabold leading-tight">{exercise.name}</span>
-          {!rx && <Chip size="sm">extra</Chip>}
+          {isExtra && <Chip size="sm">extra</Chip>}
         </div>
         {rx && (
           <div className="mt-0.5 text-sm text-muted">

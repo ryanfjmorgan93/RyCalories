@@ -41,7 +41,7 @@ export function HistoryScreen() {
     <div>
       <TopBar title="History" back="/" />
       <div className="px-4">
-        {sessions === undefined && <div className="py-8 text-muted">Loading…</div>}
+        {(sessions === undefined || setCounts === undefined) && <div className="py-8 text-muted">Loading…</div>}
 
         {sessions && sessions.length === 0 && (
           <div className="pt-4">
@@ -49,7 +49,7 @@ export function HistoryScreen() {
           </div>
         )}
 
-        {groups.map((g) => (
+        {setCounts !== undefined && groups.map((g) => (
           <div key={g.label}>
             <SectionTitle>{g.label}</SectionTitle>
             <Card>

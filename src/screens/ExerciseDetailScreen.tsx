@@ -60,7 +60,7 @@ export function ExerciseDetailScreen() {
         title={exercise.name}
         back="/exercises"
         right={
-          <Button size="sm" variant="ghost" className="mr-2" onClick={() => nav(`/exercises/${exercise.id}/edit`)}>
+          <Button size="md" variant="ghost" className="mr-1" onClick={() => nav(`/exercises/${exercise.id}/edit`)}>
             Edit
           </Button>
         }
@@ -87,8 +87,8 @@ export function ExerciseDetailScreen() {
               <Row
                 onClick={() => nav(`/history/${h.session.id}`)}
                 title={
-                  <span className="inline-flex min-w-0 max-w-full items-center gap-2">
-                    <span className="truncate">
+                  <span className="flex min-w-0 max-w-full items-center gap-2">
+                    <span className="min-w-0 truncate">
                       {fmtDateLong(h.session.startedAt)} · {h.session.title}
                     </span>
                     {h.session.source === 'hevy' && (

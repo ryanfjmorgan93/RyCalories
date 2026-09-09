@@ -119,7 +119,7 @@ export function RoutinesScreen() {
       <Confirm
         open={deleteFor !== null}
         title={`Delete ${deleteFor?.name ?? 'routine'}?`}
-        body="Its exercises and settings will be removed. Past sessions are kept."
+        body="Past sessions are kept. A routine with sessions is archived rather than deleted."
         confirmLabel="Delete"
         danger
         onCancel={() => setDeleteFor(null)}

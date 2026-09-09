@@ -315,9 +315,14 @@ export async function lockInRoutineExercise(id: string, weight: number, sessionI
   });
 }
 
-/** Put a routine-exercise back into calibration. */
+/** Put a routine-exercise back into calibration (linked siblings follow, §4.8). */
 export async function unlockRoutineExercise(id: string): Promise<void> {
-  await db.routineExercises.update(id, { mode: 'calibrating' });
+  await db.transaction('rw', db.routineExercises, async () => {
+    const rx = await db.routineExercises.get(id);
+    if (!rx) return;
+    await db.routineExercises.update(id, { mode: 'calibrating' });
+    await propagateLinked(rx, { mode: 'calibrating' });
+  });
 }
 
 // ---------------------------------------------------------------------------

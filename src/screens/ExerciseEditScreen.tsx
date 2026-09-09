@@ -1,16 +1,17 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '@/db/db';
 import { useNavigate, useParams } from 'react-router-dom';
 import { createExercise, deleteExercise, exerciseUsage, updateExercise, type ExerciseInput } from '@/db/repo';
 import { MUSCLE_GROUPS, type Exercise, type ExerciseKind, type MuscleGroup } from '@/domain/types';
 import { Button } from '@/ui/components/Button';
-import { Card, Divider } from '@/ui/components/Card';
+import { Card, Divider, EmptyState } from '@/ui/components/Card';
 import { Chip, Segmented, Toggle } from '@/ui/components/Chip';
 import { NumberInput, TextInput } from '@/ui/components/NumberField';
 import { Confirm } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { TopBar } from '@/ui/components/TopBar';
-import { useExercise } from '@/ui/hooks';
+
 
 const KIND_OPTIONS: { value: ExerciseKind; label: ReactNode }[] = [
   { value: 'reps', label: 'Reps' },
@@ -79,7 +80,8 @@ export function ExerciseEditScreen() {
   const { id } = useParams<{ id: string }>();
   const nav = useNavigate();
   const isNew = id === undefined;
-  const existing = useExercise(id);
+  // null = not found (deleted or stale link); undefined = still loading.
+  const existing = useLiveQuery(async () => (id ? ((await db.exercises.get(id)) ?? null) : null), [id]);
   const usage = useLiveQuery(() => (id ? exerciseUsage(id) : undefined), [id]);
 
   const [form, setForm] = useState<Form>(NEW_FORM);
@@ -163,7 +165,11 @@ export function ExerciseEditScreen() {
     <div>
       <TopBar title={isNew ? 'New exercise' : 'Edit exercise'} back />
       <div className="px-4">
-        {!loaded ? (
+        {!isNew && existing === null ? (
+          <div className="pt-4">
+            <EmptyState>Exercise not found</EmptyState>
+          </div>
+        ) : !loaded ? (
           <div className="py-4 text-sm text-muted">Loading…</div>
         ) : (
           <>
