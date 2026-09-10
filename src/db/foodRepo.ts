@@ -8,7 +8,7 @@
 import { db } from './db';
 import { nowIso, toDateKey } from '@/domain/dates';
 import { uuid } from '@/domain/ids';
-import { ZERO, addMacros, displayMacros, type FoodSource, type Macros, type Nutrition } from '@/domain/food';
+import { ZERO, addMacros, displayMacros, gramsOf, type FoodSource, type Macros, type Nutrition } from '@/domain/food';
 import { memoryFrom, mergeMemory, rankMemories } from '@/domain/foodMemory';
 import { MEAL_SLOTS, type FoodMemory, type Meal, type MealItem, type MealSlot } from '@/domain/types';
 
@@ -252,6 +252,42 @@ export async function deleteMeal(id: string): Promise<void> {
     await db.mealItems.bulkDelete(items.map((i) => i.id));
     await db.meals.delete(id);
   });
+}
+
+/**
+ * Distinct meals eaten recently, newest first, excluding anything already on `date`.
+ *
+ * De-duplicated by what the meal IS — its name and the foods in it — rather than by name alone.
+ * Eating porridge every morning should offer one entry, not thirty; but "Lunch" on Monday with
+ * chicken and "Lunch" on Tuesday with a curry are two different meals that happen to share a
+ * label, and collapsing them would hide one behind the other.
+ */
+export async function recentMeals(date: string, limit = 8): Promise<MealWithItems[]> {
+  // A window, not the whole history: enough to find a fortnight of distinct meals without
+  // reading years of rows on a phone.
+  const recent = (await db.meals.orderBy('loggedAt').reverse().limit(limit * 12).toArray()).filter((m) => m.date !== date);
+  if (!recent.length) return [];
+
+  const items = await db.mealItems.where('mealId').anyOf(recent.map((m) => m.id)).toArray();
+  const byMeal = new Map<string, MealItem[]>();
+  for (const item of items) {
+    const list = byMeal.get(item.mealId);
+    if (list) list.push(item);
+    else byMeal.set(item.mealId, [item]);
+  }
+
+  const seen = new Set<string>();
+  const out: MealWithItems[] = [];
+  for (const meal of recent) {
+    const mealItems = (byMeal.get(meal.id) ?? []).sort((a, b) => a.index - b.index);
+    if (!mealItems.length) continue;
+    const signature = [meal.name.trim().toLowerCase(), ...mealItems.map((i) => `${i.name.trim().toLowerCase()}:${gramsOf(i.nutrition) ?? i.portion}`)].join('|');
+    if (seen.has(signature)) continue;
+    seen.add(signature);
+    out.push({ meal, items: mealItems, macros: sumItems(mealItems) });
+    if (out.length >= limit) break;
+  }
+  return out;
 }
 
 /** Copy a meal onto another day — the fastest route to logging a repeated breakfast. */

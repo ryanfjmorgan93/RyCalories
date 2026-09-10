@@ -12,7 +12,7 @@ import { MacroLine, MacroSplit, TargetBar } from '@/ui/components/MacroBar';
 import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { BackIcon, ChevronIcon, MoreIcon, PlusIcon, TopBar } from '@/ui/components/TopBar';
-import { useDayMeals, useSettings, useToday } from '@/ui/hooks';
+import { useDayMeals, useRecentMeals, useSettings, useToday } from '@/ui/hooks';
 
 /**
  * The day's food. Deliberately the whole feature on one screen: what the target is, what has
@@ -25,6 +25,7 @@ export function FoodScreen() {
   const [menuFor, setMenuFor] = useState<MealWithItems | null>(null);
   const [deleteFor, setDeleteFor] = useState<MealWithItems | null>(null);
   const [copying, setCopying] = useState(false);
+  const [repeatOpen, setRepeatOpen] = useState(false);
 
   // Roll the view onto the new day if the app is left open past midnight, but only while
   // looking at today — never yank the screen away from a day being edited.
@@ -80,11 +81,20 @@ export function FoodScreen() {
         <DayBody key={date} date={date} today={today} isToday={isToday} onMenu={setMenuFor} />
 
         <div className="h-4" />
-        <Button size="lg" variant="primary" full onClick={() => nav(`/food/new?date=${date}`)} data-testid="add-meal-button">
-          Add meal
-        </Button>
+        <div className="grid grid-cols-[1fr_auto] gap-3">
+          <Button size="lg" variant="primary" full onClick={() => nav(`/food/new?date=${date}`)} data-testid="add-meal-button">
+            Add meal
+          </Button>
+          {/* Most food is repeat food. Composing yesterday's breakfast again from scratch is six
+              taps; this is two. */}
+          <Button size="lg" variant="secondary" onClick={() => setRepeatOpen(true)} data-testid="repeat-meal">
+            Repeat
+          </Button>
+        </div>
         <div className="h-8" />
       </div>
+
+      <RepeatSheet open={repeatOpen} date={date} onClose={() => setRepeatOpen(false)} />
 
       <Sheet open={menuFor !== null} onClose={() => setMenuFor(null)} title={menuFor?.meal.name}>
         <div className="grid gap-3">
@@ -241,4 +251,55 @@ function MealSubtitle({ m }: { m: MealWithItems }) {
   const parts = [m.meal.slot ? capitalise(m.meal.slot) : '', sameDay ? fmtTime(m.meal.loggedAt) : ''].filter(Boolean);
   parts.push(`${m.items.length} ${m.items.length === 1 ? 'item' : 'items'}`);
   return <span>{parts.join(' · ')}</span>;
+}
+
+/** Pick a meal eaten before and put it on this day. */
+function RepeatSheet({ open, date, onClose }: { open: boolean; date: string; onClose: () => void }) {
+  const nav = useNavigate();
+  const recent = useRecentMeals(open ? date : '', 8);
+  const [busy, setBusy] = useState(false);
+
+  const repeat = async (m: MealWithItems) => {
+    // Latched and closed before the await, like every other write-then-navigate here: repeatMeal
+    // mints a new id per call, so a second tap would put the meal on the day twice.
+    if (busy) return;
+    setBusy(true);
+    onClose();
+    try {
+      const id = await repeatMeal(m.meal.id, date);
+      if (id) {
+        toast('Meal added');
+        nav(`/food/${id}`);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Sheet open={open} onClose={onClose} title="Repeat a meal">
+      {recent === undefined && <div className="py-6 text-center text-sm text-muted">Loading…</div>}
+      {recent && recent.length === 0 && <EmptyState>Nothing to repeat yet.</EmptyState>}
+      {recent && recent.length > 0 && (
+        <Card>
+          {recent.map((m, i) => (
+            <div key={m.meal.id}>
+              {i > 0 && <Divider />}
+              <Row
+                onClick={() => void repeat(m)}
+                title={m.meal.name}
+                subtitle={m.items.map((it) => it.name).join(', ')}
+                right={
+                  <div className="text-right">
+                    <div className="num font-extrabold tabular-nums">{fmtKcal(m.macros.kcal)}</div>
+                    <MacroLine m={m.macros} className="text-[11px] text-muted" />
+                  </div>
+                }
+              />
+            </div>
+          ))}
+        </Card>
+      )}
+    </Sheet>
+  );
 }

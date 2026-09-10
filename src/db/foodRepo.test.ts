@@ -11,6 +11,7 @@ import {
   itemsForMeal,
   loggedDays,
   mealsOnDay,
+  recentMeals,
   repeatMeal,
   suggestFoods,
   sumItems,
@@ -356,5 +357,59 @@ describe('forgetting a food', () => {
     const [remembered] = await suggestFoods('');
     await forgetFood(remembered!.id);
     await expect(forgetFood(remembered!.id)).resolves.toBeUndefined();
+  });
+});
+
+describe('recent meals, for repeating one', () => {
+  it('offers a meal eaten on another day', async () => {
+    await addMeal({ name: 'Breakfast', date: '2026-03-01', slot: 'breakfast' }, [oats(80), shake()]);
+    const recent = await recentMeals(TODAY);
+    expect(recent.map((m) => m.meal.name)).toEqual(['Breakfast']);
+    expect(recent[0]!.macros.kcal).toBe(423);
+  });
+
+  it('never offers a meal already on the day being viewed', async () => {
+    await addMeal({ name: 'Breakfast', date: TODAY }, [oats(80)]);
+    expect(await recentMeals(TODAY)).toEqual([]);
+  });
+
+  it('collapses the same meal eaten repeatedly into one entry', async () => {
+    // Porridge every morning should be one row, not thirty.
+    for (const date of ['2026-03-01', '2026-03-02', '2026-03-03']) {
+      await addMeal({ name: 'Breakfast', date }, [oats(80)]);
+    }
+    expect(await recentMeals(TODAY)).toHaveLength(1);
+  });
+
+  it('keeps two different meals that happen to share a name', async () => {
+    await addMeal({ name: 'Lunch', date: '2026-03-01' }, [oats(80)]);
+    await addMeal({ name: 'Lunch', date: '2026-03-02' }, [shake()]);
+    expect(await recentMeals(TODAY)).toHaveLength(2);
+  });
+
+  it('treats the same food at a different weight as a different meal', async () => {
+    await addMeal({ name: 'Breakfast', date: '2026-03-01' }, [oats(80)]);
+    await addMeal({ name: 'Breakfast', date: '2026-03-02' }, [oats(120)]);
+    expect(await recentMeals(TODAY)).toHaveLength(2);
+  });
+
+  it('leaves out a meal with no food in it', async () => {
+    await addMeal({ name: 'Empty', date: '2026-03-01' }, []);
+    expect(await recentMeals(TODAY)).toEqual([]);
+  });
+
+  it('respects the limit', async () => {
+    for (let i = 1; i <= 6; i++) {
+      await addMeal({ name: `Meal ${i}`, date: `2026-03-0${i}` }, [oats(80 + i)]);
+    }
+    expect(await recentMeals(TODAY, 3)).toHaveLength(3);
+  });
+
+  it('copies onto the day being viewed, not onto today', async () => {
+    await addMeal({ name: 'Breakfast', date: '2026-03-01' }, [oats(80)]);
+    const [recent] = await recentMeals('2026-03-05');
+    await repeatMeal(recent!.meal.id, '2026-03-05');
+    expect((await mealsOnDay('2026-03-05')).map((m) => m.meal.name)).toEqual(['Breakfast']);
+    expect(await dayTotals(TODAY)).toEqual({ kcal: 0, protein: 0, carbs: 0, fat: 0 });
   });
 });

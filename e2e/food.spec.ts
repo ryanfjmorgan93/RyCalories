@@ -495,4 +495,39 @@ test.describe('nutrition', () => {
     await expect(page.getByTestId('days-logged')).toHaveText('2 of 14');
     await expect(page.getByTestId('thin-coverage')).toBeVisible();
   });
+
+  test('a meal eaten before can be repeated onto the day being viewed', async ({ page }) => {
+    // Log a breakfast yesterday.
+    await page.goto('/food');
+    await page.getByTestId('prev-day').click();
+    await page.getByTestId('add-meal-button').click();
+    await page.getByTestId('meal-name').fill('Breakfast');
+    await page.getByTestId('empty-add-food').click();
+    await addFood(page, { name: 'Porridge oats', grams: 80, kcal: 379, protein: 11, carbs: 60, fat: 8 });
+    await page.getByTestId('add-food').click();
+    await addFood(page, { name: 'Whey', portion: '1 scoop', kcal: 120, protein: 24, carbs: 3, fat: 1.5 });
+    await page.getByTestId('save-meal').click();
+    await page.waitForURL(/\/food\/[0-9a-f-]+$/);
+
+    // Today: two taps to have the same breakfast again.
+    await page.goto('/food');
+    await expect(page.getByTestId('calories-bar')).toContainText('0 kcal');
+    await page.getByTestId('repeat-meal').click();
+    await page.getByRole('button', { name: /^Breakfast/ }).click();
+    await expect(page).toHaveURL(/\/food\/[0-9a-f-]+$/);
+    await expect(page.getByTestId('meal-total')).toContainText('423 kcal');
+
+    await page.goto('/food');
+    await expect(page.getByTestId('calories-bar')).toContainText('423 kcal');
+
+    // The day it came from still has its own copy.
+    await page.getByTestId('prev-day').click();
+    await expect(page.getByTestId('calories-bar')).toContainText('423 kcal');
+  });
+
+  test('there is nothing to repeat before anything has been eaten', async ({ page }) => {
+    await page.goto('/food');
+    await page.getByTestId('repeat-meal').click();
+    await expect(page.getByText('Nothing to repeat yet.')).toBeVisible();
+  });
 });

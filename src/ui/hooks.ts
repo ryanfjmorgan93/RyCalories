@@ -2,7 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useState } from 'react';
 import { db } from '@/db/db';
 import { getActiveSession, lastCompletedSession, recentSessions, routineItems, type RoutineItem } from '@/db/repo';
-import { getMeal, loggedDays, mealsOnDay, suggestFoods, type MealWithItems } from '@/db/foodRepo';
+import { getMeal, loggedDays, mealsOnDay, recentMeals, suggestFoods, type MealWithItems } from '@/db/foodRepo';
 import { toDateKey } from '@/domain/dates';
 import type { Exercise, FoodMemory, Routine, Session, Settings } from '@/domain/types';
 
@@ -120,4 +120,9 @@ export function useToday(): string {
  */
 export function useFoodSuggestions(query: string | null, limit = 6): FoodMemory[] | undefined {
   return useLiveQuery(() => (query === null ? [] : suggestFoods(query, limit)), [query, limit]);
+}
+
+/** Distinct meals eaten recently, for repeating one onto `date`. */
+export function useRecentMeals(date: string, limit = 8): MealWithItems[] | undefined {
+  return useLiveQuery(() => recentMeals(date, limit), [date, limit]);
 }
