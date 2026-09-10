@@ -211,4 +211,62 @@ test.describe('nutrition', () => {
 
     await expect(page.getByTestId('calories-bar')).toContainText('1900 kcal');
   });
+
+  test('a food eaten before is one tap the next time', async ({ page }) => {
+    // Log it the long way once.
+    await page.goto('/food/new');
+    await page.getByTestId('meal-name').fill('Breakfast');
+    await page.getByTestId('empty-add-food').click();
+    await addFood(page, { name: 'Porridge oats', grams: 80, kcal: 379, protein: 11, carbs: 60, fat: 8 });
+    await page.getByTestId('save-meal').click();
+    await page.waitForURL(/\/food\/[0-9a-f-]+$/);
+
+    // Next time, it is offered before a single number is typed.
+    await page.goto('/food/new');
+    await page.getByTestId('meal-name').fill('Second breakfast');
+    await page.getByTestId('empty-add-food').click();
+    const suggestion = page.getByTestId('suggest-Porridge oats');
+    await expect(suggestion).toBeVisible();
+    await expect(suggestion).toContainText('379 kcal / 100 g');
+    await expect(suggestion).toContainText('usually 80 g');
+    await suggestion.click();
+
+    // Everything is filled in, at the weight last eaten, and the row is no longer offered.
+    await expect(page.getByTestId('food-name')).toHaveValue('Porridge oats');
+    await expect(page.getByTestId('food-grams')).toHaveValue('80');
+    await expect(page.getByTestId('food-kcal')).toHaveValue('379');
+    await expect(page.getByTestId('food-eaten')).toContainText('303 kcal');
+    await expect(suggestion).toBeHidden();
+
+    await page.getByTestId('save-food').click();
+    await expect(page.getByTestId('meal-total')).toContainText('303 kcal');
+    await page.getByTestId('save-meal').click();
+    await page.waitForURL(/\/food\/[0-9a-f-]+$/);
+
+    await page.goto('/food');
+    await expect(page.getByTestId('calories-bar')).toContainText('606 kcal');
+  });
+
+  test('typing narrows the remembered foods, and an unweighed one is never offered', async ({ page }) => {
+    await page.goto('/food/new');
+    await page.getByTestId('meal-name').fill('Mixed');
+    await page.getByTestId('empty-add-food').click();
+    await addFood(page, { name: 'Porridge oats', grams: 80, kcal: 379, protein: 11, carbs: 60, fat: 8 });
+    await page.getByTestId('add-food').click();
+    await addFood(page, { name: 'Chicken thigh', grams: 200, kcal: 209, protein: 26, carbs: 0, fat: 11 });
+    await page.getByTestId('add-food').click();
+    // A whole portion has no per-100g figures, so there is nothing generalisable to remember.
+    await addFood(page, { name: 'Mystery stew', portion: '1 bowl', kcal: 500, protein: 30, carbs: 40, fat: 20 });
+    await page.getByTestId('save-meal').click();
+    await page.waitForURL(/\/food\/[0-9a-f-]+$/);
+
+    await page.goto('/food/new');
+    await page.getByTestId('empty-add-food').click();
+    await expect(page.getByTestId('food-suggestions')).toBeVisible();
+    await expect(page.getByTestId('suggest-Mystery stew')).toBeHidden();
+
+    await page.getByTestId('food-name').fill('chick');
+    await expect(page.getByTestId('suggest-Chicken thigh')).toBeVisible();
+    await expect(page.getByTestId('suggest-Porridge oats')).toBeHidden();
+  });
 });

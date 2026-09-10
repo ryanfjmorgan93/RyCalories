@@ -9,7 +9,8 @@ import { db } from './db';
 import { nowIso, toDateKey } from '@/domain/dates';
 import { uuid } from '@/domain/ids';
 import { ZERO, addMacros, displayMacros, type FoodSource, type Macros, type Nutrition } from '@/domain/food';
-import { MEAL_SLOTS, type Meal, type MealItem, type MealSlot } from '@/domain/types';
+import { memoryFrom, mergeMemory, rankMemories } from '@/domain/foodMemory';
+import { MEAL_SLOTS, type FoodMemory, type Meal, type MealItem, type MealSlot } from '@/domain/types';
 
 /** What a meal is made of, as the UI wants it: the meal plus its items in order. */
 export interface MealWithItems {
@@ -142,7 +143,42 @@ export async function addMeal(meal: NewMeal, items: NewMealItem[]): Promise<stri
     await db.meals.put(row);
     if (itemRows.length) await db.mealItems.bulkPut(itemRows);
   });
+  // After the meal is safely committed, never inside its transaction: remembering is a
+  // convenience and must not be able to fail the write the user actually asked for.
+  for (const it of itemRows) await rememberFood(it);
   return id;
+}
+
+// ---------------------------------------------------------------------------
+// Food memory
+
+/**
+ * Record that a food was eaten, so it can be offered back next time.
+ *
+ * Best-effort by design: a failure here must never take a meal down with it. Logging the food is
+ * the user's intent; remembering it is a convenience the app adds on top.
+ */
+export async function rememberFood(item: NewMealItem | MealItem): Promise<void> {
+  // NewMealItem's source is optional and defaults the same way toItemRow does, so a food added
+  // without one is remembered as the user's own rather than falling through to the least trusted.
+  const next = memoryFrom({ ...item, source: item.source ?? 'user' });
+  if (!next) return;
+  const at = nowIso();
+  try {
+    await db.transaction('rw', db.foods, async () => {
+      const existing = await db.foods.where('key').equals(next.key).first();
+      if (existing) await db.foods.put(mergeMemory(existing, next, at));
+      else await db.foods.put({ id: uuid(), ...next, timesUsed: 1, lastUsedAt: at });
+    });
+  } catch {
+    // Deliberately swallowed. See above.
+  }
+}
+
+/** Remembered foods for the picker, ranked for `query` (empty = most eaten, most recent). */
+export async function suggestFoods(query: string, limit = 8): Promise<FoodMemory[]> {
+  const all = await db.foods.toArray();
+  return rankMemories(query, all, limit).map((r) => r.memory);
 }
 
 function toItemRow(id: string, mealId: string, index: number, it: NewMealItem): MealItem {
@@ -171,6 +207,7 @@ export async function addItem(mealId: string, item: NewMealItem): Promise<string
     const index = existing.reduce((max, i) => Math.max(max, i.index), -1) + 1;
     await db.mealItems.put(toItemRow(id, mealId, index, item));
   });
+  await rememberFood(item);
   return id;
 }
 
@@ -181,6 +218,10 @@ export async function addItem(mealId: string, item: NewMealItem): Promise<string
  */
 export async function updateItem(id: string, patch: Partial<Omit<MealItem, 'id' | 'mealId' | 'index'>>): Promise<void> {
   await db.mealItems.update(id, patch);
+  // A correction is the most valuable thing to remember: it is the number the user went back and
+  // fixed, and the trust hierarchy will let it overwrite a guess.
+  const row = await db.mealItems.get(id);
+  if (row) await rememberFood(row);
 }
 
 /** Remove one food. Removing the last one leaves an empty meal rather than deleting it. */

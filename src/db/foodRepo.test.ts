@@ -11,6 +11,7 @@ import {
   loggedDays,
   mealsOnDay,
   repeatMeal,
+  suggestFoods,
   sumItems,
   updateItem,
   updateMeal,
@@ -244,5 +245,60 @@ describe('logged days', () => {
 
   it('is empty before anything is logged', async () => {
     expect(await loggedDays()).toEqual([]);
+  });
+});
+
+describe('remembering food', () => {
+  it('remembers a weighed food the first time it is logged', async () => {
+    await addMeal({ name: 'Breakfast' }, [oats(80)]);
+    const remembered = await suggestFoods('');
+    expect(remembered.map((f) => f.name)).toEqual(['Oats']);
+    expect(remembered[0]!.per100).toEqual(OATS);
+    expect(remembered[0]!.typicalGrams).toBe(80);
+    expect(remembered[0]!.timesUsed).toBe(1);
+  });
+
+  it('counts repeats instead of duplicating the entry', async () => {
+    await addMeal({ name: 'Monday' }, [oats(80)]);
+    await addMeal({ name: 'Tuesday' }, [oats(65)]);
+    const remembered = await suggestFoods('');
+    expect(remembered).toHaveLength(1);
+    expect(remembered[0]!.timesUsed).toBe(2);
+    // The suggested weight follows the most recent portion, which is what was actually eaten.
+    expect(remembered[0]!.typicalGrams).toBe(65);
+  });
+
+  it('does not remember an unweighed portion', async () => {
+    await addMeal({ name: 'Snack' }, [shake()]);
+    expect(await suggestFoods('')).toEqual([]);
+  });
+
+  it('remembers a food added to an existing meal', async () => {
+    const id = await addMeal({ name: 'Lunch' }, []);
+    await addItem(id, oats(50));
+    expect((await suggestFoods('oat')).map((f) => f.name)).toEqual(['Oats']);
+  });
+
+  it('remembers a correction, and lets it overwrite a guess', async () => {
+    const id = await addMeal({ name: 'Lunch' }, [{ ...oats(100), source: 'model' }]);
+    const row = (await itemsForMeal(id))[0]!;
+    await updateItem(row.id, { nutrition: fromPer100({ kcal: 500, protein: 20, carbs: 50, fat: 20 }, 100), source: 'user' });
+    const remembered = await suggestFoods('oat');
+    expect(remembered[0]!.per100.kcal).toBe(500);
+    expect(remembered[0]!.source).toBe('user');
+  });
+
+  it('does not let a later guess undo that correction', async () => {
+    await addMeal({ name: 'A' }, [{ ...oats(100), source: 'user' }]);
+    await addMeal({ name: 'B' }, [{ ...oats(100), source: 'model', nutrition: fromPer100({ kcal: 1, protein: 0, carbs: 0, fat: 0 }, 100) }]);
+    const remembered = await suggestFoods('oat');
+    expect(remembered[0]!.per100).toEqual(OATS);
+    expect(remembered[0]!.timesUsed).toBe(2);
+  });
+
+  it('survives a meal that cannot be remembered without failing the meal', async () => {
+    const id = await addMeal({ name: 'Mixed' }, [shake(), oats(80)]);
+    expect((await itemsForMeal(id))).toHaveLength(2);
+    expect((await suggestFoods('')).map((f) => f.name)).toEqual(['Oats']);
   });
 });

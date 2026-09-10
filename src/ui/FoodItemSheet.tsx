@@ -4,10 +4,14 @@ import {
   fromPer100,
   fromPortion,
   macrosOf,
+  type FoodSource,
   type Macros,
   type Nutrition,
 } from '@/domain/food';
 import { fmtGrams, fmtKcal } from '@/domain/format';
+import { useFoodSuggestions } from './hooks';
+import { normalise } from '@/domain/foodMemory';
+import type { FoodMemory } from '@/domain/types';
 import type { NewMealItem } from '@/db/foodRepo';
 import { Button } from './components/Button';
 import { Segmented } from './components/Chip';
@@ -20,6 +24,10 @@ interface Draft {
   name: string;
   portion: string;
   basis: Basis;
+  brand?: string;
+  product?: string;
+  /** Where these numbers came from. Carried through so the trust hierarchy still applies. */
+  source?: FoodSource;
   grams: number | null;
   /** Per 100 g when weighed; for the whole serving when not. */
   kcal: number | null;
@@ -38,6 +46,9 @@ function draftFrom(item?: NewMealItem): Draft {
     name: item.name,
     portion: item.portion,
     basis: n.basis,
+    ...(item.brand ? { brand: item.brand } : {}),
+    ...(item.product ? { product: item.product } : {}),
+    ...(item.source ? { source: item.source } : {}),
     grams: n.basis === 'weighed' ? n.grams : null,
     kcal: m.kcal,
     protein: m.protein,
@@ -81,6 +92,33 @@ export function FoodItemSheet({
   const [d, setD] = useState<Draft>(() => draftFrom(item));
 
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
+
+  // Suggestions only while adding a new food. When editing a saved one the numbers on screen are
+  // the ones being corrected, and offering to overwrite them with a remembered version is the
+  // opposite of what the user came here to do.
+  const all = useFoodSuggestions(item ? null : d.name, 6) ?? [];
+  // Drop the entry whose name the draft already carries: after picking it, it is applied, and a
+  // row offering to apply it again is noise. This also means retyping brings the list back,
+  // without a flag to get out of step with what is on screen.
+  const suggestions = all.filter((m) => normalise(m.name) !== normalise(d.name)).slice(0, 5);
+
+  const usePrevious = (m: FoodMemory) => {
+    setD({
+      name: m.name,
+      portion: '',
+      basis: 'weighed',
+      grams: m.typicalGrams ?? 100,
+      kcal: m.per100.kcal,
+      protein: m.per100.protein,
+      carbs: m.per100.carbs,
+      fat: m.per100.fat,
+      brand: m.brand,
+      product: m.product,
+      // Carried across, so a remembered label keeps its standing and a remembered guess does not
+      // acquire one it never had.
+      source: m.source,
+    });
+  };
   const eaten = macrosOf(nutritionFrom(d));
   const check = checkAtwater(macrosFrom(d));
   const canSave = d.name.trim().length > 0;
@@ -112,7 +150,9 @@ export function FoodItemSheet({
                 name: d.name.trim(),
                 portion: d.portion.trim() || (d.basis === 'weighed' ? `${d.grams ?? 0} g` : '1 serving'),
                 nutrition: nutritionFrom(d),
-                source: 'user',
+                source: d.source ?? 'user',
+                ...(d.brand ? { brand: d.brand } : {}),
+                ...(d.product ? { product: d.product } : {}),
               })
             }
           >
@@ -125,6 +165,27 @@ export function FoodItemSheet({
         <Field label="Food">
           <TextInput value={d.name} onChange={(v) => set('name', v)} placeholder="Chicken thigh" testId="food-name" autoFocus={!item} />
         </Field>
+
+        {suggestions.length > 0 && (
+          <div className="-mt-2 overflow-hidden rounded-xl border border-line" data-testid="food-suggestions">
+            {suggestions.map((m, i) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => usePrevious(m)}
+                data-testid={`suggest-${m.name}`}
+                className={`flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left active:bg-surface-2 ${i > 0 ? 'border-t border-line' : ''}`}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-semibold leading-tight">{[m.brand, m.name].filter(Boolean).join(' ')}</div>
+                  <div className="num mt-0.5 truncate text-xs text-muted">
+                    {fmtKcal(m.per100.kcal)} / 100 g{m.typicalGrams ? ` · usually ${fmtGrams(m.typicalGrams)}` : ''}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
 
         <Segmented<Basis>
           value={d.basis}

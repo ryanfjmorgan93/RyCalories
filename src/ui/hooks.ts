@@ -2,9 +2,9 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useState } from 'react';
 import { db } from '@/db/db';
 import { getActiveSession, lastCompletedSession, recentSessions, routineItems, type RoutineItem } from '@/db/repo';
-import { getMeal, loggedDays, mealsOnDay, type MealWithItems } from '@/db/foodRepo';
+import { getMeal, loggedDays, mealsOnDay, suggestFoods, type MealWithItems } from '@/db/foodRepo';
 import { toDateKey } from '@/domain/dates';
-import type { Exercise, Routine, Session, Settings } from '@/domain/types';
+import type { Exercise, FoodMemory, Routine, Session, Settings } from '@/domain/types';
 
 /** Live settings row (undefined while loading). */
 export function useSettings(): Settings | undefined {
@@ -112,4 +112,12 @@ export function useToday(): string {
     };
   }, []);
   return key;
+}
+
+/**
+ * Remembered foods ranked for a search box. An empty query means "most eaten, most recently";
+ * `null` means the caller does not want suggestions at all and asks the database for nothing.
+ */
+export function useFoodSuggestions(query: string | null, limit = 6): FoodMemory[] | undefined {
+  return useLiveQuery(() => (query === null ? [] : suggestFoods(query, limit)), [query, limit]);
 }
