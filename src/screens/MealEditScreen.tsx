@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { addItem, addMeal, deleteItem, deleteMeal, updateItem, updateMeal, sumItems, type NewMealItem } from '@/db/foodRepo';
 import { toDateKey } from '@/domain/dates';
-import { macrosOf, type Macros } from '@/domain/food';
+import { displayMacros, type Macros } from '@/domain/food';
 import { fmtDayKey, fmtGrams, fmtKcal } from '@/domain/format';
 import { MEAL_SLOTS, type MealSlot } from '@/domain/types';
 import { Button, IconButton } from '@/ui/components/Button';
@@ -38,16 +38,27 @@ function NewMeal() {
 
   const macros = items.reduce<Macros>(
     (acc, i) => {
-      const m = macrosOf(i.nutrition);
+      const m = displayMacros(i.nutrition);
       return { kcal: acc.kcal + m.kcal, protein: acc.protein + m.protein, carbs: acc.carbs + m.carbs, fat: acc.fat + m.fat };
     },
     { kcal: 0, protein: 0, carbs: 0, fat: 0 },
   );
 
+  // Latched before the await. addMeal mints a fresh id every call, so a second tap landing
+  // before the two-table write commits writes the whole meal again — two identical rows on the
+  // day, both counted. Every other write-then-navigate action in this app is guarded the same way.
+  const [saving, setSaving] = useState(false);
   const save = async () => {
-    const mealId = await addMeal({ name: name.trim() || fallbackName(slot), date, slot }, items);
-    toast('Meal logged');
-    nav(`/food/${mealId}`, { replace: true });
+    if (saving) return;
+    setSaving(true);
+    try {
+      const mealId = await addMeal({ name: name.trim() || fallbackName(slot), date, slot }, items);
+      toast('Meal logged');
+      nav(`/food/${mealId}`, { replace: true });
+    } catch {
+      setSaving(false);
+      toast('Could not save the meal', 'danger');
+    }
   };
 
   return (
@@ -72,13 +83,14 @@ function NewMeal() {
           macros={macros}
         />
         <div className="h-4" />
-        <Button size="lg" variant="primary" full disabled={items.length === 0} onClick={() => void save()} data-testid="save-meal">
+        <Button size="lg" variant="primary" full disabled={items.length === 0 || saving} onClick={() => void save()} data-testid="save-meal">
           Save meal
         </Button>
         <div className="h-8" />
       </div>
 
       <FoodItemSheet
+        key={`new-${editing}`}
         open={editing !== null}
         item={typeof editing === 'number' ? items[editing] : undefined}
         onClose={() => setEditing(null)}
@@ -164,6 +176,7 @@ function ExistingMeal({ id }: { id: string }) {
       </div>
 
       <FoodItemSheet
+        key={`edit-${editing}`}
         open={editing !== null}
         item={typeof editing === 'number' ? items[editing] : undefined}
         onClose={() => setEditing(null)}
@@ -261,7 +274,8 @@ function ItemList({
   return (
     <Card>
       {items.map((item, i) => {
-        const m = macrosOf(item.nutrition);
+        // Display precision, matching the Total row below, so the column adds up.
+        const m = displayMacros(item.nutrition);
         const grams = item.nutrition.basis === 'weighed' ? item.nutrition.grams : null;
         return (
           <div key={`${item.name}-${i}`}>

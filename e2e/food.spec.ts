@@ -177,4 +177,38 @@ test.describe('nutrition', () => {
     await expect(page.getByTestId('data-counts')).toContainText('1 meals');
     await expect(page.getByTestId('db-version')).toHaveText('Database v2');
   });
+
+  test('a back-filled day reads in meal order, without a misleading time', async ({ page }) => {
+    await page.goto('/food');
+    await page.getByTestId('prev-day').click();
+    await expect(page.getByTestId('day-label')).toHaveText('Yesterday');
+
+    // Catch up on yesterday out of order, which is how catching up actually goes.
+    for (const [name, slot, kcal] of [
+      ['Dinner', 'Dinner', 900],
+      ['Breakfast', 'Breakfast', 400],
+      ['Lunch', 'Lunch', 600],
+    ] as const) {
+      await page.getByTestId('add-meal-button').click();
+      await page.getByTestId('meal-name').fill(name);
+      await page.getByRole('button', { name: slot, exact: true }).click();
+      await page.getByTestId('empty-add-food').click();
+      await addFood(page, { name, portion: '1', kcal, protein: 10, carbs: 10, fat: 10 });
+      await page.getByTestId('save-meal').click();
+      await page.waitForURL(/\/food\/[0-9a-f-]+$/);
+      await page.goto('/food');
+      await page.getByTestId('prev-day').click();
+    }
+
+    // Ordered by the slot, not by the order they were typed.
+    const names = page.getByRole('button', { name: /^(Breakfast|Lunch|Dinner)/ });
+    await expect(names).toHaveCount(3);
+    const order = await names.allInnerTexts();
+    expect(order.map((t) => t.split('\n')[0])).toEqual(['Breakfast', 'Lunch', 'Dinner']);
+
+    // And no clock time, because the only time on record is when the row was typed — today.
+    for (const t of order) expect(t).not.toMatch(/\d{2}:\d{2}/);
+
+    await expect(page.getByTestId('calories-bar')).toContainText('1900 kcal');
+  });
 });

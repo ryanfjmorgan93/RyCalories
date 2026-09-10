@@ -11,12 +11,13 @@ import {
   loggedDays,
   mealsOnDay,
   repeatMeal,
+  sumItems,
   updateItem,
   updateMeal,
   type NewMealItem,
 } from './foodRepo';
 import { wipeAll } from './repo';
-import { fromPer100, fromPortion, gramsOf, macrosOf, withGrams } from '@/domain/food';
+import { displayMacros, fromPer100, fromPortion, gramsOf, macrosOf, withGrams } from '@/domain/food';
 import { toDateKey } from '@/domain/dates';
 
 const OATS = { kcal: 379, protein: 11, carbs: 60, fat: 8 };
@@ -90,16 +91,79 @@ describe('totals', () => {
     const item = (await itemsForMeal(id))[0]!;
     await updateItem(item.id, { nutrition: withGrams(item.nutrition, 50) });
 
-    // Half the weight, half the calories, and the stored weight agrees with them.
-    expect((await dayTotals(TODAY)).kcal).toBeCloseTo(189.5, 6);
+    // Half the weight, half the calories, and the stored weight agrees with them. The total is at
+    // display precision (189.5 → 190) so that what is shown adds up; the underlying portion keeps
+    // its exact value.
+    expect((await dayTotals(TODAY)).kcal).toBe(190);
     const after = (await itemsForMeal(id))[0]!;
     expect(gramsOf(after.nutrition)).toBe(50);
     expect(macrosOf(after.nutrition).kcal).toBeCloseTo((OATS.kcal * 50) / 100, 6);
   });
 
+  it('always equal the sum of the parts as displayed', async () => {
+    // Independently rounding each item and the total is individually honest and collectively
+    // wrong: four rows reading 289 + 286 + 50 + 106 under a total of 730 is a maths error to
+    // anyone reading it. These weights are chosen so every item lands on a .x fraction.
+    const items: NewMealItem[] = [
+      { name: 'Chicken', portion: '175 g', nutrition: fromPer100({ kcal: 165, protein: 31, carbs: 0, fat: 3.6 }, 175) },
+      { name: 'Rice', portion: '220 g', nutrition: fromPer100({ kcal: 130, protein: 2.7, carbs: 28, fat: 0.3 }, 220) },
+      { name: 'Courgette', portion: '150 g', nutrition: fromPer100({ kcal: 33, protein: 2.4, carbs: 6, fat: 0.4 }, 150) },
+      { name: 'Olive oil', portion: '12 g', nutrition: fromPer100({ kcal: 884, protein: 0, carbs: 0, fat: 100 }, 12) },
+    ];
+    const id = await addMeal({ name: 'Lunch' }, items);
+    const rows = await itemsForMeal(id);
+
+    const shownParts = rows.map((r) => displayMacros(r.nutrition));
+    const shownTotal = sumItems(rows);
+    for (const key of ['kcal', 'protein', 'carbs', 'fat'] as const) {
+      const summed = shownParts.reduce((n, m) => n + m[key], 0);
+      expect(shownTotal[key]).toBe(summed);
+    }
+
+    // And the day total is the sum of the meal totals, so the day screen adds up too.
+    expect((await dayTotals(TODAY)).kcal).toBe(shownTotal.kcal);
+  });
+
   it('ignore meals on other days', async () => {
     await addMeal({ name: 'Old', date: '2026-03-01' }, [oats(100)]);
     expect((await dayTotals(TODAY)).kcal).toBe(0);
+  });
+});
+
+describe('the order meals appear in', () => {
+  it('follows the slot, not the order they were typed', async () => {
+    // Back-filling a past day stamps every meal with the same catch-up timestamp, so ordering by
+    // loggedAt alone put dinner above breakfast on exactly the day the feature exists for.
+    await addMeal({ name: 'Dinner', date: '2026-03-01', slot: 'dinner' }, []);
+    await addMeal({ name: 'Breakfast', date: '2026-03-01', slot: 'breakfast' }, []);
+    await addMeal({ name: 'Lunch', date: '2026-03-01', slot: 'lunch' }, []);
+    expect((await mealsOnDay('2026-03-01')).map((m) => m.meal.name)).toEqual(['Breakfast', 'Lunch', 'Dinner']);
+  });
+
+  it('keeps unslotted meals in entry order, after the slotted ones', async () => {
+    await addMeal({ name: 'Unlabelled A', date: '2026-03-02' }, []);
+    await addMeal({ name: 'Unlabelled B', date: '2026-03-02' }, []);
+    await addMeal({ name: 'Dinner', date: '2026-03-02', slot: 'dinner' }, []);
+    expect((await mealsOnDay('2026-03-02')).map((m) => m.meal.name)).toEqual(['Dinner', 'Unlabelled A', 'Unlabelled B']);
+  });
+
+  it('orders two meals in the same slot by when they were logged', async () => {
+    const first = await addMeal({ name: 'Snack one', date: '2026-03-03', slot: 'snack' }, []);
+    const second = await addMeal({ name: 'Snack two', date: '2026-03-03', slot: 'snack' }, []);
+    // addMeal stamps from the clock, and two writes can land in the same millisecond, so set the
+    // times explicitly rather than testing the machine's timer resolution.
+    await db.meals.update(first, { loggedAt: '2026-03-03T10:00:00.000Z' });
+    await db.meals.update(second, { loggedAt: '2026-03-03T16:00:00.000Z' });
+    expect((await mealsOnDay('2026-03-03')).map((m) => m.meal.name)).toEqual(['Snack one', 'Snack two']);
+  });
+
+  it('is stable when two meals share a timestamp', async () => {
+    await addMeal({ name: 'A', date: '2026-03-04', slot: 'snack' }, []);
+    await addMeal({ name: 'B', date: '2026-03-04', slot: 'snack' }, []);
+    await db.meals.toCollection().modify({ loggedAt: '2026-03-04T10:00:00.000Z' });
+    const once = (await mealsOnDay('2026-03-04')).map((m) => m.meal.name);
+    const twice = (await mealsOnDay('2026-03-04')).map((m) => m.meal.name);
+    expect(once).toEqual(twice);
   });
 });
 

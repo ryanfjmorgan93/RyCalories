@@ -145,6 +145,20 @@ describe('Atwater cross-check', () => {
     expect(checkAtwater({ kcal: 250, protein: 0, carbs: 0, fat: 30 }).ok).toBe(true);
   });
 
+  it('does not chase its own tail on a near-zero food', () => {
+    // A diet squash: 3 kcal with 0.3 g of carbs implies 1.2 kcal. Judged on relative drift alone
+    // that is a 60% shortfall, and accepting the correction gives 1 kcal, itself 20% under its own
+    // implied 1.2 — a warning that could never be cleared, on a correct label.
+    expect(checkAtwater({ kcal: 3, protein: 0, carbs: 0.3, fat: 0 }).ok).toBe(true);
+    expect(checkAtwater({ kcal: 2, protein: 0.1, carbs: 0, fat: 0 }).ok).toBe(true);
+    expect(reconcileMacros({ kcal: 3, protein: 0, carbs: 0.3, fat: 0 }).corrected).toBe(false);
+  });
+
+  it('still flags a real disagreement on a small food', () => {
+    // The floor is absolute and small, so it excuses rounding without excusing error.
+    expect(checkAtwater({ kcal: 20, protein: 0, carbs: 0, fat: 5 }).reason).toBe('impossible');
+  });
+
   it('trusts the macros over the calorie figure when they disagree', () => {
     const { macros, corrected, reason } = reconcileMacros({ kcal: 250, protein: 20, carbs: 30, fat: 30 });
     expect(corrected).toBe(true);

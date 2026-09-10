@@ -429,7 +429,7 @@ function DeveloperCard() {
       <Confirm
         open={resetOpen}
         title="Reset to seed data?"
-        body="Everything is replaced with the seed routines."
+        body="Everything is replaced with the seed routines. Meals are deleted too."
         confirmLabel="Reset"
         danger
         onCancel={() => setResetOpen(false)}
@@ -438,7 +438,7 @@ function DeveloperCard() {
       <Confirm
         open={wipeOpen}
         title="Wipe all data?"
-        body="Every routine, exercise, session and reading is deleted."
+        body="Every routine, exercise, session, reading and meal is deleted."
         confirmLabel="Wipe"
         danger
         onCancel={() => setWipeOpen(false)}

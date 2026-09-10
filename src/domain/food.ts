@@ -66,6 +66,20 @@ export function roundMacros(m: Macros): Macros {
   return { kcal: Math.round(m.kcal), protein: round1(m.protein), carbs: round1(m.carbs), fat: round1(m.fat) };
 }
 
+/**
+ * Macros at the precision they are displayed at: whole kilocalories, whole grams.
+ *
+ * Totals are summed from these rather than from the raw doubles, so that the arithmetic on screen
+ * adds up. Rounding each part and the total independently is individually honest and collectively
+ * wrong — four items showing 289 + 286 + 50 + 106 under a total reading 730 is a maths error as
+ * far as anyone reading it is concerned. The cost is at most half a unit per item against figures
+ * that come off labels accurate to about ±20%.
+ */
+export function displayMacros(n: Nutrition): Macros {
+  const m = macrosOf(n);
+  return { kcal: Math.round(m.kcal), protein: Math.round(m.protein), carbs: Math.round(m.carbs), fat: Math.round(m.fat) };
+}
+
 export function scaleMacros(m: Macros, factor: number): Macros {
   return { kcal: m.kcal * factor, protein: m.protein * factor, carbs: m.carbs * factor, fat: m.fat * factor };
 }
@@ -165,10 +179,19 @@ export function checkAtwater(m: Macros, overMargin = 0.1, underMargin = 0.25): A
   const implied = atwaterKcal(m);
   if (m.kcal <= 0) return { implied, drift: 0, ok: implied <= 0 };
   const drift = (implied - m.kcal) / m.kcal;
+  // Purely relative margins have a fixed point at the bottom of the scale. A diet squash at
+  // 3 kcal with 0.3 g of carbs implies 1.2 kcal — a 60% shortfall, so it is flagged; accepting
+  // the correction sets 1 kcal, which is then 20% under its own implied 1.2 and flagged again,
+  // for ever. Below an absolute floor the 4/4/9 factors and label rounding dominate and there is
+  // no disagreement worth reporting.
+  if (Math.abs(implied - m.kcal) <= ABSOLUTE_FLOOR_KCAL) return { implied, drift, ok: true };
   if (drift > overMargin) return { implied, drift, ok: false, reason: 'impossible' };
   if (-drift > underMargin) return { implied, drift, ok: false, reason: 'unexplained' };
   return { implied, drift, ok: true };
 }
+
+/** Energy disagreements smaller than this are rounding, not error. */
+const ABSOLUTE_FLOOR_KCAL = 5;
 
 /**
  * Replace an implausible calorie figure with the one the macros imply. Each macro is anchored to

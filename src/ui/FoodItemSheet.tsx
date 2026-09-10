@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   checkAtwater,
   fromPer100,
@@ -73,12 +73,12 @@ export function FoodItemSheet({
   onSave: (item: NewMealItem) => void;
   onDelete?: () => void;
 }) {
+  // Seeded once. There is deliberately no reset effect: the parent rebuilds its item objects on
+  // every render, so an effect keyed on the `item` prop fires whenever anything else re-renders
+  // the screen and throws away half-entered input — and a focused number field goes on showing
+  // the number the user typed while the draft behind it has reverted, so Save writes a different
+  // value than the one on screen. The sheet is instead remounted per edit target with a `key`.
   const [d, setD] = useState<Draft>(() => draftFrom(item));
-
-  // Reset when the sheet is opened on a different food.
-  useEffect(() => {
-    if (open) setD(draftFrom(item));
-  }, [open, item]);
 
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
   const eaten = macrosOf(nutritionFrom(d));

@@ -8,8 +8,8 @@
 import { db } from './db';
 import { nowIso, toDateKey } from '@/domain/dates';
 import { uuid } from '@/domain/ids';
-import { ZERO, addMacros, macrosOf, type FoodSource, type Macros, type Nutrition } from '@/domain/food';
-import type { Meal, MealItem, MealSlot } from '@/domain/types';
+import { ZERO, addMacros, displayMacros, type FoodSource, type Macros, type Nutrition } from '@/domain/food';
+import { MEAL_SLOTS, type Meal, type MealItem, type MealSlot } from '@/domain/types';
 
 /** What a meal is made of, as the UI wants it: the meal plus its items in order. */
 export interface MealWithItems {
@@ -46,9 +46,22 @@ export async function itemsForMeal(mealId: string): Promise<MealItem[]> {
   return items.sort((a, b) => a.index - b.index);
 }
 
-/** Every meal on a day, oldest first, each with its items and derived macros. */
+/**
+ * Every meal on a day, in the order they were eaten, each with its items and derived macros.
+ *
+ * Ordered by slot first and only then by when the row was typed. `loggedAt` is when the meal was
+ * RECORDED, which on a back-filled day is the moment the user sat down to catch up — so every meal
+ * on Monday can carry a Tuesday-morning timestamp, and sorting by it alone puts Monday's dinner
+ * above Monday's breakfast. Meals with no slot keep their entry order, after the slotted ones.
+ *
+ * The final tie-break on id exists because two meals written in the same millisecond share a
+ * loggedAt, and without it their order would come from IndexedDB's key order over random UUIDs —
+ * stable for a given database, but arbitrary and untestable.
+ */
 export async function mealsOnDay(date: string): Promise<MealWithItems[]> {
-  const meals = (await db.meals.where('date').equals(date).toArray()).sort((a, b) => a.loggedAt.localeCompare(b.loggedAt));
+  const meals = (await db.meals.where('date').equals(date).toArray()).sort(
+    (a, b) => slotOrder(a.slot) - slotOrder(b.slot) || a.loggedAt.localeCompare(b.loggedAt) || a.id.localeCompare(b.id),
+  );
   if (!meals.length) return [];
   // One query for the whole day rather than one per meal.
   const ids = new Set(meals.map((m) => m.id));
@@ -65,8 +78,17 @@ export async function mealsOnDay(date: string): Promise<MealWithItems[]> {
   });
 }
 
+/**
+ * A meal's macros. Summed from each item at DISPLAY precision, so the total shown always equals
+ * the sum of the item figures shown above it — see displayMacros in the domain for why.
+ */
+function slotOrder(slot: MealSlot | undefined): number {
+  const i = slot ? MEAL_SLOTS.indexOf(slot) : -1;
+  return i === -1 ? MEAL_SLOTS.length : i;
+}
+
 export function sumItems(items: MealItem[]): Macros {
-  return items.reduce((acc, i) => addMacros(acc, macrosOf(i.nutrition)), ZERO);
+  return items.reduce((acc, i) => addMacros(acc, displayMacros(i.nutrition)), ZERO);
 }
 
 /** Everything eaten on a day. Derived from the items every time; never stored. */

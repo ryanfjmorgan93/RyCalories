@@ -7,7 +7,7 @@ import { dayView } from '@/db/todayQueries';
 import { ZERO } from '@/domain/food';
 import { fmtDateTime, fmtKg, fmtMinutes, fmtNum } from '@/domain/format';
 import { isConsecutiveLower, suggestNextRoutine } from '@/domain/schedule';
-import { toDateKey } from '@/domain/dates';
+import { dateKeyToDate } from '@/domain/dates';
 import { useTimer } from '@/state/timer';
 import { weeklyDelta, bandStatus } from '@/domain/bodyweight';
 import type { Routine } from '@/domain/types';
@@ -18,7 +18,7 @@ import { NumberInput } from '@/ui/components/NumberField';
 import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { ChevronIcon, TopBar } from '@/ui/components/TopBar';
-import { useActiveSession, useLastCompletedSession, useRecentSessions, useRoutines, useSettings } from '@/ui/hooks';
+import { useActiveSession, useLastCompletedSession, useRecentSessions, useRoutines, useSettings, useToday } from '@/ui/hooks';
 
 export function HomeScreen() {
   const nav = useNavigate();
@@ -39,7 +39,10 @@ export function HomeScreen() {
   }, []);
 
   const suggested = routines && last !== undefined ? suggestNextRoutine(routines, last?.routineId ?? null, { avoidConsecutiveLower: true }) : null;
-  const todayKey = toDateKey();
+  // From the hook, never a bare toDateKey(): nothing on this screen is time-driven, so a plain
+  // render-time read freezes on the day the screen mounted. Left open overnight it would show
+  // yesterday's calories as today's progress, against yesterday's target.
+  const todayKey = useToday();
 
   const starting = useRef(false);
   const start = async (r: Routine) => {
@@ -68,7 +71,10 @@ export function HomeScreen() {
 
   return (
     <div>
-      <TopBar title="Iron" subtitle={new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date())} />
+      <TopBar
+        title="Iron"
+        subtitle={new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }).format(dateKeyToDate(todayKey))}
+      />
       <div className="px-4">
         {active && (
           <Card className="mt-2 border-accent/60 p-4">
@@ -244,7 +250,10 @@ function BodyweightQuickAdd() {
   const entries = useLiveQuery(() => db.bodyweight.orderBy('date').toArray(), []);
   const [kg, setKg] = useState<number | null>(null);
   const latest = entries && entries.length ? entries[entries.length - 1] : undefined;
-  const delta = entries ? weeklyDelta(entries, toDateKey()) : null;
+  // Same rule as above: the hook, so the "Logged today" chip cannot go on asserting that
+  // yesterday's reading is today's.
+  const todayKey = useToday();
+  const delta = entries ? weeklyDelta(entries, todayKey) : null;
   const status = delta && settings ? bandStatus(delta.deltaKg, settings.weeklyGainTargetMin, settings.weeklyGainTargetMax) : null;
 
   return (
@@ -267,7 +276,7 @@ function BodyweightQuickAdd() {
           disabled={kg === null}
           onClick={async () => {
             if (kg === null) return;
-            await logBodyweight(toDateKey(), kg);
+            await logBodyweight(todayKey, kg);
             setKg(null);
             toast(`Logged ${fmtKg(kg)}`, 'ok');
           }}
@@ -275,7 +284,7 @@ function BodyweightQuickAdd() {
           Log today
         </Button>
       </div>
-      {latest && latest.date === toDateKey() && <div className="mt-2 text-xs text-muted"><Chip size="sm" tone="ok">Logged today</Chip></div>}
+      {latest && latest.date === todayKey && <div className="mt-2 text-xs text-muted"><Chip size="sm" tone="ok">Logged today</Chip></div>}
     </Card>
   );
 }
