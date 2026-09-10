@@ -91,3 +91,19 @@ jobs:
             Download, open on the phone, allow installs from this source, done.
 
             Stable link: https://github.com/${{ github.repository }}/releases/download/iron-latest/iron.apk
+
+      # The rolling release accumulated eleven SHA-named APKs before it carried a stable filename.
+      # Prune anything that is not the current one, so the release page always offers exactly one
+      # file and there is nothing to choose between. Workflow artifacts keep the per-commit builds.
+      - name: Prune stale release assets
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/claude/workout-logger')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          stale=$(gh api "repos/${{ github.repository }}/releases/tags/iron-latest" \
+            --jq '.assets[] | select(.name != "iron.apk") | "\(.id) \(.name)"')
+          if [ -z "$stale" ]; then echo "Nothing to prune."; exit 0; fi
+          echo "$stale" | while read -r id name; do
+            echo "Deleting $name ($id)"
+            gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$id"
+          done
