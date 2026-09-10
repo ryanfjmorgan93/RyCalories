@@ -120,3 +120,41 @@ test('capture food memory', async ({ page }) => {
   await expect(page.getByTestId('suggest-Porridge oats')).toBeVisible();
   await page.screenshot({ path: `${OUT}/10-food-memory-typed.png` });
 });
+
+test('capture progress', async ({ page }) => {
+  await fresh(page);
+  await page.goto('/settings');
+  await page.getByRole('button', { name: 'Save' }).first().click();
+  await expect(page.getByText('Saved')).toBeVisible();
+
+  // A few days of eating and a couple of readings, so the charts have something in them.
+  for (const [back, kcal] of [[0, 2950], [1, 3100], [2, 2780], [4, 3020]] as const) {
+    await page.goto('/food');
+    for (let i = 0; i < back; i++) await page.getByTestId('prev-day').click();
+    await page.getByTestId('add-meal-button').click();
+    await page.getByTestId('meal-name').fill('Day');
+    await page.getByTestId('empty-add-food').click();
+    await page.getByTestId('food-name').fill('Food');
+    await page.getByRole('radio', { name: 'Whole portion' }).click();
+    await page.getByTestId('food-kcal').fill(String(kcal));
+    await page.getByTestId('food-protein').fill('195');
+    await page.getByTestId('food-carbs').fill('320');
+    await page.getByTestId('food-fat').fill('95');
+    await page.getByTestId('save-food').click();
+    await page.getByTestId('save-meal').click();
+    await page.waitForURL(/\/food\/[0-9a-f-]+$/);
+  }
+
+  await page.goto('/body');
+  await page.getByTestId('bw-kg').fill('80.4');
+  await page.getByTestId('bw-save').click();
+
+  await page.goto('/progress');
+  await expect(page.getByTestId('avg-kcal')).toBeVisible();
+  await page.screenshot({ path: `${OUT}/11-progress.png`, fullPage: true });
+  // Scrolled to the very bottom, in a real viewport, to confirm the fixed navigation is not
+  // sitting on top of the last row.
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: `${OUT}/12-progress-bottom.png` });
+});

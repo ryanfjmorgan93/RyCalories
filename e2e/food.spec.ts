@@ -466,4 +466,33 @@ test.describe('nutrition', () => {
     await expect(page.getByTestId('food-kcal')).toHaveValue('209');
     await expect(page.getByTestId('food-grams')).toHaveValue('200');
   });
+
+  test('progress averages only the days that were logged, and says how many', async ({ page }) => {
+    await saveSettings(page);
+
+    // Two logged days in a fourteen-day window: today, and yesterday via the day navigation.
+    await page.goto('/food/new');
+    await page.getByTestId('meal-name').fill('Today');
+    await page.getByTestId('empty-add-food').click();
+    await addFood(page, { name: 'Today', portion: '1', kcal: 3000, protein: 200, carbs: 100, fat: 80 });
+    await page.getByTestId('save-meal').click();
+    await page.waitForURL(/\/food\/[0-9a-f-]+$/);
+
+    await page.goto('/food');
+    await page.getByTestId('prev-day').click();
+    await page.getByTestId('add-meal-button').click();
+    await page.getByTestId('meal-name').fill('Yesterday');
+    await page.getByTestId('empty-add-food').click();
+    await addFood(page, { name: 'Yesterday', portion: '1', kcal: 2600, protein: 200, carbs: 100, fat: 80 });
+    await page.getByTestId('save-meal').click();
+    await page.waitForURL(/\/food\/[0-9a-f-]+$/);
+
+    await page.goto('/progress');
+    await page.getByRole('radio', { name: '2 weeks' }).click();
+
+    // The average is of the two logged days (2,800), not of fourteen days with twelve zeros (400).
+    await expect(page.getByTestId('avg-kcal')).toHaveText('2800 kcal');
+    await expect(page.getByTestId('days-logged')).toHaveText('2 of 14');
+    await expect(page.getByTestId('thin-coverage')).toBeVisible();
+  });
 });

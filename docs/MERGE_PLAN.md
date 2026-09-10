@@ -264,7 +264,9 @@ Still open in this phase:
 - ⬜ The additive route table of §5.1 in full. Food was added alongside every existing path,
   and Exercises moved from the bottom bar to the Routines screen to make room; `Today` and
   `Train` as distinct hubs are not built.
-- ⬜ Weekly and trend views (P5).
+- ✅ **Weekly and trend views**, pulled forward from P5: a Progress tab showing bodyweight,
+  eating and training over a two-, four- or eight-week window. This is the second cross-domain
+  query and the one that answers what the merged app exists for.
 - ⬜ Barcode scanning. The lookup by barcode exists and is tested; nothing calls it yet,
   because reading a barcode needs the camera and therefore the native plugin of P4.
 
@@ -302,8 +304,16 @@ exists. Both need a phone to verify, which is why they are last.
 
 ### P5 — The known gaps and the design pass · **M**
 
-ROADMAP §1's bug list (§6.2 below), weekly and trend views, the design token split (§5.2),
-and implementation of whatever the commissioned mockups return.
+ROADMAP §1's bug list (§6.2 below), the design token split (§5.2), and implementation of
+whatever the commissioned mockups return. The weekly and trend views are done (see P3).
+
+**The rule the trend view is built on, worth carrying to anything else that summarises.** A day
+with no food logged is not a day of eating nothing, and averaging it in as zero produces a figure
+that is not imprecise but false — three logged days and four blank ones would report an intake
+less than half the real one, and that number would then be read as evidence for eating more. So
+unlogged days are excluded from every average, the count of days each average stands on is shown
+beside it, and below half coverage the screen says outright that the averages describe the logged
+days rather than the window.
 
 ### P6 — Explicitly deferred to v1.1
 

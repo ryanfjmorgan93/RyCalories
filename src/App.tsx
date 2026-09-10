@@ -20,6 +20,7 @@ import { SettingsScreen } from './screens/SettingsScreen';
 import { CheckInScreen } from './screens/CheckInScreen';
 import { FoodScreen } from './screens/FoodScreen';
 import { MealEditScreen } from './screens/MealEditScreen';
+import { ProgressScreen } from './screens/ProgressScreen';
 
 function Shell() {
   return (
@@ -86,6 +87,7 @@ export function App() {
           <Route path="food/:id" element={<MealEditScreen />} />
           <Route path="history" element={<HistoryScreen />} />
           <Route path="history/:id" element={<SessionDetailScreen />} />
+          <Route path="progress" element={<ProgressScreen />} />
           <Route path="body" element={<BodyweightScreen />} />
           <Route path="settings" element={<SettingsScreen />} />
           <Route path="checkin" element={<CheckInScreen />} />
