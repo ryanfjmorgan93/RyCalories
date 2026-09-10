@@ -123,10 +123,10 @@ export function parseProduct(p: unknown): LabelNutrition | null {
   }
   if (kcal === undefined || kcal < 0) return null;
 
-  const name = String(o['product_name'] ?? '').trim();
+  const name = firstText(o['product_name']);
   if (!name) return null;
 
-  const brand = String(o['brands'] ?? '').split(',')[0]?.trim() ?? '';
+  const brand = firstText(o['brands']);
   const servingGrams = positive(num(o, 'serving_quantity')) ?? parseGrams(String(o['serving_size'] ?? ''));
   const packGrams = positive(num(o, 'product_quantity')) ?? parseGrams(String(o['quantity'] ?? ''));
 
@@ -143,6 +143,28 @@ export function parseProduct(p: unknown): LabelNutrition | null {
     ...(servingGrams !== undefined ? { servingGrams } : {}),
     ...(packGrams !== undefined ? { packGrams } : {}),
   };
+}
+
+/**
+ * The first usable string from a field Open Food Facts types inconsistently.
+ *
+ * `brands` is a comma-separated string from the barcode endpoint and an array from the search
+ * endpoint; `product_name` can be a string or an object keyed by language. String(array) happens
+ * to produce something split(',') can handle, but only by accident, and it would silently start
+ * returning "[object Object]" the day a name arrives as a map.
+ */
+function firstText(v: unknown): string {
+  if (typeof v === 'string') return v.split(',')[0]?.trim() ?? '';
+  if (Array.isArray(v)) return firstText(v[0]);
+  if (v && typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    // Prefer English, then whatever the entry actually carries.
+    for (const key of ['en', ...Object.keys(o)]) {
+      const t = firstText(o[key]);
+      if (t) return t;
+    }
+  }
+  return '';
 }
 
 function positive(n: number | undefined): number | undefined {
@@ -238,14 +260,43 @@ export function portionLabel(label: LabelNutrition, grams: number): string {
   return `${Math.round(grams)} g`;
 }
 
-/** "TREK PROTEIN FLAPJACK" is shouting; title-case it. Mixed case is left exactly as found. */
+/**
+ * A readable name for a product.
+ *
+ * Two things Open Food Facts does that need handling. Entries are often shouted —
+ * "TREK PROTEIN FLAPJACKS" — so an all-caps part is title-cased, judged part by part rather than
+ * on the joined string, or a properly-cased brand next to a shouting name leaves the name shouting.
+ * And the product name usually already contains the brand, so prefixing it again gives
+ * "Trek Trek Protein Flapjacks"; the brand is only prepended when the name does not already lead
+ * with it.
+ */
 export function displayName(label: LabelNutrition): string {
-  const joined = [label.brand, label.name].filter((s) => s.trim()).join(' ').trim();
-  if (!joined) return '';
-  if (joined !== joined.toUpperCase()) return joined;
-  return joined
+  const brand = tidyCase(label.brand.trim());
+  const name = tidyCase(label.name.trim());
+  if (!brand) return name;
+  if (!name) return brand;
+  const leadsWithBrand = tokens(name).size > 0 && startsWithWords(name, brand);
+  return leadsWithBrand ? name : `${brand} ${name}`;
+}
+
+/** Title-case an all-caps string; leave anything already mixed-case exactly as found. */
+function tidyCase(s: string): string {
+  if (!s || s !== s.toUpperCase()) return s;
+  return s
     .toLowerCase()
     .split(' ')
     .map((w) => (w ? w[0]!.toUpperCase() + w.slice(1) : w))
     .join(' ');
+}
+
+/** Whether `name` opens with every word of `brand`, ignoring case and punctuation. */
+function startsWithWords(name: string, brand: string): boolean {
+  const b = wordList(brand);
+  if (b.length === 0) return false;
+  const n = wordList(name);
+  return b.every((w, i) => n[i] === w);
+}
+
+function wordList(s: string): string[] {
+  return s.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 }

@@ -5,6 +5,7 @@ import { backupFilename, csvFilename, deliverFile, exportBackup, exportBodyweigh
 import { parseHevyCsv, reconcileWeights, type HevyParsed, type WeightReconcileRow } from '@/db/hevy';
 import { resetToSeed, saveSettings, wipeAll } from '@/db/repo';
 import { applyRestDefaults, dataCounts } from '@/db/settingsQueries';
+import { clearProductCache } from '@/db/productRepo';
 import { DB_VERSION } from '@/db/db';
 import { dateKeyToDate, toDateKey } from '@/domain/dates';
 import { fmtNum } from '@/domain/format';
@@ -55,6 +56,22 @@ export function SettingsScreen() {
                   applyTheme(theme);
                   await saveSettings({ theme });
                 }}
+              />
+            </Card>
+
+            <SectionTitle>Food lookup</SectionTitle>
+            <Card className="px-4">
+              <Toggle
+                checked={settings.productLookup !== false}
+                onChange={async (productLookup) => {
+                  await saveSettings({ productLookup });
+                  if (!productLookup) {
+                    const n = await clearProductCache();
+                    toast(n ? `Off. ${n} cached ${n === 1 ? 'product' : 'products'} deleted.` : 'Off.');
+                  }
+                }}
+                label="Look up labels online"
+                sub="Sends the product name to Open Food Facts. The only thing this app sends anywhere."
               />
             </Card>
 

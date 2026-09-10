@@ -171,6 +171,20 @@ describe('parsing a product record', () => {
     expect(l.per100).toEqual({ kcal: 400, protein: 0, carbs: 0, fat: 0 });
   });
 
+  it('reads a brand however Open Food Facts happens to type it', () => {
+    // Comma-separated from the barcode endpoint, an array from the search endpoint.
+    expect(parseProduct({ ...raw, brands: 'Trek, Natural Balance Foods' })?.brand).toBe('Trek');
+    expect(parseProduct({ ...raw, brands: ['Trek', 'Natural Balance Foods'] })?.brand).toBe('Trek');
+    expect(parseProduct({ ...raw, brands: [] })?.brand).toBe('');
+    expect(parseProduct({ ...raw, brands: null })?.brand).toBe('');
+  });
+
+  it('reads a name given as a language map rather than rendering it as [object Object]', () => {
+    expect(parseProduct({ ...raw, product_name: { fr: 'Flapjack protéiné', en: 'Protein Flapjack' } })?.name).toBe('Protein Flapjack');
+    expect(parseProduct({ ...raw, product_name: { fr: 'Flapjack protéiné' } })?.name).toBe('Flapjack protéiné');
+    expect(parseProduct({ ...raw, product_name: {} })).toBeNull();
+  });
+
   it('reads numbers that arrive as strings', () => {
     const l = parseProduct({ ...raw, nutriments: { 'energy-kcal_100g': '400', proteins_100g: '15' } })!;
     expect(l.per100.kcal).toBe(400);
@@ -232,6 +246,24 @@ describe('portioning', () => {
 describe('display name', () => {
   it('title-cases a shouting entry', () => {
     expect(displayName(label({ brand: 'TREK', name: 'PROTEIN FLAPJACK' }))).toBe('Trek Protein Flapjack');
+  });
+
+  it('does not repeat a brand the product name already carries', () => {
+    // Open Food Facts entries usually include the brand in the name. Prefixing it again gave
+    // "Trek TREK PROTEIN FLAPJACKS" on a real record.
+    expect(displayName(label({ brand: 'Trek', name: 'TREK PROTEIN FLAPJACKS' }))).toBe('Trek Protein Flapjacks');
+    expect(displayName(label({ brand: 'Trek', name: 'Trek Protein Flapjack' }))).toBe('Trek Protein Flapjack');
+  });
+
+  it('title-cases each part on its own merits', () => {
+    // A properly-cased brand beside a shouting name used to leave the name shouting, because the
+    // test was applied to the joined string.
+    expect(displayName(label({ brand: 'Aldi', name: 'PROTEIN FLAPJACK' }))).toBe('Aldi Protein Flapjack');
+  });
+
+  it('still prefixes a brand the name does not lead with', () => {
+    expect(displayName(label({ brand: 'Trek', name: 'Protein Flapjack' }))).toBe('Trek Protein Flapjack');
+    expect(displayName(label({ brand: 'Trek', name: 'Cocoa Trek Bar' }))).toBe('Trek Cocoa Trek Bar');
   });
 
   it('leaves a properly cased entry alone', () => {

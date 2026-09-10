@@ -9,7 +9,9 @@ import {
   type Nutrition,
 } from '@/domain/food';
 import { fmtGrams, fmtKcal } from '@/domain/format';
-import { useFoodSuggestions } from './hooks';
+import { useFoodSuggestions, useSettings } from './hooks';
+import { lookupName } from '@/db/productRepo';
+import { displayName, portionGrams, portionLabel, type LabelNutrition } from '@/domain/products';
 import { normalise } from '@/domain/foodMemory';
 import type { FoodMemory } from '@/domain/types';
 import type { NewMealItem } from '@/db/foodRepo';
@@ -90,6 +92,8 @@ export function FoodItemSheet({
   // the number the user typed while the draft behind it has reverted, so Save writes a different
   // value than the one on screen. The sheet is instead remounted per edit target with a `key`.
   const [d, setD] = useState<Draft>(() => draftFrom(item));
+  // Off means off: no request is made at all, not merely hidden.
+  const lookupEnabled = useSettings()?.productLookup !== false;
 
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
 
@@ -101,6 +105,35 @@ export function FoodItemSheet({
   // row offering to apply it again is noise. This also means retyping brings the list back,
   // without a flag to get out of step with what is on screen.
   const suggestions = all.filter((m) => normalise(m.name) !== normalise(d.name)).slice(0, 5);
+
+  const [lookup, setLookup] = useState<'idle' | 'searching' | 'none' | 'offline'>('idle');
+
+  const applyLabel = (l: LabelNutrition) => {
+    const grams = portionGrams(l, d.grams ?? undefined);
+    setLookup('idle');
+    setD((p) => ({
+      ...p,
+      name: displayName(l) || p.name,
+      brand: l.brand || p.brand,
+      product: l.name || p.product,
+      basis: 'weighed',
+      grams,
+      portion: portionLabel(l, grams),
+      kcal: l.per100.kcal,
+      protein: l.per100.protein,
+      carbs: l.per100.carbs,
+      fat: l.per100.fat,
+      source: 'label',
+    }));
+  };
+
+  const runLookup = async () => {
+    if (lookup === 'searching') return;
+    setLookup('searching');
+    const result = await lookupName({ text: d.name.trim(), ...(d.brand?.trim() ? { brand: d.brand.trim() } : {}) });
+    if (result.label) applyLabel(result.label);
+    else setLookup(result.from === 'offline' ? 'offline' : 'none');
+  };
 
   const usePrevious = (m: FoodMemory) => {
     setD({
@@ -122,6 +155,8 @@ export function FoodItemSheet({
   const eaten = macrosOf(nutritionFrom(d));
   const check = checkAtwater(macrosFrom(d));
   const canSave = d.name.trim().length > 0;
+  // Looking up needs something to look up, and is pointless once a label has supplied the numbers.
+  const canLookUp = lookupEnabled && d.name.trim().length >= 3 && d.source !== 'label';
   const per = d.basis === 'weighed' ? 'per 100 g' : 'for the serving';
 
   return (
@@ -165,6 +200,30 @@ export function FoodItemSheet({
         <Field label="Food">
           <TextInput value={d.name} onChange={(v) => set('name', v)} placeholder="Chicken thigh" testId="food-name" autoFocus={!item} />
         </Field>
+
+        {canLookUp && (
+          <div className="-mt-2 grid gap-2">
+            <TextInput
+              value={d.brand ?? ''}
+              onChange={(v) => set('brand', v)}
+              placeholder="Brand (optional)"
+              testId="food-brand"
+            />
+            <Button size="md" variant="outline" full disabled={lookup === 'searching'} onClick={() => void runLookup()} data-testid="lookup-food">
+              {lookup === 'searching' ? 'Looking up…' : 'Look up the label'}
+            </Button>
+            {lookup === 'none' && (
+              <div className="px-1 text-xs text-muted" data-testid="lookup-none">
+                No matching product{d.brand?.trim() ? ` from ${d.brand.trim()}` : ''}.
+              </div>
+            )}
+            {lookup === 'offline' && (
+              <div className="px-1 text-xs text-muted" data-testid="lookup-offline">
+                No connection.
+              </div>
+            )}
+          </div>
+        )}
 
         {suggestions.length > 0 && (
           <div className="-mt-2 overflow-hidden rounded-xl border border-line" data-testid="food-suggestions">

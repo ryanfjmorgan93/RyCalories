@@ -214,6 +214,12 @@ export interface Settings {
   restCarrySec: number;
   restVibrate: boolean;
   restNotify: boolean;
+  /**
+   * Whether a food name may be sent to Open Food Facts to fetch its label. The only data that
+   * leaves the device anywhere in this app. Absent on rows written before the setting existed,
+   * which reads as on — so check `!== false`, never truthiness.
+   */
+  productLookup?: boolean;
   /** Seed data version, so future seed changes can migrate. */
   seedVersion: number;
   /** ISO timestamp of first run. */
@@ -240,6 +246,7 @@ export const DEFAULT_SETTINGS: Omit<Settings, 'id' | 'createdAt'> = {
   restCarrySec: 90,
   restVibrate: true,
   restNotify: true,
+  productLookup: true,
   seedVersion: 1,
 };
 
@@ -313,6 +320,8 @@ export interface ProductCacheEntry {
   key: string;
   /** Null records a confident miss, so an unrecognised food stops re-hitting the network. */
   per100: import('./food').Macros | null;
+  /** The matched product's barcode, when there was one. */
+  code?: string;
   name?: string;
   brand?: string;
   servingGrams?: number;

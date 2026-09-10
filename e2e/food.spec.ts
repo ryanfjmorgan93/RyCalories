@@ -278,4 +278,75 @@ test.describe('nutrition', () => {
     await expect(page.getByTestId('suggest-Chicken thigh')).toBeVisible();
     await expect(page.getByTestId('suggest-Porridge oats')).toBeHidden();
   });
+
+  test('looking up a label fills the numbers, and says so plainly when it cannot', async ({ page }) => {
+    // Answer the lookup from the test, so this never depends on a database in Paris.
+    await page.route('**/search.openfoodfacts.org/**', async (route) => {
+      const url = route.request().url();
+      const wanted = decodeURIComponent(url).toLowerCase().includes('trek');
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          hits: wanted
+            ? [
+                {
+                  code: '5060088709054',
+                  product_name: 'TREK PROTEIN FLAPJACKS',
+                  brands: ['Trek'],
+                  serving_quantity: 50,
+                  nutriments: { 'energy-kcal_100g': 452, proteins_100g: 18.5, carbohydrates_100g: 44, fat_100g: 22 },
+                },
+              ]
+            : [],
+        }),
+      });
+    });
+
+    await page.goto('/food/new');
+    await page.getByTestId('meal-name').fill('Snack');
+    await page.getByTestId('empty-add-food').click();
+
+    // Nothing to look up until there is a name.
+    await expect(page.getByTestId('lookup-food')).toBeHidden();
+    await page.getByTestId('food-name').fill('Protein Flapjack');
+    await page.getByTestId('food-brand').fill('Trek');
+    await page.getByTestId('lookup-food').click();
+
+    // Label values, the pack's own serving weight, and a title-cased name.
+    await expect(page.getByTestId('food-kcal')).toHaveValue('452');
+    await expect(page.getByTestId('food-grams')).toHaveValue('50');
+    await expect(page.getByTestId('food-name')).toHaveValue('Trek Protein Flapjacks');
+    await expect(page.getByTestId('food-eaten')).toContainText('226 kcal');
+    // Once a label has answered there is nothing left to look up.
+    await expect(page.getByTestId('lookup-food')).toBeHidden();
+
+    await page.getByTestId('save-food').click();
+    await expect(page.getByTestId('meal-total')).toContainText('226 kcal');
+
+    // A food the database does not have says so, in one line, and changes nothing.
+    await page.getByTestId('add-food').click();
+    await page.getByTestId('food-name').fill('Nan bread thing');
+    await page.getByTestId('lookup-food').click();
+    await expect(page.getByTestId('lookup-none')).toBeVisible();
+    await expect(page.getByTestId('food-kcal')).toHaveValue('');
+  });
+
+  test('the label lookup can be switched off, and then makes no request at all', async ({ page }) => {
+    let asked = 0;
+    await page.route('**/search.openfoodfacts.org/**', async (route) => {
+      asked += 1;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ hits: [] }) });
+    });
+
+    await page.goto('/settings');
+    await page.getByRole('switch', { name: /Look up labels online/ }).click();
+    await expect(page.getByText('Off.')).toBeVisible();
+
+    await page.goto('/food/new');
+    await page.getByTestId('empty-add-food').click();
+    await page.getByTestId('food-name').fill('Protein Flapjack');
+    await expect(page.getByTestId('lookup-food')).toBeHidden();
+    expect(asked).toBe(0);
+  });
 });
