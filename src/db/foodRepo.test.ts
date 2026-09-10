@@ -140,10 +140,14 @@ describe('the order meals appear in', () => {
     expect((await mealsOnDay('2026-03-01')).map((m) => m.meal.name)).toEqual(['Breakfast', 'Lunch', 'Dinner']);
   });
 
-  it('keeps unslotted meals in entry order, after the slotted ones', async () => {
-    await addMeal({ name: 'Unlabelled A', date: '2026-03-02' }, []);
-    await addMeal({ name: 'Unlabelled B', date: '2026-03-02' }, []);
+  it('puts unslotted meals after the slotted ones, in the order they were recorded', async () => {
+    const a = await addMeal({ name: 'Unlabelled A', date: '2026-03-02' }, []);
+    const b = await addMeal({ name: 'Unlabelled B', date: '2026-03-02' }, []);
     await addMeal({ name: 'Dinner', date: '2026-03-02', slot: 'dinner' }, []);
+    // Timestamps set explicitly: two addMeal calls can land in the same millisecond, and meals
+    // that share a loggedAt have no recorded order to recover — the sort falls through to the id.
+    await db.meals.update(a, { loggedAt: '2026-03-02T09:00:00.000Z' });
+    await db.meals.update(b, { loggedAt: '2026-03-02T15:00:00.000Z' });
     expect((await mealsOnDay('2026-03-02')).map((m) => m.meal.name)).toEqual(['Dinner', 'Unlabelled A', 'Unlabelled B']);
   });
 

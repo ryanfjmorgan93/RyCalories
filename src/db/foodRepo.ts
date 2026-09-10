@@ -52,7 +52,8 @@ export async function itemsForMeal(mealId: string): Promise<MealItem[]> {
  * Ordered by slot first and only then by when the row was typed. `loggedAt` is when the meal was
  * RECORDED, which on a back-filled day is the moment the user sat down to catch up — so every meal
  * on Monday can carry a Tuesday-morning timestamp, and sorting by it alone puts Monday's dinner
- * above Monday's breakfast. Meals with no slot keep their entry order, after the slotted ones.
+ * above Monday's breakfast. Meals with no slot sort after the slotted ones, by when they were
+ * recorded.
  *
  * The final tie-break on id exists because two meals written in the same millisecond share a
  * loggedAt, and without it their order would come from IndexedDB's key order over random UUIDs —
