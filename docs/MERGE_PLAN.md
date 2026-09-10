@@ -245,16 +245,30 @@ Shipped:
 - ✅ Settings reports the live schema version and the meal count — **the line to check on the
   phone** after the version 2 bump, which the sandbox cannot verify.
 
+Also shipped, pulled forward from P6 and P5 because they are what "seamless" actually
+means for daily use:
+
+- ✅ **Food memory** (`5088e24`). Anything eaten before is offered before a number is typed,
+  at the weight last eaten. Stored per 100 g, never as a portion — portions vary, per-100g
+  figures do not — which is why an unweighed "1 bowl" is deliberately not remembered at all.
+  Merging respects the trust hierarchy: a label may correct a remembered guess, a guess may
+  never overwrite a correction.
+- ✅ **Open Food Facts label lookup** (`f5b0c8f`, `1ff9c34`). Name a packaged food, give the
+  brand, and its per-100g figures and serving weight fill in. Every failure path returns "no
+  answer" rather than throwing; offline it does not ask but still answers from cache. Hits are
+  cached indefinitely, misses for thirty days, network failures never. A Settings toggle turns
+  it off, and off means no request is made.
+
 Still open in this phase:
 
 - ⬜ The additive route table of §5.1 in full. Food was added alongside every existing path,
   and Exercises moved from the bottom bar to the Routines screen to make room; `Today` and
   `Train` as distinct hubs are not built.
-- ⬜ Food memory: `foods` is still written by nothing. Re-typing a repeated food is currently
-  answered by "copy meal to today", which covers the common case but not a single item.
 - ⬜ Weekly and trend views (P5).
+- ⬜ Barcode scanning. The lookup by barcode exists and is tested; nothing calls it yet,
+  because reading a barcode needs the camera and therefore the native plugin of P4.
 
-**Two verification findings from this phase, both worth keeping:**
+**Verification findings from this phase, all worth keeping:**
 
 1. The end-to-end helper cleared IndexedDB but not the service worker or its precache. Since
    the app registers a service worker with `immediate: true`, the first navigation after a
@@ -266,11 +280,25 @@ Still open in this phase:
    is silently lost. Two tests failed about one run in three until every save waited for the
    navigation the save performs; three latent instances of the same pattern in the existing
    suite were given explicit waits too.
+3. `locator.isVisible()` does not wait, and its `timeout` option is ignored. Used as a guard
+   for an optional step it silently answers "no" for anything not yet rendered, so the click is
+   skipped and the test walks past a step that never happened — which is how the Hevy
+   re-import test came to leave a modal sheet open mid-test while passing. Replaced with a
+   helper that waits.
+4. An 87-agent adversarial review of the nutrition code raised 27 findings, of which 12
+   survived independent verification and were fixed in `e742c08`. The pattern earns its cost:
+   the worst finding was a midnight roll-over that was an unconditional no-op, writing a 00:20
+   snack to the previous day. Reviews of this shape should precede any release the owner is
+   not going to verify by hand.
 
 ### P4 — The AI plugin · **L**
 
-The Kotlin plugin, plus the TypeScript ports from §3.1, plus the malformed-JSON auto-retry
-that HANDOVER §9 flags as an open gap.
+The Kotlin plugin, plus the malformed-JSON auto-retry that HANDOVER §9 flags as an open gap.
+
+The TypeScript ports from §3.1 are **already done**: `src/domain/products.ts` (matching and
+parsing) and `src/db/productRepo.ts` (network and cache). What remains is native: the Capacitor
+plugin for Gemini Nano, and ML Kit barcode scanning to feed the barcode lookup that already
+exists. Both need a phone to verify, which is why they are last.
 
 ### P5 — The known gaps and the design pass · **M**
 
@@ -279,9 +307,12 @@ and implementation of whatever the commissioned mockups return.
 
 ### P6 — Explicitly deferred to v1.1
 
-Food memory, adaptive TDEE, and the strength-versus-cut "Loop" chart. All three are
-excellent and all three are the cross-domain tier you did not choose for v1. Recorded here
-so they are deferred deliberately rather than forgotten.
+Adaptive TDEE and the strength-versus-cut "Loop" chart — the cross-domain tier not chosen for
+v1. Recorded here so they are deferred deliberately rather than forgotten.
+
+Food memory was on this list and has been pulled forward into P3: it turned out to be the
+difference between a logger that is used daily and one that is abandoned, which puts it under
+§2.3 rather than in the intelligence tier.
 
 ---
 
@@ -366,9 +397,12 @@ mechanical.
   makes this bug unrepresentable rather than fixed.
 - The truncation path in §2.1, which is the most dangerous line in either codebase.
 
-ROADMAP §1's own list (brand-match false positives at `ProductLookup.kt:157`, the barcode
-overwriting the wrong item, the missing Atwater cross-check, schema field ordering) is
-accurate and mostly ports across as explicit fixes in the TypeScript rewrite. §1.3
+ROADMAP §1's own list is accurate. Its first two entries are now fixed in the port rather
+than carried across: the brand-match false positive (`ProductLookup.kt:157`) — a query naming a
+brand now requires a shared brand token, absolutely, and scoring is symmetric so a variety
+multipack cannot outrank the product it contains — and the missing Atwater cross-check, which
+is in `src/domain/food.ts` with asymmetric margins and an absolute floor. §1.2, the barcode
+overwriting the wrong item, applies only to the photo-enrichment path and lands with P4. §1.3
 ("can't log to a past day") and §1.6 (absolute photo paths) are already dissolved: `Meal`
 separates `date` from `loggedAt`, and `photoPath` is documented as relative to the data
 directory, never absolute.
