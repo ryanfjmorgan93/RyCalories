@@ -71,7 +71,7 @@ export function SettingsScreen() {
                   }
                 }}
                 label="Look up labels online"
-                sub="Sends the product name to Open Food Facts. The only thing this app sends anywhere."
+                sub="Sends the product name to Open Food Facts. Nothing else in this app makes a network request."
               />
             </Card>
 

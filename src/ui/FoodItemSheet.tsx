@@ -106,7 +106,7 @@ export function FoodItemSheet({
   // without a flag to get out of step with what is on screen.
   const suggestions = all.filter((m) => normalise(m.name) !== normalise(d.name)).slice(0, 5);
 
-  const [lookup, setLookup] = useState<'idle' | 'searching' | 'none' | 'offline'>('idle');
+  const [lookup, setLookup] = useState<'idle' | 'searching' | 'none' | 'offline' | 'unavailable'>('idle');
 
   const applyLabel = (l: LabelNutrition) => {
     const grams = portionGrams(l, d.grams ?? undefined);
@@ -130,9 +130,17 @@ export function FoodItemSheet({
   const runLookup = async () => {
     if (lookup === 'searching') return;
     setLookup('searching');
-    const result = await lookupName({ text: d.name.trim(), ...(d.brand?.trim() ? { brand: d.brand.trim() } : {}) });
-    if (result.label) applyLabel(result.label);
-    else setLookup(result.from === 'offline' ? 'offline' : 'none');
+    // Never leave the button on "Looking up…": anything that escapes the repository still has to
+    // land somewhere the user can act on.
+    try {
+      const result = await lookupName({ text: d.name.trim(), ...(d.brand?.trim() ? { brand: d.brand.trim() } : {}) });
+      if (result.label) applyLabel(result.label);
+      else if (result.from === 'offline') setLookup('offline');
+      else if (result.from === 'network' || result.from === 'cache') setLookup('none');
+      else setLookup('unavailable');
+    } catch {
+      setLookup('unavailable');
+    }
   };
 
   const usePrevious = (m: FoodMemory) => {
@@ -220,6 +228,11 @@ export function FoodItemSheet({
             {lookup === 'offline' && (
               <div className="px-1 text-xs text-muted" data-testid="lookup-offline">
                 No connection.
+              </div>
+            )}
+            {lookup === 'unavailable' && (
+              <div className="px-1 text-xs text-muted" data-testid="lookup-unavailable">
+                Lookup unavailable.
               </div>
             )}
           </div>

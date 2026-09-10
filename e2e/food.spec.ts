@@ -281,14 +281,14 @@ test.describe('nutrition', () => {
 
   test('looking up a label fills the numbers, and says so plainly when it cannot', async ({ page }) => {
     // Answer the lookup from the test, so this never depends on a database in Paris.
-    await page.route('**/search.openfoodfacts.org/**', async (route) => {
+    await page.route('**/*openfoodfacts.org/**', async (route) => {
       const url = route.request().url();
       const wanted = decodeURIComponent(url).toLowerCase().includes('trek');
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          hits: wanted
+          products: wanted
             ? [
                 {
                   code: '5060088709054',
@@ -334,9 +334,9 @@ test.describe('nutrition', () => {
 
   test('the label lookup can be switched off, and then makes no request at all', async ({ page }) => {
     let asked = 0;
-    await page.route('**/search.openfoodfacts.org/**', async (route) => {
+    await page.route('**/*openfoodfacts.org/**', async (route) => {
       asked += 1;
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ hits: [] }) });
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ products: [] }) });
     });
 
     await page.goto('/settings');
@@ -348,5 +348,27 @@ test.describe('nutrition', () => {
     await page.getByTestId('food-name').fill('Protein Flapjack');
     await expect(page.getByTestId('lookup-food')).toBeHidden();
     expect(asked).toBe(0);
+  });
+
+  test('a lookup that cannot reach the service says so, and never hangs', async ({ page }) => {
+    // The real failure this guards: the full-text search host sends no CORS header, so in a plain
+    // browser the request is blocked before the response can be read. Whatever the cause, the
+    // button must come back and the message must not blame the user's connection.
+    await page.route('**/*openfoodfacts.org/**', (route) => route.abort('failed'));
+
+    await page.goto('/food/new');
+    await page.getByTestId('empty-add-food').click();
+    await page.getByTestId('food-name').fill('Protein Flapjack');
+    await page.getByTestId('food-brand').fill('Trek');
+    await page.getByTestId('lookup-food').click();
+
+    await expect(page.getByTestId('lookup-unavailable')).toBeVisible();
+    await expect(page.getByTestId('lookup-offline')).toBeHidden();
+    await expect(page.getByTestId('lookup-food')).toBeEnabled();
+    await expect(page.getByTestId('lookup-food')).toHaveText('Look up the label');
+
+    // And the food can still be logged by hand, which is the whole point of it degrading.
+    await addFood(page, { name: 'Protein Flapjack', grams: 50, kcal: 452, protein: 18.5, carbs: 44, fat: 22 });
+    await expect(page.getByTestId('meal-total')).toContainText('226 kcal');
   });
 });

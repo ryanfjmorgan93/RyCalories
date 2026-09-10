@@ -76,14 +76,16 @@ describe('barcode lookup', () => {
   it('says nothing rather than throwing when the network fails', async () => {
     mockFetch([new Error('ECONNRESET')]);
     const r = await lookupBarcode('5060088709054');
-    expect(r).toEqual({ label: null, from: 'offline' });
+    // 'unavailable', not 'offline': the device has a connection, the service did not answer.
+    // Reporting that as "no connection" sends the user off to check their wifi.
+    expect(r).toEqual({ label: null, from: 'unavailable' });
     // And a failure is NOT remembered as a miss — the food may well be in the database.
     expect(await db.productCache.count()).toBe(0);
   });
 
   it('treats a bad HTTP status the same way', async () => {
     mockFetch([{ ok: false }]);
-    expect((await lookupBarcode('5060088709054')).from).toBe('offline');
+    expect((await lookupBarcode('5060088709054')).from).toBe('unavailable');
     expect(await db.productCache.count()).toBe(0);
   });
 
@@ -106,22 +108,61 @@ describe('barcode lookup', () => {
 
   it('refuses something that is not a barcode without asking', async () => {
     const calls = mockFetch([]);
-    expect((await lookupBarcode('12')).label).toBeNull();
-    expect((await lookupBarcode('')).label).toBeNull();
+    expect(await lookupBarcode('12')).toEqual({ label: null, from: 'invalid' });
+    expect(await lookupBarcode('')).toEqual({ label: null, from: 'invalid' });
     expect(calls).toHaveLength(0);
   });
 });
 
 describe('name lookup', () => {
   it('finds the right product and remembers the answer', async () => {
-    const calls = mockFetch([{ body: { hits: [TREK] } }]);
+    const calls = mockFetch([{ body: { products: [TREK] } }]);
     const r = await lookupName({ text: 'Protein Flapjack', brand: 'Trek' });
     expect(r.from).toBe('network');
     expect(r.label?.name).toBe('TREK PROTEIN FLAPJACKS');
-    expect(calls[0]).toContain('search.openfoodfacts.org');
 
     expect((await lookupName({ text: 'protein  flapjack!', brand: 'TREK' })).from).toBe('cache');
     expect(calls).toHaveLength(1);
+  });
+
+  it('goes to the host that allows cross-origin reads when it has a brand to filter on', async () => {
+    // search.openfoodfacts.org sends no Access-Control-Allow-Origin, so a browser blocks the
+    // response before it can be read. The main API host does send it, and accepts a brand tag.
+    const calls = mockFetch([{ body: { products: [TREK] } }]);
+    await lookupName({ text: 'Protein Flapjack', brand: 'Natural Balance Foods' });
+    expect(calls[0]).toContain('world.openfoodfacts.org/api/v2/search');
+    expect(calls[0]).toContain('brands_tags=natural-balance-foods');
+  });
+
+  it('falls back to full-text search only when there is no brand', async () => {
+    const calls = mockFetch([{ body: { hits: [TREK] } }]);
+    await lookupName({ text: 'Protein Flapjack' });
+    expect(calls[0]).toContain('search.openfoodfacts.org');
+  });
+
+  it('does not serve a brandless answer to a branded search', async () => {
+    // Joined into one key, "Trek Protein Flapjack" with no brand and "Protein Flapjack" branded
+    // "Trek" collapse together — but only the second enforces the brand rule, so the first's
+    // laxer answer would defeat it.
+    const calls = mockFetch([{ body: { hits: [TREK] } }, { body: { products: [TREK] } }]);
+    await lookupName({ text: 'Trek Protein Flapjack' });
+    const second = await lookupName({ text: 'Protein Flapjack', brand: 'Trek' });
+    expect(second.from).toBe('network');
+    expect(calls).toHaveLength(2);
+  });
+
+  it('reports a service that will not answer as unavailable, not as being offline', async () => {
+    mockFetch([{ ok: false }]);
+    expect((await lookupName({ text: 'Protein Flapjack', brand: 'Trek' })).from).toBe('unavailable');
+  });
+
+  it('survives a database that cannot be read', async () => {
+    // A cache read that throws used to escape the call and leave the UI stuck on "Looking up…".
+    const spy = vi.spyOn(db.productCache, 'get').mockRejectedValue(new Error('IndexedDB gone'));
+    mockFetch([{ body: { products: [TREK] } }]);
+    const r = await lookupName({ text: 'Protein Flapjack', brand: 'Trek' });
+    expect(r.label?.brand).toBe('Trek');
+    spy.mockRestore();
   });
 
   it('returns nothing rather than a rival manufacturer', async () => {
@@ -134,15 +175,15 @@ describe('name lookup', () => {
   });
 
   it('copes with a response that is not shaped as expected', async () => {
-    mockFetch([{ body: { hits: 'nope' } }, { body: null }, { body: { hits: [{}] } }]);
+    mockFetch([{ body: { products: 'nope' } }, { body: null }, { body: { products: [{}] } }]);
     expect((await lookupName({ text: 'a' })).label).toBeNull();
     expect((await lookupName({ text: 'b' })).label).toBeNull();
     expect((await lookupName({ text: 'c' })).label).toBeNull();
   });
 
-  it('does not ask for an empty query', async () => {
+  it('does not ask for an empty query, and does not blame the network for it', async () => {
     const calls = mockFetch([]);
-    expect((await lookupName({ text: '  !  ' })).label).toBeNull();
+    expect(await lookupName({ text: '  !  ' })).toEqual({ label: null, from: 'invalid' });
     expect(calls).toHaveLength(0);
   });
 });
