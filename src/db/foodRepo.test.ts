@@ -6,6 +6,7 @@ import {
   dayTotals,
   deleteItem,
   deleteMeal,
+  forgetFood,
   getMeal,
   itemsForMeal,
   loggedDays,
@@ -300,5 +301,60 @@ describe('remembering food', () => {
     const id = await addMeal({ name: 'Mixed' }, [shake(), oats(80)]);
     expect((await itemsForMeal(id))).toHaveLength(2);
     expect((await suggestFoods('')).map((f) => f.name)).toEqual(['Oats']);
+  });
+});
+
+describe('editing a food keeps its identity in step', () => {
+  it('persists a brand typed on a saved food', async () => {
+    const id = await addMeal({ name: 'Snack' }, [oats(50)]);
+    const row = (await itemsForMeal(id))[0]!;
+    await updateItem(row.id, { name: 'Oats', portion: '50 g', nutrition: row.nutrition, source: 'user', brand: 'Quaker', product: 'Porridge Oats' });
+    expect((await itemsForMeal(id))[0]!.brand).toBe('Quaker');
+  });
+
+  it('clears a brand the food no longer has, rather than leaving the old one', async () => {
+    // Dexie's update MERGES, so an omitted field survives. Applying one product's label to a row
+    // that still carried another's brand left the wrong identity on it for ever, and keyed the
+    // food memory off the stale pair.
+    const id = await addMeal({ name: 'Snack' }, [{ ...oats(50), brand: 'Aldi', product: 'Protein bar' }]);
+    const row = (await itemsForMeal(id))[0]!;
+    expect(row.brand).toBe('Aldi');
+
+    await updateItem(row.id, { name: 'Oats', portion: '50 g', nutrition: row.nutrition, source: 'user', brand: undefined, product: undefined });
+    const after = (await itemsForMeal(id))[0]!;
+    expect(after.brand).toBeUndefined();
+    expect(after.product).toBeUndefined();
+    // The new logging is remembered under the name, not the brand it no longer has. The old
+    // entry stays: renaming a food is not evidence you never ate the first one, so it is left
+    // for the user to forget deliberately rather than removed on their behalf.
+    const keys = (await suggestFoods('')).map((f) => f.key);
+    expect(keys).toContain('n:oats');
+    expect(keys).toContain('p:aldi protein bar');
+  });
+});
+
+describe('forgetting a food', () => {
+  it('removes it from the suggestions', async () => {
+    await addMeal({ name: 'Breakfast' }, [oats(80)]);
+    const [remembered] = await suggestFoods('');
+    expect(remembered).toBeTruthy();
+
+    await forgetFood(remembered!.id);
+    expect(await suggestFoods('')).toEqual([]);
+  });
+
+  it('leaves the meals that used it alone', async () => {
+    const id = await addMeal({ name: 'Breakfast' }, [oats(80)]);
+    const [remembered] = await suggestFoods('');
+    await forgetFood(remembered!.id);
+    expect((await itemsForMeal(id))).toHaveLength(1);
+    expect((await dayTotals(TODAY)).kcal).toBe(303);
+  });
+
+  it('does not mind being asked twice', async () => {
+    await addMeal({ name: 'Breakfast' }, [oats(80)]);
+    const [remembered] = await suggestFoods('');
+    await forgetFood(remembered!.id);
+    await expect(forgetFood(remembered!.id)).resolves.toBeUndefined();
   });
 });

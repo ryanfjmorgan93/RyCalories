@@ -175,6 +175,15 @@ export async function rememberFood(item: NewMealItem | MealItem): Promise<void> 
   }
 }
 
+/**
+ * Forget a food. Nothing else ever removes one, so without this a name typed wrong once is
+ * suggested for ever with no way to be rid of it. Meals that used the food are untouched: what
+ * was eaten is a fact, and only the suggestion is being withdrawn.
+ */
+export async function forgetFood(id: string): Promise<void> {
+  await db.foods.delete(id);
+}
+
 /** Remembered foods for the picker, ranked for `query` (empty = most eaten, most recent). */
 export async function suggestFoods(query: string, limit = 8): Promise<FoodMemory[]> {
   const all = await db.foods.toArray();

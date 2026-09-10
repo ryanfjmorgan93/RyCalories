@@ -49,10 +49,23 @@ const STOP = new Set([
 export function tokens(s: string): Set<string> {
   const out = new Set<string>();
   for (const raw of s.toLowerCase().split(/[^a-z0-9]+/)) {
-    if (raw.length < 2 || STOP.has(raw)) continue;
+    // A lone digit is kept. Dropping it made "Fage Total 0%", "2%" and "5%" — three different
+    // products with 54, 70 and 93 kcal — reduce to the same two tokens, so asking for the 5%
+    // returned the 0% at a perfect score. Same for "Omega 3" against "Omega 6", "Milk 1%"
+    // against "Milk 4%". A single letter still goes: it is initials and noise.
+    if (STOP.has(raw)) continue;
+    if (raw.length < 2 && !/^[0-9]$/.test(raw)) continue;
     // flapjacks == flapjack, but gas stays gas.
     out.add(raw.length > 3 && raw.endsWith('s') && !raw.endsWith('ss') ? raw.slice(0, -1) : raw);
   }
+  return out;
+}
+
+/** `a` with everything in `b` removed. */
+function without(a: Set<string>, b: Set<string>): Set<string> {
+  if (b.size === 0) return a;
+  const out = new Set<string>();
+  for (const t of a) if (!b.has(t)) out.add(t);
   return out;
 }
 
@@ -199,14 +212,22 @@ export const MATCH_THRESHOLD = 0.5;
  */
 export function bestMatch(query: MatchQuery, candidates: LabelNutrition[], threshold = MATCH_THRESHOLD): Match | null {
   const qBrand = query.brand ? tokens(query.brand) : new Set<string>();
-  const qTokens = tokens(`${query.brand ?? ''} ${query.text}`);
+  // Product words only. The brand is a gate, not a score: including it in both sets meant brand
+  // agreement — which the gate has ALREADY required — could carry a candidate over the threshold
+  // on its own. "Heinz Ketchup" against "Heinz Mayonnaise" scored exactly 0.5 and matched, with
+  // no product word in common at all. Multi-word brands made it worse, and UK grocery brands
+  // often are ("Yeo Valley", "Marks & Spencer"), so the hole was wide open on the very query
+  // shape this function exists to protect.
+  const qTokens = without(tokens(query.text), qBrand);
   if (qTokens.size === 0) return null;
 
   const scored: Match[] = [];
   for (const label of candidates) {
     if (qBrand.size > 0 && intersectionSize(qBrand, tokens(label.brand)) === 0) continue;
-    const score = tokenScore(qTokens, tokens(`${label.brand} ${label.name}`));
-    if (score >= threshold) scored.push({ label, score });
+    const score = tokenScore(qTokens, without(tokens(label.name), qBrand));
+    // Strictly greater: a bare 0.5 is one word shared out of two on each side, which is what
+    // "Fage Total 5" and "Fage Total 0" look like once the brand is removed. Different products.
+    if (score > threshold) scored.push({ label, score });
   }
   if (scored.length === 0) return null;
 
@@ -224,14 +245,19 @@ export function bestMatch(query: MatchQuery, candidates: LabelNutrition[], thres
 
   // Entries are patchy. If the winner has no portion size, borrow one from another entry of the
   // same brand — another flavour of the same bar is the same pack.
+  //
+  // Borrowed into the field it came from. Putting a sibling's SERVING size into packGrams made
+  // portionLabel announce "1 pack (45 g)" for a 500 g box of granola: a statement of fact about
+  // the packet that is simply false, and it gets written onto the meal item.
   if (best.label.servingGrams === undefined && best.label.packGrams === undefined) {
     const sibling = scored
       .map((m) => m.label)
       .find((l) => l !== best.label && sameBrand(l, best.label) && (l.servingGrams !== undefined || plausiblePack(l.packGrams) !== undefined));
-    if (sibling) {
-      const borrowed = sibling.servingGrams ?? plausiblePack(sibling.packGrams);
-      if (borrowed !== undefined) return { ...best, label: { ...best.label, packGrams: borrowed } };
+    if (sibling?.servingGrams !== undefined) {
+      return { ...best, label: { ...best.label, servingGrams: sibling.servingGrams } };
     }
+    const pack = plausiblePack(sibling?.packGrams);
+    if (pack !== undefined) return { ...best, label: { ...best.label, packGrams: pack } };
   }
   return best;
 }

@@ -147,7 +147,12 @@ export function rankMemories(query: string, memories: FoodMemory[], limit = 8): 
       if (match < 0) continue;
       match /= terms.length;
     }
-    ranked.push({ memory, score: match + familiarity(memory) });
+    // Familiarity is divided by the same term count as the match. Without that, the exact-vs-prefix
+    // gap shrinks to 0.2/terms as the query lengthens while the bonus stays fixed, and at three
+    // words a prefix match on a familiar food overtakes an exact match on a rarer one — which is
+    // exactly the invariant the comment on familiarity() claims to hold.
+    const divisor = terms.length || 1;
+    ranked.push({ memory, score: match + familiarity(memory) / divisor });
   }
 
   ranked.sort((a, b) => b.score - a.score || b.memory.lastUsedAt.localeCompare(a.memory.lastUsedAt) || a.memory.key.localeCompare(b.memory.key));

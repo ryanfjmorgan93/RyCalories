@@ -97,6 +97,55 @@ describe('the brand rule (ROADMAP §1.1)', () => {
   });
 });
 
+describe('the brand is a gate, not a score', () => {
+  it('refuses a candidate that shares only the brand', () => {
+    // Scoring the brand as well as gating on it meant brand agreement alone could clear the
+    // threshold: "Heinz Ketchup" vs "Heinz Mayonnaise" scored exactly 0.5 and matched, with no
+    // product word in common.
+    const mayo = label({ code: '9', brand: 'Heinz', name: 'Mayonnaise', per100: { kcal: 721, protein: 1, carbs: 1, fat: 79 } });
+    expect(bestMatch({ text: 'Ketchup', brand: 'Heinz' }, [mayo])).toBeNull();
+    expect(bestMatch({ text: 'Heinz Ketchup', brand: 'Heinz' }, [mayo])).toBeNull();
+  });
+
+  it('is not fooled by a multi-word brand, which is where the hole was widest', () => {
+    const butter = label({ code: '9', brand: 'Yeo Valley', name: 'Yeo Valley Salted Butter', per100: { kcal: 744, protein: 0.6, carbs: 0.6, fat: 82 } });
+    expect(bestMatch({ text: 'Natural Yoghurt', brand: 'Yeo Valley' }, [butter])).toBeNull();
+  });
+
+  it('still matches the real product once the brand is set aside', () => {
+    const real = label({ brand: 'Trek', name: 'TREK PROTEIN FLAPJACKS' });
+    expect(bestMatch({ text: 'Protein Flapjack', brand: 'Trek' }, [real])?.label.code).toBe('1');
+    // And when the brand was typed into the name field instead of the brand field.
+    expect(bestMatch({ text: 'Trek Protein Flapjack' }, [real])?.label.code).toBe('1');
+  });
+
+  it('will not pick an arbitrary product when the query is only the brand', () => {
+    expect(bestMatch({ text: 'Heinz', brand: 'Heinz' }, [label({ brand: 'Heinz', name: 'Mayonnaise' })])).toBeNull();
+  });
+});
+
+describe('numbers that distinguish one variant from another', () => {
+  const fage = (pct: string, kcal: number, fat: number) =>
+    label({ code: pct, brand: 'Fage', name: `Fage Total ${pct}%`, per100: { kcal, protein: 9, carbs: 3, fat } });
+  const all = [fage('0', 54, 0), fage('2', 70, 2), fage('5', 93, 5)];
+
+  it('keeps a lone digit, so three real products stay three products', () => {
+    // Dropping single-character tokens reduced all three to {fage,total}, so asking for the 5%
+    // returned the 0% — 54 kcal and 0 g fat — at a perfect score with no ambiguity signalled.
+    expect(tokens('Fage Total 5%').has('5')).toBe(true);
+    expect(bestMatch({ text: 'Fage Total 5%', brand: 'Fage' }, all)?.label.per100.kcal).toBe(93);
+    expect(bestMatch({ text: 'Fage Total 0%', brand: 'Fage' }, all)?.label.per100.kcal).toBe(54);
+  });
+
+  it('returns nothing rather than the wrong strength when the one asked for is absent', () => {
+    expect(bestMatch({ text: 'Fage Total 5%', brand: 'Fage' }, [fage('0', 54, 0)])).toBeNull();
+  });
+
+  it('still drops a lone letter, which is initials and noise', () => {
+    expect(tokens('M S Protein Flapjack').has('m')).toBe(false);
+  });
+});
+
 describe('choosing between plausible matches', () => {
   it('prefers an entry that knows its own portion', () => {
     const vague = label({ code: 'a', name: 'Protein Flapjack' });
@@ -110,6 +159,17 @@ describe('choosing between plausible matches', () => {
     const m = bestMatch({ text: 'Protein Flapjack Cocoa', brand: 'Trek' }, [winner, sibling]);
     expect(m?.label.code).toBe('a');
     expect(m?.label.packGrams).toBe(50);
+  });
+
+  it('borrows a serving as a serving, not as a pack', () => {
+    // Borrowing a sibling's 45 g SERVING into packGrams made portionLabel announce
+    // "1 pack (45 g)" for a 500 g box — a false statement about the packet, written onto the meal.
+    const winner = label({ code: 'a', name: 'Crunchy Nut Granola' });
+    const sibling = label({ code: 'b', name: 'Crunchy Nut Granola Chocolate', servingGrams: 45, packGrams: 500 });
+    const m = bestMatch({ text: 'Crunchy Nut Granola', brand: 'Trek' }, [winner, sibling]);
+    expect(m?.label.servingGrams).toBe(45);
+    expect(m?.label.packGrams).toBeUndefined();
+    expect(portionLabel(m!.label, portionGrams(m!.label))).toBe('1 serving (45 g)');
   });
 
   it('does not borrow an implausible pack size', () => {

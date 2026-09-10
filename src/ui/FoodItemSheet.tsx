@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import {
   checkAtwater,
   fromPer100,
@@ -11,14 +11,16 @@ import {
 import { fmtGrams, fmtKcal } from '@/domain/format';
 import { useFoodSuggestions, useSettings } from './hooks';
 import { lookupName } from '@/db/productRepo';
+import { forgetFood } from '@/db/foodRepo';
 import { displayName, portionGrams, portionLabel, type LabelNutrition } from '@/domain/products';
 import { normalise } from '@/domain/foodMemory';
 import type { FoodMemory } from '@/domain/types';
 import type { NewMealItem } from '@/db/foodRepo';
-import { Button } from './components/Button';
+import { Button, IconButton } from './components/Button';
 import { Segmented } from './components/Chip';
 import { NumberInput, TextInput } from './components/NumberField';
 import { Sheet } from './components/Sheet';
+import { TrashIcon } from './components/TopBar';
 
 type Basis = 'weighed' | 'portion';
 
@@ -92,10 +94,31 @@ export function FoodItemSheet({
   // the number the user typed while the draft behind it has reverted, so Save writes a different
   // value than the one on screen. The sheet is instead remounted per edit target with a `key`.
   const [d, setD] = useState<Draft>(() => draftFrom(item));
+  const [lookup, setLookup] = useState<'idle' | 'searching' | 'none' | 'offline' | 'unavailable'>('idle');
+  // Bumped by anything that changes what a lookup would be for. A response whose ticket is stale
+  // is discarded rather than applied to a food nobody asked about.
+  const requestRef = useRef(0);
   // Off means off: no request is made at all, not merely hidden.
   const lookupEnabled = useSettings()?.productLookup !== false;
 
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
+
+  /**
+   * Set a figure the user has typed, and record that they typed it.
+   *
+   * Without this the draft kept whatever source the lookup or the suggestion put there, so a
+   * hand-corrected number was saved badged 'label' — and the trust hierarchy, working exactly as
+   * designed, then let the next label lookup overwrite the correction with the figures the user
+   * had gone back and fixed.
+   */
+  const setOwn = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v, source: 'user' }));
+
+  /** Changing what is being searched for invalidates whatever the last search said about it. */
+  const setSearchable = <K extends 'name' | 'brand'>(k: K, v: string) => {
+    requestRef.current += 1;
+    setLookup('idle');
+    setD((p) => ({ ...p, [k]: v }));
+  };
 
   // Suggestions only while adding a new food. When editing a saved one the numbers on screen are
   // the ones being corrected, and offering to overwrite them with a remembered version is the
@@ -105,8 +128,6 @@ export function FoodItemSheet({
   // row offering to apply it again is noise. This also means retyping brings the list back,
   // without a flag to get out of step with what is on screen.
   const suggestions = all.filter((m) => normalise(m.name) !== normalise(d.name)).slice(0, 5);
-
-  const [lookup, setLookup] = useState<'idle' | 'searching' | 'none' | 'offline' | 'unavailable'>('idle');
 
   const applyLabel = (l: LabelNutrition) => {
     const grams = portionGrams(l, d.grams ?? undefined);
@@ -129,17 +150,23 @@ export function FoodItemSheet({
 
   const runLookup = async () => {
     if (lookup === 'searching') return;
+    const asked = { text: d.name.trim(), brand: d.brand?.trim() ?? '' };
+    // Which search this is. A lookup can take up to the repository's timeout, and nothing stops
+    // the user editing meanwhile — so a slow answer for "Protein Flapjack" could land on a sheet
+    // that now says "Chicken thigh" and overwrite every field of it, with no undo.
+    const ticket = (requestRef.current += 1);
     setLookup('searching');
     // Never leave the button on "Looking up…": anything that escapes the repository still has to
     // land somewhere the user can act on.
     try {
-      const result = await lookupName({ text: d.name.trim(), ...(d.brand?.trim() ? { brand: d.brand.trim() } : {}) });
+      const result = await lookupName({ text: asked.text, ...(asked.brand ? { brand: asked.brand } : {}) });
+      if (ticket !== requestRef.current) return;
       if (result.label) applyLabel(result.label);
       else if (result.from === 'offline') setLookup('offline');
       else if (result.from === 'network' || result.from === 'cache') setLookup('none');
       else setLookup('unavailable');
     } catch {
-      setLookup('unavailable');
+      if (ticket === requestRef.current) setLookup('unavailable');
     }
   };
 
@@ -206,14 +233,14 @@ export function FoodItemSheet({
     >
       <div className="grid gap-4">
         <Field label="Food">
-          <TextInput value={d.name} onChange={(v) => set('name', v)} placeholder="Chicken thigh" testId="food-name" autoFocus={!item} />
+          <TextInput value={d.name} onChange={(v) => setSearchable('name', v)} placeholder="Chicken thigh" testId="food-name" autoFocus={!item} />
         </Field>
 
         {canLookUp && (
           <div className="-mt-2 grid gap-2">
             <TextInput
               value={d.brand ?? ''}
-              onChange={(v) => set('brand', v)}
+              onChange={(v) => setSearchable('brand', v)}
               placeholder="Brand (optional)"
               testId="food-brand"
             />
@@ -241,20 +268,26 @@ export function FoodItemSheet({
         {suggestions.length > 0 && (
           <div className="-mt-2 overflow-hidden rounded-xl border border-line" data-testid="food-suggestions">
             {suggestions.map((m, i) => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => usePrevious(m)}
-                data-testid={`suggest-${m.name}`}
-                className={`flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left active:bg-surface-2 ${i > 0 ? 'border-t border-line' : ''}`}
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-semibold leading-tight">{[m.brand, m.name].filter(Boolean).join(' ')}</div>
-                  <div className="num mt-0.5 truncate text-xs text-muted">
-                    {fmtKcal(m.per100.kcal)} / 100 g{m.typicalGrams ? ` · usually ${fmtGrams(m.typicalGrams)}` : ''}
+              <div key={m.id} className={`flex items-center ${i > 0 ? 'border-t border-line' : ''}`}>
+                <button
+                  type="button"
+                  onClick={() => usePrevious(m)}
+                  data-testid={`suggest-${m.name}`}
+                  className="flex min-h-14 min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left active:bg-surface-2"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-semibold leading-tight">{[m.brand, m.name].filter(Boolean).join(' ')}</div>
+                    <div className="num mt-0.5 truncate text-xs text-muted">
+                      {fmtKcal(m.per100.kcal)} / 100 g{m.typicalGrams ? ` · usually ${fmtGrams(m.typicalGrams)}` : ''}
+                    </div>
                   </div>
-                </div>
-              </button>
+                </button>
+                {/* Nothing else removes a remembered food, so a name typed wrong once would be
+                    offered here for ever. */}
+                <IconButton label={`Forget ${m.name}`} onClick={() => void forgetFood(m.id)} data-testid={`forget-${m.name}`}>
+                  <TrashIcon />
+                </IconButton>
+              </div>
             ))}
           </div>
         )}
@@ -270,7 +303,7 @@ export function FoodItemSheet({
 
         {d.basis === 'weighed' ? (
           <Field label="Weight">
-            <NumberInput value={d.grams} onChange={(v) => set('grams', v)} mode="numeric" min={0} placeholder="100" testId="food-grams" />
+            <NumberInput value={d.grams} onChange={(v) => setOwn('grams', v)} mode="numeric" min={0} placeholder="100" testId="food-grams" />
           </Field>
         ) : (
           <Field label="Portion">
@@ -282,16 +315,16 @@ export function FoodItemSheet({
           <div className="mb-2 px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Nutrition {per}</div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Calories">
-              <NumberInput value={d.kcal} onChange={(v) => set('kcal', v)} mode="numeric" min={0} placeholder="0" testId="food-kcal" />
+              <NumberInput value={d.kcal} onChange={(v) => setOwn('kcal', v)} mode="numeric" min={0} placeholder="0" testId="food-kcal" />
             </Field>
             <Field label="Protein (g)">
-              <NumberInput value={d.protein} onChange={(v) => set('protein', v)} min={0} placeholder="0" testId="food-protein" />
+              <NumberInput value={d.protein} onChange={(v) => setOwn('protein', v)} min={0} placeholder="0" testId="food-protein" />
             </Field>
             <Field label="Carbs (g)">
-              <NumberInput value={d.carbs} onChange={(v) => set('carbs', v)} min={0} placeholder="0" testId="food-carbs" />
+              <NumberInput value={d.carbs} onChange={(v) => setOwn('carbs', v)} min={0} placeholder="0" testId="food-carbs" />
             </Field>
             <Field label="Fat (g)">
-              <NumberInput value={d.fat} onChange={(v) => set('fat', v)} min={0} placeholder="0" testId="food-fat" />
+              <NumberInput value={d.fat} onChange={(v) => setOwn('fat', v)} min={0} placeholder="0" testId="food-fat" />
             </Field>
           </div>
         </div>
@@ -300,7 +333,7 @@ export function FoodItemSheet({
         {!check.ok && (
           <button
             type="button"
-            onClick={() => set('kcal', Math.round(check.implied))}
+            onClick={() => setOwn('kcal', Math.round(check.implied))}
             className="rounded-xl border border-warn/40 bg-warn/10 px-3 py-3 text-left text-sm text-warn"
             data-testid="atwater-warning"
           >

@@ -4,7 +4,7 @@ import { addItem, addMeal, deleteItem, deleteMeal, updateItem, updateMeal, sumIt
 import { toDateKey } from '@/domain/dates';
 import { displayMacros, type Macros } from '@/domain/food';
 import { fmtDayKey, fmtGrams, fmtKcal } from '@/domain/format';
-import { MEAL_SLOTS, type MealSlot } from '@/domain/types';
+import { MEAL_SLOTS, type MealItem, type MealSlot } from '@/domain/types';
 import { Button, IconButton } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row } from '@/ui/components/Card';
 import { Chip } from '@/ui/components/Chip';
@@ -194,7 +194,11 @@ function ExistingMeal({ id }: { id: string }) {
           setEditing(null);
           if (typeof index === 'number') {
             const row = meal.items[index];
-            if (row) await updateItem(row.id, { name: item.name, portion: item.portion, nutrition: item.nutrition, source: item.source });
+            // Brand and product go in the same patch as everything else. Omitted, a typed brand
+            // was silently dropped, and applying Trek's label to a row that still said brand
+            // "Aldi" left the wrong identity on the row for ever — Dexie's update merges, so
+            // nothing ever cleared it — and keyed the food memory off the stale pair.
+            if (row) await updateItem(row.id, itemPatch(item));
           } else {
             await addItem(id, item);
           }
@@ -319,4 +323,20 @@ function defaultSlot(): MealSlot {
 
 function fallbackName(slot?: MealSlot): string {
   return slot ? slot[0]!.toUpperCase() + slot.slice(1) : 'Meal';
+}
+
+/**
+ * The full set of fields an edit writes, so an edited row matches what adding the same food would
+ * have written. `undefined` clears a field the draft no longer has, which is why brand and product
+ * are always present rather than spread in conditionally.
+ */
+function itemPatch(item: NewMealItem): Partial<Omit<MealItem, 'id' | 'mealId' | 'index'>> {
+  return {
+    name: item.name,
+    portion: item.portion,
+    nutrition: item.nutrition,
+    source: item.source ?? 'user',
+    brand: item.brand,
+    product: item.product,
+  };
 }

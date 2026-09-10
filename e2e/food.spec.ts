@@ -371,4 +371,99 @@ test.describe('nutrition', () => {
     await addFood(page, { name: 'Protein Flapjack', grams: 50, kcal: 452, protein: 18.5, carbs: 44, fat: 22 });
     await expect(page.getByTestId('meal-total')).toContainText('226 kcal');
   });
+
+  test('a correction outranks a later label, and a remembered food can be forgotten', async ({ page }) => {
+    await page.route('**/*openfoodfacts.org/**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          products: [
+            {
+              code: '1',
+              product_name: 'TREK PROTEIN FLAPJACKS',
+              brands: ['Trek'],
+              serving_quantity: 50,
+              nutriments: { 'energy-kcal_100g': 500, proteins_100g: 3, carbohydrates_100g: 60, fat_100g: 27 },
+            },
+          ],
+        }),
+      });
+    });
+
+    // Look the label up, then correct its figures by hand.
+    await page.goto('/food/new');
+    await page.getByTestId('meal-name').fill('Snack');
+    await page.getByTestId('empty-add-food').click();
+    await page.getByTestId('food-name').fill('Protein Flapjack');
+    await page.getByTestId('food-brand').fill('Trek');
+    await page.getByTestId('lookup-food').click();
+    await expect(page.getByTestId('food-kcal')).toHaveValue('500');
+
+    await page.getByTestId('food-kcal').fill('210');
+    await page.getByTestId('save-food').click();
+    await page.getByTestId('save-meal').click();
+    await page.waitForURL(/\/food\/[0-9a-f-]+$/);
+
+    // Log it again the same way. The label must not undo the correction.
+    await page.goto('/food/new');
+    await page.getByTestId('meal-name').fill('Snack two');
+    await page.getByTestId('empty-add-food').click();
+    await page.getByTestId('food-name').fill('Protein Flapjack');
+    await page.getByTestId('food-brand').fill('Trek');
+    await page.getByTestId('lookup-food').click();
+    await expect(page.getByTestId('food-kcal')).toHaveValue('500');
+    await page.getByTestId('save-food').click();
+    await page.getByTestId('save-meal').click();
+    await page.waitForURL(/\/food\/[0-9a-f-]+$/);
+
+    // The remembered figures are still the ones typed by hand.
+    await page.goto('/food/new');
+    await page.getByTestId('empty-add-food').click();
+    const suggestion = page.getByTestId('suggest-Trek Protein Flapjacks');
+    await expect(suggestion).toContainText('210 kcal / 100 g');
+
+    // And it can be forgotten.
+    await page.getByTestId('forget-Trek Protein Flapjacks').click();
+    await expect(suggestion).toBeHidden();
+  });
+
+  test('a slow lookup cannot land on a food it was not asked about', async ({ page }) => {
+    let release: (() => void) | null = null;
+    await page.route('**/*openfoodfacts.org/**', async (route) => {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          products: [
+            { code: '1', product_name: 'TREK PROTEIN FLAPJACKS', brands: ['Trek'], serving_quantity: 50, nutriments: { 'energy-kcal_100g': 452, proteins_100g: 18.5, carbohydrates_100g: 44, fat_100g: 22 } },
+          ],
+        }),
+      });
+    });
+
+    await page.goto('/food/new');
+    await page.getByTestId('meal-name').fill('Lunch');
+    await page.getByTestId('empty-add-food').click();
+    await page.getByTestId('food-name').fill('Protein Flapjack');
+    await page.getByTestId('food-brand').fill('Trek');
+    await page.getByTestId('lookup-food').click();
+
+    // Give up waiting and type a different food entirely.
+    await page.getByTestId('food-name').fill('Chicken thigh');
+    await page.getByTestId('food-brand').fill('');
+    await page.getByTestId('food-grams').fill('200');
+    await page.getByTestId('food-kcal').fill('209');
+
+    await expect.poll(() => release !== null).toBe(true);
+    release!();
+
+    // The flapjack's label must not overwrite the chicken.
+    await expect(page.getByTestId('food-name')).toHaveValue('Chicken thigh');
+    await expect(page.getByTestId('food-kcal')).toHaveValue('209');
+    await expect(page.getByTestId('food-grams')).toHaveValue('200');
+  });
 });

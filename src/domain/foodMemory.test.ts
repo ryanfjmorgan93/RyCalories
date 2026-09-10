@@ -177,6 +177,15 @@ describe('ranking for the search box', () => {
     expect(rankMemories('chick', all).map((r) => r.memory.name)).toEqual(['Chicken thigh']);
   });
 
+  it('keeps an exact match above a prefix match however long the query', () => {
+    // The bonus is scaled by the term count like the match is. Unscaled, at three words a
+    // familiar prefix match ("Tesco oat drinking yoghurt", eaten often) overtook the exact one.
+    const drink = memory({ id: 'g1', key: 'n:tesco oat drink', name: 'Tesco oat drink', timesUsed: 1 });
+    const yoghurt = memory({ id: 'g2', key: 'n:tesco oat drinking yoghurt', name: 'Tesco oat drinking yoghurt', timesUsed: 40 });
+    expect(rankMemories('tesco oat drink', [yoghurt, drink])[0]?.memory.name).toBe('Tesco oat drink');
+    expect(rankMemories('oat drink', [yoghurt, drink])[0]?.memory.name).toBe('Tesco oat drink');
+  });
+
   it('is stable and bounded', () => {
     expect(rankMemories('', all, 2).map((r) => r.memory.name)).toEqual(['Porridge oats', 'Chicken thigh']);
     expect(rankMemories('', [...all].reverse()).map((r) => r.memory.name)).toEqual(rankMemories('', all).map((r) => r.memory.name));
