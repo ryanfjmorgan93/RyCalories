@@ -30,6 +30,17 @@ async function addFood(
   await page.getByTestId('save-food').click();
 }
 
+/**
+ * Save Settings and wait for the write to land. Without the wait, the navigation that follows can
+ * abort the transaction, leaving no reverse-diet start date and therefore no calorie target — so
+ * the assertion fails on a missing element rather than a wrong number, intermittently.
+ */
+async function saveSettings(page: Page) {
+  await page.goto('/settings');
+  await page.getByRole('button', { name: 'Save' }).first().click();
+  await expect(page.getByText('Saved')).toBeVisible();
+}
+
 test.describe('nutrition', () => {
   test.beforeEach(async ({ page }) => {
     await fresh(page);
@@ -128,8 +139,7 @@ test.describe('nutrition', () => {
   });
 
   test('going over the target says so rather than showing zero left', async ({ page }) => {
-    await page.goto('/settings');
-    await page.getByRole('button', { name: 'Save' }).first().click();
+    await saveSettings(page);
 
     await page.goto('/food/new');
     await page.getByTestId('meal-name').fill('Big one');
@@ -145,8 +155,7 @@ test.describe('nutrition', () => {
 
   test('the home screen shows what has been eaten against the target', async ({ page }) => {
     // A target only exists once Settings has been saved once.
-    await page.goto('/settings');
-    await page.getByRole('button', { name: 'Save' }).first().click();
+    await saveSettings(page);
 
     await page.goto('/food/new');
     await page.getByTestId('meal-name').fill('Breakfast');

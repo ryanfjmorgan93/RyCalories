@@ -26,6 +26,8 @@ test('capture the nutrition screens', async ({ page }) => {
   await fresh(page);
   await page.goto('/settings');
   await page.getByRole('button', { name: 'Save' }).first().click();
+  // Wait for the write, or the navigation below can abort it and there is no calorie target.
+  await expect(page.getByText('Saved')).toBeVisible();
 
   await page.goto('/food');
   await page.screenshot({ path: `${OUT}/01-food-empty.png` });
