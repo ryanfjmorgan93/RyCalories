@@ -36,6 +36,12 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
         navigateFallback: '/index.html',
+        // Capacitor rewrites cross-origin GETs to a same-origin proxy path and lets its own
+        // WebViewLocalServer answer them, which is how the label lookup gets past CORS on Android.
+        // Being same-origin, that path is inside this service worker's scope, so keep the
+        // navigation fallback away from it — serving index.html in place of a product record would
+        // kill the lookup silently.
+        navigateFallbackDenylist: [/^\/_capacitor_http_interceptor_/],
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         skipWaiting: true,
