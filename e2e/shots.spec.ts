@@ -1,4 +1,4 @@
-import { test, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { fresh } from './fresh';
 
 // Screenshots for design work. SHOT_DIR points them anywhere; the default keeps them out of
@@ -90,4 +90,31 @@ test('capture the nutrition screens', async ({ page }) => {
 
   await page.goto('/routines');
   await page.screenshot({ path: `${OUT}/08-routines.png`, fullPage: true });
+});
+
+test('capture food memory', async ({ page }) => {
+  await fresh(page);
+  await page.goto('/food/new');
+  await page.getByTestId('meal-name').fill('Breakfast');
+  await page.getByTestId('empty-add-food').click();
+  await food(page, { name: 'Porridge oats', grams: 80, kcal: 379, protein: 11, carbs: 60, fat: 8 });
+  await page.getByTestId('save-food').click();
+  await page.getByTestId('add-food').click();
+  await food(page, { name: 'Whey protein', grams: 30, kcal: 400, protein: 80, carbs: 8, fat: 5 });
+  await page.getByTestId('save-food').click();
+  await page.getByTestId('add-food').click();
+  await food(page, { name: 'Banana', grams: 120, kcal: 89, protein: 1.1, carbs: 23, fat: 0.3 });
+  await page.getByTestId('save-food').click();
+  await page.getByTestId('save-meal').click();
+  await page.waitForURL(/\/food\/[0-9a-f-]+$/);
+
+  // The next morning: everything eaten before, offered before a number is typed.
+  await page.goto('/food/new');
+  await page.getByTestId('meal-name').fill('Breakfast');
+  await page.getByTestId('empty-add-food').click();
+  await page.screenshot({ path: `${OUT}/09-food-memory.png` });
+
+  await page.getByTestId('food-name').fill('oat');
+  await expect(page.getByTestId('suggest-Porridge oats')).toBeVisible();
+  await page.screenshot({ path: `${OUT}/10-food-memory-typed.png` });
 });
