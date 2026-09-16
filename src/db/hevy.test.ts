@@ -67,6 +67,19 @@ describe('parsing the real hevy_export.csv', () => {
   });
 });
 
+describe('set_type mapping', () => {
+  const header = 'title,start_time,end_time,description,exercise_title,superset_id,exercise_notes,set_index,set_type,weight_kg,reps,distance_km,duration_seconds,rpe';
+  const row = (setIndex: number, setType: string) =>
+    `"Routine 1 - Lower","12 Aug 2026, 19:31","12 Aug 2026, 21:03","","Romanian Deadlift (Barbell)",,"",${setIndex},"${setType}",110,8,,,`;
+  const SET_TYPES_CSV = [header, row(0, 'normal'), row(1, 'warmup'), row(2, 'failure'), row(3, 'dropset')].join('\n');
+
+  it('maps Hevy set_type onto our four set types: normal→working, warmup→warmup, failure→failure, dropset→drop', () => {
+    const parsed = parseHevyCsv(SET_TYPES_CSV);
+    const sets = parsed.sessions.flatMap((s) => s.sets).sort((a, b) => a.ordinal - b.ordinal);
+    expect(sets.map((s) => s.type)).toEqual(['working', 'warmup', 'failure', 'drop']);
+  });
+});
+
 describe('importing into a seeded database', () => {
   beforeEach(async () => {
     await resetToSeed();

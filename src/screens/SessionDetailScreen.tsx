@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { deleteSession, sessionDetail, type SessionGroup } from '@/db/repo';
 import { sessionSeconds } from '@/db/historyQueries';
 import { fmtDateLong, fmtDuration, fmtKg, fmtNum, fmtWeight, targetLine } from '@/domain/format';
+import { countsForVolume, setBadges } from '@/domain/sets';
 import type { ExerciseKind, ProgressionDecision, Session, SetLog } from '@/domain/types';
 import { Button, IconButton } from '@/ui/components/Button';
 import { Card, Divider, Stat } from '@/ui/components/Card';
@@ -52,7 +53,7 @@ export function SessionDetailScreen() {
   if (!session.endedAt) return null;
 
   const allSets = groups.flatMap((g) => g.sets);
-  const working = allSets.filter((s) => s.type === 'working').length;
+  const working = allSets.filter((s) => countsForVolume(s.type)).length;
   const warmups = allSets.length - working;
 
   return (
@@ -126,7 +127,7 @@ function GroupCard({ group }: { group: SessionGroup }) {
   const nav = useNavigate();
   const { rx, exercise, sets, decision } = group;
   const kind = exercise.kind;
-  const numbers = setNumbers(sets);
+  const badges = setBadges(sets);
   // "Extra" means logged outside the routine; a routine-exercise deleted since is not extra.
   const isExtra = sets[0]?.routineExerciseId === null;
 
@@ -148,7 +149,7 @@ function GroupCard({ group }: { group: SessionGroup }) {
       <div className="border-t border-line">
         {sets.map((s, i) => (
           <div key={s.id} className="flex items-center gap-3 border-b border-line px-4 py-2.5 last:border-b-0">
-            <span className={`num w-7 text-center text-sm font-bold ${s.type === 'warmup' ? 'text-warn' : 'text-muted'}`}>{numbers[i]}</span>
+            <span className={`num w-7 text-center text-sm font-bold ${badges[i] === 'W' ? 'text-warn' : badges[i] === 'D' ? 'text-info' : 'text-muted'}`}>{badges[i]}</span>
             <span className="num flex-1 text-lg font-bold">{setLabel(s, kind)}</span>
             {s.rir !== undefined && <Chip size="sm">RIR {s.rir}</Chip>}
           </div>
@@ -248,12 +249,6 @@ function ChecklistRow({ label, done }: { label: string; done: boolean }) {
       <span className={`num font-bold ${done ? 'text-ok' : 'text-dim'}`}>{done ? '✓' : '–'}</span>
     </div>
   );
-}
-
-/** "W" for warm-ups, else 1..n counting working sets only. */
-function setNumbers(sets: SetLog[]): (string | number)[] {
-  let n = 0;
-  return sets.map((s) => (s.type === 'warmup' ? 'W' : ++n));
 }
 
 function setLabel(s: SetLog, kind: ExerciseKind): string {

@@ -14,7 +14,8 @@ import {
   type PreviousSets,
 } from '@/db/repo';
 import { fmtDate, fmtDuration, fmtKg, fmtNum, fmtWeight, targetLine } from '@/domain/format';
-import type { Exercise, RoutineExercise, Session, SetLog, Settings } from '@/domain/types';
+import { countsForProgression, effortOptions, type EffortScale, formatEffort, setBadges } from '@/domain/sets';
+import type { Exercise, RoutineExercise, Session, SetLog, SetType, Settings } from '@/domain/types';
 import { primeAudio, requestNotificationsOnce, vibrate } from '@/state/notify';
 import { useTimer } from '@/state/timer';
 import { Button, IconButton } from '@/ui/components/Button';
@@ -33,7 +34,7 @@ interface Draft {
   rir: number | null;
   distanceM: number | null;
   seconds: number | null;
-  warmup: boolean;
+  type: SetType;
 }
 
 interface Slot {
@@ -91,7 +92,7 @@ export function LiveSessionScreen() {
   const currentKey = useMemo(() => {
     for (const s of slots) {
       if (s.rx && skipped.has(s.rx.id)) continue;
-      const done = (setsBySlot.get(s.key) ?? []).filter((x) => x.type === 'working').length;
+      const done = (setsBySlot.get(s.key) ?? []).filter((x) => countsForProgression(x.type)).length;
       const target = s.rx?.targetSets ?? 3;
       if (done < target) return s.key;
     }
@@ -272,16 +273,18 @@ function ExerciseCard({
   const timer = useTimer();
 
   const prev = useLiveQuery<PreviousSets | null>(() => previousSets(rx?.id ?? null, exercise.id, session.id), [rx?.id, exercise.id, session.id]);
-  const prevWorking = useMemo(() => (prev?.sets ?? []).filter((s) => s.type === 'working'), [prev]);
+  const prevWorking = useMemo(() => (prev?.sets ?? []).filter((s) => countsForProgression(s.type)), [prev]);
 
-  const workingDone = sets.filter((s) => s.type === 'working').length;
-  const nextIndex = workingDone; // index among working sets
+  const workingDone = sets.filter((s) => countsForProgression(s.type)).length;
+  const nextIndex = workingDone; // index among sets that count for progression
   const target = rx?.targetSets ?? 3;
   const complete = workingDone >= target;
+  const effortScale: EffortScale = settings.effortScale ?? 'rir';
+  const badges = setBadges(sets);
 
   const defaultDraft = useCallback((): Draft => {
     const lastLogged = sets.length ? sets[sets.length - 1] : null;
-    const lastWorking = [...sets].reverse().find((s) => s.type === 'working') ?? null;
+    const lastWorking = [...sets].reverse().find((s) => countsForProgression(s.type)) ?? null;
     const prevSame = prevWorking[nextIndex] ?? prevWorking[prevWorking.length - 1] ?? null;
     let weight: number | null;
     // Keep whatever was actually on the bar this session; otherwise the prescription; otherwise last time.
@@ -298,7 +301,7 @@ function ExerciseCard({
       rir: null,
       distanceM: kind === 'carry' ? prevSame?.distanceM ?? lastLogged?.distanceM ?? rx?.distanceMinM ?? null : null,
       seconds: kind === 'timed' ? prevSame?.seconds ?? lastLogged?.seconds ?? rx?.repMin ?? null : null,
-      warmup: false,
+      type: 'working',
     };
   }, [sets, prevWorking, nextIndex, rx, kind]);
 
@@ -350,14 +353,15 @@ function ExerciseCard({
       sessionId: session.id,
       routineExerciseId: rx?.id ?? null,
       exerciseId: exercise.id,
-      type: draft.warmup ? 'warmup' : 'working',
+      type: draft.type,
       weight: draft.weight ?? 0,
       reps: kind === 'reps' || kind === 'bodyweight_plus' ? (draft.reps ?? undefined) : undefined,
       distanceM: kind === 'carry' ? (draft.distanceM ?? undefined) : undefined,
       seconds: kind === 'carry' || kind === 'timed' ? (draft.seconds ?? undefined) : undefined,
       rir: draft.rir ?? undefined,
     });
-    timer.start(restSecondsFor(rx, exercise, settings), exercise.name);
+    // A drop set follows a working set the timer is already running for.
+    if (draft.type !== 'drop') timer.start(restSecondsFor(rx, exercise, settings), exercise.name);
     } finally {
       busy.current = false;
       setBusyUi(false);
@@ -415,18 +419,18 @@ function ExerciseCard({
 
         {sets.length > 0 && (
           <div className="mt-3 border-t border-line">
-            {sets.map((s) => (
+            {sets.map((s, i) => (
               <button
                 key={s.id}
                 type="button"
                 onClick={() => setEditing(s)}
                 className="flex w-full items-center gap-3 border-b border-line px-4 py-2.5 text-left active:bg-surface-2"
               >
-                <span className={`num w-7 text-center text-sm font-bold ${s.type === 'warmup' ? 'text-warn' : 'text-muted'}`}>
-                  {s.type === 'warmup' ? 'W' : workingNumber(sets, s)}
+                <span className={`num w-7 text-center text-sm font-bold ${badges[i] === 'W' ? 'text-warn' : badges[i] === 'D' ? 'text-info' : 'text-muted'}`}>
+                  {badges[i]}
                 </span>
                 <span className="num flex-1 text-lg font-bold">{setLabel(s, kind)}</span>
-                {s.rir !== undefined && <span className="text-xs font-bold text-muted">RIR {s.rir}</span>}
+                {s.rir !== undefined && <span className="text-xs font-bold text-muted">{formatEffort(s.rir, effortScale)}</span>}
                 <span className="text-ok">
                   <CheckIcon size={20} />
                 </span>
@@ -439,18 +443,27 @@ function ExerciseCard({
           <div className="px-4 pb-4 pt-3">
             <div className="mb-2 flex items-center justify-between">
               <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">
-                {draft.warmup ? 'Warm-up' : complete ? `Set ${nextIndex + 1} (target ${target})` : `Set ${nextIndex + 1} of ${target}`}
+                {draft.type === 'warmup' ? 'Warm-up' : complete ? `Set ${nextIndex + 1} (target ${target})` : `Set ${nextIndex + 1} of ${target}`}
               </div>
-              <div className="flex gap-2">
-                <Chip size="lg" tone="warn" active={draft.warmup} onClick={() => update({ warmup: !draft.warmup })}>
-                  Warm-up
+              {(kind === 'reps' || kind === 'bodyweight_plus') && (
+                <Chip size="lg" active={showRir} onClick={() => setShowRir((v) => !v)}>
+                  {effortScale === 'rpe' ? 'RPE' : 'RIR'}
                 </Chip>
-                {(kind === 'reps' || kind === 'bodyweight_plus') && (
-                  <Chip size="lg" active={showRir} onClick={() => setShowRir((v) => !v)}>
-                    RIR
-                  </Chip>
-                )}
-              </div>
+              )}
+            </div>
+            <div className="mb-2 flex items-center gap-2 overflow-x-auto no-scrollbar">
+              <Chip size="lg" tone="warn" active={draft.type === 'warmup'} onClick={() => update({ type: 'warmup' })}>
+                Warm-up
+              </Chip>
+              <Chip size="lg" active={draft.type === 'working'} onClick={() => update({ type: 'working' })}>
+                Working
+              </Chip>
+              <Chip size="lg" tone="danger" active={draft.type === 'failure'} onClick={() => update({ type: 'failure' })}>
+                Failure
+              </Chip>
+              <Chip size="lg" tone="info" active={draft.type === 'drop'} onClick={() => update({ type: 'drop' })}>
+                Drop
+              </Chip>
             </div>
             <div className="grid grid-cols-2 gap-2">
               {kind !== 'timed' && (
@@ -473,11 +486,11 @@ function ExerciseCard({
               {kind === 'timed' && <NumberField label="Seconds" value={draft.seconds} onChange={(v) => update({ seconds: v })} step={5} mode="numeric" placeholder="s" testId="seconds-input" />}
             </div>
             {showRir && (
-              <div className="mt-2 flex items-center gap-2">
-                <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">RIR</span>
-                {[0, 1, 2, 3, 4, 5].map((n) => (
-                  <Chip key={n} size="lg" className="min-w-11 justify-center px-0" active={draft.rir === n} onClick={() => update({ rir: draft.rir === n ? null : n })}>
-                    {n}
+              <div className="mt-2 flex items-center gap-2 overflow-x-auto no-scrollbar" data-testid="effort-options">
+                <span className="shrink-0 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">{effortScale === 'rpe' ? 'RPE' : 'RIR'}</span>
+                {effortOptions(effortScale).map((o) => (
+                  <Chip key={o.label} size="lg" className="min-w-11 shrink-0 justify-center px-0" active={draft.rir === o.rir} onClick={() => update({ rir: draft.rir === o.rir ? null : o.rir })}>
+                    {o.label}
                   </Chip>
                 ))}
               </div>
@@ -488,11 +501,11 @@ function ExerciseCard({
               disabled={!canLog || busyUi}
               data-testid="set-done"
               className={`mt-3 flex h-16 w-full items-center justify-center gap-2 rounded-2xl text-xl font-extrabold transition-[filter] active:brightness-90 disabled:opacity-40 ${
-                complete && !draft.warmup ? 'bg-surface-2 text-fg border border-line' : 'bg-ok text-ok-fg'
+                complete && draft.type !== 'warmup' ? 'bg-surface-2 text-fg border border-line' : 'bg-ok text-ok-fg'
               }`}
             >
               <CheckIcon />
-              {draft.warmup ? 'Warm-up done' : 'Set done'}
+              {draft.type === 'warmup' ? 'Warm-up done' : draft.type === 'drop' ? 'Drop set done' : 'Set done'}
             </button>
             {slot.optional && sets.length === 0 && (
               <Button className="mt-2" full variant="ghost" onClick={() => rx && void setSkipped(session.id, rx.id, true)}>
@@ -592,6 +605,7 @@ function ExerciseCard({
           set={editing}
           kind={kind}
           increment={inc}
+          effortScale={effortScale}
           onClose={() => setEditing(null)}
           onDelete={async () => {
             await deleteSet(editing.id);
@@ -605,15 +619,6 @@ function ExerciseCard({
       )}
     </div>
   );
-}
-
-function workingNumber(sets: SetLog[], s: SetLog): number {
-  let n = 0;
-  for (const x of sets) {
-    if (x.type === 'working') n++;
-    if (x.id === s.id) break;
-  }
-  return n;
 }
 
 function setLabel(s: SetLog, kind: Exercise['kind']): string {
@@ -632,6 +637,7 @@ function EditSetSheet({
   set,
   kind,
   increment,
+  effortScale,
   onClose,
   onDelete,
   onSave,
@@ -639,6 +645,7 @@ function EditSetSheet({
   set: SetLog;
   kind: Exercise['kind'];
   increment: number;
+  effortScale: EffortScale;
   onClose: () => void;
   onDelete: () => void;
   onSave: (patch: Partial<Pick<SetLog, 'weight' | 'reps' | 'rir' | 'type' | 'distanceM' | 'seconds'>>) => void;
@@ -648,15 +655,21 @@ function EditSetSheet({
   const [distanceM, setDistance] = useState<number | null>(set.distanceM ?? null);
   const [seconds, setSeconds] = useState<number | null>(set.seconds ?? null);
   const [rir, setRir] = useState<number | null>(set.rir ?? null);
-  const [type, setType] = useState(set.type);
+  const [type, setType] = useState<SetType>(set.type);
   return (
     <Sheet open onClose={onClose} title={`Edit set`}>
-      <div className="mb-3 flex gap-2">
+      <div className="mb-3 flex items-center gap-2 overflow-x-auto no-scrollbar">
+        <Chip tone="warn" active={type === 'warmup'} onClick={() => setType('warmup')}>
+          Warm-up
+        </Chip>
         <Chip active={type === 'working'} onClick={() => setType('working')}>
           Working
         </Chip>
-        <Chip tone="warn" active={type === 'warmup'} onClick={() => setType('warmup')}>
-          Warm-up
+        <Chip tone="danger" active={type === 'failure'} onClick={() => setType('failure')}>
+          Failure
+        </Chip>
+        <Chip tone="info" active={type === 'drop'} onClick={() => setType('drop')}>
+          Drop
         </Chip>
       </div>
       <div className="grid grid-cols-2 gap-2">
@@ -666,11 +679,11 @@ function EditSetSheet({
         {(kind === 'carry' || kind === 'timed') && <NumberField label="Seconds" value={seconds} onChange={setSeconds} step={5} mode="numeric" />}
       </div>
       {(kind === 'reps' || kind === 'bodyweight_plus') && (
-        <div className="mt-3 flex items-center gap-2">
-          <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">RIR</span>
-          {[0, 1, 2, 3, 4, 5].map((n) => (
-            <Chip key={n} size="sm" active={rir === n} onClick={() => setRir(rir === n ? null : n)}>
-              {n}
+        <div className="mt-3 flex items-center gap-2 overflow-x-auto no-scrollbar">
+          <span className="shrink-0 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">{effortScale === 'rpe' ? 'RPE' : 'RIR'}</span>
+          {effortOptions(effortScale).map((o) => (
+            <Chip key={o.label} size="sm" className="shrink-0" active={rir === o.rir} onClick={() => setRir(rir === o.rir ? null : o.rir)}>
+              {o.label}
             </Chip>
           ))}
         </div>

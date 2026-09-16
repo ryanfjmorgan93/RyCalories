@@ -5,6 +5,7 @@ import { db } from '@/db/db';
 import { routineUsageForExercise, type RoutineUsage } from '@/db/exerciseDetailQueries';
 import { exerciseHistory, lockInRoutineExercise, unlockRoutineExercise, type HistoryEntry } from '@/db/repo';
 import { fmtDate, fmtDateLong, fmtKg, fmtNum, fmtWeight, targetLine } from '@/domain/format';
+import { countsForProgression, countsForRecords } from '@/domain/sets';
 import type { Exercise, ExerciseKind, ProgressionDecision, ProgressionRule, RoutineExercise, SetLog } from '@/domain/types';
 import { Button } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row, SectionTitle } from '@/ui/components/Card';
@@ -299,7 +300,7 @@ function chartPointsFor(history: HistoryEntry[], kind: ExerciseKind): ChartPoint
     if (Number.isNaN(t)) continue;
     let y = h.topWeight;
     if (kind === 'timed') {
-      const secs = h.sets.filter((s) => s.type === 'working').map((s) => s.seconds ?? 0);
+      const secs = h.sets.filter((s) => countsForProgression(s.type)).map((s) => s.seconds ?? 0);
       if (secs.length === 0) continue;
       y = Math.max(...secs);
     }
@@ -308,15 +309,17 @@ function chartPointsFor(history: HistoryEntry[], kind: ExerciseKind): ChartPoint
   return pts.sort((a, b) => a.t - b.t);
 }
 
-/** "110 × 8, 8, 8, 8" — consecutive working sets grouped by weight; warm-ups appended dimmed. */
+/** "110 × 8, 8, 8, 8" — sets that count for records grouped by weight; warm-ups and drop sets appended dimmed. */
 function SetsLine({ sets, kind }: { sets: SetLog[]; kind: ExerciseKind }) {
-  const working = useMemo(() => sets.filter((s) => s.type === 'working'), [sets]);
+  const counted = useMemo(() => sets.filter((s) => countsForRecords(s.type)), [sets]);
   const warmups = useMemo(() => sets.filter((s) => s.type === 'warmup'), [sets]);
-  const main = working.length ? groupedLine(working, kind) : 'no working sets';
+  const drops = useMemo(() => sets.filter((s) => s.type === 'drop'), [sets]);
+  const main = counted.length ? groupedLine(counted, kind) : 'no working sets';
   return (
     <span>
       <span className="num">{main}</span>
-      {warmups.length > 0 && <span className="text-dim"> · W: {warmups.map((s) => warmupLabel(s, kind)).join(', ')}</span>}
+      {warmups.length > 0 && <span className="text-dim"> · W: {warmups.map((s) => dimSetLabel(s, kind)).join(', ')}</span>}
+      {drops.length > 0 && <span className="text-dim"> · D: {drops.map((s) => dimSetLabel(s, kind)).join(', ')}</span>}
     </span>
   );
 }
@@ -348,7 +351,7 @@ function groupedLine(sets: SetLog[], kind: ExerciseKind): string {
   return groups.map((g) => `${g.w} × ${g.reps.join(', ')}`).join(' · ');
 }
 
-function warmupLabel(s: SetLog, kind: ExerciseKind): string {
+function dimSetLabel(s: SetLog, kind: ExerciseKind): string {
   if (kind === 'carry') return `${fmtNum(s.weight)}×${s.distanceM !== undefined ? `${fmtNum(s.distanceM)}m` : `${fmtNum(s.seconds ?? 0)}s`}`;
   if (kind === 'timed') return `${fmtNum(s.seconds ?? 0)}s`;
   return `${weightLabel(s, kind)}×${s.reps ?? 0}`;

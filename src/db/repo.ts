@@ -19,6 +19,7 @@ import {
   type Suggestion,
 } from '@/domain/engine';
 import { uuid } from '@/domain/ids';
+import { countsForRecords, countsForVolume } from '@/domain/sets';
 import {
   DEFAULT_SETTINGS,
   type Bodyweight,
@@ -597,7 +598,7 @@ export async function buildSummary(sessionId: string, now = nowIso()): Promise<S
     routine,
     items,
     setsDone: allSets.length,
-    workingSetsDone: allSets.filter((s) => s.type === 'working').length,
+    workingSetsDone: allSets.filter((s) => countsForVolume(s.type)).length,
     durationSec,
   };
 }
@@ -711,11 +712,11 @@ export async function recentSessions(limit = 3): Promise<Session[]> {
 export interface HistoryEntry {
   session: Session;
   sets: SetLog[];
-  /** Heaviest working-set weight (0 when none). */
+  /** Heaviest weight among sets that count for records (working/failure; 0 when none). */
   topWeight: number;
-  /** Reps on the heaviest working set. */
+  /** Reps on that set. */
   topReps: number | undefined;
-  /** Sum of weight × reps over working sets. */
+  /** Sum of weight × reps over every set that counts for volume (everything but warm-ups). */
   volume: number;
 }
 
@@ -732,14 +733,15 @@ export async function exerciseHistory(exerciseId: string): Promise<HistoryEntry[
   sessions.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   return sessions.map((session) => {
     const ss = (bySession.get(session.id) ?? []).sort(byIndex);
-    const working = ss.filter((x) => x.type === 'working');
-    const top = working.reduce<SetLog | null>((best, x) => (best === null || x.weight > best.weight ? x : best), null);
+    const records = ss.filter((x) => countsForRecords(x.type));
+    const volumeSets = ss.filter((x) => countsForVolume(x.type));
+    const top = records.reduce<SetLog | null>((best, x) => (best === null || x.weight > best.weight ? x : best), null);
     return {
       session,
       sets: ss,
       topWeight: top?.weight ?? 0,
       topReps: top?.reps,
-      volume: working.reduce((sum, x) => sum + x.weight * (x.reps ?? 0), 0),
+      volume: volumeSets.reduce((sum, x) => sum + x.weight * (x.reps ?? 0), 0),
     };
   });
 }

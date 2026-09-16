@@ -16,15 +16,24 @@ import { findExerciseByName, lockInRoutineExercise, logBodyweight, normaliseName
 import { stableUuid } from '@/domain/ids';
 import { roundKg } from '@/domain/engine';
 import { toDateKey } from '@/domain/dates';
-import type { Exercise, ExerciseKind, MuscleGroup, Routine, RoutineExercise, Session, SetLog } from '@/domain/types';
+import { countsForProgression } from '@/domain/sets';
+import type { Exercise, ExerciseKind, MuscleGroup, Routine, RoutineExercise, Session, SetLog, SetType } from '@/domain/types';
 
 export type HevyFileKind = 'workouts' | 'measurements' | 'unknown';
+
+/** Hevy's `set_type` column, lower-cased, mapped onto our four set types. */
+function hevySetType(raw: string): SetType {
+  if (raw === 'warmup') return 'warmup';
+  if (raw === 'failure') return 'failure';
+  if (raw === 'dropset') return 'drop';
+  return 'working';
+}
 
 export interface HevySet {
   exerciseTitle: string;
   /** Ordinal of this set within the exercise for the session (file order). */
   ordinal: number;
-  type: 'warmup' | 'working';
+  type: SetType;
   hevySetType: string;
   weight: number | null;
   reps?: number;
@@ -163,7 +172,7 @@ export function parseHevyCsv(text: string): HevyParsed {
     const ordKey = `${key}|${exerciseTitle}`;
     const ordinal = ordinals.get(ordKey) ?? 0;
     ordinals.set(ordKey, ordinal + 1);
-    const hevySetType = (row.set_type ?? 'normal').trim().toLowerCase();
+    const rawSetType = (row.set_type ?? 'normal').trim().toLowerCase();
     const rawWeight = hasLbs ? num(row.weight_lbs) : num(row.weight_kg);
     const weight = rawWeight === null ? null : hasLbs ? roundKg(rawWeight * 0.45359237) : rawWeight;
     const reps = num(row.reps);
@@ -173,8 +182,8 @@ export function parseHevyCsv(text: string): HevyParsed {
     const set: HevySet = {
       exerciseTitle,
       ordinal,
-      type: hevySetType === 'warmup' ? 'warmup' : 'working',
-      hevySetType,
+      type: hevySetType(rawSetType),
+      hevySetType: rawSetType,
       weight,
       reps: reps === null ? undefined : Math.max(0, Math.round(reps)),
       distanceM: km === null ? undefined : Math.round(km * 1000),
@@ -520,7 +529,7 @@ export async function reconcileWeights(): Promise<WeightReconcileRow[]> {
       sessions.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
       const latest = sessions[0];
       if (!latest) continue;
-      const working = sets.filter((s) => s.sessionId === latest.id && s.type === 'working');
+      const working = sets.filter((s) => s.sessionId === latest.id && countsForProgression(s.type));
       if (working.length === 0) continue;
       const w = working[0].weight;
       if (!working.every((s) => s.weight === w)) continue;

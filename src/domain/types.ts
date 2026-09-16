@@ -220,6 +220,11 @@ export interface Settings {
    * which reads as on — so check `!== false`, never truthiness.
    */
   productLookup?: boolean;
+  /**
+   * Which effort scale the session UI shows and edits in. Always stored as RIR regardless.
+   * Absent = RIR.
+   */
+  effortScale?: 'rir' | 'rpe';
   /** Seed data version, so future seed changes can migrate. */
   seedVersion: number;
   /** ISO timestamp of first run. */

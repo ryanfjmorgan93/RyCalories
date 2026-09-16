@@ -7,6 +7,7 @@ import { SEED_EXERCISE_IDS } from './seed';
 import type { CheckInInput, CheckInLift, CheckInNiggle, CheckInSession } from '@/domain/checkin';
 import { windowStart } from '@/domain/checkin';
 import { isoToDateKey } from '@/domain/dates';
+import { countsForProgression } from '@/domain/sets';
 import type { Routine, RoutineExercise, Session } from '@/domain/types';
 
 /** The four lifts named in the brief, in report order. */
@@ -35,7 +36,7 @@ export async function checkInLifts(): Promise<CheckInLift[]> {
     if (!rx) continue;
     const prev = await previousSets(rx.id, exerciseId, '');
     const lastSessionReps = prev
-      ? prev.sets.filter((s) => s.type === 'working' && typeof s.reps === 'number').map((s) => s.reps as number)
+      ? prev.sets.filter((s) => countsForProgression(s.type) && typeof s.reps === 'number').map((s) => s.reps as number)
       : undefined;
     out.push({
       name: exercise.name,

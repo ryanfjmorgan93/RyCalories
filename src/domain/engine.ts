@@ -1,14 +1,19 @@
 /**
  * The progression engine. Pure functions only — no IO, no dates, no DB.
  *
+ * Four set types (see `domain/sets.ts`): warm-up, working, failure, drop.
+ *   - working and failure sets both drive progression (`countsForProgression`); a failure set
+ *     with no RIR logged reads as RIR 0, so it never qualifies for the double-increment nudge.
+ *   - warm-up and drop sets are ignored entirely by the engine.
+ *
  * Double progression (§4.1):
- *   - every working set ≥ repMax  → increase by `increment`
+ *   - every counted set ≥ repMax   → increase by `increment`
  *   - otherwise                    → hold
- *   - fewer working sets than targetSets → hold (missing sets count as misses)
- *   - warm-up sets are ignored entirely
+ *   - fewer counted sets than targetSets → hold (missing sets count as misses)
  *   - calibrating exercises produce no decision
  *   - carry / timed exercises never produce a weight decision
  */
+import { countsForProgression, effortRir } from './sets';
 import type { ExerciseKind, ProgressionMode, ProgressionRule, SetType } from './types';
 
 export interface EngineRoutineExercise {
@@ -59,7 +64,7 @@ export function roundKg(n: number): number {
 }
 
 export function workingSets(sets: EngineSet[]): EngineSet[] {
-  return sets.filter((s) => s.type === 'working');
+  return sets.filter((s) => countsForProgression(s.type));
 }
 
 /** Kinds the engine will never write a weight decision for. */
@@ -128,8 +133,9 @@ export function suggestDoubleIncrement(rx: EngineRoutineExercise, decision: Deci
   if (decision.rule !== 'increase') return null;
   const working = workingSets(sets);
   if (working.length === 0) return null;
-  if (!working.every((s) => typeof s.rir === 'number' && s.rir >= 3)) return null;
-  const minRir = Math.min(...working.map((s) => s.rir as number));
+  const rirs = working.map((s) => effortRir(s));
+  if (!rirs.every((r) => typeof r === 'number' && r >= 3)) return null;
+  const minRir = Math.min(...(rirs as number[]));
   const baseWeight = decision.sessionWeight ?? rx.currentWeight;
   return { kind: 'double_increment', toWeight: roundKg(baseWeight + rx.increment * 2), minRir };
 }

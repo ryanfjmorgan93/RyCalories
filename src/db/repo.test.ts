@@ -281,6 +281,31 @@ describe('sessions and progression (acceptance §11)', () => {
     expect(history[0].volume).toBe(110 * 32);
   });
 
+  it('exercise history volume includes drop sets and excludes warm-ups; topWeight ignores drop sets', async () => {
+    const session = await startSession(HINGE);
+    const rx = await rxFor(HINGE, RDL);
+    await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'warmup', weight: 60, reps: 5 });
+    for (const r of [8, 8, 8, 8]) await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 110, reps: r });
+    await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'drop', weight: 90, reps: 10 });
+    await finishSession(session.id, { choices: [{ routineExerciseId: rx.id }] });
+    const history = await exerciseHistory(RDL);
+    expect(history[0].topWeight).toBe(110);
+    // volume = warm-up excluded (60*5), working 110*32, drop 90*10 included.
+    expect(history[0].volume).toBe(110 * 32 + 90 * 10);
+  });
+
+  it('buildSummary().workingSetsDone counts working + failure + drop, not warm-ups', async () => {
+    const session = await startSession(HINGE);
+    const rx = await rxFor(HINGE, RDL);
+    await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'warmup', weight: 60, reps: 5 });
+    await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 110, reps: 8 });
+    await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'failure', weight: 110, reps: 7 });
+    await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'drop', weight: 90, reps: 10 });
+    const summary = await buildSummary(session.id);
+    expect(summary.setsDone).toBe(4);
+    expect(summary.workingSetsDone).toBe(3);
+  });
+
   it('bodyweight upserts by date', async () => {
     await logBodyweight('2026-09-08', 74.2);
     await logBodyweight('2026-09-08', 74.4, 'evening');

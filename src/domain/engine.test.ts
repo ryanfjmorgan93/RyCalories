@@ -34,6 +34,14 @@ function warmup(weight: number, reps: number): EngineSet {
   return { type: 'warmup', weight, reps };
 }
 
+function failure(weight: number, reps: number, rir?: number): EngineSet {
+  return { type: 'failure', weight, reps, rir };
+}
+
+function drop(weight: number, reps: number): EngineSet {
+  return { type: 'drop', weight, reps };
+}
+
 describe('double progression — §4.1 worked example (RDL 4 × 6–8 @ 110, +5)', () => {
   it('runs the five-session table exactly', () => {
     let rx = { ...rdl };
@@ -107,6 +115,51 @@ describe('warm-ups are ignored entirely', () => {
     const d = decide(rdl, sets);
     expect(d.rule).toBe('hold_missing_sets');
     expect(d.toWeight).toBe(110);
+  });
+});
+
+describe('failure and drop sets (domain/sets.ts helpers)', () => {
+  it('a failure set counts toward the increase like a working set', () => {
+    const sets = [...working(110, [8, 8, 8]), failure(110, 8)];
+    const d = decide(rdl, sets);
+    expect(d.rule).toBe('increase');
+    expect(d.toWeight).toBe(115);
+    expect(d.workingSets).toBe(4);
+  });
+
+  it('a failure set with a low rep still blocks the increase', () => {
+    const sets = [...working(110, [8, 8, 8]), failure(110, 5)];
+    const d = decide(rdl, sets);
+    expect(d.rule).toBe('hold');
+  });
+
+  it('drop sets are ignored: they never count toward targetSets and never cause hold_missing_sets', () => {
+    const sets = [...working(110, [8, 8, 8, 8]), drop(80, 20)];
+    const d = decide(rdl, sets);
+    expect(d.rule).toBe('increase');
+    expect(d.workingSets).toBe(4);
+    expect(d.workingReps).toEqual([8, 8, 8, 8]);
+  });
+
+  it('a drop set does not make up for a missing counted set', () => {
+    const sets = [...working(110, [8, 8, 8]), drop(80, 20)];
+    const d = decide(rdl, sets);
+    expect(d.rule).toBe('hold_missing_sets');
+    expect(d.workingSets).toBe(3);
+  });
+
+  it('double-increment refuses when a counted set is a failure with no RIR logged (reads as RIR 0)', () => {
+    const sets = [...working(110, [8, 8, 8], 4), failure(110, 8)];
+    const d = decide(rdl, sets);
+    expect(d.rule).toBe('increase');
+    expect(suggestDoubleIncrement(rdl, d, sets)).toBeNull();
+  });
+
+  it('double-increment respects an explicit RIR logged on a failure set', () => {
+    const sets = [...working(110, [8, 8, 8], 4), failure(110, 8, 3)];
+    const d = decide(rdl, sets);
+    expect(d.rule).toBe('increase');
+    expect(suggestDoubleIncrement(rdl, d, sets)).toEqual({ kind: 'double_increment', toWeight: 120, minRir: 3 });
   });
 });
 
