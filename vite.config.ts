@@ -34,7 +34,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,webp,ico,woff2,wasm}'],
         navigateFallback: '/index.html',
         // Capacitor rewrites cross-origin GETs to a same-origin proxy path and lets its own
         // WebViewLocalServer answer them, which is how the label lookup gets past CORS on Android.

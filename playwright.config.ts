@@ -1,7 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 import { existsSync } from 'node:fs';
 
-const PORT = 4173;
+// Overridable so two suites can run side by side (each worktree of a parallel build gets its own port).
+const PORT = Number(process.env.PW_PORT ?? 4173);
 
 // The sandbox ships a pre-installed Chromium at a fixed path; CI installs its own. Only pin an
 // executable when one is actually there, so the same config works in both.
