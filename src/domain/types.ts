@@ -6,7 +6,7 @@
 
 export type ExerciseKind = 'reps' | 'bodyweight_plus' | 'carry' | 'timed';
 export type ProgressionMode = 'normal' | 'calibrating';
-export type SetType = 'warmup' | 'working';
+export type SetType = 'warmup' | 'working' | 'failure' | 'drop';
 
 export type MuscleGroup =
   | 'hamstrings'
