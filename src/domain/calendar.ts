@@ -2,19 +2,7 @@
  * Training calendar: the weekly grid and the consistency streak. Pure functions only — no IO,
  * no clock, no database.
  */
-import { addDays, dateKeyToDate, daysBetween, isoToDateKey } from './dates';
-
-/**
- * Monday (YYYY-MM-DD) of the local week containing `dateKey`. Kept private and duplicated from
- * volume.ts's mondayOf rather than imported, per this module's import allowlist (./types, ./sets,
- * ./dates, ./format, ./engine only) — the two must agree on what a week is, so keep the logic
- * identical if either changes.
- */
-function mondayOf(dateKey: string): string {
-  const dow = dateKeyToDate(dateKey).getDay(); // 0 = Sunday .. 6 = Saturday
-  const diffToMonday = dow === 0 ? 6 : dow - 1;
-  return addDays(dateKey, -diffToMonday);
-}
+import { addDays, daysBetween, isoToDateKey, mondayOf } from './dates';
 
 export interface CalendarSession {
   id: string;

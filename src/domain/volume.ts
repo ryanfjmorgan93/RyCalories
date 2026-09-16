@@ -1,9 +1,11 @@
 /**
  * Session and weekly training volume. Pure functions only — no IO, no clock, no database.
  */
-import { addDays, dateKeyToDate, daysBetween, isoToDateKey } from './dates';
+import { daysBetween, isoToDateKey, mondayOf } from './dates';
 import { countsForProgression, countsForVolume } from './sets';
 import type { MuscleGroup, SetType } from './types';
+
+export { mondayOf };
 
 /** Total kg×reps over the sets that count for volume (everything but a warm-up). */
 export function sessionVolume(sets: { type: SetType; weight: number; reps?: number }[]): number {
@@ -20,14 +22,6 @@ export interface MuscleSetRow {
   type: SetType;
   /** ISO timestamp. */
   completedAt: string;
-}
-
-/** Monday (YYYY-MM-DD) of the local week containing `dateKey`. */
-export function mondayOf(dateKey: string): string {
-  // getDay(): 0 = Sunday .. 6 = Saturday. Days to subtract to reach Monday.
-  const dow = dateKeyToDate(dateKey).getDay();
-  const diffToMonday = dow === 0 ? 6 : dow - 1;
-  return addDays(dateKey, -diffToMonday);
 }
 
 /**

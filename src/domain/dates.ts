@@ -35,3 +35,9 @@ export function daysBetween(a: string, b: string): number {
 export function isSameLocalDay(isoA: string, isoB: string): boolean {
   return isoToDateKey(isoA) === isoToDateKey(isoB);
 }
+
+/** Monday (YYYY-MM-DD) of the local week containing `key`. Weeks run Monday to Sunday everywhere in the app. */
+export function mondayOf(key: string): string {
+  const dow = dateKeyToDate(key).getDay(); // 0 = Sunday .. 6 = Saturday
+  return addDays(key, -(dow === 0 ? 6 : dow - 1));
+}
