@@ -1,10 +1,14 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useState } from 'react';
 import { db } from '@/db/db';
-import { getActiveSession, lastCompletedSession, recentSessions, routineItems, type RoutineItem } from '@/db/repo';
+import { calendarData, type CalendarData } from '@/db/calendarQueries';
 import { getMeal, loggedDays, mealsOnDay, recentMeals, suggestFoods, type MealWithItems } from '@/db/foodRepo';
+import { nextSessionPlan, type SessionPlan } from '@/db/planQueries';
+import { e1rmSeries, recentRecords, volumeSeries } from '@/db/recordsQueries';
+import { exerciseHistory, getActiveSession, lastCompletedSession, recentSessions, routineItems, type RoutineItem } from '@/db/repo';
+import { muscleRecency, weeklySetsTable, type WeeklySetsRow } from '@/db/volumeQueries';
 import { toDateKey } from '@/domain/dates';
-import type { Exercise, FoodMemory, Routine, Session, Settings } from '@/domain/types';
+import type { Exercise, FoodMemory, MuscleGroup, Routine, Session, Settings } from '@/domain/types';
 
 /** Live settings row (undefined while loading). */
 export function useSettings(): Settings | undefined {
@@ -125,4 +129,41 @@ export function useFoodSuggestions(query: string | null, limit = 6): FoodMemory[
 /** Distinct meals eaten recently, for repeating one onto `date`. */
 export function useRecentMeals(date: string, limit = 8): MealWithItems[] | undefined {
   return useLiveQuery(() => recentMeals(date, limit), [date, limit]);
+}
+
+// ---------------------------------------------------------------------------
+// Training queries (WP3)
+
+/** The next session's plan for a routine (undefined while `routineId`/`settings` are not ready). */
+export function useNextSessionPlan(routineId: string | undefined, settings: Settings | undefined, deload = false): SessionPlan | null | undefined {
+  return useLiveQuery(() => (routineId && settings ? nextSessionPlan(routineId, settings, { deload }) : undefined), [routineId, settings, deload]);
+}
+
+/** The training calendar grid and streak. */
+export function useCalendar(weeks: number, today: string, settings: Settings | undefined): CalendarData | undefined {
+  return useLiveQuery(() => (settings ? calendarData(weeks, today, settings) : undefined), [weeks, today, settings]);
+}
+
+/** This week's sets per muscle group against any target, sorted by sets descending. */
+export function useWeeklySets(weekStart: string, settings: Settings | undefined): WeeklySetsRow[] | undefined {
+  return useLiveQuery(() => (settings ? weeklySetsTable(weekStart, settings) : undefined), [weekStart, settings]);
+}
+
+/** Days since the most recent counted set per muscle group. */
+export function useMuscleRecency(today: string): Partial<Record<MuscleGroup, number>> | undefined {
+  return useLiveQuery(() => muscleRecency(today), [today]);
+}
+
+/** The most recent personal records across every exercise, newest first. */
+export function useRecentRecords(limit = 10) {
+  return useLiveQuery(() => recentRecords(limit), [limit]);
+}
+
+/** e1RM and volume series for an exercise's chart, plus its existing top-set history. */
+export function useExerciseSeries(exerciseId: string | undefined) {
+  return useLiveQuery(async () => {
+    if (!exerciseId) return undefined;
+    const [history, e1rm, volume] = await Promise.all([exerciseHistory(exerciseId), e1rmSeries(exerciseId), volumeSeries(exerciseId)]);
+    return { history, e1rm, volume };
+  }, [exerciseId]);
 }
