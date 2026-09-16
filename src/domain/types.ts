@@ -297,7 +297,7 @@ export const DEFAULT_SETTINGS: Omit<Settings, 'id' | 'createdAt'> = {
   restVibrate: true,
   restNotify: true,
   productLookup: true,
-  seedVersion: 1,
+  seedVersion: 2,
   barKg: 20,
   plates: [25, 20, 15, 10, 5, 2.5, 1.25],
   deloadPercent: 0.9,

@@ -19,7 +19,8 @@ import {
   type Suggestion,
 } from '@/domain/engine';
 import { uuid } from '@/domain/ids';
-import { countsForRecords, countsForVolume } from '@/domain/sets';
+import type { PersonalRecord } from '@/domain/records';
+import { countsForProgression, countsForRecords, countsForVolume } from '@/domain/sets';
 import {
   DEFAULT_SETTINGS,
   type Bodyweight,
@@ -33,6 +34,7 @@ import {
   type SetType,
   type Settings,
 } from '@/domain/types';
+import { recordsForNewSets } from './recordsQueries';
 
 // ---------------------------------------------------------------------------
 // Seeding
@@ -72,6 +74,32 @@ export async function wipeAll(): Promise<void> {
     for (const t of db.tables) await t.clear();
   });
   await db.settings.put({ id: 'settings', ...DEFAULT_SETTINGS, createdAt: nowIso() });
+}
+
+/**
+ * Backfill `equipment` / `demo` / `standard` onto the seed exercise rows for installs seeded
+ * before those fields existed. Idempotent (guarded by `settings.seedVersion`), and never
+ * overwrites a field the user has already set — only fields the stored row lacks are patched.
+ * Fresh installs are already seeded with the fields (seedAll writes the current SEED_EXERCISES
+ * and DEFAULT_SETTINGS.seedVersion is 2), so this is a no-op for them.
+ */
+export async function migrateSeed(): Promise<void> {
+  await db.transaction('rw', [db.exercises, db.settings], async () => {
+    const settings = await db.settings.get('settings');
+    if (settings && (settings.seedVersion ?? 1) >= 2) return;
+    for (const seedEx of SEED_EXERCISES) {
+      const stored = await db.exercises.get(seedEx.id);
+      if (!stored) continue;
+      const patch: Partial<Pick<Exercise, 'equipment' | 'demo' | 'standard'>> = {};
+      if (stored.equipment === undefined && seedEx.equipment !== undefined) patch.equipment = seedEx.equipment;
+      if (stored.demo === undefined && seedEx.demo !== undefined) patch.demo = seedEx.demo;
+      if (stored.standard === undefined && seedEx.standard !== undefined) patch.standard = seedEx.standard;
+      if (Object.keys(patch).length > 0) await db.exercises.update(seedEx.id, patch);
+    }
+    // Deliberately db.settings.update, not saveSettings: saveSettings stamps calorieStartDate on
+    // an install that never saved Settings, which this migration must not trigger as a side effect.
+    if (settings) await db.settings.update('settings', { seedVersion: 2 });
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -295,6 +323,40 @@ export async function reorderRoutineExercises(ids: string[]): Promise<void> {
   });
 }
 
+/**
+ * Toggle a superset between a routine-exercise and the one immediately after it in `order`.
+ * Adjacent only — there is no target parameter, the "next" item is whatever follows `rxId`.
+ * Refuses silently (no-op) when there is no next item, or when one side is optional and the
+ * other is not (the optional tail cannot be supersetted with required work).
+ *
+ * Already linked to the next item → unlink: `rx` always loses its supersetId; the next item
+ * keeps its supersetId only if a third member of the same group is still relying on it (a chain
+ * of three loses its first link and stays a chain of two), otherwise it is cleared too.
+ * Not linked → link: both take the next item's existing supersetId, or a fresh one.
+ */
+export async function toggleSupersetWithNext(routineId: string, rxId: string): Promise<void> {
+  await db.transaction('rw', db.routineExercises, async () => {
+    const list = await db.routineExercises.where('routineId').equals(routineId).sortBy('order');
+    const idx = list.findIndex((r) => r.id === rxId);
+    if (idx === -1) return;
+    const rx = list[idx];
+    const next = list[idx + 1];
+    if (!next) return;
+    if (rx.optional !== next.optional) return;
+
+    if (rx.supersetId !== undefined && rx.supersetId === next.supersetId) {
+      const groupSize = list.filter((r) => r.supersetId === rx.supersetId).length;
+      await db.routineExercises.update(rx.id, { supersetId: undefined });
+      if (groupSize <= 2) await db.routineExercises.update(next.id, { supersetId: undefined });
+      return;
+    }
+
+    const supersetId = next.supersetId ?? uuid();
+    await db.routineExercises.update(rx.id, { supersetId });
+    await db.routineExercises.update(next.id, { supersetId });
+  });
+}
+
 /** Lock a calibrating routine-exercise in at `weight`; double progression starts next session. */
 export async function lockInRoutineExercise(id: string, weight: number, sessionId = ''): Promise<void> {
   await db.transaction('rw', [db.routineExercises, db.decisions], async () => {
@@ -334,12 +396,18 @@ export async function getActiveSession(): Promise<Session | undefined> {
 }
 
 /** Start a session for a routine. If one is already live, it is returned instead. */
-export async function startSession(routineId: string): Promise<Session> {
+export async function startSession(routineId: string, opts?: { deload?: boolean }): Promise<Session> {
   return db.transaction('rw', [db.sessions, db.routines], async () => {
     const active = await getActiveSession();
     if (active) return active;
     const routine = await db.routines.get(routineId);
-    const s: Session = { id: uuid(), routineId, title: routine?.name ?? 'Session', startedAt: nowIso() };
+    const s: Session = {
+      id: uuid(),
+      routineId,
+      title: routine?.name ?? 'Session',
+      startedAt: nowIso(),
+      ...(opts?.deload ? { deload: true } : {}),
+    };
     await db.sessions.put(s);
     return s;
   });
@@ -384,6 +452,31 @@ export async function removeExtraExercise(sessionId: string, exerciseId: string)
     await db.sessions.update(sessionId, { extraExerciseIds: (s.extraExerciseIds ?? []).filter((id) => id !== exerciseId) });
     const sets = await db.setLogs.where('[sessionId+exerciseId]').equals([sessionId, exerciseId]).toArray();
     await db.setLogs.bulkDelete(sets.filter((x) => x.routineExerciseId === null).map((x) => x.id));
+  });
+}
+
+/** Swap a slot for a substitute exercise, for this session only: skips the slot, logs the substitute as an extra. */
+export async function swapExercise(sessionId: string, rxId: string, exerciseId: string): Promise<void> {
+  await db.transaction('rw', [db.sessions, db.setLogs], async () => {
+    await setSkipped(sessionId, rxId, true);
+    await addExtraExercise(sessionId, exerciseId);
+    const s = await db.sessions.get(sessionId);
+    if (!s) return;
+    await db.sessions.update(sessionId, { swaps: { ...(s.swaps ?? {}), [rxId]: exerciseId } });
+  });
+}
+
+/** Undo a swap: removes the substitute's extra sets, unskips the original slot. */
+export async function undoSwap(sessionId: string, rxId: string): Promise<void> {
+  await db.transaction('rw', [db.sessions, db.setLogs], async () => {
+    const s = await db.sessions.get(sessionId);
+    if (!s) return;
+    const exerciseId = s.swaps?.[rxId];
+    if (exerciseId !== undefined) await removeExtraExercise(sessionId, exerciseId);
+    await setSkipped(sessionId, rxId, false);
+    const swaps = { ...(s.swaps ?? {}) };
+    delete swaps[rxId];
+    await db.sessions.update(sessionId, { swaps });
   });
 }
 
@@ -537,6 +630,8 @@ export interface SummaryItem {
   suggestions: Suggestion[];
   /** Present for calibrating exercises with working sets: the default lock-in weight. */
   lockIn: { suggested: number } | null;
+  /** Personal records set by this item's sets this session (computed for extras too). */
+  records: PersonalRecord[];
 }
 
 export interface SessionSummary {
@@ -560,11 +655,11 @@ export async function buildSummary(sessionId: string, now = nowIso()): Promise<S
     for (const { rx, exercise } of await routineItems(routine.id)) {
       const sets = allSets.filter((s) => s.routineExerciseId === rx.id);
       if (sets.length === 0) {
-        items.push({ rx, exercise, sets, status: skipped.has(rx.id) ? 'skipped' : 'not_done', decision: null, suggestions: [], lockIn: null });
+        items.push({ rx, exercise, sets, status: skipped.has(rx.id) ? 'skipped' : 'not_done', decision: null, suggestions: [], lockIn: null, records: [] });
         continue;
       }
       const engineRx = toEngine(rx, exercise);
-      const decision = decide(engineRx, sets);
+      const decision = decide(engineRx, sets, { deload: !!session.deload });
       const suggestions: Suggestion[] = [];
       const dbl = suggestDoubleIncrement(engineRx, decision, sets);
       if (dbl) suggestions.push(dbl);
@@ -580,7 +675,8 @@ export async function buildSummary(sessionId: string, now = nowIso()): Promise<S
         decision.rule === 'calibrating' && suggestedLockInWeight(sets) !== null
           ? { suggested: suggestedLockInWeight(sets) as number }
           : null;
-      items.push({ rx, exercise, sets, status: 'done', decision, suggestions, lockIn });
+      const records = await recordsForNewSets(exercise.id, sessionId, sets);
+      items.push({ rx, exercise, sets, status: 'done', decision, suggestions, lockIn, records });
     }
   }
 
@@ -589,7 +685,8 @@ export async function buildSummary(sessionId: string, now = nowIso()): Promise<S
     const exercise = await db.exercises.get(exerciseId);
     if (!exercise) continue;
     const sets = allSets.filter((s) => s.routineExerciseId === null && s.exerciseId === exerciseId);
-    items.push({ rx: null, exercise, sets, status: 'extra', decision: null, suggestions: [], lockIn: null });
+    const records = sets.length > 0 ? await recordsForNewSets(exerciseId, sessionId, sets) : [];
+    items.push({ rx: null, exercise, sets, status: 'extra', decision: null, suggestions: [], lockIn: null, records });
   }
 
   const durationSec = session.durationSec ?? Math.max(0, Math.round((Date.parse(now) - Date.parse(session.startedAt)) / 1000));
@@ -789,6 +886,47 @@ export async function sessionDetail(sessionId: string): Promise<SessionDetail | 
     order.push(key);
   }
   return { session, routine, groups: order.map((k) => groupsByKey.get(k)!) };
+}
+
+/**
+ * A new routine with one routine-exercise per exercise group logged in `sessionId`, in session
+ * order, seeded from what was actually done rather than `defaultRoutineExercise`'s blanks:
+ * targetSets from the counted (working/failure) sets logged (min 1), repMin/repMax from their
+ * min/max reps when any were logged, currentWeight from their weight (the shared weight if every
+ * counted set agrees, else the heaviest), mode 'normal' once a weight was logged that way, else
+ * left calibrating. The routine's isLowerBody follows whichever way most of its exercises go.
+ */
+export async function createRoutineFromSession(sessionId: string, name?: string): Promise<Routine> {
+  const detail = await sessionDetail(sessionId);
+  if (!detail) throw new Error('Session not found');
+  const lowerCount = detail.groups.filter((g) => g.exercise.isLowerBody).length;
+  const isLowerBody = lowerCount * 2 > detail.groups.length;
+
+  return db.transaction('rw', [db.routines, db.routineExercises], async () => {
+    const routine = await createRoutine({ name: name ?? detail.session.title, isLowerBody });
+    const rxs: RoutineExercise[] = detail.groups.map((g, order) => {
+      const base = defaultRoutineExercise(routine.id, g.exercise, order);
+      const counted = g.sets.filter((s) => countsForProgression(s.type));
+      const targetSets = Math.max(1, counted.length);
+      let repMin = base.repMin;
+      let repMax = base.repMax;
+      let currentWeight = base.currentWeight;
+      let mode = base.mode;
+      if (counted.length > 0) {
+        const repsLogged = counted.map((s) => s.reps).filter((r): r is number => r !== undefined);
+        if (repsLogged.length > 0) {
+          repMin = Math.min(...repsLogged);
+          repMax = Math.max(...repsLogged);
+        }
+        const weights = counted.map((s) => s.weight);
+        currentWeight = weights.every((w) => w === weights[0]) ? weights[0] : Math.max(...weights);
+        mode = 'normal';
+      }
+      return { ...base, targetSets, repMin, repMax, currentWeight, mode };
+    });
+    await db.routineExercises.bulkPut(rxs);
+    return routine;
+  });
 }
 
 export async function decisionsForRoutineExercise(routineExerciseId: string): Promise<ProgressionDecision[]> {

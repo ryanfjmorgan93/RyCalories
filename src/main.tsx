@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { registerSW } from 'virtual:pwa-register';
 import './index.css';
 import { App } from './App';
-import { ensureSeeded, getSettings } from './db/repo';
+import { ensureSeeded, getSettings, migrateSeed } from './db/repo';
 import { applyTheme } from './ui/theme';
 import { isNative } from './state/native';
 import { DB_VERSION } from './db/db';
@@ -11,6 +11,7 @@ import { renderRecovery } from './boot/recovery';
 
 async function boot() {
   await ensureSeeded();
+  await migrateSeed();
   const settings = await getSettings();
   applyTheme(settings.theme);
   createRoot(document.getElementById('root')!).render(

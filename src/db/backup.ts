@@ -1,5 +1,6 @@
 import Papa from 'papaparse';
 import { db, TABLE_NAMES, type TableName } from './db';
+import { migrateSeed } from './repo';
 import { nowIso } from '@/domain/dates';
 import { DEFAULT_SETTINGS } from '@/domain/types';
 import { isNative, shareTextFile } from '@/state/native';
@@ -124,6 +125,9 @@ export async function importBackup(backup: Backup, mode: RestoreMode): Promise<R
       await db.settings.put({ id: 'settings', ...DEFAULT_SETTINGS, createdAt: nowIso() });
     }
   });
+  // An older-shaped backup (merge or replace) can overwrite the settings row and the seed
+  // exercise rows with pre-migration shapes — re-run the migration so it does not need a reload.
+  await migrateSeed();
   return counts;
 }
 

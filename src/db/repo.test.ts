@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { exportBackup, exportCsv, importBackup } from './backup';
+import { exportBackup, exportCsv, importBackup, type Backup } from './backup';
 import { db } from './db';
 import {
   addExtraExercise,
   buildSummary,
+  createRoutineFromSession,
   deleteSet,
   ensureSeeded,
   exerciseHistory,
@@ -12,6 +13,7 @@ import {
   lockInRoutineExercise,
   logBodyweight,
   logSet,
+  migrateSeed,
   previousSets,
   resetToSeed,
   routineItems,
@@ -19,17 +21,26 @@ import {
   setSkipped,
   stallStatus,
   startSession,
+  swapExercise,
+  toggleSupersetWithNext,
+  undoSwap,
   updateRoutineExercise,
   updateSession,
   wipeAll,
 } from './repo';
-import { SEED_EXERCISE_IDS, SEED_ROUTINE_IDS } from './seed';
-import type { RoutineExercise } from '@/domain/types';
+import { SEED_EXERCISE_IDS, SEED_EXERCISES, SEED_ROUTINE_IDS } from './seed';
+import { DEFAULT_SETTINGS, type RoutineExercise } from '@/domain/types';
 
 const HINGE = SEED_ROUTINE_IDS['Lower (Hinge)'];
 const SQUAT = SEED_ROUTINE_IDS['Lower (Squat)'];
+const DAY5 = SEED_ROUTINE_IDS['Arms (Day 5)'];
 const RDL = SEED_EXERCISE_IDS['Romanian Deadlift (Barbell)'];
+const HIP_THRUST = SEED_EXERCISE_IDS['Hip Thrust (Barbell)'];
+const LYING_LEG_CURL = SEED_EXERCISE_IDS['Lying Leg Curl (Machine)'];
 const BACK_SQUAT = SEED_EXERCISE_IDS['Barbell Back Squat'];
+const REAR_DELT_FLY = SEED_EXERCISE_IDS['Rear Delt Fly (Machine)'];
+const CABLE_CRUNCH = SEED_EXERCISE_IDS['Cable Crunch'];
+const FACE_PULL = SEED_EXERCISE_IDS['Face Pull'];
 
 async function rxFor(routineId: string, exerciseId: string): Promise<RoutineExercise> {
   const items = await routineItems(routineId);
@@ -397,5 +408,275 @@ describe('backup and export', () => {
     expect(lines[0]).toMatch(/^session_id,session_start,/);
     expect(lines[1]).toContain('Romanian Deadlift (Barbell)');
     expect(lines[1]).toContain(',working,110,8,');
+  });
+});
+
+describe('superset toggle (WP3)', () => {
+  beforeEach(async () => {
+    await resetToSeed();
+  });
+
+  it('pairs two adjacent routine-exercises', async () => {
+    const rdlRx = await rxFor(HINGE, RDL);
+    await toggleSupersetWithNext(HINGE, rdlRx.id);
+    const after = await routineItems(HINGE);
+    const rdl = after.find((i) => i.exercise.id === RDL)!.rx;
+    const hip = after.find((i) => i.exercise.id === HIP_THRUST)!.rx;
+    expect(rdl.supersetId).toBeDefined();
+    expect(rdl.supersetId).toBe(hip.supersetId);
+  });
+
+  it('toggling a paired pair again clears both', async () => {
+    const rdlRx = await rxFor(HINGE, RDL);
+    await toggleSupersetWithNext(HINGE, rdlRx.id);
+    await toggleSupersetWithNext(HINGE, rdlRx.id);
+    const after = await routineItems(HINGE);
+    expect(after.find((i) => i.exercise.id === RDL)!.rx.supersetId).toBeUndefined();
+    expect(after.find((i) => i.exercise.id === HIP_THRUST)!.rx.supersetId).toBeUndefined();
+  });
+
+  it('breaking the first link in a chain of three leaves the other two paired', async () => {
+    const groupId = 'test-superset-group';
+    const rdlRx = await rxFor(HINGE, RDL);
+    await db.routineExercises.update(rdlRx.id, { supersetId: groupId });
+    await db.routineExercises.update((await rxFor(HINGE, HIP_THRUST)).id, { supersetId: groupId });
+    await db.routineExercises.update((await rxFor(HINGE, LYING_LEG_CURL)).id, { supersetId: groupId });
+
+    await toggleSupersetWithNext(HINGE, rdlRx.id);
+
+    const after = await routineItems(HINGE);
+    expect(after.find((i) => i.exercise.id === RDL)!.rx.supersetId).toBeUndefined();
+    expect(after.find((i) => i.exercise.id === HIP_THRUST)!.rx.supersetId).toBe(groupId);
+    expect(after.find((i) => i.exercise.id === LYING_LEG_CURL)!.rx.supersetId).toBe(groupId);
+  });
+
+  it('refuses to superset a required exercise with the optional tail', async () => {
+    const rearDeltRx = await rxFor(DAY5, REAR_DELT_FLY);
+    await toggleSupersetWithNext(DAY5, rearDeltRx.id);
+    const after = await routineItems(DAY5);
+    expect(after.find((i) => i.exercise.id === REAR_DELT_FLY)!.rx.supersetId).toBeUndefined();
+    expect(after.find((i) => i.exercise.id === CABLE_CRUNCH)!.rx.supersetId).toBeUndefined();
+  });
+});
+
+describe('swap and undo swap (WP3)', () => {
+  beforeEach(async () => {
+    await resetToSeed();
+  });
+
+  it('swaps a slot for a substitute, and undoing it removes the sets and restores the slot', async () => {
+    const session = await startSession(HINGE);
+    const rx = await rxFor(HINGE, RDL);
+
+    await swapExercise(session.id, rx.id, FACE_PULL);
+    let s = await db.sessions.get(session.id);
+    expect(s?.skippedRoutineExerciseIds).toContain(rx.id);
+    expect(s?.extraExerciseIds).toContain(FACE_PULL);
+    expect(s?.swaps).toEqual({ [rx.id]: FACE_PULL });
+
+    await logSet({ sessionId: session.id, routineExerciseId: null, exerciseId: FACE_PULL, type: 'working', weight: 50, reps: 15 });
+    expect(await db.setLogs.where('[sessionId+exerciseId]').equals([session.id, FACE_PULL]).count()).toBe(1);
+
+    await undoSwap(session.id, rx.id);
+    s = await db.sessions.get(session.id);
+    expect(s?.skippedRoutineExerciseIds ?? []).not.toContain(rx.id);
+    expect(s?.extraExerciseIds ?? []).not.toContain(FACE_PULL);
+    expect(s?.swaps ?? {}).toEqual({});
+    expect(await db.setLogs.where('[sessionId+exerciseId]').equals([session.id, FACE_PULL]).count()).toBe(0);
+  });
+});
+
+describe('createRoutineFromSession (WP3)', () => {
+  beforeEach(async () => {
+    await resetToSeed();
+  });
+
+  it('builds targets, rep range and weight from what was actually logged', async () => {
+    const session = await startSession(HINGE);
+    const rdlRx = await rxFor(HINGE, RDL);
+    const hipRx = await rxFor(HINGE, HIP_THRUST);
+    await logSet({ sessionId: session.id, routineExerciseId: rdlRx.id, exerciseId: RDL, type: 'warmup', weight: 60, reps: 5 });
+    await logSet({ sessionId: session.id, routineExerciseId: rdlRx.id, exerciseId: RDL, type: 'working', weight: 100, reps: 8 });
+    await logSet({ sessionId: session.id, routineExerciseId: rdlRx.id, exerciseId: RDL, type: 'working', weight: 105, reps: 8 });
+    await logSet({ sessionId: session.id, routineExerciseId: rdlRx.id, exerciseId: RDL, type: 'drop', weight: 80, reps: 10 });
+    await logSet({ sessionId: session.id, routineExerciseId: hipRx.id, exerciseId: HIP_THRUST, type: 'warmup', weight: 40, reps: 5 });
+
+    const routine = await createRoutineFromSession(session.id, 'My New Routine');
+    expect(routine.name).toBe('My New Routine');
+    // RDL and Hip Thrust are both lower body — majority.
+    expect(routine.isLowerBody).toBe(true);
+
+    const items = await routineItems(routine.id);
+    const rdl = items.find((i) => i.exercise.id === RDL)!.rx;
+    // Two counted (working) sets: 100×8 and 105×8. Weights disagree, so the heavier wins.
+    expect(rdl).toMatchObject({ targetSets: 2, repMin: 8, repMax: 8, currentWeight: 105, mode: 'normal' });
+
+    const hip = items.find((i) => i.exercise.id === HIP_THRUST)!.rx;
+    // No counted sets were logged for Hip Thrust — falls back to the calibrating default.
+    expect(hip).toMatchObject({ targetSets: 1, currentWeight: 0, mode: 'calibrating', repMin: 6, repMax: 8 });
+  });
+
+  it('defaults the name to the session title when none is given', async () => {
+    const session = await startSession(HINGE);
+    const rx = await rxFor(HINGE, RDL);
+    await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 110, reps: 8 });
+    const routine = await createRoutineFromSession(session.id);
+    expect(routine.name).toBe((await db.sessions.get(session.id))!.title);
+  });
+});
+
+describe('deload sessions (WP3)', () => {
+  beforeEach(async () => {
+    await resetToSeed();
+  });
+
+  it('a deload decision leaves the weight unchanged after finishing, unless overridden', async () => {
+    const session = await startSession(HINGE, { deload: true });
+    expect((await db.sessions.get(session.id))?.deload).toBe(true);
+    const rx = await rxFor(HINGE, RDL);
+    for (const r of [8, 8, 8]) {
+      await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 99, reps: r });
+    }
+    const summary = await buildSummary(session.id);
+    const item = summary.items.find((i) => i.exercise.id === RDL)!;
+    expect(item.decision).toMatchObject({ rule: 'deload', fromWeight: 110, toWeight: 110 });
+
+    await finishSession(session.id, { choices: [] });
+    expect((await rxFor(HINGE, RDL)).currentWeight).toBe(110);
+    const decision = await db.decisions.where('routineExerciseId').equals(rx.id).first();
+    expect(decision).toMatchObject({ rule: 'deload', fromWeight: 110, toWeight: 110, accepted: true });
+    expect(decision?.overrideTo).toBeUndefined();
+  });
+
+  it('an override still wins on a deload session', async () => {
+    const session = await startSession(HINGE, { deload: true });
+    const rx = await rxFor(HINGE, RDL);
+    await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 99, reps: 8 });
+    await finishSession(session.id, { choices: [{ routineExerciseId: rx.id, overrideTo: 105 }] });
+    expect((await rxFor(HINGE, RDL)).currentWeight).toBe(105);
+    const decision = await db.decisions.where('routineExerciseId').equals(rx.id).first();
+    expect(decision).toMatchObject({ rule: 'deload', accepted: false, overrideTo: 105 });
+  });
+
+  it('a deload outcome breaks an existing stall', async () => {
+    const rx = await rxFor(HINGE, RDL);
+    await rdlSession([6, 6, 6, 6], 110, { startedAt: '2026-09-01T18:00:00.000Z' });
+    await rdlSession([7, 6, 6, 6], 110, { startedAt: '2026-09-04T18:00:00.000Z' });
+    await rdlSession([7, 7, 6, 6], 110, { startedAt: '2026-09-07T18:00:00.000Z' });
+    expect(await stallStatus(rx.id)).toEqual({ kind: 'stalled', sessions: 3, weight: 110 });
+
+    const session = await startSession(HINGE, { deload: true });
+    await updateSession(session.id, { startedAt: '2026-09-10T18:00:00.000Z' });
+    for (const r of [8, 8, 8]) {
+      await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 99, reps: r });
+    }
+    const summary = await buildSummary(session.id);
+    const item = summary.items.find((i) => i.exercise.id === RDL)!;
+    expect(item.suggestions.some((s) => s.kind === 'stalled')).toBe(false);
+
+    await finishSession(session.id, { choices: [] });
+    expect(await stallStatus(rx.id)).toBeNull();
+  });
+});
+
+describe('personal records attached to summary items (WP3)', () => {
+  beforeEach(async () => {
+    await resetToSeed();
+  });
+
+  it('a second heavier set in the same session is a record against the first, not only history', async () => {
+    await rdlSession([8, 8, 8, 8], 100, { startedAt: '2026-09-01T18:00:00.000Z' });
+    const session = await startSession(HINGE);
+    const rx = await rxFor(HINGE, RDL);
+    await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 105, reps: 8 });
+    await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 110, reps: 8 });
+
+    const summary = await buildSummary(session.id);
+    const item = summary.items.find((i) => i.exercise.id === RDL)!;
+    const weightRecords = item.records.filter((r) => r.kind === 'weight');
+    expect(weightRecords).toHaveLength(2);
+    expect(weightRecords[0]).toMatchObject({ value: 105, previous: 100, previousSource: 'app', setIndex: 0 });
+    expect(weightRecords[1]).toMatchObject({ value: 110, previous: 105, previousSource: 'app', setIndex: 1 });
+  });
+
+  it('records are computed for extra exercises too', async () => {
+    const session = await startSession(HINGE);
+    await addExtraExercise(session.id, FACE_PULL);
+    await logSet({ sessionId: session.id, routineExerciseId: null, exerciseId: FACE_PULL, type: 'working', weight: 50, reps: 15 });
+    const summary = await buildSummary(session.id);
+    const extra = summary.items.find((i) => i.status === 'extra')!;
+    expect(extra.records.length).toBeGreaterThan(0);
+  });
+});
+
+describe('migrateSeed (WP3)', () => {
+  beforeEach(async () => {
+    await resetToSeed();
+  });
+
+  /** Simulate a v1-shaped install: no equipment/demo/standard on the seed rows, seedVersion 1. */
+  async function downgradeToV1(): Promise<void> {
+    await db.settings.update('settings', { seedVersion: 1 });
+    for (const seedEx of SEED_EXERCISES) {
+      await db.exercises.update(seedEx.id, { equipment: undefined, demo: undefined, standard: undefined });
+    }
+  }
+
+  function backupWithUnmigratedSeed(): Backup {
+    return {
+      app: 'iron',
+      version: 1,
+      exportedAt: '2026-01-01T00:00:00.000Z',
+      tables: {
+        exercises: SEED_EXERCISES.map((e) => ({
+          ...e,
+          equipment: undefined,
+          demo: undefined,
+          standard: undefined,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        })),
+        routines: [],
+        routineExercises: [],
+        sessions: [],
+        setLogs: [],
+        decisions: [],
+        bodyweight: [],
+        settings: [{ ...DEFAULT_SETTINGS, id: 'settings', seedVersion: 1, createdAt: '2026-01-01T00:00:00.000Z' }],
+      },
+    };
+  }
+
+  it('backfills equipment/demo/standard onto a v1-shaped install and bumps seedVersion to 2', async () => {
+    await downgradeToV1();
+    await migrateSeed();
+    expect((await db.settings.get('settings'))?.seedVersion).toBe(2);
+    const rdl = await db.exercises.get(RDL);
+    expect(rdl?.equipment).toBe('barbell');
+    expect(rdl?.demo).toBe('romanian-deadlift');
+    const benchPress = await db.exercises.get(SEED_EXERCISE_IDS['Bench Press (Barbell)']);
+    expect(benchPress?.standard).toBe('bench');
+  });
+
+  it('never overwrites a field the user has already edited', async () => {
+    await downgradeToV1();
+    await db.exercises.update(RDL, { equipment: 'machine' });
+    await migrateSeed();
+    expect((await db.exercises.get(RDL))?.equipment).toBe('machine');
+  });
+
+  it('running it twice is a no-op the second time', async () => {
+    await downgradeToV1();
+    await migrateSeed();
+    await db.exercises.update(RDL, { equipment: 'dumbbell' }); // an edit made after migrating
+    await migrateSeed();
+    expect((await db.exercises.get(RDL))?.equipment).toBe('dumbbell');
+  });
+
+  it('re-runs after importBackup merges an old-shaped backup', async () => {
+    await importBackup(backupWithUnmigratedSeed(), 'merge');
+    expect((await db.settings.get('settings'))?.seedVersion).toBe(2);
+    const rdl = await db.exercises.get(RDL);
+    expect(rdl?.equipment).toBe('barbell');
+    expect(rdl?.demo).toBe('romanian-deadlift');
   });
 });

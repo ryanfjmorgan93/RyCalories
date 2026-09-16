@@ -104,6 +104,46 @@ export function decisionLine(d: Decision, kind: ExerciseKind): string {
   }
 }
 
+/** A logged set, loose enough to accept a `SetLog` or any equivalent shape. */
+export interface SetLine {
+  weight: number;
+  reps?: number;
+  distanceM?: number;
+  seconds?: number;
+}
+
+function setsWeightLabel(kind: ExerciseKind, weight: number): string {
+  if (kind === 'bodyweight_plus') return weight === 0 ? 'BW' : `+${fmtNum(weight)}`;
+  return fmtNum(weight);
+}
+
+/**
+ * "100 × 8, 8, 7" — sets grouped by consecutive equal weights. Carry: "56 kg · 40 m" per set.
+ * Timed: "45 s" per set. Mirrors `groupedLine` in `ExerciseDetailScreen.tsx` (kept there in sync
+ * until that screen's copy is retired).
+ */
+export function fmtSetsLine(sets: SetLine[], kind: ExerciseKind): string {
+  if (kind === 'carry') {
+    return sets
+      .map((s) => {
+        const parts = [fmtKg(s.weight)];
+        if (s.distanceM !== undefined) parts.push(`${fmtNum(s.distanceM)} m`);
+        if (s.seconds !== undefined) parts.push(`${fmtNum(s.seconds)} s`);
+        return parts.join(' · ');
+      })
+      .join(', ');
+  }
+  if (kind === 'timed') return sets.map((s) => `${fmtNum(s.seconds ?? 0)} s`).join(', ');
+  const groups: { w: string; reps: number[] }[] = [];
+  for (const s of sets) {
+    const w = setsWeightLabel(kind, s.weight);
+    const last = groups[groups.length - 1];
+    if (last && last.w === w) last.reps.push(s.reps ?? 0);
+    else groups.push({ w, reps: [s.reps ?? 0] });
+  }
+  return groups.map((g) => `${g.w} × ${g.reps.join(', ')}`).join(' · ');
+}
+
 // ---------------------------------------------------------------------------
 // Nutrition
 

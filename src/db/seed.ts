@@ -112,4 +112,3 @@ export const SEED_ROUTINE_EXERCISES: RoutineExercise[] = [
 ];
 
 export const SEED_BODYWEIGHT_KG = 74;
-export const SEED_VERSION = 1;
