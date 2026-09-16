@@ -75,8 +75,10 @@ export function producesWeightDecision(kind: ExerciseKind): boolean {
 /**
  * Decide next session's weight for one routine-exercise from this session's sets.
  * Returns `rule: 'calibrating'` / `'not_applicable'` when no decision applies.
+ * `opts.deload` marks a session that started as a deload: prescriptions were reduced and no
+ * progression is decided, but calibrating and not-applicable still take precedence over it.
  */
-export function decide(rx: EngineRoutineExercise, sets: EngineSet[]): Decision {
+export function decide(rx: EngineRoutineExercise, sets: EngineSet[], opts?: { deload?: boolean }): Decision {
   const working = workingSets(sets);
   const reps = working.map((s) => Math.max(0, Math.floor(s.reps ?? 0)));
   const weights = working.map((s) => s.weight);
@@ -97,6 +99,9 @@ export function decide(rx: EngineRoutineExercise, sets: EngineSet[]): Decision {
   }
   if (rx.mode === 'calibrating') {
     return { ...base, rule: 'calibrating', toWeight: rx.currentWeight, changesWeight: false };
+  }
+  if (opts?.deload) {
+    return { ...base, rule: 'deload', toWeight: rx.currentWeight, changesWeight: false };
   }
 
   // The weight to progress from: what was actually lifted if every working set agrees,
@@ -121,7 +126,9 @@ export function decide(rx: EngineRoutineExercise, sets: EngineSet[]): Decision {
 /** The weight that ends up stored after the user's Accept / Override. */
 export function resolveWeight(decision: Decision, overrideTo?: number): number {
   if (overrideTo !== undefined && Number.isFinite(overrideTo)) return roundKg(overrideTo);
-  if (decision.rule === 'calibrating' || decision.rule === 'not_applicable') return decision.fromWeight;
+  if (decision.rule === 'calibrating' || decision.rule === 'not_applicable' || decision.rule === 'deload') {
+    return decision.fromWeight;
+  }
   return decision.toWeight;
 }
 
@@ -176,18 +183,23 @@ export interface SessionOutcome {
 
 /**
  * §4.3 — stalled when the last `threshold` sessions (most recent first) were all at the same
- * weight with no progression. Calibrating / not-applicable outcomes are ignored.
+ * weight with no progression. Calibrating / not-applicable / lock-in outcomes are ignored, but a
+ * deload is kept and breaks the streak: it's a deliberate reset, not a symptom of stalling. If
+ * any of the `threshold` most recent relevant rows is a deload there is no stall, and the
+ * streak-length count stops the moment it reaches one.
  */
 export function detectStall(history: SessionOutcome[], threshold = 3): Suggestion | null {
   const relevant = history.filter((h) => h.rule !== 'calibrating' && h.rule !== 'not_applicable' && h.rule !== 'lock_in');
   if (relevant.length < threshold) return null;
   const recent = relevant.slice(0, threshold);
+  if (recent.some((h) => h.rule === 'deload')) return null;
   const w = recent[0].fromWeight;
   const stuck = recent.every((h) => h.fromWeight === w && h.appliedWeight === w);
   if (!stuck) return null;
   // Count how long the stall has actually lasted (may exceed threshold).
   let n = 0;
   for (const h of relevant) {
+    if (h.rule === 'deload') break;
     if (h.fromWeight === w && h.appliedWeight === w) n++;
     else break;
   }

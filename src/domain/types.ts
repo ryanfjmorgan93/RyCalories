@@ -3,10 +3,15 @@
  * Every record carries a stable UUID `id` so export → import round-trips cleanly
  * and a sync layer can be bolted on later without renumbering anything.
  */
+import type { StrengthStandard } from './standards';
 
 export type ExerciseKind = 'reps' | 'bodyweight_plus' | 'carry' | 'timed';
 export type ProgressionMode = 'normal' | 'calibrating';
 export type SetType = 'warmup' | 'working' | 'failure' | 'drop';
+
+export type Equipment = 'barbell' | 'dumbbell' | 'machine' | 'cable' | 'bodyweight' | 'kettlebell' | 'other';
+
+export const EQUIPMENT_KINDS: Equipment[] = ['barbell', 'dumbbell', 'machine', 'cable', 'bodyweight', 'kettlebell', 'other'];
 
 export type MuscleGroup =
   | 'hamstrings'
@@ -68,6 +73,14 @@ export interface Exercise {
   aliases?: string[];
   /** ISO timestamp of creation; used only for ordering custom exercises. */
   createdAt: string;
+  /** Equipment used, when known. Absent on exercises that predate this field or that never set it. */
+  equipment?: Equipment;
+  /** Diagram slug from the bundled exercise-demo library (`src/data/exerciseDemos.ts`), when matched. */
+  demo?: string;
+  /** Optional link to a form-check video. */
+  videoUrl?: string;
+  /** Strength standard this exercise's e1RM is judged against (see `./standards`). Absent = no standard shown. */
+  standard?: StrengthStandard;
 }
 
 export interface Routine {
@@ -110,6 +123,8 @@ export interface RoutineExercise {
   /** Carry exercises: target distance range in metres (display only). */
   distanceMinM?: number;
   distanceMaxM?: number;
+  /** Routine-exercises sharing this id are one superset, adjacent in order. Absent = not supersetted. */
+  supersetId?: string;
 }
 
 export type NiggleTag = 'lower back' | 'hamstring DOMS' | 'knee' | 'shoulder' | 'other';
@@ -140,6 +155,13 @@ export interface Session {
   source?: 'hevy' | 'backup';
   /** Leg-day checklist state (Phase 2). */
   checklist?: { electrolytes?: boolean; protein?: boolean };
+  /** True when this session started as a deload: prescriptions were reduced and no weight decision was written. */
+  deload?: boolean;
+  /**
+   * Routine-exercise id → exercise id substituted for this session only. The slot is skipped and
+   * the substitute is logged as an extra.
+   */
+  swaps?: Record<string, string>;
 }
 
 export interface SetLog {
@@ -167,7 +189,8 @@ export type ProgressionRule =
   | 'hold_missing_sets'
   | 'calibrating'
   | 'not_applicable'
-  | 'lock_in';
+  | 'lock_in'
+  | 'deload';
 
 export interface ProgressionDecision {
   id: string;
@@ -231,6 +254,28 @@ export interface Settings {
   createdAt: string;
   /** Bumped every save; the reverse-diet start date is stamped on the first save. */
   savedAt?: string;
+  /**
+   * Barbell weight in kg, used for plate maths. Absent on rows written before this setting
+   * existed — read as `?? DEFAULT_SETTINGS.barKg`.
+   */
+  barKg?: number;
+  /**
+   * Plate sizes available, in kg, one of each pair, any order. Absent on rows written before
+   * this setting existed — read as `?? DEFAULT_SETTINGS.plates`.
+   */
+  plates?: number[];
+  /**
+   * Fraction of current weight prescribed on a deload (e.g. 0.9 = 90%). Absent on rows written
+   * before this setting existed — read as `?? DEFAULT_SETTINGS.deloadPercent`.
+   */
+  deloadPercent?: number;
+  /**
+   * Sessions per week the streak counts towards. Absent on rows written before this setting
+   * existed — read as `?? DEFAULT_SETTINGS.weeklySessionTarget`.
+   */
+  weeklySessionTarget?: number;
+  /** Weekly set targets per muscle group. Absent means no target set for that group — no default. */
+  weeklySetTargets?: Partial<Record<MuscleGroup, number>>;
 }
 
 export const DEFAULT_SETTINGS: Omit<Settings, 'id' | 'createdAt'> = {
@@ -253,6 +298,10 @@ export const DEFAULT_SETTINGS: Omit<Settings, 'id' | 'createdAt'> = {
   restNotify: true,
   productLookup: true,
   seedVersion: 1,
+  barKg: 20,
+  plates: [25, 20, 15, 10, 5, 2.5, 1.25],
+  deloadPercent: 0.9,
+  weeklySessionTarget: 3,
 };
 
 // ---------------------------------------------------------------------------

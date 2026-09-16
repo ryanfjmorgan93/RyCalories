@@ -235,6 +235,7 @@ const RULE_LABEL: Record<ProgressionRule, string> = {
   calibrating: 'calibrating',
   not_applicable: 'no decision',
   lock_in: 'locked in',
+  deload: 'deload',
 };
 
 function DecisionRow({ d, kind }: { d: ProgressionDecision; kind: ExerciseKind }) {

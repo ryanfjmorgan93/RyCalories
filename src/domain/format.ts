@@ -96,6 +96,11 @@ export function decisionLine(d: Decision, kind: ExerciseKind): string {
       return 'no weight decision for this exercise';
     case 'lock_in':
       return `locked in at ${w(d.toWeight)}`;
+    case 'deload': {
+      const uniform = d.workingReps.length > 0 && d.workingReps.every((r) => r === d.workingReps[0]);
+      const setsByReps = d.workingReps.length === 0 ? 'no working sets' : uniform ? `${d.workingSets}×${d.workingReps[0]}` : `${d.workingSets}×(${reps})`;
+      return `deload · ${setsByReps} at ${w(at)} · stays ${w(d.toWeight)}`;
+    }
   }
 }
 

@@ -270,6 +270,56 @@ describe('carry and timed kinds never produce a weight decision', () => {
   });
 });
 
+describe('deload sessions (WP2-c)', () => {
+  it('a deload marks the decision without changing the weight, keeping sets/reps for display', () => {
+    const d = decide(rdl, working(90, [8, 8, 8]), { deload: true });
+    expect(d.rule).toBe('deload');
+    expect(d.fromWeight).toBe(110);
+    expect(d.toWeight).toBe(110);
+    expect(d.changesWeight).toBe(false);
+    expect(d.sessionWeight).toBe(90);
+    expect(d.workingReps).toEqual([8, 8, 8]);
+    expect(d.workingSets).toBe(3);
+    expect(resolveWeight(d)).toBe(110);
+  });
+
+  it('an override on a deload still wins', () => {
+    const d = decide(rdl, working(90, [8, 8, 8]), { deload: true });
+    expect(resolveWeight(d, 100)).toBe(100);
+  });
+
+  it('calibrating takes precedence over deload', () => {
+    const squat: EngineRoutineExercise = { ...rdl, id: 'rx-squat', mode: 'calibrating', currentWeight: 0 };
+    const d = decide(squat, working(60, [8, 8, 8]), { deload: true });
+    expect(d.rule).toBe('calibrating');
+    expect(d.toWeight).toBe(0);
+  });
+
+  it('not-applicable kinds take precedence over deload', () => {
+    const carry: EngineRoutineExercise = { ...rdl, kind: 'carry', currentWeight: 56 };
+    expect(decide(carry, [{ type: 'working', weight: 56, distanceM: 40 }], { deload: true }).rule).toBe('not_applicable');
+    const plank: EngineRoutineExercise = { ...rdl, kind: 'timed', currentWeight: 0 };
+    expect(decide(plank, [{ type: 'working', weight: 0, seconds: 60 }], { deload: true }).rule).toBe('not_applicable');
+  });
+
+  it('bodyweight_plus can also deload', () => {
+    const backExt: EngineRoutineExercise = {
+      id: 'rx-be',
+      kind: 'bodyweight_plus',
+      mode: 'normal',
+      targetSets: 3,
+      repMin: 10,
+      repMax: 15,
+      currentWeight: 10,
+      increment: 5,
+    };
+    const d = decide(backExt, working(5, [15, 15, 15]), { deload: true });
+    expect(d.rule).toBe('deload');
+    expect(d.fromWeight).toBe(10);
+    expect(d.toWeight).toBe(10);
+  });
+});
+
 describe('accept / override', () => {
   it('accept stores the proposed weight', () => {
     const d = decide(rdl, working(110, [8, 8, 8, 8]));
@@ -430,6 +480,18 @@ describe('stall detection (§4.3)', () => {
     const miss: SessionOutcome = { fromWeight: 110, appliedWeight: 110, rule: 'hold_missing_sets' };
     expect(detectStall([miss, hold(110), miss])?.kind).toBe('stalled');
   });
+
+  const deloadOutcome = (w: number): SessionOutcome => ({ fromWeight: w, appliedWeight: w, rule: 'deload' });
+
+  it('a deload among the most recent threshold rows means no stall', () => {
+    expect(detectStall([deloadOutcome(110), hold(110), hold(110)])).toBeNull();
+    expect(detectStall([hold(110), deloadOutcome(110), hold(110)])).toBeNull();
+  });
+
+  it('the streak-length count stops at a deload rather than crossing it', () => {
+    const history = [hold(110), hold(110), hold(110), hold(110), deloadOutcome(110), hold(110), hold(110)];
+    expect(detectStall(history)).toEqual({ kind: 'stalled', sessions: 4, weight: 110 });
+  });
 });
 
 describe('plain-terms decision lines', () => {
@@ -448,6 +510,21 @@ describe('plain-terms decision lines', () => {
   });
   it('deviated hold shows both weights', () => {
     expect(decisionLine(decide(rdl, working(100, [7, 7, 7, 7])), 'reps')).toBe('7/7/7/7 at 100 kg → hold 100 kg (was 110 kg)');
+  });
+  it('deload with uniform reps compacts to sets×reps and names the retained weight', () => {
+    const rx: EngineRoutineExercise = { ...rdl, currentWeight: 100 };
+    const line = decisionLine(decide(rx, working(90, [8, 8, 8]), { deload: true }), 'reps');
+    expect(line).toBe('deload · 3×8 at 90 kg · stays 100 kg');
+  });
+  it('deload with mixed reps lists them instead of compacting', () => {
+    const rx: EngineRoutineExercise = { ...rdl, currentWeight: 100 };
+    const line = decisionLine(decide(rx, working(90, [8, 6]), { deload: true }), 'reps');
+    expect(line).toBe('deload · 2×(8/6) at 90 kg · stays 100 kg');
+  });
+  it('deload with no working sets logged', () => {
+    const rx: EngineRoutineExercise = { ...rdl, currentWeight: 100 };
+    const line = decisionLine(decide(rx, [], { deload: true }), 'reps');
+    expect(line).toBe('deload · no working sets at 100 kg · stays 100 kg');
   });
 });
 
