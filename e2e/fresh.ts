@@ -58,3 +58,16 @@ export async function clickIfPresent(locator: Locator, timeout = 1500): Promise<
   await locator.click();
   return true;
 }
+
+/**
+ * Wait until the service worker that makes the app work offline has installed and taken control.
+ * `ready` resolves once a worker is active, which with Workbox means the whole precache (every
+ * asset, including the 900-odd exercise diagrams) has been fetched; `controller` confirms this
+ * page is under it, so a reload with the network off is served from the cache.
+ */
+export async function waitForServiceWorker(page: Page, timeout = 60_000): Promise<void> {
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+  });
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, { timeout });
+}

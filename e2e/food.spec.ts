@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { fresh } from './fresh';
+import { fresh, waitForServiceWorker } from './fresh';
 
 /**
  * Manual nutrition logging through the real UI. This is the path that has to work before the
@@ -132,6 +132,9 @@ test.describe('nutrition', () => {
     await page.getByTestId('save-meal').click();
     await expect(page).toHaveURL(/\/food\/[0-9a-f-]+$/);
 
+    // The precache now carries every exercise diagram, so installing the worker takes longer than
+    // the few steps above; going offline before it is active would fail for the wrong reason.
+    await waitForServiceWorker(page);
     await context.setOffline(true);
     await page.reload();
     await expect(page.getByTestId('meal-total')).toContainText('250 kcal');
