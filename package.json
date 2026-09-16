@@ -5,13 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node scripts/exercise-media.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "media": "node scripts/exercise-media.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^7.6.9",
