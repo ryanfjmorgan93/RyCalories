@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { Y4M_PATH } from './e2e/fixtures/ean13';
 
 // Overridable so two suites can run side by side (each worktree of a parallel build gets its own port).
 const PORT = Number(process.env.PW_PORT ?? 4173);
@@ -8,6 +10,10 @@ const PORT = Number(process.env.PW_PORT ?? 4173);
 // executable when one is actually there, so the same config works in both.
 const SANDBOX_CHROMIUM = '/opt/pw-browsers/chromium';
 const executablePath = process.env.CHROMIUM_PATH ?? (existsSync(SANDBOX_CHROMIUM) ? SANDBOX_CHROMIUM : undefined);
+
+// Chromium wants an absolute path for the fake video capture file. global-setup.ts draws it
+// before any project launches a browser.
+const y4mPath = resolve(process.cwd(), Y4M_PATH);
 
 export default defineConfig({
   testDir: './e2e',
@@ -19,6 +25,7 @@ export default defineConfig({
   // report, and locally a flake must fail so it gets fixed rather than absorbed.
   retries: process.env.CI ? 1 : 0,
   reporter: [['list']],
+  globalSetup: './e2e/global-setup.ts',
   use: {
     baseURL: `http://localhost:${PORT}`,
     ...devices['Pixel 7'],
@@ -26,6 +33,26 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
+  projects: [
+    {
+      name: 'app',
+      testIgnore: /barcode\.spec\.ts/,
+    },
+    {
+      name: 'camera',
+      testMatch: /barcode\.spec\.ts/,
+      use: {
+        ...devices['Pixel 7'],
+        // Pre-grant camera so getUserMedia resolves against the fake device with no permission
+        // prompt to drive through.
+        permissions: ['camera'],
+        launchOptions: {
+          ...(executablePath ? { executablePath } : {}),
+          args: ['--use-fake-device-for-media-stream', `--use-file-for-fake-video-capture=${y4mPath}`],
+        },
+      },
+    },
+  ],
   webServer: {
     command: `npm run build && npx vite preview --port ${PORT} --strictPort`,
     port: PORT,

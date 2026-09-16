@@ -10,12 +10,13 @@ import {
 } from '@/domain/food';
 import { fmtGrams, fmtKcal } from '@/domain/format';
 import { useFoodSuggestions, useSettings } from './hooks';
-import { lookupName } from '@/db/productRepo';
+import { lookupBarcode, lookupName } from '@/db/productRepo';
 import { forgetFood } from '@/db/foodRepo';
 import { displayName, portionGrams, portionLabel, type LabelNutrition } from '@/domain/products';
 import { normalise } from '@/domain/foodMemory';
 import type { FoodMemory } from '@/domain/types';
 import type { NewMealItem } from '@/db/foodRepo';
+import { BarcodeScanner } from './BarcodeScanner';
 import { Button, IconButton } from './components/Button';
 import { Segmented } from './components/Chip';
 import { NumberInput, TextInput } from './components/NumberField';
@@ -94,7 +95,10 @@ export function FoodItemSheet({
   // the number the user typed while the draft behind it has reverted, so Save writes a different
   // value than the one on screen. The sheet is instead remounted per edit target with a `key`.
   const [d, setD] = useState<Draft>(() => draftFrom(item));
-  const [lookup, setLookup] = useState<'idle' | 'searching' | 'none' | 'offline' | 'unavailable'>('idle');
+  const [lookup, setLookup] = useState<
+    'idle' | 'searching' | 'none' | 'offline' | 'unavailable' | 'notfound' | 'invalid'
+  >('idle');
+  const [scannerOpen, setScannerOpen] = useState(false);
   // Bumped by anything that changes what a lookup would be for. A response whose ticket is stale
   // is discarded rather than applied to a food nobody asked about.
   const requestRef = useRef(0);
@@ -170,6 +174,24 @@ export function FoodItemSheet({
     }
   };
 
+  /** A code from the camera or typed by hand. Scanning is a lookup, so it shares the same ticket. */
+  const onScanCode = async (code: string) => {
+    setScannerOpen(false);
+    const ticket = (requestRef.current += 1);
+    setLookup('searching');
+    try {
+      const result = await lookupBarcode(code);
+      if (ticket !== requestRef.current) return;
+      if (result.label) applyLabel(result.label);
+      else if (result.from === 'offline') setLookup('offline');
+      else if (result.from === 'invalid') setLookup('invalid');
+      else if (result.from === 'network' || result.from === 'cache') setLookup('notfound');
+      else setLookup('unavailable');
+    } catch {
+      if (ticket === requestRef.current) setLookup('unavailable');
+    }
+  };
+
   const usePrevious = (m: FoodMemory) => {
     setD({
       name: m.name,
@@ -195,161 +217,190 @@ export function FoodItemSheet({
   const per = d.basis === 'weighed' ? 'per 100 g' : 'for the serving';
 
   return (
-    <Sheet
-      open={open}
-      onClose={onClose}
-      title={item ? 'Edit food' : 'Add food'}
-      footer={
-        <div className="grid grid-cols-2 gap-3">
-          {onDelete ? (
-            <Button size="lg" variant="danger" onClick={onDelete}>
-              Delete
-            </Button>
-          ) : (
-            <Button size="lg" variant="secondary" onClick={onClose}>
-              Cancel
-            </Button>
-          )}
-          <Button
-            size="lg"
-            variant="primary"
-            disabled={!canSave}
-            data-testid="save-food"
-            onClick={() =>
-              onSave({
-                name: d.name.trim(),
-                portion: d.portion.trim() || (d.basis === 'weighed' ? `${d.grams ?? 0} g` : '1 serving'),
-                nutrition: nutritionFrom(d),
-                source: d.source ?? 'user',
-                ...(d.brand ? { brand: d.brand } : {}),
-                ...(d.product ? { product: d.product } : {}),
-              })
-            }
-          >
-            Save
-          </Button>
-        </div>
-      }
-    >
-      <div className="grid gap-4">
-        <Field label="Food">
-          <TextInput value={d.name} onChange={(v) => setSearchable('name', v)} placeholder="Chicken thigh" testId="food-name" autoFocus={!item} />
-        </Field>
-
-        {canLookUp && (
-          <div className="-mt-2 grid gap-2">
-            <TextInput
-              value={d.brand ?? ''}
-              onChange={(v) => setSearchable('brand', v)}
-              placeholder="Brand (optional)"
-              testId="food-brand"
-            />
-            <Button size="md" variant="outline" full disabled={lookup === 'searching'} onClick={() => void runLookup()} data-testid="lookup-food">
-              {lookup === 'searching' ? 'Looking up…' : 'Look up the label'}
-            </Button>
-            {lookup === 'none' && (
-              <div className="px-1 text-xs text-muted" data-testid="lookup-none">
-                No matching product{d.brand?.trim() ? ` from ${d.brand.trim()}` : ''}.
-              </div>
-            )}
-            {lookup === 'offline' && (
-              <div className="px-1 text-xs text-muted" data-testid="lookup-offline">
-                No connection.
-              </div>
-            )}
-            {lookup === 'unavailable' && (
-              <div className="px-1 text-xs text-muted" data-testid="lookup-unavailable">
-                Lookup unavailable.
-              </div>
-            )}
-          </div>
-        )}
-
-        {suggestions.length > 0 && (
-          <div className="-mt-2 overflow-hidden rounded-xl border border-line" data-testid="food-suggestions">
-            {suggestions.map((m, i) => (
-              <div key={m.id} className={`flex items-center ${i > 0 ? 'border-t border-line' : ''}`}>
-                <button
-                  type="button"
-                  onClick={() => usePrevious(m)}
-                  data-testid={`suggest-${m.name}`}
-                  className="flex min-h-14 min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left active:bg-surface-2"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-semibold leading-tight">{[m.brand, m.name].filter(Boolean).join(' ')}</div>
-                    <div className="num mt-0.5 truncate text-xs text-muted">
-                      {fmtKcal(m.per100.kcal)} / 100 g{m.typicalGrams ? ` · usually ${fmtGrams(m.typicalGrams)}` : ''}
-                    </div>
-                  </div>
-                </button>
-                {/* Nothing else removes a remembered food, so a name typed wrong once would be
-                    offered here for ever. */}
-                <IconButton label={`Forget ${m.name}`} onClick={() => void forgetFood(m.id)} data-testid={`forget-${m.name}`}>
-                  <TrashIcon />
-                </IconButton>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <Segmented<Basis>
-          value={d.basis}
-          onChange={(v) => set('basis', v)}
-          options={[
-            { value: 'weighed', label: 'Weighed' },
-            { value: 'portion', label: 'Whole portion' },
-          ]}
-        />
-
-        {d.basis === 'weighed' ? (
-          <Field label="Weight">
-            <NumberInput value={d.grams} onChange={(v) => setOwn('grams', v)} mode="numeric" min={0} placeholder="100" testId="food-grams" />
-          </Field>
-        ) : (
-          <Field label="Portion">
-            <TextInput value={d.portion} onChange={(v) => set('portion', v)} placeholder="1 bowl" testId="food-portion" />
-          </Field>
-        )}
-
-        <div>
-          <div className="mb-2 px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Nutrition {per}</div>
+    <>
+      <Sheet
+        open={open}
+        onClose={onClose}
+        title={item ? 'Edit food' : 'Add food'}
+        footer={
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Calories">
-              <NumberInput value={d.kcal} onChange={(v) => setOwn('kcal', v)} mode="numeric" min={0} placeholder="0" testId="food-kcal" />
+            {onDelete ? (
+              <Button size="lg" variant="danger" onClick={onDelete}>
+                Delete
+              </Button>
+            ) : (
+              <Button size="lg" variant="secondary" onClick={onClose}>
+                Cancel
+              </Button>
+            )}
+            <Button
+              size="lg"
+              variant="primary"
+              disabled={!canSave}
+              data-testid="save-food"
+              onClick={() =>
+                onSave({
+                  name: d.name.trim(),
+                  portion: d.portion.trim() || (d.basis === 'weighed' ? `${d.grams ?? 0} g` : '1 serving'),
+                  nutrition: nutritionFrom(d),
+                  source: d.source ?? 'user',
+                  ...(d.brand ? { brand: d.brand } : {}),
+                  ...(d.product ? { product: d.product } : {}),
+                })
+              }
+            >
+              Save
+            </Button>
+          </div>
+        }
+      >
+        <div className="grid gap-4">
+          <Field label="Food">
+            <TextInput value={d.name} onChange={(v) => setSearchable('name', v)} placeholder="Chicken thigh" testId="food-name" autoFocus={!item} />
+          </Field>
+
+          {lookupEnabled && (
+            <div className="-mt-2 grid gap-2">
+              <div className={canLookUp ? 'grid grid-cols-2 gap-2' : ''}>
+                <Button
+                  size="md"
+                  variant="outline"
+                  full
+                  disabled={lookup === 'searching'}
+                  onClick={() => setScannerOpen(true)}
+                  data-testid="scan-barcode"
+                >
+                  Scan barcode
+                </Button>
+                {canLookUp && (
+                  <Button size="md" variant="outline" full disabled={lookup === 'searching'} onClick={() => void runLookup()} data-testid="lookup-food">
+                    {lookup === 'searching' ? 'Looking up…' : 'Look up the label'}
+                  </Button>
+                )}
+              </div>
+              {canLookUp && (
+                <TextInput
+                  value={d.brand ?? ''}
+                  onChange={(v) => setSearchable('brand', v)}
+                  placeholder="Brand (optional)"
+                  testId="food-brand"
+                />
+              )}
+              {lookup === 'none' && (
+                <div className="px-1 text-xs text-muted" data-testid="lookup-none">
+                  No matching product{d.brand?.trim() ? ` from ${d.brand.trim()}` : ''}.
+                </div>
+              )}
+              {lookup === 'notfound' && (
+                <div className="px-1 text-xs text-muted" data-testid="lookup-notfound">
+                  Not in the database.
+                </div>
+              )}
+              {lookup === 'offline' && (
+                <div className="px-1 text-xs text-muted" data-testid="lookup-offline">
+                  No connection.
+                </div>
+              )}
+              {lookup === 'unavailable' && (
+                <div className="px-1 text-xs text-muted" data-testid="lookup-unavailable">
+                  Lookup unavailable.
+                </div>
+              )}
+              {lookup === 'invalid' && (
+                <div className="px-1 text-xs text-muted" data-testid="lookup-invalid">
+                  Not a product barcode.
+                </div>
+              )}
+            </div>
+          )}
+
+          {suggestions.length > 0 && (
+            <div className="-mt-2 overflow-hidden rounded-xl border border-line" data-testid="food-suggestions">
+              {suggestions.map((m, i) => (
+                <div key={m.id} className={`flex items-center ${i > 0 ? 'border-t border-line' : ''}`}>
+                  <button
+                    type="button"
+                    onClick={() => usePrevious(m)}
+                    data-testid={`suggest-${m.name}`}
+                    className="flex min-h-14 min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left active:bg-surface-2"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-semibold leading-tight">{[m.brand, m.name].filter(Boolean).join(' ')}</div>
+                      <div className="num mt-0.5 truncate text-xs text-muted">
+                        {fmtKcal(m.per100.kcal)} / 100 g{m.typicalGrams ? ` · usually ${fmtGrams(m.typicalGrams)}` : ''}
+                      </div>
+                    </div>
+                  </button>
+                  {/* Nothing else removes a remembered food, so a name typed wrong once would be
+                      offered here for ever. */}
+                  <IconButton label={`Forget ${m.name}`} onClick={() => void forgetFood(m.id)} data-testid={`forget-${m.name}`}>
+                    <TrashIcon />
+                  </IconButton>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <Segmented<Basis>
+            value={d.basis}
+            onChange={(v) => set('basis', v)}
+            options={[
+              { value: 'weighed', label: 'Weighed' },
+              { value: 'portion', label: 'Whole portion' },
+            ]}
+          />
+
+          {d.basis === 'weighed' ? (
+            <Field label="Weight">
+              <NumberInput value={d.grams} onChange={(v) => setOwn('grams', v)} mode="numeric" min={0} placeholder="100" testId="food-grams" />
             </Field>
-            <Field label="Protein (g)">
-              <NumberInput value={d.protein} onChange={(v) => setOwn('protein', v)} min={0} placeholder="0" testId="food-protein" />
+          ) : (
+            <Field label="Portion">
+              <TextInput value={d.portion} onChange={(v) => set('portion', v)} placeholder="1 bowl" testId="food-portion" />
             </Field>
-            <Field label="Carbs (g)">
-              <NumberInput value={d.carbs} onChange={(v) => setOwn('carbs', v)} min={0} placeholder="0" testId="food-carbs" />
-            </Field>
-            <Field label="Fat (g)">
-              <NumberInput value={d.fat} onChange={(v) => setOwn('fat', v)} min={0} placeholder="0" testId="food-fat" />
-            </Field>
+          )}
+
+          <div>
+            <div className="mb-2 px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Nutrition {per}</div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Calories">
+                <NumberInput value={d.kcal} onChange={(v) => setOwn('kcal', v)} mode="numeric" min={0} placeholder="0" testId="food-kcal" />
+              </Field>
+              <Field label="Protein (g)">
+                <NumberInput value={d.protein} onChange={(v) => setOwn('protein', v)} min={0} placeholder="0" testId="food-protein" />
+              </Field>
+              <Field label="Carbs (g)">
+                <NumberInput value={d.carbs} onChange={(v) => setOwn('carbs', v)} min={0} placeholder="0" testId="food-carbs" />
+              </Field>
+              <Field label="Fat (g)">
+                <NumberInput value={d.fat} onChange={(v) => setOwn('fat', v)} min={0} placeholder="0" testId="food-fat" />
+              </Field>
+            </div>
+          </div>
+
+          {/* The macros contradicting the calorie figure is worth one line, and only one. */}
+          {!check.ok && (
+            <button
+              type="button"
+              onClick={() => setOwn('kcal', Math.round(check.implied))}
+              className="rounded-xl border border-warn/40 bg-warn/10 px-3 py-3 text-left text-sm text-warn"
+              data-testid="atwater-warning"
+            >
+              Macros come to {fmtKcal(check.implied)}. Tap to use that.
+            </button>
+          )}
+
+          <div className="flex items-baseline justify-between rounded-xl bg-surface-2 px-3 py-3">
+            <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Eaten</span>
+            <span className="num font-extrabold tabular-nums" data-testid="food-eaten">
+              {fmtKcal(eaten.kcal)}
+              {d.basis === 'weighed' && d.grams ? <span className="text-muted"> · {fmtGrams(d.grams)}</span> : null}
+            </span>
           </div>
         </div>
-
-        {/* The macros contradicting the calorie figure is worth one line, and only one. */}
-        {!check.ok && (
-          <button
-            type="button"
-            onClick={() => setOwn('kcal', Math.round(check.implied))}
-            className="rounded-xl border border-warn/40 bg-warn/10 px-3 py-3 text-left text-sm text-warn"
-            data-testid="atwater-warning"
-          >
-            Macros come to {fmtKcal(check.implied)}. Tap to use that.
-          </button>
-        )}
-
-        <div className="flex items-baseline justify-between rounded-xl bg-surface-2 px-3 py-3">
-          <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Eaten</span>
-          <span className="num font-extrabold tabular-nums" data-testid="food-eaten">
-            {fmtKcal(eaten.kcal)}
-            {d.basis === 'weighed' && d.grams ? <span className="text-muted"> · {fmtGrams(d.grams)}</span> : null}
-          </span>
-        </div>
-      </div>
-    </Sheet>
+      </Sheet>
+      <BarcodeScanner open={scannerOpen} onClose={() => setScannerOpen(false)} onCode={(code) => void onScanCode(code)} />
+    </>
   );
 }
 

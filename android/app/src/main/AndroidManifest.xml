@@ -42,4 +42,10 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <!-- The WebView's getUserMedia (barcode scanning) is routed by Capacitor's
+         BridgeWebChromeClient to a runtime CAMERA permission request; without this declaration
+         that prompt never appears and the camera stream never starts. Not required, since the
+         label lookup still works by typing a barcode in by hand. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 </manifest>
