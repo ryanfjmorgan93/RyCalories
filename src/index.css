@@ -169,3 +169,8 @@
 .pulse-ring {
   animation: pulse-ring 1.1s ease-out infinite;
 }
+
+/* Exercise diagrams are white line art on a transparent ground, drawn for the dark theme. */
+[data-theme='light'] .demo-frame {
+  filter: invert(1);
+}

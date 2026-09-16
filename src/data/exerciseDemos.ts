@@ -3044,7 +3044,7 @@ export function findDemo(slug: string): ExerciseDemo | undefined {
 }
 
 export function demoFrameUrl(slug: string, frame: number): string {
-  return `/exercises/${slug}/${frame}.webp`;
+  return `/exercises/${slug}/${frame}.png`;
 }
 
 /**

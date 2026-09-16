@@ -3,7 +3,7 @@
  * Build step (also runnable standalone as `npm run media`).
  *
  * For every exercise in @bryllim/workout-guide's manifest, converts its three 512×512 PNG frames
- * to WebP at 384px wide (quality 75) into public/exercises/<slug>/{1,2,3}.webp, skipping files that
+ * to 4-colour palette PNG at 384px wide into public/exercises/<slug>/{1,2,3}.png, skipping files that
  * are already newer than their source so re-runs are fast. Then writes src/data/exerciseDemos.ts
  * deterministically (sorted by slug).
  *
@@ -20,8 +20,10 @@ const PKG_ROOT = fileURLToPath(new URL('../node_modules/@bryllim/workout-guide/'
 const OUT_DIR = fileURLToPath(new URL('../public/exercises/', import.meta.url));
 const DATA_FILE = fileURLToPath(new URL('../src/data/exerciseDemos.ts', import.meta.url));
 
-const WIDTH = 320;
-const QUALITY = 75;
+const WIDTH = 384;
+// The frames are monochrome line art on a transparent background. A 4-colour palette PNG keeps
+// them crisp at a quarter of the size of lossy WebP (measured: ~4 KB a frame against ~15 KB).
+const COLOURS = 4;
 const TARGET_BYTES = 8 * 1024 * 1024;
 
 /** @type {{id:string, slug:string, name:string, exerciseType:string, equipment:string, primaryMuscle:string, secondaryMuscles:string[], isStretch:boolean, frames:{index:number,path:string}[]}[]} */
@@ -67,7 +69,7 @@ async function convertFrame(srcPath, destPath) {
     const destStat = statSync(destPath);
     if (destStat.mtimeMs >= srcStat.mtimeMs) return false; // already up to date
   }
-  await sharp(srcPath).resize({ width: WIDTH }).webp({ quality: QUALITY }).toFile(destPath);
+  await sharp(srcPath).resize({ width: WIDTH }).png({ palette: true, colours: COLOURS, compressionLevel: 9 }).toFile(destPath);
   return true;
 }
 
@@ -79,7 +81,7 @@ for (const ex of manifest) {
   mkdirSync(destDir, { recursive: true });
   for (const frame of ex.frames) {
     const srcPath = join(PKG_ROOT, frame.path);
-    const destPath = join(destDir, `${frame.index}.webp`);
+    const destPath = join(destDir, `${frame.index}.png`);
     const didConvert = await convertFrame(srcPath, destPath);
     if (didConvert) converted++;
     else skipped++;
@@ -103,7 +105,7 @@ const totalMB = (totalBytes / (1024 * 1024)).toFixed(2);
 console.log(`public/exercises total size: ${totalMB} MB (target <= 8 MB) at ${WIDTH}px.`);
 if (totalBytes > TARGET_BYTES) {
   console.warn(
-    `WARNING: public/exercises exceeds the 8 MB target at ${WIDTH}px (${totalMB} MB). Re-run with a narrower width (e.g. 320px) and re-measure.`,
+    `WARNING: public/exercises exceeds the 8 MB target at ${WIDTH}px (${totalMB} MB). Lower WIDTH or COLOURS and re-measure.`,
   );
 }
 
@@ -165,7 +167,7 @@ export function findDemo(slug: string): ExerciseDemo | undefined {
 }
 
 export function demoFrameUrl(slug: string, frame: number): string {
-  return \`/exercises/\${slug}/\${frame}.webp\`;
+  return \`/exercises/\${slug}/\${frame}.png\`;
 }
 
 /**

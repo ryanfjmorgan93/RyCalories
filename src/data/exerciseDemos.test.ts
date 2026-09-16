@@ -67,7 +67,7 @@ describe('searchDemos', () => {
 
 describe('demoFrameUrl', () => {
   it('builds the expected path shape', () => {
-    expect(demoFrameUrl('bench-press', 1)).toBe('/exercises/bench-press/1.webp');
-    expect(demoFrameUrl('squat', 3)).toBe('/exercises/squat/3.webp');
+    expect(demoFrameUrl('bench-press', 1)).toBe('/exercises/bench-press/1.png');
+    expect(demoFrameUrl('squat', 3)).toBe('/exercises/squat/3.png');
   });
 });

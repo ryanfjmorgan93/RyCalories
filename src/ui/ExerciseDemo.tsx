@@ -38,7 +38,7 @@ export function ExerciseDemo({ slug, name, videoUrl, size = 'lg' }: { slug: stri
         onClick={() => setPaused((p) => !p)}
         className={`relative overflow-hidden rounded-2xl bg-surface-2 border border-line ${imgSize}`}
       >
-        <img src={demoFrameUrl(slug, frame)} alt={name} className="h-full w-full object-contain" />
+        <img src={demoFrameUrl(slug, frame)} alt={name} className="demo-frame h-full w-full object-contain" />
       </button>
 
       <div className="flex items-center gap-1.5" aria-hidden="true">
