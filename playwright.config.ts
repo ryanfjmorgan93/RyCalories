@@ -46,6 +46,12 @@ export default defineConfig({
         // Pre-grant camera so getUserMedia resolves against the fake device with no permission
         // prompt to drive through.
         permissions: ['camera'],
+        // The fake video device only paints frames in full Chromium. Playwright's default headless
+        // build is the reduced "headless shell", on which the camera never yields a frame and the
+        // decode times out (reproduced locally, and exactly what CI showed). In CI, where no
+        // executable is pinned, `channel: 'chromium'` selects the full build that
+        // `playwright install chromium` also downloads.
+        ...(executablePath ? {} : { channel: 'chromium' as const }),
         launchOptions: {
           ...(executablePath ? { executablePath } : {}),
           args: ['--use-fake-device-for-media-stream', `--use-file-for-fake-video-capture=${y4mPath}`],
