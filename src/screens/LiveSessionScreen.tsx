@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
 import { db } from '@/db/db';
+import { gatherContext } from '@/db/assistantQueries';
+import { recordsForNewSets } from '@/db/recordsQueries';
 import {
   addExtraExercise,
   deleteSet,
@@ -10,22 +12,35 @@ import {
   previousSets,
   removeExtraExercise,
   setSkipped,
+  swapExercise,
+  undoSwap,
+  updateSession,
   updateSet,
   type PreviousSets,
 } from '@/db/repo';
+import type { AssistantContext } from '@/domain/assistant';
+import { toDateKey } from '@/domain/dates';
 import { fmtDate, fmtDuration, fmtKg, fmtNum, fmtWeight, targetLine } from '@/domain/format';
+import { DEFAULT_PLATES, plateLabel, platesPerSide } from '@/domain/plates';
+import { prescribe } from '@/domain/prescription';
+import type { PersonalRecord } from '@/domain/records';
 import { countsForProgression, effortOptions, type EffortScale, formatEffort, setBadges } from '@/domain/sets';
-import type { Exercise, RoutineExercise, Session, SetLog, SetType, Settings } from '@/domain/types';
+import { DEFAULT_SETTINGS, type Exercise, type RoutineExercise, type Session, type SetLog, type SetType, type Settings } from '@/domain/types';
+import { warmupRamp } from '@/domain/warmup';
 import { primeAudio, requestNotificationsOnce, vibrate } from '@/state/notify';
 import { useTimer } from '@/state/timer';
+import { AssistantBox } from '@/ui/AssistantBox';
 import { Button, IconButton } from '@/ui/components/Button';
 import { Card } from '@/ui/components/Card';
-import { Chip } from '@/ui/components/Chip';
+import { Chip, Toggle } from '@/ui/components/Chip';
 import { NumberField } from '@/ui/components/NumberField';
 import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { CheckIcon, MoreIcon, TopBar } from '@/ui/components/TopBar';
+import { ExerciseDemo } from '@/ui/ExerciseDemo';
 import { ExercisePicker } from '@/ui/ExercisePicker';
+import { PlateSheet } from '@/ui/PlateSheet';
+import { SwapExerciseSheet } from '@/ui/SwapExerciseSheet';
 import { useNow, useRoutine, useRoutineItems, useSettings } from '@/ui/hooks';
 
 interface Draft {
@@ -42,6 +57,12 @@ interface Slot {
   rx: RoutineExercise | null;
   exercise: Exercise;
   optional: boolean;
+}
+
+/** A lone slot, or adjacent required slots sharing an `rx.supersetId` (a superset). */
+interface SlotGroup {
+  key: string;
+  slots: Slot[];
 }
 
 export function LiveSessionScreen() {
@@ -75,6 +96,33 @@ export function LiveSessionScreen() {
     return [...required, ...extra, ...optional];
   }, [items, extras]);
 
+  // Group adjacent required slots that share a supersetId into one bracket; everything else
+  // (lone slots, extras, optional) stays a group of one.
+  const groups: SlotGroup[] = useMemo(() => {
+    const out: SlotGroup[] = [];
+    let i = 0;
+    while (i < slots.length) {
+      const slot = slots[i];
+      if (!slot.optional && slot.rx?.supersetId !== undefined) {
+        const supersetId = slot.rx.supersetId;
+        const group: Slot[] = [slot];
+        let j = i + 1;
+        while (j < slots.length && !slots[j].optional && slots[j].rx?.supersetId === supersetId) {
+          group.push(slots[j]);
+          j++;
+        }
+        if (group.length > 1) {
+          out.push({ key: `g:${supersetId}`, slots: group });
+          i = j;
+          continue;
+        }
+      }
+      out.push({ key: slot.key, slots: [slot] });
+      i++;
+    }
+    return out;
+  }, [slots]);
+
   const setsBySlot = useMemo(() => {
     const m = new Map<string, SetLog[]>();
     for (const s of sets ?? []) {
@@ -89,15 +137,29 @@ export function LiveSessionScreen() {
 
   const skipped = useMemo(() => new Set(session?.skippedRoutineExerciseIds ?? []), [session?.skippedRoutineExerciseIds]);
 
+  // The first group (or lone slot) still short of its target; within a group, whichever member
+  // has fewest counted sets, ties by order — this alternates A/B/A/B in a superset with no extra state.
   const currentKey = useMemo(() => {
-    for (const s of slots) {
-      if (s.rx && skipped.has(s.rx.id)) continue;
-      const done = (setsBySlot.get(s.key) ?? []).filter((x) => countsForProgression(x.type)).length;
-      const target = s.rx?.targetSets ?? 3;
-      if (done < target) return s.key;
+    for (const g of groups) {
+      let best: Slot | null = null;
+      let bestDone = Infinity;
+      let anyUndone = false;
+      for (const s of g.slots) {
+        if (s.rx && skipped.has(s.rx.id)) continue;
+        const done = (setsBySlot.get(s.key) ?? []).filter((x) => countsForProgression(x.type)).length;
+        const target = s.rx?.targetSets ?? 3;
+        if (done < target) {
+          anyUndone = true;
+          if (done < bestDone) {
+            bestDone = done;
+            best = s;
+          }
+        }
+      }
+      if (anyUndone && best) return best.key;
     }
     return null;
-  }, [slots, setsBySlot, skipped]);
+  }, [groups, setsBySlot, skipped]);
 
   if (!session || !settings || (session.routineId && (!routine || !items))) {
     return (
@@ -110,6 +172,7 @@ export function LiveSessionScreen() {
 
   const requiredUndone = slots.filter((s) => !s.optional && s.rx && !skipped.has(s.rx.id) && (setsBySlot.get(s.key) ?? []).length === 0);
   const totalSets = (sets ?? []).length;
+  const currentExerciseId = slots.find((s) => s.key === currentKey)?.exercise.id;
 
   const finish = () => {
     if (requiredUndone.length > 0 || totalSets === 0) setFinishOpen(true);
@@ -118,13 +181,22 @@ export function LiveSessionScreen() {
 
   return (
     <div className="pb-safe-timer">
-      <SessionHeader session={session} targetMinutes={routine?.targetMinutes} onFinish={finish} />
+      <SessionHeader
+        session={session}
+        targetMinutes={routine?.targetMinutes}
+        settings={settings}
+        currentExerciseId={currentExerciseId}
+        onFinish={finish}
+      />
       <div className="px-3">
-        {slots.map((slot, i) => {
-          const prevSlot = i > 0 ? slots[i - 1] : null;
-          const showOptionalDivider = slot.optional && (!prevSlot || !prevSlot.optional);
+        {groups.map((group, gi) => {
+          const firstSlot = group.slots[0];
+          const prevGroup = gi > 0 ? groups[gi - 1] : null;
+          const prevSlot = prevGroup ? prevGroup.slots[prevGroup.slots.length - 1] : null;
+          const showOptionalDivider = firstSlot.optional && (!prevSlot || !prevSlot.optional);
+          const isSuperset = group.slots.length > 1;
           return (
-            <div key={slot.key}>
+            <div key={group.key}>
               {showOptionalDivider && (
                 <div className="flex items-center gap-3 px-1 pt-5 pb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-dim">
                   <span className="h-px flex-1 bg-line" />
@@ -132,14 +204,33 @@ export function LiveSessionScreen() {
                   <span className="h-px flex-1 bg-line" />
                 </div>
               )}
-              <ExerciseCard
-                session={session}
-                slot={slot}
-                sets={setsBySlot.get(slot.key) ?? []}
-                settings={settings}
-                isCurrent={slot.key === currentKey}
-                isSkipped={slot.rx ? skipped.has(slot.rx.id) : false}
-              />
+              {isSuperset ? (
+                <div className="mt-3 border-l-2 border-accent pl-2" data-testid="superset-group">
+                  <div className="px-1 pb-1 text-[11px] font-bold uppercase tracking-[0.14em] text-accent">Superset</div>
+                  {group.slots.map((slot, si) => (
+                    <ExerciseCard
+                      key={slot.key}
+                      session={session}
+                      slot={slot}
+                      sets={setsBySlot.get(slot.key) ?? []}
+                      settings={settings}
+                      isCurrent={slot.key === currentKey}
+                      isSkipped={slot.rx ? skipped.has(slot.rx.id) : false}
+                      startsRestTimer={si === group.slots.length - 1}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <ExerciseCard
+                  session={session}
+                  slot={firstSlot}
+                  sets={setsBySlot.get(firstSlot.key) ?? []}
+                  settings={settings}
+                  isCurrent={firstSlot.key === currentKey}
+                  isSkipped={firstSlot.rx ? skipped.has(firstSlot.rx.id) : false}
+                  startsRestTimer
+                />
+              )}
             </div>
           );
         })}
@@ -216,26 +307,90 @@ export function LiveSessionScreen() {
   );
 }
 
-function SessionHeader({ session, targetMinutes, onFinish }: { session: Session; targetMinutes?: number; onFinish: () => void }) {
+function SessionHeader({
+  session,
+  targetMinutes,
+  settings,
+  currentExerciseId,
+  onFinish,
+}: {
+  session: Session;
+  targetMinutes?: number;
+  settings: Settings;
+  currentExerciseId?: string;
+  onFinish: () => void;
+}) {
   const now = useNow(1000);
   const elapsed = Math.max(0, Math.floor((now - Date.parse(session.startedAt)) / 1000));
   const over = targetMinutes !== undefined && elapsed > targetMinutes * 60;
+  const [sessionMenuOpen, setSessionMenuOpen] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantContext, setAssistantContext] = useState<AssistantContext>({ today: toDateKey() });
+  const deloadPercent = settings.deloadPercent ?? DEFAULT_SETTINGS.deloadPercent!;
+
+  useEffect(() => {
+    if (!assistantOpen) return;
+    let alive = true;
+    void gatherContext({
+      today: toDateKey(),
+      settings,
+      sessionId: session.id,
+      routineId: session.routineId || undefined,
+      exerciseId: currentExerciseId,
+    }).then((ctx) => {
+      if (alive) setAssistantContext(ctx);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [assistantOpen, settings, session.id, session.routineId, currentExerciseId]);
+
   return (
-    <TopBar
-      title={session.title}
-      back="/"
-      subtitle={
-        <span className={`num text-base font-extrabold ${over ? 'text-danger' : 'text-muted'}`} data-testid="session-clock">
-          {fmtDuration(elapsed)}
-          {targetMinutes ? <span className="text-xs font-semibold text-dim"> / {targetMinutes} min</span> : null}
-        </span>
-      }
-      right={
-        <Button variant="primary" size="md" onClick={onFinish} data-testid="finish-session" className="mr-2">
-          Finish
-        </Button>
-      }
-    />
+    <>
+      <TopBar
+        title={session.title}
+        back="/"
+        subtitle={
+          <span className={`num text-base font-extrabold ${over ? 'text-danger' : 'text-muted'}`} data-testid="session-clock">
+            {fmtDuration(elapsed)}
+            {targetMinutes ? <span className="text-xs font-semibold text-dim"> / {targetMinutes} min</span> : null}
+            {session.deload ? <span className="text-info"> · deload</span> : null}
+          </span>
+        }
+        right={
+          <>
+            <IconButton label="Ask" onClick={() => setAssistantOpen(true)} data-testid="ask-assistant">
+              <AskIcon />
+            </IconButton>
+            <IconButton label="Session options" onClick={() => setSessionMenuOpen(true)} data-testid="session-options">
+              <MoreIcon />
+            </IconButton>
+            <Button variant="primary" size="md" onClick={onFinish} data-testid="finish-session" className="mr-2">
+              Finish
+            </Button>
+          </>
+        }
+      />
+
+      <Sheet open={sessionMenuOpen} onClose={() => setSessionMenuOpen(false)} title={session.title}>
+        <Toggle
+          checked={!!session.deload}
+          onChange={(v) => void updateSession(session.id, { deload: v })}
+          label="Deload session"
+          sub={`Loads reduced to ${Math.round(deloadPercent * 100)}%; weights do not change after this session.`}
+        />
+      </Sheet>
+
+      <AssistantBox open={assistantOpen} onClose={() => setAssistantOpen(false)} context={assistantContext} />
+    </>
+  );
+}
+
+function AskIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-4-1L3 20l1-5.5A8.38 8.38 0 0 1 3 11.5 8.5 8.5 0 0 1 11.5 3a8.5 8.5 0 0 1 9.5 8.5Z" />
+    </svg>
   );
 }
 
@@ -253,6 +408,7 @@ function ExerciseCard({
   settings,
   isCurrent,
   isSkipped,
+  startsRestTimer,
 }: {
   session: Session;
   slot: Slot;
@@ -260,6 +416,8 @@ function ExerciseCard({
   settings: Settings;
   isCurrent: boolean;
   isSkipped: boolean;
+  /** False for a superset member that isn't the last one logged — its partner still owes a set. */
+  startsRestTimer: boolean;
 }) {
   const nav = useNavigate();
   const { rx, exercise } = slot;
@@ -270,6 +428,9 @@ function ExerciseCard({
   const [removeConfirm, setRemoveConfirm] = useState(false);
   const [editing, setEditing] = useState<SetLog | null>(null);
   const [showRir, setShowRir] = useState(false);
+  const [plateSheetOpen, setPlateSheetOpen] = useState(false);
+  const [swapOpen, setSwapOpen] = useState(false);
+  const [howToOpen, setHowToOpen] = useState(false);
   const timer = useTimer();
 
   const prev = useLiveQuery<PreviousSets | null>(() => previousSets(rx?.id ?? null, exercise.id, session.id), [rx?.id, exercise.id, session.id]);
@@ -282,14 +443,36 @@ function ExerciseCard({
   const effortScale: EffortScale = settings.effortScale ?? 'rir';
   const badges = setBadges(sets);
 
+  const barKg = settings.barKg ?? DEFAULT_PLATES.barKg;
+  const plateSizes = settings.plates ?? DEFAULT_PLATES.plates;
+
+  const prescription = useMemo(() => {
+    if (!rx) return null;
+    return prescribe({ rx, kind, equipment: exercise.equipment, deload: !!session.deload, settings });
+  }, [rx, kind, exercise.equipment, session.deload, settings]);
+
+  // The weight this slot is actually working at right now: deload-adjusted when the session is a
+  // deload, otherwise the plain prescription. Null for calibrating/carry/timed.
+  const workingWeight = useMemo(() => {
+    if (!rx || rx.mode !== 'normal' || kind === 'carry' || kind === 'timed') return null;
+    return session.deload ? (prescription?.weight ?? null) : rx.currentWeight;
+  }, [rx, kind, session.deload, prescription]);
+
+  const swappedToId = rx ? session.swaps?.[rx.id] : undefined;
+  const swappedExercise = useLiveQuery(() => (swappedToId ? db.exercises.get(swappedToId) : undefined), [swappedToId]);
+
+  const prRecords = useLiveQuery<PersonalRecord[]>(() => recordsForNewSets(exercise.id, session.id, sets), [exercise.id, session.id, sets]);
+  const prIndices = useMemo(() => new Set((prRecords ?? []).map((r) => r.setIndex)), [prRecords]);
+
   const defaultDraft = useCallback((): Draft => {
     const lastLogged = sets.length ? sets[sets.length - 1] : null;
     const lastWorking = [...sets].reverse().find((s) => countsForProgression(s.type)) ?? null;
     const prevSame = prevWorking[nextIndex] ?? prevWorking[prevWorking.length - 1] ?? null;
     let weight: number | null;
-    // Keep whatever was actually on the bar this session; otherwise the prescription; otherwise last time.
+    // Keep whatever was actually on the bar this session; otherwise the prescription (deload-
+    // adjusted when this is a deload session); otherwise last time.
     if (lastWorking) weight = lastWorking.weight;
-    else if (rx && rx.mode === 'normal' && kind !== 'carry' && kind !== 'timed') weight = rx.currentWeight;
+    else if (rx && rx.mode === 'normal' && kind !== 'carry' && kind !== 'timed') weight = workingWeight ?? rx.currentWeight;
     else weight = prevSame?.weight ?? null;
     let reps: number | null = null;
     if (kind === 'reps' || kind === 'bodyweight_plus') {
@@ -303,7 +486,7 @@ function ExerciseCard({
       seconds: kind === 'timed' ? prevSame?.seconds ?? lastLogged?.seconds ?? rx?.repMin ?? null : null,
       type: 'working',
     };
-  }, [sets, prevWorking, nextIndex, rx, kind]);
+  }, [sets, prevWorking, nextIndex, rx, kind, workingWeight]);
 
   const [draft, setDraft] = useState<Draft>(defaultDraft);
   const touched = useRef(false);
@@ -319,6 +502,13 @@ function ExerciseCard({
       setDraft(defaultDraft());
     }
   }, [sets.length, prev, defaultDraft]);
+
+  // Deload toggled on (or off) mid-session, before this slot's draft was touched: refresh it so
+  // an as-yet-unlogged set picks up the changed prescription straight away.
+  useEffect(() => {
+    if (!touched.current) setDraft(defaultDraft());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workingWeight]);
 
   useEffect(() => {
     if (isCurrent && ref.current) {
@@ -349,19 +539,22 @@ function ExerciseCard({
     vibrate(25);
     void requestNotificationsOnce();
     try {
-    await logSet({
-      sessionId: session.id,
-      routineExerciseId: rx?.id ?? null,
-      exerciseId: exercise.id,
-      type: draft.type,
-      weight: draft.weight ?? 0,
-      reps: kind === 'reps' || kind === 'bodyweight_plus' ? (draft.reps ?? undefined) : undefined,
-      distanceM: kind === 'carry' ? (draft.distanceM ?? undefined) : undefined,
-      seconds: kind === 'carry' || kind === 'timed' ? (draft.seconds ?? undefined) : undefined,
-      rir: draft.rir ?? undefined,
-    });
-    // A drop set follows a working set the timer is already running for.
-    if (draft.type !== 'drop') timer.start(restSecondsFor(rx, exercise, settings), exercise.name);
+      const newSet = await logSet({
+        sessionId: session.id,
+        routineExerciseId: rx?.id ?? null,
+        exerciseId: exercise.id,
+        type: draft.type,
+        weight: draft.weight ?? 0,
+        reps: kind === 'reps' || kind === 'bodyweight_plus' ? (draft.reps ?? undefined) : undefined,
+        distanceM: kind === 'carry' ? (draft.distanceM ?? undefined) : undefined,
+        seconds: kind === 'carry' || kind === 'timed' ? (draft.seconds ?? undefined) : undefined,
+        rir: draft.rir ?? undefined,
+      });
+      // A drop set follows a working set the timer is already running for; a superset member
+      // that isn't last in its group leaves the timer to whoever logs last.
+      if (draft.type !== 'drop' && startsRestTimer) timer.start(restSecondsFor(rx, exercise, settings), exercise.name);
+      const newRecords = await recordsForNewSets(exercise.id, session.id, [newSet]);
+      if (newRecords.length > 0) toast(`PR · ${setLabel(newSet, kind)}`, 'ok');
     } finally {
       busy.current = false;
       setBusyUi(false);
@@ -373,9 +566,17 @@ function ExerciseCard({
   };
 
   const inc = rx?.increment ?? exercise.defaultIncrement ?? 2.5;
-  const tLine = rx ? targetLine(rx, kind) : 'this session only';
+  const tLine = rx ? (session.deload && prescription ? prescription.line : targetLine(rx, kind)) : 'this session only';
   const perSide = exercise.unilateral ? ' · per side' : '';
   const dimmed = isSkipped || (slot.optional && !isCurrent && sets.length === 0);
+
+  const showWarmup = exercise.isCompound && exercise.equipment === 'barbell' && workingDone === 0 && workingWeight !== null && workingWeight > 0;
+  const warmupPills = showWarmup ? warmupRamp(workingWeight as number, { barKg, plates: plateSizes }) : [];
+
+  const plateLoad =
+    exercise.equipment === 'barbell' && draft.weight !== null && Number.isFinite(draft.weight) && draft.weight >= barKg
+      ? platesPerSide(draft.weight, { barKg, plates: plateSizes })
+      : null;
 
   return (
     <div ref={ref} className="pt-3">
@@ -388,6 +589,7 @@ function ExerciseCard({
               {slot.optional && <Chip size="sm">optional</Chip>}
               {!rx && <Chip size="sm">extra</Chip>}
               {isSkipped && <Chip size="sm" tone="warn">skipped</Chip>}
+              {session.deload && rx && <Chip size="sm" tone="info">deload</Chip>}
             </div>
             <div className="mt-0.5 text-sm text-muted">
               {tLine}
@@ -400,6 +602,23 @@ function ExerciseCard({
         </div>
 
         {rx?.cue && <div className="px-4 pt-2 text-[15px] font-semibold leading-snug text-accent">{rx.cue}</div>}
+
+        {warmupPills.length > 0 && (
+          <div className="mt-2 flex items-center gap-2 overflow-x-auto px-4 no-scrollbar">
+            <span className="shrink-0 text-[11px] font-bold uppercase tracking-[0.12em] text-dim">Warm-up</span>
+            {warmupPills.map((w, i) => (
+              <button
+                key={i}
+                type="button"
+                data-testid={`warmup-pill-${i}`}
+                onClick={() => update({ type: 'warmup', weight: w.weight, reps: w.reps })}
+                className="num min-h-11 shrink-0 rounded-lg border border-line bg-surface-2 px-3 text-base font-semibold text-muted active:bg-line"
+              >
+                {fmtNum(w.weight)} × {w.reps}
+              </button>
+            ))}
+          </div>
+        )}
 
         {prev && prevWorking.length > 0 && (
           <div className="mt-2 flex items-center gap-2 overflow-x-auto px-4 no-scrollbar">
@@ -430,6 +649,11 @@ function ExerciseCard({
                   {badges[i]}
                 </span>
                 <span className="num flex-1 text-lg font-bold">{setLabel(s, kind)}</span>
+                {prIndices.has(i) && (
+                  <span data-testid="pr-chip">
+                    <Chip size="sm" tone="ok">PR</Chip>
+                  </span>
+                )}
                 {s.rir !== undefined && <span className="text-xs font-bold text-muted">{formatEffort(s.rir, effortScale)}</span>}
                 <span className="text-ok">
                   <CheckIcon size={20} />
@@ -467,15 +691,27 @@ function ExerciseCard({
             </div>
             <div className="grid grid-cols-2 gap-2">
               {kind !== 'timed' && (
-                <NumberField
-                  label={kind === 'bodyweight_plus' ? 'Added kg' : 'kg'}
-                  value={draft.weight}
-                  onChange={(v) => update({ weight: v })}
-                  step={inc}
-                  fallback={rx?.mode === 'normal' ? rx.currentWeight : 0}
-                  placeholder={kind === 'bodyweight_plus' ? '0' : 'kg'}
-                  testId="weight-input"
-                />
+                <div className="min-w-0">
+                  <NumberField
+                    label={kind === 'bodyweight_plus' ? 'Added kg' : 'kg'}
+                    value={draft.weight}
+                    onChange={(v) => update({ weight: v })}
+                    step={inc}
+                    fallback={rx?.mode === 'normal' ? (workingWeight ?? rx.currentWeight) : 0}
+                    placeholder={kind === 'bodyweight_plus' ? '0' : 'kg'}
+                    testId="weight-input"
+                  />
+                  {plateLoad && (
+                    <button
+                      type="button"
+                      data-testid="plate-line"
+                      onClick={() => setPlateSheetOpen(true)}
+                      className="mt-1 px-1 text-left text-xs font-semibold text-muted underline decoration-dotted"
+                    >
+                      {plateLabel(plateLoad)}
+                    </button>
+                  )}
+                </div>
               )}
               {(kind === 'reps' || kind === 'bodyweight_plus') && (
                 <NumberField label="Reps" value={draft.reps} onChange={(v) => update({ reps: v })} step={1} mode="numeric" fallback={rx?.repMin ?? 1} min={0} placeholder={rx ? `${rx.repMin}–${rx.repMax}` : 'reps'} testId="reps-input" />
@@ -516,9 +752,18 @@ function ExerciseCard({
         )}
         {isSkipped && rx && (
           <div className="px-4 pb-4 pt-2">
-            <Button full variant="ghost" onClick={() => void setSkipped(session.id, rx.id, false)}>
-              Unskip
-            </Button>
+            {swappedToId ? (
+              <>
+                <div className="mb-2 text-sm text-muted">Swapped for {swappedExercise?.name ?? '…'}</div>
+                <Button full variant="ghost" onClick={() => void undoSwap(session.id, rx.id)}>
+                  Undo
+                </Button>
+              </>
+            ) : (
+              <Button full variant="ghost" onClick={() => void setSkipped(session.id, rx.id, false)}>
+                Unskip
+              </Button>
+            )}
           </div>
         )}
       </Card>
@@ -535,6 +780,30 @@ function ExerciseCard({
           >
             History and details
           </Button>
+          {exercise.demo && (
+            <Button
+              full
+              size="lg"
+              onClick={() => {
+                setMenuOpen(false);
+                setHowToOpen(true);
+              }}
+            >
+              How to
+            </Button>
+          )}
+          {rx && !swappedToId && (
+            <Button
+              full
+              size="lg"
+              onClick={() => {
+                setMenuOpen(false);
+                setSwapOpen(true);
+              }}
+            >
+              Swap exercise
+            </Button>
+          )}
           {rx && !isSkipped && (
             <Button
               full
@@ -547,7 +816,7 @@ function ExerciseCard({
               Skip this exercise
             </Button>
           )}
-          {rx && isSkipped && (
+          {rx && isSkipped && !swappedToId && (
             <Button
               full
               size="lg"
@@ -616,6 +885,29 @@ function ExerciseCard({
             setEditing(null);
           }}
         />
+      )}
+
+      {plateLoad && draft.weight !== null && (
+        <PlateSheet open={plateSheetOpen} onClose={() => setPlateSheetOpen(false)} weight={draft.weight} plates={{ barKg, plates: plateSizes }} />
+      )}
+
+      {rx && (
+        <SwapExerciseSheet
+          open={swapOpen}
+          onClose={() => setSwapOpen(false)}
+          muscleGroup={exercise.muscleGroup}
+          excludeExerciseId={exercise.id}
+          onPick={(picked) => {
+            setSwapOpen(false);
+            void swapExercise(session.id, rx.id, picked.id);
+          }}
+        />
+      )}
+
+      {exercise.demo && (
+        <Sheet open={howToOpen} onClose={() => setHowToOpen(false)} title={exercise.name}>
+          <ExerciseDemo slug={exercise.demo} name={exercise.name} videoUrl={exercise.videoUrl} />
+        </Sheet>
       )}
     </div>
   );

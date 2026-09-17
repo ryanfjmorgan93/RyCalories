@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { buildSummary, discardSession, finishSession, type SessionSummary, type SummaryItem } from '@/db/repo';
-import { decisionLine, fmtDuration, fmtKg, fmtWeight } from '@/domain/format';
+import { decisionLine, fmtDuration, fmtKg, fmtNum, fmtWeight } from '@/domain/format';
 import type { Suggestion } from '@/domain/engine';
+import type { PersonalRecord } from '@/domain/records';
 import { NIGGLE_TAGS, type Niggle, type NiggleTag } from '@/domain/types';
 import { useTimer } from '@/state/timer';
 import { Button } from '@/ui/components/Button';
@@ -108,6 +109,7 @@ export function SummaryScreen() {
           <Stat label="Time" value={fmtDuration(summary.durationSec)} />
           <Stat label="Sets" value={summary.workingSetsDone} sub={summary.setsDone !== summary.workingSetsDone ? `+${summary.setsDone - summary.workingSetsDone} warm-up` : undefined} />
           <Stat label="Exercises" value={summary.items.filter((i) => i.sets.length > 0).length} />
+          {summary.session.deload && <Stat label="Deload" value="Yes" />}
         </Card>
 
         {decided.length > 0 && <SectionTitle>Next time</SectionTitle>}
@@ -133,6 +135,15 @@ export function SummaryScreen() {
                     <div className="text-sm text-muted">
                       {item.status === 'skipped' ? 'Skipped' : item.status === 'not_done' ? 'Not done' : item.status === 'extra' ? `${item.sets.length} sets · no progression (extra)` : ''}
                     </div>
+                    {item.records.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {item.records.map((r, ri) => (
+                          <Chip key={ri} size="sm" tone="ok">
+                            {recordChipLabel(r)}
+                          </Chip>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -228,11 +239,41 @@ function DecisionCard({ item, choice, onChange }: { item: SummaryItem; choice: C
         {direction === 'down' && <Chip tone="warn" size="sm">down</Chip>}
         {direction === 'hold' && <Chip size="sm">hold</Chip>}
         {d.rule === 'calibrating' && <Chip tone="info" size="sm">calibrating</Chip>}
+        {d.rule === 'deload' && <Chip tone="info" size="sm">deload</Chip>}
       </div>
+
+      {item.records.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {item.records.map((r, i) => (
+            <Chip key={i} size="sm" tone="ok">
+              {recordChipLabel(r)}
+            </Chip>
+          ))}
+        </div>
+      )}
 
       {item.suggestions.map((s, i) => (
         <SuggestionRow key={i} s={s} kind={kind} onUse={(w) => onChange({ ...c, mode: 'override', overrideTo: w })} />
       ))}
+
+      {d.rule === 'deload' && (
+        <div className="mt-3">
+          <Button size="lg" full variant={c.mode === 'override' ? 'primary' : 'secondary'} onClick={() => onChange({ ...c, mode: 'override' })} data-testid="override">
+            Override
+          </Button>
+          {c.mode === 'override' && (
+            <div className="mt-2">
+              <NumberField
+                label={kind === 'bodyweight_plus' ? 'Added kg next time' : 'Next time (kg)'}
+                value={c.overrideTo}
+                onChange={(v) => onChange({ ...c, overrideTo: v })}
+                step={rx.increment}
+                testId="override-input"
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {isWeightDecision && (
         <div className="mt-3">
@@ -284,6 +325,26 @@ function DecisionCard({ item, choice, onChange }: { item: SummaryItem; choice: C
       )}
     </Card>
   );
+}
+
+/** "PR weight 100 kg" · "PR e1RM 118 kg" · "PR set volume 800" · "PR reps 9 × 100 kg". */
+function recordChipLabel(r: PersonalRecord): string {
+  let base: string;
+  switch (r.kind) {
+    case 'weight':
+      base = `PR weight ${fmtKg(r.value)}`;
+      break;
+    case 'e1rm':
+      base = `PR e1RM ${fmtKg(r.value)}`;
+      break;
+    case 'set_volume':
+      base = `PR set volume ${fmtNum(r.value)}`;
+      break;
+    case 'reps_at_weight':
+      base = `PR reps ${fmtNum(r.value)} × ${fmtKg(r.weight)}`;
+      break;
+  }
+  return r.previousSource === 'hevy' ? `${base} · beats Hevy` : base;
 }
 
 function SuggestionRow({ s, kind, onUse }: { s: Suggestion; kind: SummaryItem['exercise']['kind']; onUse: (w: number) => void }) {

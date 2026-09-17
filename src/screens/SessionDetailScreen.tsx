@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
-import { deleteSession, sessionDetail, type SessionGroup } from '@/db/repo';
+import { recordsForNewSets } from '@/db/recordsQueries';
+import { createRoutineFromSession, deleteSession, sessionDetail, type SessionGroup } from '@/db/repo';
 import { sessionSeconds } from '@/db/historyQueries';
 import { fmtDateLong, fmtDuration, fmtKg, fmtNum, fmtWeight, targetLine } from '@/domain/format';
 import { countsForVolume, setBadges } from '@/domain/sets';
@@ -12,6 +13,7 @@ import { Chip } from '@/ui/components/Chip';
 import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { MoreIcon, TopBar } from '@/ui/components/TopBar';
+import { useRoutineItems } from '@/ui/hooks';
 
 const timeFmt = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' });
 
@@ -60,7 +62,7 @@ export function SessionDetailScreen() {
     <div>
       <TopBar
         title={session.title}
-        subtitle={`${fmtDateLong(session.startedAt)}, ${fmtTime(session.startedAt)}`}
+        subtitle={`${fmtDateLong(session.startedAt)}, ${fmtTime(session.startedAt)}${session.deload ? ' · Deload' : ''}`}
         back
         right={
           <IconButton label="More" onClick={() => setMenuOpen(true)}>
@@ -81,13 +83,29 @@ export function SessionDetailScreen() {
           </div>
         )}
 
+        <SwappedSkippedList session={session} groups={groups} />
+
         {groups.length === 0 && <div className="py-8 text-center text-sm text-muted">No sets logged</div>}
 
         {groups.map((g) => (
-          <GroupCard key={g.sets[0]?.routineExerciseId ?? `x:${g.exercise.id}`} group={g} />
+          <GroupCard key={g.sets[0]?.routineExerciseId ?? `x:${g.exercise.id}`} group={g} session={session} />
         ))}
 
         <SessionExtras session={session} />
+
+        <Button
+          className="mt-4"
+          full
+          size="lg"
+          data-testid="save-as-routine"
+          onClick={async () => {
+            const routine = await createRoutineFromSession(session.id);
+            toast('Routine saved', 'ok');
+            nav(`/routines/${routine.id}`);
+          }}
+        >
+          Save as routine
+        </Button>
         <div className="h-6" />
       </div>
 
@@ -123,13 +141,51 @@ export function SessionDetailScreen() {
   );
 }
 
-function GroupCard({ group }: { group: SessionGroup }) {
+/** Routine-exercises skipped in favour of a session-only swap: they never get a `GroupCard` of
+ * their own (no sets were logged against them), so this lists what stood in for what. */
+function SwappedSkippedList({ session, groups }: { session: Session; groups: SessionGroup[] }) {
+  const items = useRoutineItems(session.routineId || undefined);
+  const rows = useMemo(() => {
+    if (!items) return [];
+    const swaps = session.swaps ?? {};
+    const skippedIds = new Set(session.skippedRoutineExerciseIds ?? []);
+    return items
+      .filter((it) => skippedIds.has(it.rx.id) && swaps[it.rx.id])
+      .map((it) => {
+        const subId = swaps[it.rx.id];
+        const subName = groups.find((g) => g.exercise.id === subId)?.exercise.name ?? '';
+        return { rxId: it.rx.id, originalName: it.exercise.name, subName };
+      });
+  }, [items, session.swaps, session.skippedRoutineExerciseIds, groups]);
+
+  if (rows.length === 0) return null;
+  return (
+    <div className="mt-3 grid gap-2">
+      {rows.map((r) => (
+        <div key={r.rxId} className="rounded-xl border border-line bg-surface-2 px-4 py-2.5 text-sm">
+          <span className="font-semibold">{r.originalName}</span>
+          <span className="text-muted"> · Swapped for {r.subName}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GroupCard({ group, session }: { group: SessionGroup; session: Session }) {
   const nav = useNavigate();
   const { rx, exercise, sets, decision } = group;
   const kind = exercise.kind;
   const badges = setBadges(sets);
   // "Extra" means logged outside the routine; a routine-exercise deleted since is not extra.
   const isExtra = sets[0]?.routineExerciseId === null;
+
+  // A finished session's PR chips reflect what stood *at the time*: records already set later
+  // (by a subsequent session) don't retroactively un-PR a set logged here.
+  const prRecords = useLiveQuery(
+    () => (sets.length > 0 ? recordsForNewSets(exercise.id, sets[0].sessionId, sets, { before: session.startedAt }) : []),
+    [exercise.id, sets, session.startedAt],
+  );
+  const prIndices = useMemo(() => new Set((prRecords ?? []).map((r) => r.setIndex)), [prRecords]);
 
   return (
     <Card className="mt-3 overflow-hidden">
@@ -151,6 +207,11 @@ function GroupCard({ group }: { group: SessionGroup }) {
           <div key={s.id} className="flex items-center gap-3 border-b border-line px-4 py-2.5 last:border-b-0">
             <span className={`num w-7 text-center text-sm font-bold ${badges[i] === 'W' ? 'text-warn' : badges[i] === 'D' ? 'text-info' : 'text-muted'}`}>{badges[i]}</span>
             <span className="num flex-1 text-lg font-bold">{setLabel(s, kind)}</span>
+            {prIndices.has(i) && (
+              <span data-testid="pr-chip">
+                <Chip size="sm" tone="ok">PR</Chip>
+              </span>
+            )}
             {s.rir !== undefined && <Chip size="sm">RIR {s.rir}</Chip>}
           </div>
         ))}

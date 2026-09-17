@@ -34,8 +34,12 @@ async function latestBodyweightKg(): Promise<number | undefined> {
   return rows[0].kg;
 }
 
-/** Completed sessions' sets for an exercise (other than `excludeSessionId`), as `RecordSession`s. */
-async function priorRecordSessions(exerciseId: string, excludeSessionId: string): Promise<RecordSession[]> {
+/**
+ * Completed sessions' sets for an exercise (other than `excludeSessionId`), as `RecordSession`s.
+ * `before`, when given, also excludes sessions that started on or after it — so a finished
+ * session's records can be judged against only what stood at the time it was logged.
+ */
+async function priorRecordSessions(exerciseId: string, excludeSessionId: string, before?: string): Promise<RecordSession[]> {
   const sets = await db.setLogs.where('exerciseId').equals(exerciseId).toArray();
   const bySession = new Map<string, SetLog[]>();
   for (const s of sets) {
@@ -44,7 +48,9 @@ async function priorRecordSessions(exerciseId: string, excludeSessionId: string)
     arr.push(s);
     bySession.set(s.sessionId, arr);
   }
-  const sessions = (await db.sessions.bulkGet([...bySession.keys()])).filter((s): s is Session => !!s && !!s.endedAt);
+  const sessions = (await db.sessions.bulkGet([...bySession.keys()])).filter(
+    (s): s is Session => !!s && !!s.endedAt && (before === undefined || s.startedAt < before),
+  );
   return sessions.map((session) => ({
     sessionId: session.id,
     startedAt: session.startedAt,
@@ -58,12 +64,17 @@ async function priorRecordSessions(exerciseId: string, excludeSessionId: string)
  * session's counted sets (Hevy imports included, attributed) PLUS the earlier sets of this same
  * session (so a second heavier set is compared with the first, not only with history).
  */
-export async function recordsForNewSets(exerciseId: string, sessionId: string, newSets: SetLog[]): Promise<PersonalRecord[]> {
+export async function recordsForNewSets(
+  exerciseId: string,
+  sessionId: string,
+  newSets: SetLog[],
+  opts?: { before?: string },
+): Promise<PersonalRecord[]> {
   if (newSets.length === 0) return [];
   const [exercise, session] = await Promise.all([db.exercises.get(exerciseId), db.sessions.get(sessionId)]);
   if (!exercise || !session) return [];
   const bodyweightKg = exercise.kind === 'bodyweight_plus' ? await bodyweightKgFor(session) : undefined;
-  const priorSessions = await priorRecordSessions(exerciseId, sessionId);
+  const priorSessions = await priorRecordSessions(exerciseId, sessionId, opts?.before);
 
   const newIds = new Set(newSets.map((s) => s.id));
   const earlier = (await db.setLogs.where('[sessionId+exerciseId]').equals([sessionId, exerciseId]).toArray())
