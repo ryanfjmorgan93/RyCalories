@@ -457,6 +457,68 @@ describe('superset toggle (WP3)', () => {
     expect(after.find((i) => i.exercise.id === REAR_DELT_FLY)!.rx.supersetId).toBeUndefined();
     expect(after.find((i) => i.exercise.id === CABLE_CRUNCH)!.rx.supersetId).toBeUndefined();
   });
+
+  /** No routine-exercise in `routineId` is ever the sole holder of a supersetId. */
+  async function assertNoOrphanSuperset(routineId: string): Promise<void> {
+    const items = await routineItems(routineId);
+    const counts = new Map<string, number>();
+    for (const { rx } of items) {
+      if (rx.supersetId !== undefined) counts.set(rx.supersetId, (counts.get(rx.supersetId) ?? 0) + 1);
+    }
+    for (const [id, count] of counts) {
+      expect(count, `supersetId ${id} has only ${count} member(s)`).toBeGreaterThanOrEqual(2);
+    }
+  }
+
+  it('extending a superset to a third exercise links the third to the first, not a new group', async () => {
+    const rdlRx = await rxFor(HINGE, RDL);
+    const hipRx = await rxFor(HINGE, HIP_THRUST);
+
+    await toggleSupersetWithNext(HINGE, rdlRx.id); // pairs RDL + Hip Thrust
+    await assertNoOrphanSuperset(HINGE);
+    await toggleSupersetWithNext(HINGE, hipRx.id); // extends to Hip Thrust + Lying Leg Curl
+    await assertNoOrphanSuperset(HINGE);
+
+    const after = await routineItems(HINGE);
+    const rdl = after.find((i) => i.exercise.id === RDL)!.rx;
+    const hip = after.find((i) => i.exercise.id === HIP_THRUST)!.rx;
+    const curl = after.find((i) => i.exercise.id === LYING_LEG_CURL)!.rx;
+    expect(rdl.supersetId).toBeDefined();
+    expect(rdl.supersetId).toBe(hip.supersetId);
+    expect(hip.supersetId).toBe(curl.supersetId);
+  });
+
+  it('unlinking the last link of a chain of three leaves the first two paired, not the middle orphaned', async () => {
+    const rdlRx = await rxFor(HINGE, RDL);
+    const hipRx = await rxFor(HINGE, HIP_THRUST);
+
+    await toggleSupersetWithNext(HINGE, rdlRx.id); // RDL + Hip Thrust
+    await toggleSupersetWithNext(HINGE, hipRx.id); // + Lying Leg Curl -> chain of three
+    await toggleSupersetWithNext(HINGE, hipRx.id); // unlink Hip Thrust from Lying Leg Curl
+    await assertNoOrphanSuperset(HINGE);
+
+    const after = await routineItems(HINGE);
+    const rdl = after.find((i) => i.exercise.id === RDL)!.rx;
+    const hip = after.find((i) => i.exercise.id === HIP_THRUST)!.rx;
+    const curl = after.find((i) => i.exercise.id === LYING_LEG_CURL)!.rx;
+    // The rx/next boundary that was toggled (Hip Thrust / Lying Leg Curl) splits there: RDL and
+    // Hip Thrust are still contiguous and untouched by this toggle, so they stay paired; Lying Leg
+    // Curl is left alone and loses its id rather than dangling with a group of one.
+    expect(rdl.supersetId).toBeDefined();
+    expect(rdl.supersetId).toBe(hip.supersetId);
+    expect(curl.supersetId).toBeUndefined();
+  });
+
+  it('never leaves a routine-exercise as the sole holder of a supersetId, across a long sequence of toggles', async () => {
+    const rdlRx = await rxFor(HINGE, RDL);
+    const hipRx = await rxFor(HINGE, HIP_THRUST);
+
+    const steps = [rdlRx.id, hipRx.id, hipRx.id, rdlRx.id, rdlRx.id, hipRx.id, hipRx.id, rdlRx.id];
+    for (const id of steps) {
+      await toggleSupersetWithNext(HINGE, id);
+      await assertNoOrphanSuperset(HINGE);
+    }
+  });
 });
 
 describe('swap and undo swap (WP3)', () => {
@@ -482,6 +544,38 @@ describe('swap and undo swap (WP3)', () => {
     expect(s?.skippedRoutineExerciseIds ?? []).not.toContain(rx.id);
     expect(s?.extraExerciseIds ?? []).not.toContain(FACE_PULL);
     expect(s?.swaps ?? {}).toEqual({});
+    expect(await db.setLogs.where('[sessionId+exerciseId]').equals([session.id, FACE_PULL]).count()).toBe(0);
+  });
+
+  it('undoing one of two swaps to the same substitute keeps the shared extra and its sets', async () => {
+    const session = await startSession(HINGE);
+    const rdlRx = await rxFor(HINGE, RDL);
+    const hipRx = await rxFor(HINGE, HIP_THRUST);
+
+    // Two different slots swapped to the same substitute share one extra entry and its sets.
+    await swapExercise(session.id, rdlRx.id, FACE_PULL);
+    await swapExercise(session.id, hipRx.id, FACE_PULL);
+    await logSet({ sessionId: session.id, routineExerciseId: null, exerciseId: FACE_PULL, type: 'working', weight: 50, reps: 15 });
+    await logSet({ sessionId: session.id, routineExerciseId: null, exerciseId: FACE_PULL, type: 'working', weight: 50, reps: 12 });
+    expect(await db.setLogs.where('[sessionId+exerciseId]').equals([session.id, FACE_PULL]).count()).toBe(2);
+
+    await undoSwap(session.id, rdlRx.id);
+    let s = await db.sessions.get(session.id);
+    // The RDL slot is unskipped and its swap entry is gone...
+    expect(s?.skippedRoutineExerciseIds ?? []).not.toContain(rdlRx.id);
+    expect(s?.swaps ?? {}).not.toHaveProperty(rdlRx.id);
+    // ...but the Hip Thrust swap is still active, so the shared extra and its sets survive.
+    expect(s?.swaps).toEqual({ [hipRx.id]: FACE_PULL });
+    expect(s?.extraExerciseIds ?? []).toContain(FACE_PULL);
+    expect(s?.skippedRoutineExerciseIds).toContain(hipRx.id);
+    expect(await db.setLogs.where('[sessionId+exerciseId]').equals([session.id, FACE_PULL]).count()).toBe(2);
+
+    // Undoing the second (and last) swap to Face Pull now removes the extra and its sets.
+    await undoSwap(session.id, hipRx.id);
+    s = await db.sessions.get(session.id);
+    expect(s?.extraExerciseIds ?? []).not.toContain(FACE_PULL);
+    expect(s?.swaps ?? {}).toEqual({});
+    expect(s?.skippedRoutineExerciseIds ?? []).not.toContain(hipRx.id);
     expect(await db.setLogs.where('[sessionId+exerciseId]').equals([session.id, FACE_PULL]).count()).toBe(0);
   });
 });

@@ -329,10 +329,13 @@ export async function reorderRoutineExercises(ids: string[]): Promise<void> {
  * Refuses silently (no-op) when there is no next item, or when one side is optional and the
  * other is not (the optional tail cannot be supersetted with required work).
  *
- * Already linked to the next item → unlink: `rx` always loses its supersetId; the next item
- * keeps its supersetId only if a third member of the same group is still relying on it (a chain
- * of three loses its first link and stays a chain of two), otherwise it is cleared too.
- * Not linked → link: both take the next item's existing supersetId, or a fresh one.
+ * Already linked to the next item → unlink: the group (contiguous by construction) splits at the
+ * rx/next boundary into a left segment (its start up to and including rx) and a right segment
+ * (next up to the group's end). Each segment keeps sharing the id only while at least two members
+ * remain in it; a segment left with one member has that member's id cleared, so nobody is ever the
+ * sole holder of a supersetId. Not linked → link: `rx` keeps its own supersetId if it has one,
+ * otherwise takes the next item's, otherwise a fresh one; if `next` already belongs to a different
+ * group, every member of that group (adjacent by construction) moves onto the merged id too.
  */
 export async function toggleSupersetWithNext(routineId: string, rxId: string): Promise<void> {
   await db.transaction('rw', db.routineExercises, async () => {
@@ -345,15 +348,26 @@ export async function toggleSupersetWithNext(routineId: string, rxId: string): P
     if (rx.optional !== next.optional) return;
 
     if (rx.supersetId !== undefined && rx.supersetId === next.supersetId) {
-      const groupSize = list.filter((r) => r.supersetId === rx.supersetId).length;
-      await db.routineExercises.update(rx.id, { supersetId: undefined });
-      if (groupSize <= 2) await db.routineExercises.update(next.id, { supersetId: undefined });
+      const groupId = rx.supersetId;
+      const left = list.filter((r, i) => i <= idx && r.supersetId === groupId);
+      const right = list.filter((r, i) => i > idx && r.supersetId === groupId);
+      if (left.length <= 1) {
+        for (const r of left) await db.routineExercises.update(r.id, { supersetId: undefined });
+      }
+      if (right.length <= 1) {
+        for (const r of right) await db.routineExercises.update(r.id, { supersetId: undefined });
+      }
       return;
     }
 
-    const supersetId = next.supersetId ?? uuid();
+    const supersetId = rx.supersetId ?? next.supersetId ?? uuid();
+    if (next.supersetId !== undefined && next.supersetId !== supersetId) {
+      const nextGroup = list.filter((r) => r.supersetId === next.supersetId);
+      for (const member of nextGroup) await db.routineExercises.update(member.id, { supersetId });
+    } else {
+      await db.routineExercises.update(next.id, { supersetId });
+    }
     await db.routineExercises.update(rx.id, { supersetId });
-    await db.routineExercises.update(next.id, { supersetId });
   });
 }
 
@@ -466,16 +480,23 @@ export async function swapExercise(sessionId: string, rxId: string, exerciseId: 
   });
 }
 
-/** Undo a swap: removes the substitute's extra sets, unskips the original slot. */
+/**
+ * Undo a swap: removes the substitute's extra sets, unskips the original slot. Two slots swapped
+ * to the same substitute share one extra entry and its sets — only drop them when no other swap
+ * in this session still maps to that exerciseId.
+ */
 export async function undoSwap(sessionId: string, rxId: string): Promise<void> {
   await db.transaction('rw', [db.sessions, db.setLogs], async () => {
     const s = await db.sessions.get(sessionId);
     if (!s) return;
-    const exerciseId = s.swaps?.[rxId];
-    if (exerciseId !== undefined) await removeExtraExercise(sessionId, exerciseId);
-    await setSkipped(sessionId, rxId, false);
     const swaps = { ...(s.swaps ?? {}) };
+    const exerciseId = swaps[rxId];
     delete swaps[rxId];
+    if (exerciseId !== undefined) {
+      const stillSwapped = Object.values(swaps).includes(exerciseId);
+      if (!stillSwapped) await removeExtraExercise(sessionId, exerciseId);
+    }
+    await setSkipped(sessionId, rxId, false);
     await db.sessions.update(sessionId, { swaps });
   });
 }

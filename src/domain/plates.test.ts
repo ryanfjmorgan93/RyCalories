@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_PLATES, plateLabel, platesPerSide, roundToPlates, type PlateLoad } from './plates';
+import { DEFAULT_PLATES, plateLabel, platesPerSide, roundToPlates, type PlateLoad, type PlateOptions } from './plates';
 
 describe('platesPerSide', () => {
   it('breaks a target down greedily from the heaviest plate', () => {
@@ -43,6 +43,51 @@ describe('platesPerSide', () => {
     const load = platesPerSide(70, { barKg: 20, plates: [10, 0, 25, -5, 15] });
     // (70 - 20) / 2 = 25 per side: 25 exactly.
     expect(load).toEqual<PlateLoad>({ perSide: [25], loaded: 70, remainder: 0 });
+  });
+
+  it('does not commit to a heavier plate it cannot back out of: [25, 20] at 100 kg', () => {
+    // (100 - 20) / 2 = 40 per side. Greedy commits to 25 (70 loaded, 30 kg short); the exact
+    // search finds 20 + 20 = 40, hitting the target exactly.
+    const load = platesPerSide(100, { barKg: 20, plates: [25, 20] });
+    expect(load).toEqual<PlateLoad>({ perSide: [20, 20], loaded: 100, remainder: 0 });
+  });
+
+  it('does not commit to a heavier plate it cannot back out of: [20, 15] at 80 kg', () => {
+    // (80 - 20) / 2 = 30 per side. Greedy commits to 20 (60 loaded); 15 + 15 = 30 is exact.
+    const load = platesPerSide(80, { barKg: 20, plates: [20, 15] });
+    expect(load).toEqual<PlateLoad>({ perSide: [15, 15], loaded: 80, remainder: 0 });
+  });
+
+  it('finds the exact combination across three plate sizes: [20, 15, 10] at 70 kg', () => {
+    // (70 - 20) / 2 = 25 per side: 15 + 10 is exact.
+    const load = platesPerSide(70, { barKg: 20, plates: [20, 15, 10] });
+    expect(load).toEqual<PlateLoad>({ perSide: [15, 10], loaded: 70, remainder: 0 });
+  });
+
+  it('still finds the fewest-plate exact combination for the default set at 102.5 kg', () => {
+    // (102.5 - 20) / 2 = 41.25 per side. 25 + 15 + 1.25 (3 plates) is both exact and fewest.
+    const load = platesPerSide(102.5, DEFAULT_PLATES);
+    expect(load).toEqual<PlateLoad>({ perSide: [25, 15, 1.25], loaded: 102.5, remainder: 0 });
+  });
+
+  it('reports the true remainder for a genuinely unreachable target', () => {
+    // Only 3 kg plates available; (41 - 20) / 2 = 10.5 per side, not a multiple of 3. Best
+    // reachable is 3 × 3 = 9 per side (38 loaded), 3 kg short of 41.
+    const load = platesPerSide(41, { barKg: 20, plates: [3] });
+    expect(load).toEqual<PlateLoad>({ perSide: [3, 3, 3], loaded: 38, remainder: 3 });
+  });
+
+  it('runs the exact search well within budget for per-side targets up to 200 kg', () => {
+    const opts: PlateOptions = { barKg: 20, plates: [25, 20, 15, 10, 5, 2.5, 1.25, 0.5] };
+    const start = performance.now();
+    for (let i = 0; i < 1000; i++) {
+      // barKg + 2 * up to 200 kg per side.
+      platesPerSide(20 + 2 * ((i % 800) * 0.25), opts);
+    }
+    // Generously bounded: the DP itself runs in low single-digit milliseconds for 1,000 calls;
+    // the wide margin absorbs CPU contention when the whole suite runs across many parallel
+    // worker processes, so this stays a check for a runaway algorithm, not a flaky race.
+    expect(performance.now() - start).toBeLessThan(1000);
   });
 });
 
