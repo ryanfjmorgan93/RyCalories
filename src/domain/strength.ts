@@ -42,6 +42,32 @@ export function e1rmFor(
   return e1rm(weightKg, reps, opts.formula);
 }
 
+/**
+ * Change in e1RM over a trailing window, from a series of {t: ms epoch, y: e1RM} points ordered
+ * oldest to newest. Null when there are fewer than two points — a single point has no change to
+ * report. `covered` is true only when a point at least `windowDays` before the last one exists and
+ * was used as the base; otherwise the base is the very first point on record and `spanDays` is the
+ * true span of what is actually there, never the window asked for.
+ */
+export function e1rmChange(
+  series: { t: number; y: number }[],
+  windowDays = 28,
+): { delta: number; from: number; to: number; spanDays: number; covered: boolean } | null {
+  if (series.length < 2) return null;
+  const last = series[series.length - 1];
+  const cutoff = last.t - windowDays * 24 * 3600 * 1000;
+  let base = series[0];
+  let covered = false;
+  for (const p of series) {
+    if (p.t <= cutoff) {
+      base = p;
+      covered = true;
+    }
+  }
+  const spanDays = Math.round((last.t - base.t) / (24 * 3600 * 1000));
+  return { delta: last.y - base.y, from: base.t, to: last.t, spanDays, covered };
+}
+
 /** Best e1RM over the sets that count for records; null when none produce one. */
 export function bestE1rm(
   kind: ExerciseKind,

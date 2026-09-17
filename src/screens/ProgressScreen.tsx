@@ -8,6 +8,7 @@ import { dateKeyToDate, mondayOf } from '@/domain/dates';
 import { bandStatus, movingAverage, weeklyDelta } from '@/domain/bodyweight';
 import { fmtDate, fmtGrams, fmtKcal, fmtKg, fmtNum, fmtSignedKg } from '@/domain/format';
 import { strengthLevel, type StrengthLevel } from '@/domain/standards';
+import { e1rmChange } from '@/domain/strength';
 import { averagesAreMeaningful, type Average, type Trend } from '@/domain/trends';
 import type { Exercise, MuscleGroup } from '@/domain/types';
 import { BodyMap } from '@/ui/components/BodyMap';
@@ -75,12 +76,8 @@ export function ProgressScreen() {
     const out: ChangeRow[] = [];
     for (const e of exercises) {
       const series = await e1rmSeries(e.id);
-      if (series.length === 0) continue;
-      const last = series[series.length - 1];
-      const cutoff = last.t - 28 * 24 * 3600 * 1000;
-      let base = series[0];
-      for (const p of series) if (p.t <= cutoff) base = p;
-      out.push({ exercise: e, delta: last.y - base.y });
+      const change = e1rmChange(series);
+      if (change) out.push({ exercise: e, change });
     }
     return out;
   }, [exercises]);
@@ -151,7 +148,7 @@ interface StandardRow {
 
 interface ChangeRow {
   exercise: Exercise;
-  delta: number;
+  change: NonNullable<ReturnType<typeof e1rmChange>>;
 }
 
 function BodyweightCard({
@@ -326,7 +323,9 @@ function StrengthCard({ standards, changes }: { standards: StandardRow[]; change
           {i > 0 && <Divider />}
           <div className="flex items-baseline justify-between gap-3 py-2">
             <span className="min-w-0 truncate">{r.exercise.name}</span>
-            <span className="num shrink-0 text-sm text-muted">{fmtSignedKg(r.delta)} in 4 weeks</span>
+            <span className="num shrink-0 text-sm text-muted">
+              {fmtSignedKg(r.change.delta)} {r.change.covered ? 'in 4 weeks' : `since ${fmtDate(new Date(r.change.from).toISOString())}`}
+            </span>
           </div>
         </div>
       ))}

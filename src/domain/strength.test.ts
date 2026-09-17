@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { bestE1rm, e1rm, e1rmFor } from './strength';
+import { bestE1rm, e1rm, e1rmChange, e1rmFor } from './strength';
+
+const DAY = 24 * 3600 * 1000;
 
 describe('e1rm', () => {
   it('returns the weight itself at 1 rep', () => {
@@ -75,5 +77,52 @@ describe('bestE1rm', () => {
     const sets = [{ type: 'working' as const, weight: 10, reps: 5 }];
     expect(bestE1rm('bodyweight_plus', sets)).toBeNull();
     expect(bestE1rm('bodyweight_plus', sets, { bodyweightKg: 80 })).toBe(e1rm(90, 5));
+  });
+});
+
+describe('e1rmChange', () => {
+  it('is null with fewer than two points — one point has no change to report', () => {
+    expect(e1rmChange([])).toBeNull();
+    expect(e1rmChange([{ t: 0, y: 100 }])).toBeNull();
+  });
+
+  it('is covered and measures from the true base when a point at least 28 days old exists', () => {
+    const series = [
+      { t: 0, y: 100 },
+      { t: 30 * DAY, y: 110 },
+    ];
+    const change = e1rmChange(series);
+    expect(change).not.toBeNull();
+    expect(change!.covered).toBe(true);
+    expect(change!.delta).toBe(10);
+    expect(change!.from).toBe(0);
+    expect(change!.to).toBe(30 * DAY);
+    expect(change!.spanDays).toBe(30);
+  });
+
+  it('is not covered when the whole history spans under 28 days — the true span, not the window', () => {
+    const series = [
+      { t: 0, y: 100 },
+      { t: 2 * DAY, y: 105 },
+    ];
+    const change = e1rmChange(series);
+    expect(change).not.toBeNull();
+    expect(change!.covered).toBe(false);
+    expect(change!.spanDays).toBe(2);
+    expect(change!.delta).toBe(5);
+    expect(change!.from).toBe(0);
+  });
+
+  it('picks the latest point at or before the cutoff as the base', () => {
+    const series = [
+      { t: 0, y: 100 },
+      { t: 10 * DAY, y: 105 },
+      { t: 40 * DAY, y: 120 },
+    ];
+    // last.t - 28 days = 12 days, so the point at 10 days (not 0) is the base.
+    const change = e1rmChange(series);
+    expect(change!.covered).toBe(true);
+    expect(change!.from).toBe(10 * DAY);
+    expect(change!.delta).toBe(15);
   });
 });

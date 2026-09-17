@@ -28,6 +28,58 @@ import { useSettings } from '@/ui/hooks';
 
 const PLATE_SIZES = [25, 20, 15, 10, 5, 2.5, 1.25, 0.5];
 
+// ---------------------------------------------------------------------------
+// Draft reseeding
+//
+// This screen mixes drafted cards (their own Save button) with instant-save controls elsewhere
+// on the same screen (toggles, plate chips, the theme and effort-scale segmented controls). Every
+// write goes through `saveSettings`, which bumps `settings.savedAt` regardless of which fields it
+// touched — so reseeding a card whenever `settings` changes at all reverts a half-typed draft the
+// moment the user flips an unrelated toggle. A card must reseed only when the SAVED values of the
+// fields it owns have actually changed from the snapshot it last seeded from; its own Save (which
+// changes its owned values to the draft values) then reseeds harmlessly.
+
+function pick<K extends keyof Settings>(settings: Settings, keys: readonly K[]): Pick<Settings, K> {
+  const out = {} as Pick<Settings, K>;
+  for (const k of keys) out[k] = settings[k];
+  return out;
+}
+
+/**
+ * Value equality one level into arrays and plain objects — enough for the settings fields the
+ * cards below own (number/string scalars, a `number[]` of plates, a muscle-group → number map).
+ * A plain `===` on those would never match: Dexie round-trips every saved row through IndexedDB,
+ * so even an untouched array or object field comes back as a new reference on every reload.
+ */
+function valuesEqual(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
+  if (a && b && typeof a === 'object' && typeof b === 'object') {
+    const ak = Object.keys(a as object);
+    const bk = Object.keys(b as object);
+    return ak.length === bk.length && ak.every((k) => Object.is((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+  }
+  return false;
+}
+
+/**
+ * Reseeds a card's drafts only when the saved values of `ownedKeys` differ from the snapshot this
+ * hook last seeded from. `reseed` should copy the current `settings` prop into the card's own
+ * draft state; it takes no argument because it always runs against the `settings` this render saw.
+ *
+ * Calls `setState` directly during render rather than in an effect — a deliberate choice already
+ * used on this screen: a `key`-driven remount here once left two copies of a card briefly in the
+ * DOM, which this pattern does not risk.
+ */
+function useOwnedReseed<K extends keyof Settings>(settings: Settings, ownedKeys: readonly K[], reseed: () => void): void {
+  const [seeded, setSeeded] = useState<Pick<Settings, K>>(() => pick(settings, ownedKeys));
+  const owned = pick(settings, ownedKeys);
+  if (!ownedKeys.every((k) => valuesEqual(owned[k], seeded[k]))) {
+    setSeeded(owned);
+    reseed();
+  }
+}
+
 export function SettingsScreen() {
   const nav = useNavigate();
   const settings = useSettings();
@@ -271,18 +323,15 @@ function draftFromTargets(settings: Settings): Record<TargetKey, number | null> 
   return Object.fromEntries(TARGET_FIELDS.map((f) => [f.key, settings[f.key]])) as Record<TargetKey, number | null>;
 }
 
+const TARGETS_OWNED_KEYS: (keyof Settings)[] = [...TARGET_FIELDS.map((f) => f.key), 'calorieStartDate'];
+
 function TargetsCard({ settings }: { settings: Settings }) {
-  // Re-seeds the draft whenever a save lands, without a `key`-driven remount: that briefly left
-  // two copies of this card in the DOM (the old instance did not unmount before the new one
-  // committed), which a plain state update during render does not risk.
-  const [savedAt, setSavedAt] = useState(settings.savedAt);
   const [draft, setDraft] = useState<Record<TargetKey, number | null>>(() => draftFromTargets(settings));
   const [startDate, setStartDate] = useState(settings.calorieStartDate ?? '');
-  if (settings.savedAt !== savedAt) {
-    setSavedAt(settings.savedAt);
+  useOwnedReseed(settings, TARGETS_OWNED_KEYS, () => {
     setDraft(draftFromTargets(settings));
     setStartDate(settings.calorieStartDate ?? '');
-  }
+  });
   const today = calorieTargetOn(toDateKey(), settings);
 
   const save = async () => {
@@ -304,7 +353,7 @@ function TargetsCard({ settings }: { settings: Settings }) {
       <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3">
         {TARGET_FIELDS.map((f) => (
           <Field key={f.key} label={f.label}>
-            <NumberInput value={draft[f.key]} mode={f.mode} onChange={(v) => setDraft((d) => ({ ...d, [f.key]: v }))} />
+            <NumberInput value={draft[f.key]} mode={f.mode} onChange={(v) => setDraft((d) => ({ ...d, [f.key]: v }))} testId={`target-${f.key}`} />
           </Field>
         ))}
         <Field label="Reverse diet start">
@@ -346,20 +395,19 @@ const PERMISSION_LABEL: Record<ReturnType<typeof notificationPermission>, string
   unsupported: 'Not supported here',
 };
 
+const REST_OWNED_KEYS: (keyof Settings)[] = ['restCompoundSec', 'restIsolationSec', 'restCarrySec'];
+
 function RestCard({ settings }: { settings: Settings }) {
-  // See TargetsCard: re-seeded on `savedAt` change via a plain state update, not a `key` remount.
-  const [savedAt, setSavedAt] = useState(settings.savedAt);
   const [compound, setCompound] = useState<number | null>(settings.restCompoundSec);
   const [isolation, setIsolation] = useState<number | null>(settings.restIsolationSec);
   const [carry, setCarry] = useState<number | null>(settings.restCarrySec);
   const [applyOpen, setApplyOpen] = useState(false);
   const [perm, setPerm] = useState(() => notificationPermission());
-  if (settings.savedAt !== savedAt) {
-    setSavedAt(settings.savedAt);
+  useOwnedReseed(settings, REST_OWNED_KEYS, () => {
     setCompound(settings.restCompoundSec);
     setIsolation(settings.restIsolationSec);
     setCarry(settings.restCarrySec);
-  }
+  });
 
   // The numbers on screen (falling back to what is saved); a rest under 5 s would fire the cue at once.
   const effective = () => ({
@@ -453,16 +501,16 @@ function RestCard({ settings }: { settings: Settings }) {
 // ---------------------------------------------------------------------------
 // Plates
 
+const PLATES_OWNED_KEYS: (keyof Settings)[] = ['barKg'];
+
 function PlatesCard({ settings }: { settings: Settings }) {
+  // `plates` has no separate draft — the chips are always the live saved list — so only `barKg`
+  // needs reseeding.
   const plates = settings.plates ?? [25, 20, 15, 10, 5, 2.5, 1.25];
-  // See TargetsCard above: re-seeded on `savedAt` change via a plain state update, not a `key`
-  // remount (a remount here briefly left two copies of this card in the DOM).
-  const [savedAt, setSavedAt] = useState(settings.savedAt);
   const [barKg, setBarKg] = useState<number | null>(settings.barKg ?? 20);
-  if (settings.savedAt !== savedAt) {
-    setSavedAt(settings.savedAt);
+  useOwnedReseed(settings, PLATES_OWNED_KEYS, () => {
     setBarKg(settings.barKg ?? 20);
-  }
+  });
 
   const toggle = async (size: number) => {
     const next = plates.includes(size) ? plates.filter((p) => p !== size) : [...plates, size];
@@ -502,19 +550,17 @@ function setTargetsFrom(settings: Settings): Record<MuscleGroup, number | null> 
   return Object.fromEntries(MUSCLE_GROUPS.map((g) => [g, settings.weeklySetTargets?.[g] ?? null])) as Record<MuscleGroup, number | null>;
 }
 
+const PROGRESSION_OWNED_KEYS: (keyof Settings)[] = ['deloadPercent', 'weeklySessionTarget', 'weeklySetTargets'];
+
 function ProgressionCard({ settings }: { settings: Settings }) {
-  // See TargetsCard above: re-seeded on `savedAt` change via a plain state update, not a `key`
-  // remount (a remount here briefly left two copies of this card in the DOM).
-  const [savedAt, setSavedAt] = useState(settings.savedAt);
   const [deloadPercent, setDeloadPercent] = useState<number | null>(Math.round((settings.deloadPercent ?? 0.9) * 100));
   const [weeklyTarget, setWeeklyTarget] = useState<number | null>(settings.weeklySessionTarget ?? 3);
   const [setTargets, setSetTargets] = useState<Record<MuscleGroup, number | null>>(() => setTargetsFrom(settings));
-  if (settings.savedAt !== savedAt) {
-    setSavedAt(settings.savedAt);
+  useOwnedReseed(settings, PROGRESSION_OWNED_KEYS, () => {
     setDeloadPercent(Math.round((settings.deloadPercent ?? 0.9) * 100));
     setWeeklyTarget(settings.weeklySessionTarget ?? 3);
     setSetTargets(setTargetsFrom(settings));
-  }
+  });
 
   const save = async () => {
     const weeklySetTargets: Partial<Record<MuscleGroup, number>> = {};
@@ -531,10 +577,10 @@ function ProgressionCard({ settings }: { settings: Settings }) {
   };
 
   return (
-    <Card className="p-4">
+    <Card className="p-4" data-testid="progression-card">
       <div className="grid grid-cols-2 gap-4">
         <Field label="Deload (%)">
-          <NumberInput value={deloadPercent} onChange={setDeloadPercent} mode="numeric" min={0} max={100} placeholder="90" />
+          <NumberInput value={deloadPercent} onChange={setDeloadPercent} mode="numeric" min={0} max={100} placeholder="90" testId="deload-percent" />
         </Field>
         <Field label="Sessions per week">
           <NumberInput value={weeklyTarget} onChange={setWeeklyTarget} mode="numeric" min={1} placeholder="3" />
