@@ -35,8 +35,70 @@ export function regionIntensity(input: RegionIntensityInput): number {
   return 0.25;
 }
 
-function rect(x: number, y: number, w: number, h: number): string {
-  return `M${x},${y} h${w} v${h} h${-w} Z`;
+// -- Small path-data helpers. Every shape below is plain geometry (an ellipse, a capsule between
+// two points, a rounded rect) so the figures can be hand-placed by coordinate without tracing an
+// image or hand-rolling bezier maths per limb. --
+
+/** A full ellipse, as two arcs, closed. */
+function ellipse(cx: number, cy: number, rx: number, ry: number): string {
+  return `M${cx - rx},${cy} A${rx},${ry} 0 1,1 ${cx + rx},${cy} A${rx},${ry} 0 1,1 ${cx - rx},${cy} Z`;
+}
+
+/** A rounded rectangle. */
+function roundRect(x: number, y: number, w: number, h: number, r: number): string {
+  return `M${x + r},${y} H${x + w - r} A${r},${r} 0 0 1 ${x + w},${y + r} V${y + h - r} A${r},${r} 0 0 1 ${x + w - r},${y + h} H${x + r} A${r},${r} 0 0 1 ${x},${y + h - r} V${y + r} A${r},${r} 0 0 1 ${x + r},${y} Z`;
+}
+
+/** A rounded "stadium" between two points, as a single seamless outline (straight side, a round
+ *  cap, straight side, a round cap) — what lets two capsules meeting at a joint (shoulder→elbow→
+ *  wrist) read as a limb with a slight bend, without doubling the stroke at either end. */
+function capsule(x1: number, y1: number, x2: number, y2: number, r: number): string {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len = Math.hypot(dx, dy) || 1;
+  const px = (-dy / len) * r;
+  const py = (dx / len) * r;
+  const p1x = x1 + px;
+  const p1y = y1 + py;
+  const p2x = x2 + px;
+  const p2y = y2 + py;
+  const p3x = x2 - px;
+  const p3y = y2 - py;
+  const p4x = x1 - px;
+  const p4y = y1 - py;
+  return `M${p1x},${p1y} L${p2x},${p2y} A${r},${r} 0 0 0 ${p3x},${p3y} L${p4x},${p4y} A${r},${r} 0 0 0 ${p1x},${p1y} Z`;
+}
+
+/** Torso outline: shoulders, tapering to the waist, flaring to the hips. Identical for both
+ *  figures, just re-centred. */
+function torso(cx: number): string {
+  return (
+    `M${cx - 56},82 C${cx - 58},110 ${cx - 40},128 ${cx - 34},150 C${cx - 30},168 ${cx - 44},178 ${cx - 46},192 ` +
+    `L${cx - 12},206 L${cx + 12},206 L${cx + 46},192 C${cx + 44},178 ${cx + 30},168 ${cx + 34},150 ` +
+    `C${cx + 40},128 ${cx + 58},110 ${cx + 56},82 C${cx + 30},70 ${cx - 30},70 ${cx - 56},82 Z`
+  );
+}
+
+/** Non-interactive base silhouette for one figure: head, neck, torso, arms (with a bend at the
+ *  elbow), legs, hands and feet. */
+function silhouette(cx: number): string {
+  return [
+    ellipse(cx, 36, 17, 21),
+    roundRect(cx - 10, 56, 20, 20, 6),
+    torso(cx),
+    capsule(cx - 58, 84, cx - 75, 170, 15),
+    capsule(cx - 75, 170, cx - 66, 248, 11),
+    capsule(cx + 58, 84, cx + 75, 170, 15),
+    capsule(cx + 75, 170, cx + 66, 248, 11),
+    ellipse(cx - 64, 264, 9, 15),
+    ellipse(cx + 64, 264, 9, 15),
+    capsule(cx - 27, 204, cx - 30, 298, 19),
+    capsule(cx + 27, 204, cx + 30, 298, 19),
+    capsule(cx - 30, 298, cx - 27, 385, 13),
+    capsule(cx + 30, 298, cx + 27, 385, 13),
+    ellipse(cx - 26, 401, 13, 9),
+    ellipse(cx + 26, 401, 13, 9),
+  ].join(' ');
 }
 
 interface Region {
@@ -44,34 +106,37 @@ interface Region {
   d: string;
 }
 
-// Simple blocky silhouettes — not anatomy, just enough shape per group to tap.
+// Figure centrelines: front figure on the left, back figure on the right, ~170 wide each.
+const FX = 100;
+const BX = 300;
+
 const FRONT_REGIONS: Region[] = [
-  { group: 'neck', d: rect(53, 34, 14, 9) },
-  { group: 'shoulders', d: `${rect(27, 44, 12, 15)} ${rect(81, 44, 12, 15)}` },
-  { group: 'chest', d: rect(38, 44, 44, 26) },
-  { group: 'biceps', d: `${rect(22, 60, 12, 28)} ${rect(86, 60, 12, 28)}` },
-  { group: 'forearms', d: `${rect(20, 89, 11, 26)} ${rect(89, 89, 11, 26)}` },
-  { group: 'abs', d: rect(42, 71, 36, 30) },
-  { group: 'quads', d: `${rect(40, 102, 17, 40)} ${rect(63, 102, 17, 40)}` },
-  { group: 'adductors', d: rect(57, 102, 6, 40) },
-  { group: 'calves', d: `${rect(41, 143, 15, 34)} ${rect(64, 143, 15, 34)}` },
+  { group: 'neck', d: ellipse(FX, 66, 8, 10) },
+  { group: 'shoulders', d: `${ellipse(FX - 58, 88, 16, 18)} ${ellipse(FX + 58, 88, 16, 18)}` },
+  { group: 'chest', d: `${ellipse(FX - 25, 104, 21, 16)} ${ellipse(FX + 25, 104, 21, 16)}` },
+  { group: 'biceps', d: `${capsule(FX - 58, 86, FX - 74, 168, 12)} ${capsule(FX + 58, 86, FX + 74, 168, 12)}` },
+  { group: 'forearms', d: `${capsule(FX - 74, 170, FX - 66, 246, 9)} ${capsule(FX + 74, 170, FX + 66, 246, 9)}` },
+  { group: 'abs', d: roundRect(FX - 21, 126, 42, 66, 8) },
+  { group: 'quads', d: `${capsule(FX - 27, 206, FX - 30, 296, 16)} ${capsule(FX + 27, 206, FX + 30, 296, 16)}` },
+  { group: 'adductors', d: capsule(FX, 208, FX, 288, 8) },
+  { group: 'calves', d: `${capsule(FX - 30, 300, FX - 27, 383, 8)} ${capsule(FX + 30, 300, FX + 27, 383, 8)}` },
 ];
 
 const BACK_REGIONS: Region[] = [
-  { group: 'neck', d: rect(193, 34, 14, 9) },
-  { group: 'traps', d: rect(177, 44, 46, 14) },
-  { group: 'rear delts', d: `${rect(165, 44, 12, 14)} ${rect(223, 44, 12, 14)}` },
-  { group: 'upper back', d: rect(183, 58, 34, 20) },
-  { group: 'lats', d: `${rect(171, 58, 12, 30)} ${rect(217, 58, 12, 30)}` },
-  { group: 'triceps', d: `${rect(163, 60, 12, 56)} ${rect(225, 60, 12, 56)}` },
-  { group: 'lower back', d: rect(187, 78, 26, 20) },
-  { group: 'glutes', d: `${rect(183, 98, 15, 20)} ${rect(202, 98, 15, 20)}` },
-  { group: 'hamstrings', d: `${rect(183, 118, 15, 28)} ${rect(202, 118, 15, 28)}` },
-  { group: 'calves', d: `${rect(184, 146, 13, 32)} ${rect(203, 146, 13, 32)}` },
+  { group: 'neck', d: ellipse(BX, 66, 8, 10) },
+  { group: 'traps', d: `M${BX},70 L${BX - 40},98 L${BX - 15},132 L${BX},144 L${BX + 15},132 L${BX + 40},98 Z` },
+  { group: 'rear delts', d: `${ellipse(BX - 58, 88, 16, 18)} ${ellipse(BX + 58, 88, 16, 18)}` },
+  { group: 'upper back', d: roundRect(BX - 15, 130, 30, 42, 8) },
+  { group: 'lats', d: `${capsule(BX - 50, 106, BX - 35, 176, 17)} ${capsule(BX + 50, 106, BX + 35, 176, 17)}` },
+  { group: 'triceps', d: `${capsule(BX - 58, 86, BX - 74, 168, 12)} ${capsule(BX + 58, 86, BX + 74, 168, 12)}` },
+  { group: 'lower back', d: roundRect(BX - 19, 172, 38, 30, 10) },
+  { group: 'glutes', d: `${ellipse(BX - 23, 202, 20, 18)} ${ellipse(BX + 23, 202, 20, 18)}` },
+  { group: 'hamstrings', d: `${capsule(BX - 27, 206, BX - 30, 296, 16)} ${capsule(BX + 27, 206, BX + 30, 296, 16)}` },
+  { group: 'calves', d: `${capsule(BX - 30, 300, BX - 27, 383, 11)} ${capsule(BX + 30, 300, BX + 27, 383, 11)}` },
 ];
 
-const ALL_FRONT_D = FRONT_REGIONS.map((r) => r.d).join(' ');
-const ALL_BACK_D = BACK_REGIONS.map((r) => r.d).join(' ');
+const BASE_FRONT_D = silhouette(FX);
+const BASE_BACK_D = silhouette(BX);
 
 function readout(mode: BodyMapMode, group: MuscleGroup, sets: number, daysAgo: number | undefined): string {
   if (mode === 'sets') return `${group} · ${sets} ${sets === 1 ? 'set' : 'sets'} this week`;
@@ -112,7 +177,7 @@ export function BodyMap({
       fill="var(--c-accent)"
       fillOpacity={intensityOf(r.group)}
       stroke="var(--c-line)"
-      strokeWidth={0.75}
+      strokeWidth={1.1}
       className="cursor-pointer"
       role="button"
       aria-label={r.group}
@@ -134,12 +199,10 @@ export function BodyMap({
           { value: 'recency', label: 'Last trained' },
         ]}
       />
-      <svg viewBox="0 0 240 190" className="mt-3 block w-full" role="img" aria-label="Muscle map, front and back">
+      <svg viewBox="0 0 400 420" className="mt-3 block w-full" role="img" aria-label="Muscle map, front and back">
         {/* Base silhouettes, non-interactive. */}
-        <circle cx={60} cy={22} r={13} fill="var(--c-surface-2)" stroke="var(--c-line)" strokeWidth={0.75} />
-        <path d={ALL_FRONT_D} fill="var(--c-surface-2)" stroke="var(--c-line)" strokeWidth={0.75} />
-        <circle cx={200} cy={22} r={13} fill="var(--c-surface-2)" stroke="var(--c-line)" strokeWidth={0.75} />
-        <path d={ALL_BACK_D} fill="var(--c-surface-2)" stroke="var(--c-line)" strokeWidth={0.75} />
+        <path d={BASE_FRONT_D} fill="var(--c-surface-2)" stroke="var(--c-line)" strokeWidth={1.5} />
+        <path d={BASE_BACK_D} fill="var(--c-surface-2)" stroke="var(--c-line)" strokeWidth={1.5} />
 
         {FRONT_REGIONS.map(region('front'))}
         {BACK_REGIONS.map(region('back'))}
