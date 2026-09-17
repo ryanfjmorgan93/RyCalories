@@ -127,7 +127,7 @@ export function HomeScreen() {
           <Card className="mt-2 p-4" data-testid="next-up">
             {calendar && (
               <div className="mb-1 text-xs font-semibold text-muted" data-testid="streak-line">
-                {calendar.streak > 0 ? `${calendar.streak} weeks · ${calendar.line}` : `This week ${calendar.thisWeek} of ${calendar.weeklyTarget}`}
+                {calendar.streak > 0 ? `${calendar.streak} ${calendar.streak === 1 ? 'week' : 'weeks'} · ${calendar.line}` : `This week ${calendar.thisWeek} of ${calendar.weeklyTarget}`}
               </div>
             )}
             <div className="flex items-start justify-between gap-3">

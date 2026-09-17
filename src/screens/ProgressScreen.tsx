@@ -265,7 +265,7 @@ function CalendarCard({ calendar, today }: { calendar: NonNullable<ReturnType<ty
       <div className="mt-3 flex items-baseline justify-between border-t border-line pt-3">
         <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Streak</span>
         <span className="num text-2xl font-extrabold tabular-nums" data-testid="streak-line">
-          {calendar.streak > 0 ? `${calendar.streak} weeks · ${calendar.line}` : `This week ${calendar.thisWeek} of ${calendar.weeklyTarget}`}
+          {calendar.streak > 0 ? `${calendar.streak} ${calendar.streak === 1 ? 'week' : 'weeks'} · ${calendar.line}` : `This week ${calendar.thisWeek} of ${calendar.weeklyTarget}`}
         </span>
       </div>
     </Card>
@@ -311,12 +311,12 @@ function StrengthCard({ standards, changes }: { standards: StandardRow[]; change
       {standards.map((r, i) => (
         <div key={r.exercise.id}>
           {i > 0 && <Divider />}
-          <div className="flex items-baseline justify-between gap-3 py-2">
-            <span className="min-w-0 truncate font-semibold">{r.exercise.name}</span>
-            <span className="num shrink-0 text-right text-sm text-muted">
+          <div className="py-2">
+            <div className="font-semibold">{r.exercise.name}</div>
+            <div className="num text-sm text-muted">
               {fmtNum(r.ratio)} × bodyweight · {LEVEL_LABEL[r.level]}
               {r.next ? ` · next ${fmtNum(r.next.ratio)} × = ${fmtKg(r.next.kg)}` : ''}
-            </span>
+            </div>
           </div>
         </div>
       ))}
@@ -350,11 +350,13 @@ function RecentPRsCard({ records }: { records: NonNullable<ReturnType<typeof use
       {records.map((r, i) => {
         const kindLabel = r.record.kind === 'reps_at_weight' ? `reps at ${fmtKg(r.record.weight)}` : PR_KIND_LABEL[r.record.kind];
         const value = r.record.kind === 'set_volume' ? `${fmtNum(r.record.value)} kg` : r.record.kind === 'reps_at_weight' ? `${r.record.value} reps` : fmtKg(r.record.value);
-        const line = `${fmtDate(r.date)} · ${r.exercise.name} · PR ${kindLabel} ${value}${r.record.previousSource === 'hevy' ? ' · beats Hevy' : ''}`;
+        // Two lines, never truncated: the record itself, then when and what it beat.
+        const title = `${r.exercise.name} · PR ${kindLabel} ${value}`;
+        const subtitle = `${fmtDate(r.date)}${r.record.previousSource === 'hevy' ? ' · beats Hevy' : ''}`;
         return (
           <div key={`${r.sessionId}-${r.record.kind}-${r.record.setIndex}`}>
             {i > 0 && <Divider />}
-            <Row title={line} />
+            <Row title={title} subtitle={subtitle} />
           </div>
         );
       })}
