@@ -321,6 +321,17 @@ None of it added a Dexie table: every new field is optional, and the seed rows a
 `migrateSeed()` (keyed on `Settings.seedVersion`, run after boot and after every restore, never
 inside a Dexie upgrade).
 
+**Review findings from this phase, all fixed before release.** A five-lens Sonnet review with three
+refuters per finding confirmed nine defects and refuted none: a heaviest-first plate walk that told
+a user with only 25s and 20s that 100 kg was "30 kg short" (now an exact search, which deload and
+warm-up loads inherit); extending a superset to a third exercise orphaning the first; undoing one
+of two swaps to the same substitute deleting the other swap's sets; the superset rest timer never
+firing once the later member was skipped; swapping to an exercise already in the session producing
+two cards; edit-sheet chips under the 44 px tap floor; Settings drafts wiped by any instant-save on
+the screen; a strength change labelled "in 4 weeks" over two days of data; and the assistant's
+download state never reading as downloading. The pattern earns its cost again: none of these was
+caught by the 590 unit tests or 62 end-to-end tests that were green at the time.
+
 ### P5 — The known gaps and the design pass · **M**
 
 ROADMAP §1's bug list (§6.2 below), the design token split (§5.2), and implementation of
