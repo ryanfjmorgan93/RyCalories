@@ -123,6 +123,11 @@ export function LiveSessionScreen() {
     return out;
   }, [slots]);
 
+  // Every exercise id already occupying a slot in this session — extras included — exactly what
+  // the "Add exercise" picker excludes, and what a swap must exclude too so it can't create a
+  // second card for an exercise that's already here.
+  const sessionExerciseIds = useMemo(() => slots.map((s) => s.exercise.id), [slots]);
+
   const setsBySlot = useMemo(() => {
     const m = new Map<string, SetLog[]>();
     for (const s of sets ?? []) {
@@ -160,6 +165,23 @@ export function LiveSessionScreen() {
     }
     return null;
   }, [groups, setsBySlot, skipped]);
+
+  // Per group, the key of the last member (in array order) that isn't skipped — logging that one
+  // is what actually finishes the group's rotation, so it's the one that should start the rest
+  // timer. If every member is skipped nothing logs from that group anyway, so no key matches.
+  const lastActiveKeyByGroup = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const g of groups) {
+      for (let i = g.slots.length - 1; i >= 0; i--) {
+        const s = g.slots[i];
+        if (!s.rx || !skipped.has(s.rx.id)) {
+          m.set(g.key, s.key);
+          break;
+        }
+      }
+    }
+    return m;
+  }, [groups, skipped]);
 
   if (!session || !settings || (session.routineId && (!routine || !items))) {
     return (
@@ -207,16 +229,17 @@ export function LiveSessionScreen() {
               {isSuperset ? (
                 <div className="mt-3 border-l-2 border-accent pl-2" data-testid="superset-group">
                   <div className="px-1 pb-1 text-[11px] font-bold uppercase tracking-[0.14em] text-accent">Superset</div>
-                  {group.slots.map((slot, si) => (
+                  {group.slots.map((slot) => (
                     <ExerciseCard
                       key={slot.key}
                       session={session}
                       slot={slot}
+                      sessionExerciseIds={sessionExerciseIds}
                       sets={setsBySlot.get(slot.key) ?? []}
                       settings={settings}
                       isCurrent={slot.key === currentKey}
                       isSkipped={slot.rx ? skipped.has(slot.rx.id) : false}
-                      startsRestTimer={si === group.slots.length - 1}
+                      startsRestTimer={slot.key === lastActiveKeyByGroup.get(group.key)}
                     />
                   ))}
                 </div>
@@ -224,6 +247,7 @@ export function LiveSessionScreen() {
                 <ExerciseCard
                   session={session}
                   slot={firstSlot}
+                  sessionExerciseIds={sessionExerciseIds}
                   sets={setsBySlot.get(firstSlot.key) ?? []}
                   settings={settings}
                   isCurrent={firstSlot.key === currentKey}
@@ -404,6 +428,7 @@ function restSecondsFor(rx: RoutineExercise | null, exercise: Exercise, settings
 function ExerciseCard({
   session,
   slot,
+  sessionExerciseIds,
   sets,
   settings,
   isCurrent,
@@ -412,11 +437,13 @@ function ExerciseCard({
 }: {
   session: Session;
   slot: Slot;
+  /** Every exercise id already in the session's slots, for the swap sheet's exclude list. */
+  sessionExerciseIds: string[];
   sets: SetLog[];
   settings: Settings;
   isCurrent: boolean;
   isSkipped: boolean;
-  /** False for a superset member that isn't the last one logged — its partner still owes a set. */
+  /** False for a superset member that isn't the last active one — its partner still owes a set. */
   startsRestTimer: boolean;
 }) {
   const nav = useNavigate();
@@ -896,7 +923,7 @@ function ExerciseCard({
           open={swapOpen}
           onClose={() => setSwapOpen(false)}
           muscleGroup={exercise.muscleGroup}
-          excludeExerciseId={exercise.id}
+          exclude={sessionExerciseIds}
           onPick={(picked) => {
             setSwapOpen(false);
             void swapExercise(session.id, rx.id, picked.id);
@@ -951,16 +978,16 @@ function EditSetSheet({
   return (
     <Sheet open onClose={onClose} title={`Edit set`}>
       <div className="mb-3 flex items-center gap-2 overflow-x-auto no-scrollbar">
-        <Chip tone="warn" active={type === 'warmup'} onClick={() => setType('warmup')}>
+        <Chip size="lg" tone="warn" active={type === 'warmup'} onClick={() => setType('warmup')}>
           Warm-up
         </Chip>
-        <Chip active={type === 'working'} onClick={() => setType('working')}>
+        <Chip size="lg" active={type === 'working'} onClick={() => setType('working')}>
           Working
         </Chip>
-        <Chip tone="danger" active={type === 'failure'} onClick={() => setType('failure')}>
+        <Chip size="lg" tone="danger" active={type === 'failure'} onClick={() => setType('failure')}>
           Failure
         </Chip>
-        <Chip tone="info" active={type === 'drop'} onClick={() => setType('drop')}>
+        <Chip size="lg" tone="info" active={type === 'drop'} onClick={() => setType('drop')}>
           Drop
         </Chip>
       </div>
@@ -974,7 +1001,7 @@ function EditSetSheet({
         <div className="mt-3 flex items-center gap-2 overflow-x-auto no-scrollbar">
           <span className="shrink-0 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">{effortScale === 'rpe' ? 'RPE' : 'RIR'}</span>
           {effortOptions(effortScale).map((o) => (
-            <Chip key={o.label} size="sm" className="shrink-0" active={rir === o.rir} onClick={() => setRir(rir === o.rir ? null : o.rir)}>
+            <Chip key={o.label} size="lg" className="shrink-0" active={rir === o.rir} onClick={() => setRir(rir === o.rir ? null : o.rir)}>
               {o.label}
             </Chip>
           ))}

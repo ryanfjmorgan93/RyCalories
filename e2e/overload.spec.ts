@@ -10,6 +10,36 @@ import { clickIfPresent, fresh } from './fresh';
  * `toggleSupersetWithNext` would write — rather than driving a control that does not exist.
  */
 
+/**
+ * Link two adjacent required routine-exercise rows into a superset directly in IndexedDB — the
+ * same shape `toggleSupersetWithNext` would write — since there is no UI yet to do it (that is
+ * the routine editor's job, owned by a different work package).
+ */
+async function linkSuperset(page: Page, ids: [string, string], supersetId: string): Promise<void> {
+  await page.evaluate(
+    async ({ ids, supersetId }) => {
+      const req = indexedDB.open('iron');
+      const idb = await new Promise<IDBDatabase>((res, rej) => {
+        req.onsuccess = () => res(req.result);
+        req.onerror = () => rej(req.error);
+      });
+      const tx = idb.transaction('routineExercises', 'readwrite');
+      const store = tx.objectStore('routineExercises');
+      for (const id of ids) {
+        const row = await new Promise<{ supersetId?: string }>((res) => {
+          const r = store.get(id);
+          r.onsuccess = () => res(r.result);
+        });
+        store.put({ ...row, id, supersetId });
+      }
+      await new Promise((res) => {
+        tx.oncomplete = () => res(undefined);
+      });
+    },
+    { ids, supersetId },
+  );
+}
+
 async function finishToSummary(page: Page) {
   await page.getByTestId('finish-session').click();
   const finish = page.getByRole('button', { name: 'Finish', exact: true }).last();
@@ -70,26 +100,7 @@ test.describe('WP4 overlays', () => {
     await fresh(page);
 
     // Bench Press (order 0) and Incline DB Press (order 1) in "Upper (Push)" — adjacent, both required.
-    await page.evaluate(async () => {
-      const req = indexedDB.open('iron');
-      const idb = await new Promise<IDBDatabase>((res, rej) => {
-        req.onsuccess = () => res(req.result);
-        req.onerror = () => rej(req.error);
-      });
-      const tx = idb.transaction('routineExercises', 'readwrite');
-      const store = tx.objectStore('routineExercises');
-      const ids = ['06e6d774-dded-5317-a459-3c24a575f9a5', '23809c40-32bd-5fe4-8f71-eb2efdb47cc6'];
-      for (const id of ids) {
-        const row = await new Promise<{ supersetId?: string }>((res) => {
-          const r = store.get(id);
-          r.onsuccess = () => res(r.result);
-        });
-        store.put({ ...row, id, supersetId: 'superset-test-1' });
-      }
-      await new Promise((res) => {
-        tx.oncomplete = () => res(undefined);
-      });
-    });
+    await linkSuperset(page, ['06e6d774-dded-5317-a459-3c24a575f9a5', '23809c40-32bd-5fe4-8f71-eb2efdb47cc6'], 'superset-test-1');
 
     await page.getByTestId('start-Upper (Push)').click();
     await expect(page).toHaveURL(/\/session\//);
@@ -119,6 +130,35 @@ test.describe('WP4 overlays', () => {
 
     expect(await benchCard.locator('button span.num.w-7').allTextContents()).toEqual(['1']);
     expect(await inclineCard.locator('button span.num.w-7').allTextContents()).toEqual(['1']);
+  });
+
+  test('superset: rest timer fires from the remaining member once the other is skipped', async ({ page }) => {
+    await fresh(page);
+
+    // Same Bench Press / Incline DB Press pair as above, in "Upper (Push)".
+    await linkSuperset(page, ['06e6d774-dded-5317-a459-3c24a575f9a5', '23809c40-32bd-5fe4-8f71-eb2efdb47cc6'], 'superset-test-2');
+
+    await page.getByTestId('start-Upper (Push)').click();
+    await expect(page).toHaveURL(/\/session\//);
+
+    const benchCard = page.getByTestId('exercise-card-Bench Press (Barbell)');
+    const inclineCard = page.getByTestId('exercise-card-Incline DB Press');
+    await expect(benchCard).toBeVisible();
+    await expect(inclineCard).toBeVisible();
+
+    // Skip the later-ordered member (Incline, order 1) via its More sheet.
+    await inclineCard.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('button', { name: 'Skip this exercise' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Skip', exact: true }).click();
+    await expect(inclineCard).toContainText('skipped');
+
+    // Bench is now the only member left to log. Array position (last in the group) would never
+    // start the timer here since Incline never logs again — it must come from whichever member
+    // is still active.
+    await benchCard.getByTestId('weight-input').fill('65');
+    await benchCard.getByTestId('reps-input').fill('6');
+    await benchCard.getByTestId('set-done').click();
+    await expect(page.getByTestId('rest-timer')).toBeVisible();
   });
 
   test('warm-up pills and plates on a known barbell weight', async ({ page }) => {
@@ -194,6 +234,65 @@ test.describe('WP4 overlays', () => {
     await card.getByRole('button', { name: 'Undo' }).click();
     await expect(card).not.toContainText('Swapped for');
     await expect(page.getByTestId('exercise-card-Overhead Triceps Extension')).toHaveCount(0);
+  });
+
+  test('swap: excludes an exercise already in the session, offering only what is left', async ({ page }) => {
+    await fresh(page);
+    await page.getByTestId('start-Upper (Pull)').click();
+    await expect(page).toHaveURL(/\/session\//);
+
+    // Add Incline DB Curl (biceps) as an extra, alongside the routine's own DB Curl (biceps).
+    await page.getByRole('button', { name: 'Add exercise (this session only)' }).click();
+    await page.getByRole('dialog').getByText('Incline DB Curl', { exact: true }).click();
+    await expect(page.getByTestId('exercise-card-Incline DB Curl')).toBeVisible();
+
+    // DB Curl and Incline DB Curl are both biceps and both now in the session; Hammer Curl (also
+    // biceps) isn't, so it's the only exercise the swap sheet offers.
+    const card = page.getByTestId('exercise-card-DB Curl');
+    await expect(card).toBeVisible();
+    await card.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('button', { name: 'Swap exercise' }).click();
+
+    const sheet = page.getByRole('dialog');
+    await expect(sheet.getByText('Incline DB Curl', { exact: true })).toHaveCount(0);
+    await expect(sheet.getByText('Hammer Curl', { exact: true })).toBeVisible();
+  });
+
+  test('swap: nothing to offer once every same-muscle exercise is already in the session', async ({ page }) => {
+    await fresh(page);
+    await page.getByTestId('start-Upper (Push)').click();
+    // Bench Press and Incline DB Press are the only two chest exercises in the app, and both are
+    // already in this routine — there is nothing left to swap in.
+    const card = page.getByTestId('exercise-card-Bench Press (Barbell)');
+    await expect(card).toBeVisible();
+    await card.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('button', { name: 'Swap exercise' }).click();
+
+    const sheet = page.getByRole('dialog');
+    await expect(sheet.getByText('No other chest exercise to swap in.', { exact: true })).toBeVisible();
+    await expect(sheet.getByText('Incline DB Press', { exact: true })).toHaveCount(0);
+    await expect(sheet.getByRole('textbox')).toHaveCount(0);
+  });
+
+  test('edit set: the set-type chips meet the 44px tap floor', async ({ page }) => {
+    await fresh(page);
+    await page.getByTestId('start-Upper (Push)').click();
+    const card = page.getByTestId('exercise-card-Bench Press (Barbell)');
+    await expect(card).toBeVisible();
+
+    await card.getByTestId('weight-input').fill('60');
+    await card.getByTestId('reps-input').fill('8');
+    await card.getByTestId('set-done').click();
+    await clickIfPresent(page.getByTestId('rest-timer').getByRole('button', { name: 'Skip' }));
+
+    // Tap the logged set row to open the edit sheet.
+    await card.getByText('60 × 8', { exact: true }).click();
+    await expect(page.getByText('Edit set', { exact: true })).toBeVisible();
+
+    const failureChip = page.getByRole('dialog').getByRole('button', { name: 'Failure', exact: true });
+    await expect(failureChip).toBeVisible();
+    const box = await failureChip.boundingBox();
+    expect(box?.height).toBeGreaterThanOrEqual(44);
   });
 
   test('how to: shows the demo image and a video link', async ({ page }) => {
