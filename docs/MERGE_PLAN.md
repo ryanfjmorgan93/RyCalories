@@ -267,8 +267,10 @@ Still open in this phase:
 - ✅ **Weekly and trend views**, pulled forward from P5: a Progress tab showing bodyweight,
   eating and training over a two-, four- or eight-week window. This is the second cross-domain
   query and the one that answers what the merged app exists for.
-- ⬜ Barcode scanning. The lookup by barcode exists and is tested; nothing calls it yet,
-  because reading a barcode needs the camera and therefore the native plugin of P4.
+- ✅ Barcode scanning. Done without a native plugin: the WebView's own camera stream
+  (`getUserMedia`) decoded by the `barcode-detector` ponyfill over a bundled zxing-wasm binary,
+  feeding the `lookupBarcode` that had been waiting. Proven in CI with Chromium's fake camera fed
+  a hand-encoded EAN-13, on the full Chromium build — the headless shell never paints a frame.
 
 **Verification findings from this phase, all worth keeping:**
 
@@ -293,14 +295,31 @@ Still open in this phase:
    snack to the previous day. Reviews of this shape should precede any release the owner is
    not going to verify by hand.
 
-### P4 — The AI plugin · **L**
+### P4 — On-device assistant and the progressive-overload build · **L** · ✅ shipped
 
-The Kotlin plugin, plus the malformed-JSON auto-retry that HANDOVER §9 flags as an open gap.
+What actually landed differs from the plan above in two ways worth recording.
 
-The TypeScript ports from §3.1 are **already done**: `src/domain/products.ts` (matching and
-parsing) and `src/db/productRepo.ts` (network and cache). What remains is native: the Capacitor
-plugin for Gemini Nano, and ML Kit barcode scanning to feed the barcode lookup that already
-exists. Both need a phone to verify, which is why they are last.
+- **The Nano plugin is Java, not Kotlin, and it answers questions rather than photos.**
+  `genai-prompt:1.0.0-beta4` ships a Java facade (`GenerativeModelFutures`, ListenableFuture +
+  `DownloadCallback`), so `NanoPlugin.java` needs no Kotlin toolchain and `compileSdk` stays 35 —
+  verified by inspecting every transitive AAR for `minCompileSdk`. The bridge-thread rule of §3.2
+  holds: every future resolves on the plugin's own single-thread executor. The meal-photo pipeline
+  was not ported; the owner chose a small assistant box (exercise questions, "or anything else"),
+  fed a compact context from the training and nutrition data (`src/db/assistantQueries.ts`, under
+  Nano's ~4,000-token input limit), with a Claude backend left as a second `AssistantBackend` for
+  later. Inference is verified only on the phone: Settings → Assistant shows AICore's own status,
+  offers the download, and a Test button asks a fixed question.
+- **Barcode scanning needs no ML Kit** (see P3).
+
+The rest of P4 is the progressive-overload work: failure and drop sets, RPE/RIR, e1RM and personal
+records, weekly sets per muscle with a body map, supersets, plate maths, warm-up ramps, deloads
+that break a stall streak, a next-session plan on Home with last time's numbers, a training
+calendar with a streak, animated exercise diagrams for 302 exercises (`@bryllim/workout-guide`,
+CC BY-SA, converted to 4-colour palette PNGs at build time: 4 MB for 906 frames, where lossy
+WebP came to 13 MB), and strength standards on the two barbell lifts the seed has a standard for.
+None of it added a Dexie table: every new field is optional, and the seed rows are patched by
+`migrateSeed()` (keyed on `Settings.seedVersion`, run after boot and after every restore, never
+inside a Dexie upgrade).
 
 ### P5 — The known gaps and the design pass · **M**
 
@@ -391,12 +410,12 @@ mechanical.
 | Believed | Actually |
 |---|---|
 | `@capacitor/camera`'s FileProvider collides with Iron's | The opposite. Camera ships **no** provider and depends on Iron's existing `file_paths.xml` (`CameraPlugin.java:309`, `:860`). The instruction is **do not delete it**. |
-| Add `android.permission.CAMERA` | Do not. Leaving it undeclared removes a runtime prompt and is the supported configuration. |
+| Add `android.permission.CAMERA` | It depends which camera. For `@capacitor/camera`'s take-a-photo intent, leaving it undeclared is the supported configuration. For a live `getUserMedia` stream in the WebView — what the barcode scanner uses — it must be declared: Capacitor's `BridgeWebChromeClient.onPermissionRequest` maps the page's request to a runtime `CAMERA` prompt, and an undeclared permission is silently denied. Declared, with `uses-feature android.hardware.camera required=false`. |
 | Bump `compileSdk` to 36 to match RyCalories | Breaks CI (§P1.4). Nothing shows ML Kit needs it. |
 | A failed Dexie upgrade is a harmless no-op | It preserves the data and **bricks the app**. Hence P1.1. |
 | fake-indexeddb tests guarantee the migration | They pass on a pattern that fails on a real WebView. On-device gate required. |
 | Native surface is ~350 lines | ~550–700 once the `analyze()` signature refactor is counted. |
-| Zero cloud has one exception (Open Food Facts) | **Two.** ML Kit ships `datatransport/cct` telemetry. A working opt-out could not be verified from the artifacts — treat as an open question for the spike. |
+| Zero cloud has one exception (Open Food Facts) | **Three**, listed in Settings → About: Open Food Facts (name lookup and barcode scan, one toggle), the Video link on an exercise (opens the browser on a tap), and ML Kit's `datatransport/cct` telemetry while the assistant runs — `genai-prompt`'s POM pulls it, and no opt-out is documented. |
 
 ### 6.2 Bugs found in RyCalories that the handover did not list
 

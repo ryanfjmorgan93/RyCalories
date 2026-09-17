@@ -10,7 +10,16 @@ with the nutrition app and what remains.
 
 ## What it does
 
-- **Progression engine** (`src/domain/engine.ts`, pure, unit-tested): every working set at or above `repMax` → add the increment; otherwise hold. Warm-ups ignored; missing sets count as misses. Calibrating exercises record but never decide. Carries and timed work never produce a weight decision.
+- **Progression engine** (`src/domain/engine.ts`, pure, unit-tested): every counted set at or above `repMax` → add the increment; otherwise hold. Warm-ups and drop sets ignored; missing sets count as misses; a failure set counts like a working set and reads as RIR 0. Calibrating exercises record but never decide. Carries and timed work never produce a weight decision. A deload session decides nothing and breaks a stall streak.
+- **Set types and effort**: warm-up, working, failure, drop (`src/domain/sets.ts` is the one place that says what each counts for). RIR 0–5 per set, shown as RPE if you prefer (Settings → Logging); stored as RIR either way.
+- **Guidance from your own numbers**: Home shows the next session's plan — each exercise's weight × reps × sets, the reason from the last decision ("up 2.5 kg last time", "held: missed sets"), last time's sets and effort, and stall, regression, calibrating or deload flags. Two or more stalled lifts and it offers a deload start.
+- **Personal records** (`src/domain/records.ts`): best weight, best e1RM, best set volume, most reps at a weight — flagged on the set row as you log it, on the summary, on the finished session as it stood at the time, and on Progress. A tie is not a record; a drop set never sets one; a record that beats an imported Hevy best says so.
+- **Estimated 1RM** (`src/domain/strength.ts`): Epley by default, Brzycki available, and deliberately no estimate past 12 reps. Exercise detail charts top set, e1RM or volume. Strength standards (bodyweight multiples, five levels) for lifts that carry a standard.
+- **Volume** (`src/domain/volume.ts`): sets per muscle group this week against your own targets, on a table and on a front/back body map that can also show how recently each muscle was trained.
+- **Supersets, plate maths, warm-up ramps, swaps** in the live session: adjacent routine-exercises bracketed, the highlight alternating between them and the rest timer starting after the pair; per-side plates for any barbell weight (bar and plates in Settings); a bar-first warm-up ramp one tap per set; swap a slot for another exercise of the same muscle group for one session.
+- **Calendar and streak**: twelve weeks of trained days, a weekly-target streak, and — the one line of encouragement in the app, by the owner's request — a short sentence when the streak is alive.
+- **Exercise diagrams**: 302 exercises with three drawn frames each, animated in the app and fully offline, from Workout Guide (CC BY-SA 4.0) with public-domain instructions from free-exercise-db; a Video link opens YouTube. Custom exercises pick a diagram or are created straight from the library.
+- **Assistant** (Android only): a small box on Home, an exercise's page and the live session that answers questions from your own data, on the phone, through Gemini Nano (Google AICore via ML Kit). It never opens itself and offers nothing unasked. Settings → Assistant shows the model's status, downloads it, and has a Test button.
 - **Suggest, never auto-apply**: stall after three sessions at one weight, hold/drop after two sessions with 2+ sets under `repMin`, double increment when every set hit `repMax` at RIR ≥ 3. Every decision is shown in plain terms on the session summary with **Accept** (default) or **Override**, and logged.
 - **Routines** without limit, with per-routine-exercise rep range, weight, increment, cue, notes, optional flag, calibration mode, rest override and (Phase 2) linked progression across routines.
 - **Live session**: one scrollable screen, current exercise highlighted, your cue above the inputs, last session's sets one tap away, big ± steppers, one big ✓ that fires the rest timer. Session clock; changes colour past the routine's target length.
@@ -31,6 +40,8 @@ with the nutrition app and what remains.
 - **Food memory** (`src/domain/foodMemory.ts`): anything eaten before is offered before a number is
   typed, at the weight last eaten. Stored per 100 g, so an unweighed serving is deliberately not
   remembered — it would mean inventing a figure. A model guess can never overwrite a correction.
+- **Barcode scan**: the phone camera in the food sheet, decoded on the device (zxing-wasm, bundled), fed
+  to the same lookup; a code seen before answers offline. Manual entry if the camera is refused.
 - **Label lookup** (`src/domain/products.ts`, `src/db/productRepo.ts`): Open Food Facts by brand and
   product name. A query naming a brand requires a brand match absolutely: returning nothing beats
   putting a rival manufacturer's numbers behind a badge saying they came off a real label. Hits are
@@ -56,15 +67,15 @@ Vite · React 19 · TypeScript · Tailwind v4 · Dexie (IndexedDB) · Zustand ·
 npm install
 npm run dev          # http://localhost:5173
 npm test             # domain, repo, importer and nutrition unit tests (Vitest)
-npm run e2e          # acceptance, nutrition, offline and merged-day tests in Chromium (builds first)
+npm run e2e          # acceptance, overload, guidance, nutrition, barcode (fake camera), offline tests (builds first)
 npm run build        # tsc + vite build → dist/
 ```
 
-Seed data (the five routines from the brief) is generated from `scratch/gen/seed.py` into `src/db/seed.ts`. Edit the script, not the generated file.
+Seed data (the five routines from the brief) is generated from `scratch/gen/seed.py` into `src/db/seed.ts`; the `equipment`, `demo` and `standard` fields were added by hand afterwards. Exercise diagrams are converted from the `@bryllim/workout-guide` package on every build (`prebuild`) into `public/exercises/`, which is gitignored.
 
 ## Android APK
 
-The same app ships as a native Android package (Capacitor shell, assets bundled, works offline, rest-timer notifications and share-sheet exports through the OS).
+The same app ships as a native Android package (Capacitor shell, assets bundled, works offline, rest-timer notifications and share-sheet exports through the OS, the camera for barcodes, and Gemini Nano for the assistant through Google AICore on phones that have it).
 
 - **Download:** [github.com/ryanfjmorgan93/RyCalories/releases/download/iron-latest/iron.apk](https://github.com/ryanfjmorgan93/RyCalories/releases/download/iron-latest/iron.apk) — a stable link, refreshed by every push. Open it on the phone and allow installs from that source. The workflow run's artifacts also keep an `iron-<sha>.apk` for 90 days if a specific build is needed.
 - **Build locally:** Android SDK 35 + JDK 21, then
@@ -88,10 +99,13 @@ Settings → Import Hevy CSV → pick `workout_data.csv` (workouts) or `measurem
 ## Layout
 
 ```
-src/domain      pure logic: types, engine, schedule, nutrition, bodyweight, formatting
-src/db          Dexie schema, seed, repo (all writes), backup, Hevy importer
-src/state       rest timer store, notifications
-src/ui          primitives, hooks, rest timer bar, exercise picker
+src/domain      pure logic: types, sets, engine, prescription, records, strength, volume, calendar, plates, warmup, nutrition, assistant prompts
+src/data        generated exercise-demo index and instructions
+src/db          Dexie schema, seed, repo (all writes), backup, Hevy importer, the query modules (plan, records, volume, calendar, assistant context)
+src/state       rest timer store, notifications, the Nano plugin bridge and assistant store
+src/ui          primitives, hooks, rest timer bar, pickers, scanner, demo viewer, assistant box
 src/screens     one file per screen
-e2e             Playwright acceptance and offline tests
+android/app     the Capacitor shell and NanoPlugin.java
+scripts         exercise-media (build-time diagram conversion), fetch-instructions
+e2e             Playwright acceptance, overload, guidance, progress, nutrition, barcode and offline tests
 ```

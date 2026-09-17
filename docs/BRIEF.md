@@ -16,7 +16,7 @@ A personal workout logger that replaces Hevy and runs my progression rules for m
 4. Hevy import from `hevy_export.csv` (repo root, real file). Idempotent: re-importing must not create duplicates.
 5. Export: full JSON backup + flat CSV, one tap each, from Settings.
 6. Progression engine is pure, tested logic (Vitest), built first.
-7. Nothing lectures me. No tips, motivational copy, "did you know", coaching prose. The only mid-session prose is my own exercise cue.
+7. Nothing lectures me. No tips, motivational copy, "did you know", coaching prose. The only mid-session prose is my own exercise cue. Amended September 2026, my own request: the streak line on the calendar may carry one short sentence of encouragement, and only there.
 
 ## 3. Stack
 Vite + React + TypeScript · Tailwind · Dexie · vite-plugin-pwa · Vitest · Zustand. Static deploy to Vercel.
