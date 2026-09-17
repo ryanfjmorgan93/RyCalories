@@ -6,6 +6,7 @@ import { discardSession, logBodyweight, startSession } from '@/db/repo';
 import { dayView } from '@/db/todayQueries';
 import { ZERO } from '@/domain/food';
 import { fmtDateTime, fmtKg, fmtMinutes, fmtNum } from '@/domain/format';
+import type { Prescription } from '@/domain/prescription';
 import { isConsecutiveLower, suggestNextRoutine } from '@/domain/schedule';
 import { dateKeyToDate } from '@/domain/dates';
 import { useTimer } from '@/state/timer';
@@ -18,7 +19,24 @@ import { NumberInput } from '@/ui/components/NumberField';
 import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { ChevronIcon, TopBar } from '@/ui/components/TopBar';
-import { useActiveSession, useLastCompletedSession, useRecentSessions, useRoutines, useSettings, useToday } from '@/ui/hooks';
+import {
+  useActiveSession,
+  useCalendar,
+  useLastCompletedSession,
+  useNextSessionPlan,
+  useRecentSessions,
+  useRoutines,
+  useSettings,
+  useToday,
+} from '@/ui/hooks';
+
+/** Chip tone + label for a prescription flag, in the order they should read. */
+const FLAG_CHIPS: Record<Prescription['flags'][number], { tone: 'info' | 'warn'; label: string }> = {
+  calibrating: { tone: 'info', label: 'calibrating' },
+  stalled: { tone: 'warn', label: 'stalled' },
+  regression: { tone: 'warn', label: 'regression' },
+  deload: { tone: 'info', label: 'deload' },
+};
 
 export function HomeScreen() {
   const nav = useNavigate();
@@ -43,6 +61,8 @@ export function HomeScreen() {
   // render-time read freezes on the day the screen mounted. Left open overnight it would show
   // yesterday's calories as today's progress, against yesterday's target.
   const todayKey = useToday();
+  const plan = useNextSessionPlan(suggested?.id, settings);
+  const calendar = useCalendar(12, todayKey, settings);
 
   const starting = useRef(false);
   const start = async (r: Routine) => {
@@ -56,6 +76,17 @@ export function HomeScreen() {
       const s = await startSession(r.id);
       setPending(null);
       setPickOpen(false);
+      nav(`/session/${s.id}`);
+    } finally {
+      starting.current = false;
+    }
+  };
+
+  const startDeload = async (r: Routine) => {
+    if (starting.current) return;
+    starting.current = true;
+    try {
+      const s = await startSession(r.id, { deload: true });
       nav(`/session/${s.id}`);
     } finally {
       starting.current = false;
@@ -94,18 +125,16 @@ export function HomeScreen() {
 
         {!active && (
           <Card className="mt-2 p-4" data-testid="next-up">
+            {calendar && (
+              <div className="mb-1 text-xs font-semibold text-muted" data-testid="streak-line">
+                {calendar.streak > 0 ? `${calendar.streak} weeks · ${calendar.line}` : `This week ${calendar.thisWeek} of ${calendar.weeklyTarget}`}
+              </div>
+            )}
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Next up</div>
                 {suggested ? (
-                  <>
-                    <div className="mt-1 truncate text-3xl font-extrabold leading-tight">{suggested.name}</div>
-                    <div className="mt-1 text-sm text-muted">
-                      {rxCounts?.get(suggested.id) ?? 0} exercises
-                      {suggested.targetMinutes ? ` · target ${suggested.targetMinutes} min` : ''}
-                      {suggested.isLowerBody ? ' · lower body' : ''}
-                    </div>
-                  </>
+                  <div className="mt-1 truncate text-3xl font-extrabold leading-tight">{suggested.name}</div>
                 ) : (
                   <div className="mt-1 text-lg text-muted">No routines yet</div>
                 )}
@@ -116,10 +145,49 @@ export function HomeScreen() {
                 </Button>
               )}
             </div>
+
+            {plan && plan.items.length > 0 && (
+              <div className="mt-3 grid gap-2">
+                {plan.items.map((it) => (
+                  <div key={it.rx.id} className="rounded-xl border border-line bg-surface-2 px-3 py-2" data-testid={`plan-item-${it.exercise.name}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 truncate font-semibold">{it.exercise.name}</span>
+                      {it.prescription.flags.length > 0 && (
+                        <div className="flex shrink-0 gap-1">
+                          {it.prescription.flags.map((f) => (
+                            <Chip key={f} size="sm" tone={FLAG_CHIPS[f].tone}>
+                              {FLAG_CHIPS[f].label}
+                            </Chip>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="num text-sm">{it.prescription.line}</div>
+                    {it.prescription.reason && <div className="text-xs text-muted">{it.prescription.reason}</div>}
+                    {it.lastTime && (
+                      <div className="text-xs text-muted">
+                        Last time {it.lastTime.line}
+                        {it.lastTime.rir ? ` · ${it.lastTime.rir}` : ''}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {plan?.deloadSuggested && (
+              <div className="mt-3 text-xs font-semibold text-warn">Deload suggested · {plan.stalledCount} stalled</div>
+            )}
+
             {suggested && (
-              <Button size="xl" variant="primary" full className="mt-4" onClick={() => void start(suggested)} data-testid="start-session">
-                Start
-              </Button>
+              <div className="mt-4 grid gap-2">
+                <Button size="xl" variant="primary" full onClick={() => void start(suggested)} data-testid="start-session">
+                  Start
+                </Button>
+                <Button size="lg" variant="outline" full onClick={() => void startDeload(suggested)} data-testid="start-deload">
+                  Start as deload
+                </Button>
+              </div>
             )}
           </Card>
         )}

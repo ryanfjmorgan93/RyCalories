@@ -177,3 +177,10 @@ export function fmtTime(iso: string): string {
   if (Number.isNaN(d.getTime())) return '';
   return new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(d);
 }
+
+/** Signed kg change: "+5 kg" / "−2.5 kg" / "no change" for exactly zero. */
+export function fmtSignedKg(n: number): string {
+  const r = Math.round(n * 100) / 100;
+  if (r === 0) return 'no change';
+  return r > 0 ? `+${fmtNum(r)} kg` : `−${fmtNum(Math.abs(r))} kg`;
+}

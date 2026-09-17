@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { demoFrameUrl } from '@/data/exerciseDemos';
 import { MUSCLE_GROUPS, type Exercise, type MuscleGroup } from '@/domain/types';
 import { IconButton } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row, SectionTitle } from '@/ui/components/Card';
@@ -78,7 +79,13 @@ export function ExercisesScreen() {
             {list.map((e, i) => (
               <div key={e.id}>
                 {i > 0 && <Divider />}
-                <Row onClick={() => nav(`/exercises/${e.id}`)} title={e.name} subtitle={exerciseSubtitle(e)} right={<ChevronIcon />} />
+                <Row
+                  onClick={() => nav(`/exercises/${e.id}`)}
+                  left={e.demo ? <img src={demoFrameUrl(e.demo, 1)} alt="" className="h-10 w-10 shrink-0 rounded-lg bg-surface-2 object-contain" /> : undefined}
+                  title={e.name}
+                  subtitle={exerciseSubtitle(e)}
+                  right={<ChevronIcon />}
+                />
               </div>
             ))}
           </Card>

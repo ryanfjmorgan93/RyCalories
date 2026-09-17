@@ -2,7 +2,16 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
 import { db } from '@/db/db';
-import { addRoutineExercise, deleteRoutine, duplicateRoutine, reorderRoutineExercises, startSession, updateRoutine, type RoutineItem } from '@/db/repo';
+import {
+  addRoutineExercise,
+  deleteRoutine,
+  duplicateRoutine,
+  reorderRoutineExercises,
+  startSession,
+  toggleSupersetWithNext,
+  updateRoutine,
+  type RoutineItem,
+} from '@/db/repo';
 import { targetLine } from '@/domain/format';
 import type { Routine } from '@/domain/types';
 import { Button, IconButton } from '@/ui/components/Button';
@@ -93,6 +102,7 @@ export function RoutineEditScreen() {
               onUp={() => void move(i, -1)}
               onDown={() => void move(i, 1)}
               onOpen={() => setEditingId(it.rx.id)}
+              onToggleSuperset={() => void toggleSupersetWithNext(routine.id, it.rx.id)}
             />
           ))}
         </div>
@@ -194,6 +204,7 @@ function ExerciseItemCard({
   onUp,
   onDown,
   onOpen,
+  onToggleSuperset,
 }: {
   item: RoutineItem;
   restSec: number;
@@ -202,40 +213,56 @@ function ExerciseItemCard({
   onUp: () => void;
   onDown: () => void;
   onOpen: () => void;
+  onToggleSuperset: () => void;
 }) {
   const { rx, exercise } = item;
+  const superset = rx.supersetId !== undefined;
   const chips = [
     rx.mode === 'calibrating' ? { key: 'cal', tone: 'info' as const, label: 'calibrating' } : null,
     rx.optional ? { key: 'opt', tone: 'neutral' as const, label: 'optional' } : null,
     exercise.unilateral ? { key: 'side', tone: 'neutral' as const, label: 'per side' } : null,
-  ].filter((c): c is { key: string; tone: 'info' | 'neutral'; label: string } => c !== null);
+    superset ? { key: 'ss', tone: 'accent' as const, label: 'Superset' } : null,
+  ].filter((c): c is { key: string; tone: 'info' | 'neutral' | 'accent'; label: string } => c !== null);
 
   return (
-    <Card className={`flex items-stretch ${rx.optional ? 'opacity-70' : ''}`} data-testid={`rx-card-${exercise.name}`}>
-      <button type="button" onClick={onOpen} className="min-w-0 flex-1 px-4 py-3 text-left active:bg-surface-2 rounded-l-2xl">
-        <div className="truncate text-lg font-bold leading-tight">{exercise.name}</div>
-        <div className="mt-1 text-sm text-muted">
-          {targetLine(rx, exercise.kind)} · rest {Math.round(restSec)} s
-        </div>
-        {chips.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {chips.map((c) => (
-              <Chip key={c.key} size="sm" tone={c.tone}>
-                {c.label}
-              </Chip>
-            ))}
+    <Card
+      className={`overflow-hidden ${rx.optional ? 'opacity-70' : ''} ${superset ? 'border-l-4 border-l-accent' : ''}`}
+      data-testid={`rx-card-${exercise.name}`}
+    >
+      <div className="flex items-stretch">
+        <button type="button" onClick={onOpen} className="min-w-0 flex-1 px-4 py-3 text-left active:bg-surface-2">
+          <div className="truncate text-lg font-bold leading-tight">{exercise.name}</div>
+          <div className="mt-1 text-sm text-muted">
+            {targetLine(rx, exercise.kind)} · rest {Math.round(restSec)} s
           </div>
-        )}
-        {rx.cue && <div className="mt-2 text-[15px] font-semibold leading-snug text-accent">{rx.cue}</div>}
-      </button>
-      <div className="flex flex-col items-center justify-center border-l border-line px-1">
-        <IconButton label="Move up" disabled={!canUp} onClick={onUp}>
-          <UpIcon />
-        </IconButton>
-        <IconButton label="Move down" disabled={!canDown} onClick={onDown}>
-          <DownIcon />
-        </IconButton>
+          {chips.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {chips.map((c) => (
+                <Chip key={c.key} size="sm" tone={c.tone}>
+                  {c.label}
+                </Chip>
+              ))}
+            </div>
+          )}
+          {rx.cue && <div className="mt-2 text-[15px] font-semibold leading-snug text-accent">{rx.cue}</div>}
+        </button>
+        <div className="flex flex-col items-center justify-center border-l border-line px-1">
+          <IconButton label="Move up" disabled={!canUp} onClick={onUp}>
+            <UpIcon />
+          </IconButton>
+          <IconButton label="Move down" disabled={!canDown} onClick={onDown}>
+            <DownIcon />
+          </IconButton>
+        </div>
       </div>
+      <button
+        type="button"
+        onClick={onToggleSuperset}
+        className="w-full border-t border-line px-4 py-2 text-left text-xs font-bold text-muted active:bg-surface-2 active:text-accent"
+        data-testid={`superset-${exercise.name}`}
+      >
+        {superset ? 'Remove superset' : 'Superset with next'}
+      </button>
     </Card>
   );
 }

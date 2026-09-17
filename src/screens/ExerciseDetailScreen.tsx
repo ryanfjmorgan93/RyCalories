@@ -2,34 +2,64 @@ import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
 import { db } from '@/db/db';
+import { gatherContext } from '@/db/assistantQueries';
 import { routineUsageForExercise, type RoutineUsage } from '@/db/exerciseDetailQueries';
-import { exerciseHistory, lockInRoutineExercise, unlockRoutineExercise, type HistoryEntry } from '@/db/repo';
-import { fmtDate, fmtDateLong, fmtKg, fmtNum, fmtWeight, targetLine } from '@/domain/format';
+import { bestsForExercise } from '@/db/recordsQueries';
+import { lockInRoutineExercise, unlockRoutineExercise, type HistoryEntry } from '@/db/repo';
+import { fmtDate, fmtDateLong, fmtKg, fmtNum, fmtSetsLine, fmtWeight, targetLine } from '@/domain/format';
+import type { Bests } from '@/domain/records';
+import { strengthLevel, type StrengthStandard } from '@/domain/standards';
 import { countsForProgression, countsForRecords } from '@/domain/sets';
 import type { Exercise, ExerciseKind, ProgressionDecision, ProgressionRule, RoutineExercise, SetLog } from '@/domain/types';
-import { Button } from '@/ui/components/Button';
+import { AssistantBox } from '@/ui/AssistantBox';
+import { Button, IconButton } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row, SectionTitle } from '@/ui/components/Card';
-import { Chip } from '@/ui/components/Chip';
+import { Chip, Segmented } from '@/ui/components/Chip';
 import { LineChart, type ChartPoint } from '@/ui/components/LineChart';
 import { NumberField } from '@/ui/components/NumberField';
 import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { ChevronIcon, TopBar } from '@/ui/components/TopBar';
+import { ExerciseDemo } from '@/ui/ExerciseDemo';
+import { useExerciseSeries, useSettings, useToday } from '@/ui/hooks';
 
 const DECISIONS_CAP = 12;
 const HISTORY_CAP = 30;
 
+type ChartMode = 'top' | 'e1rm' | 'volume';
+
+const CHART_MODES: { value: ChartMode; label: string }[] = [
+  { value: 'top', label: 'Top set' },
+  { value: 'e1rm', label: 'e1RM' },
+  { value: 'volume', label: 'Volume' },
+];
+
 export function ExerciseDetailScreen() {
   const { id } = useParams();
   const nav = useNavigate();
+  const today = useToday();
+  const settings = useSettings();
   // null = not found, undefined = loading.
   const exercise = useLiveQuery(async () => (id ? ((await db.exercises.get(id)) ?? null) : null), [id]);
   const usage = useLiveQuery(() => (id ? routineUsageForExercise(id) : []), [id]);
-  const history = useLiveQuery(() => (id ? exerciseHistory(id) : []), [id]);
+  const series = useExerciseSeries(id);
+  const history = series?.history;
+  const bests = useLiveQuery(() => (id ? bestsForExercise(id) : undefined), [id]);
+  const bodyweightKg = useLiveQuery(async () => {
+    const rows = await db.bodyweight.toArray();
+    if (rows.length === 0) return null;
+    return [...rows].sort((a, b) => b.date.localeCompare(a.date))[0].kg;
+  }, []);
+  const assistantContext = useLiveQuery(
+    async () => (settings && id ? gatherContext({ today, settings, exerciseId: id }) : undefined),
+    [today, settings, id],
+  );
 
   const [lockRx, setLockRx] = useState<RoutineExercise | null>(null);
   const [unlockRx, setUnlockRx] = useState<RoutineExercise | null>(null);
   const [historyLimit, setHistoryLimit] = useState(HISTORY_CAP);
+  const [chartMode, setChartMode] = useState<ChartMode>('top');
+  const [askOpen, setAskOpen] = useState(false);
 
   if (exercise === undefined || usage === undefined || history === undefined) {
     return (
@@ -52,7 +82,9 @@ export function ExerciseDetailScreen() {
   }
 
   const kind = exercise.kind;
-  const chartPoints = chartPointsFor(history, kind);
+  const chartPoints =
+    chartMode === 'e1rm' ? (series?.e1rm ?? []) : chartMode === 'volume' ? (series?.volume ?? []) : chartPointsFor(history, kind);
+  const chartUnit = chartMode === 'e1rm' ? ' kg' : chartMode === 'volume' ? '' : kind === 'timed' ? ' s' : ' kg';
   const shownHistory = history.slice(0, historyLimit);
 
   return (
@@ -61,13 +93,24 @@ export function ExerciseDetailScreen() {
         title={exercise.name}
         back="/exercises"
         right={
-          <Button size="md" variant="ghost" className="mr-1" onClick={() => nav(`/exercises/${exercise.id}/edit`)}>
-            Edit
-          </Button>
+          <div className="flex items-center">
+            <IconButton label="Ask" onClick={() => setAskOpen(true)} data-testid="ask-assistant">
+              <AskIcon />
+            </IconButton>
+            <Button size="md" variant="ghost" className="mr-1" onClick={() => nav(`/exercises/${exercise.id}/edit`)}>
+              Edit
+            </Button>
+          </div>
         }
       />
       <div className="px-4">
         <div className="px-1 text-sm text-muted">{metaLine(exercise)}</div>
+
+        {exercise.demo && (
+          <div className="mt-3 flex justify-center">
+            <ExerciseDemo slug={exercise.demo} name={exercise.name} videoUrl={exercise.videoUrl} size="sm" />
+          </div>
+        )}
 
         <SectionTitle>In routines</SectionTitle>
         {usage.length === 0 && <EmptyState>Not in any routine</EmptyState>}
@@ -75,10 +118,21 @@ export function ExerciseDetailScreen() {
           <RoutineCard key={u.rx.id} usage={u} kind={kind} onLockIn={() => setLockRx(u.rx)} onUnlock={() => setUnlockRx(u.rx)} />
         ))}
 
-        <SectionTitle>Top set</SectionTitle>
+        <SectionTitle>Chart</SectionTitle>
+        <div data-testid="chart-mode">
+          <Segmented value={chartMode} onChange={setChartMode} options={CHART_MODES} />
+        </div>
+        <div className="h-3" />
         <Card className="p-3">
-          <LineChart points={chartPoints} unit={kind === 'timed' ? ' s' : ' kg'} height={180} emptyText="No sessions yet" />
+          <LineChart points={chartPoints} unit={chartUnit} height={180} emptyText="No sessions yet" />
         </Card>
+
+        {bests && (bests.weight !== null || bests.e1rm !== null || bests.setVolume !== null) && (
+          <>
+            <SectionTitle>Records</SectionTitle>
+            <RecordsCard bests={bests} kind={kind} standard={exercise.standard} bodyweightKg={bodyweightKg ?? null} />
+          </>
+        )}
 
         <SectionTitle>History</SectionTitle>
         <Card>
@@ -147,6 +201,8 @@ export function ExerciseDetailScreen() {
           toast('Calibrating');
         }}
       />
+
+      {assistantContext && <AssistantBox open={askOpen} onClose={() => setAskOpen(false)} context={assistantContext} title={exercise.name} />}
     </div>
   );
 }
@@ -164,6 +220,50 @@ function metaLine(e: Exercise): string {
   parts.push(`rest ${Math.round(e.defaultRestSec)} s`);
   parts.push(`+${fmtNum(e.defaultIncrement)} kg steps`);
   return parts.join(' · ');
+}
+
+// ---------------------------------------------------------------------------
+// Records
+
+function RecordRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between py-1.5">
+      <span className="text-sm text-muted">{label}</span>
+      <span className="num font-bold">{value}</span>
+    </div>
+  );
+}
+
+function RecordsCard({
+  bests,
+  kind,
+  standard,
+  bodyweightKg,
+}: {
+  bests: Bests;
+  kind: ExerciseKind;
+  standard?: StrengthStandard;
+  bodyweightKg: number | null;
+}) {
+  const topWeights = [...bests.repsAtWeight.entries()].sort((a, b) => b[0] - a[0]).slice(0, 3);
+  return (
+    <Card className="p-4" data-testid="exercise-records">
+      {bests.weight !== null && <RecordRow label="Best weight" value={fmtWeight(kind, bests.weight)} />}
+      {bests.e1rm !== null && <RecordRow label="Best e1RM" value={fmtKg(bests.e1rm)} />}
+      {bests.setVolume !== null && <RecordRow label="Best set volume" value={`${fmtNum(bests.setVolume)} kg`} />}
+      {topWeights.map(([w, reps]) => (
+        <RecordRow key={w} label={`At ${fmtWeight(kind, w)}`} value={`${reps} reps`} />
+      ))}
+      {standard && bodyweightKg !== null && bests.e1rm !== null && (
+        <div className="mt-1 border-t border-line pt-2 text-sm text-muted">
+          {(() => {
+            const s = strengthLevel(standard, bests.e1rm as number, bodyweightKg);
+            return `${fmtNum(s.ratio)} × bodyweight · ${s.level}`;
+          })()}
+        </div>
+      )}
+    </Card>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -315,7 +415,7 @@ function SetsLine({ sets, kind }: { sets: SetLog[]; kind: ExerciseKind }) {
   const counted = useMemo(() => sets.filter((s) => countsForRecords(s.type)), [sets]);
   const warmups = useMemo(() => sets.filter((s) => s.type === 'warmup'), [sets]);
   const drops = useMemo(() => sets.filter((s) => s.type === 'drop'), [sets]);
-  const main = counted.length ? groupedLine(counted, kind) : 'no working sets';
+  const main = counted.length ? fmtSetsLine(counted, kind) : 'no working sets';
   return (
     <span>
       <span className="num">{main}</span>
@@ -330,30 +430,17 @@ function weightLabel(s: SetLog, kind: ExerciseKind): string {
   return fmtNum(s.weight);
 }
 
-function groupedLine(sets: SetLog[], kind: ExerciseKind): string {
-  if (kind === 'carry') {
-    return sets
-      .map((s) => {
-        const parts = [fmtKg(s.weight)];
-        if (s.distanceM !== undefined) parts.push(`${fmtNum(s.distanceM)} m`);
-        if (s.seconds !== undefined) parts.push(`${fmtNum(s.seconds)} s`);
-        return parts.join(' · ');
-      })
-      .join(', ');
-  }
-  if (kind === 'timed') return sets.map((s) => `${fmtNum(s.seconds ?? 0)} s`).join(', ');
-  const groups: { w: string; reps: number[] }[] = [];
-  for (const s of sets) {
-    const w = weightLabel(s, kind);
-    const last = groups[groups.length - 1];
-    if (last && last.w === w) last.reps.push(s.reps ?? 0);
-    else groups.push({ w, reps: [s.reps ?? 0] });
-  }
-  return groups.map((g) => `${g.w} × ${g.reps.join(', ')}`).join(' · ');
-}
-
 function dimSetLabel(s: SetLog, kind: ExerciseKind): string {
   if (kind === 'carry') return `${fmtNum(s.weight)}×${s.distanceM !== undefined ? `${fmtNum(s.distanceM)}m` : `${fmtNum(s.seconds ?? 0)}s`}`;
   if (kind === 'timed') return `${fmtNum(s.seconds ?? 0)}s`;
   return `${weightLabel(s, kind)}×${s.reps ?? 0}`;
+}
+
+function AskIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      <path d="M12 8v3M12 14h.01" />
+    </svg>
+  );
 }

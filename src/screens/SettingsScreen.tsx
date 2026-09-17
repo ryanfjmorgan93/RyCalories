@@ -10,12 +10,14 @@ import { DB_VERSION } from '@/db/db';
 import { dateKeyToDate, toDateKey } from '@/domain/dates';
 import { fmtNum } from '@/domain/format';
 import { calorieTargetOn } from '@/domain/nutrition';
-import type { Settings } from '@/domain/types';
+import { MUSCLE_GROUPS, type MuscleGroup, type Settings } from '@/domain/types';
 import { notificationPermission, requestNotifications } from '@/state/notify';
+import { AboutCard } from '@/ui/AboutCard';
+import { AssistantSettingsCard } from '@/ui/AssistantSettingsCard';
 import { Button } from '@/ui/components/Button';
 import { Card, Divider, Row, SectionTitle, Stat } from '@/ui/components/Card';
-import { Segmented, Toggle } from '@/ui/components/Chip';
-import { NumberInput } from '@/ui/components/NumberField';
+import { Chip, Segmented, Toggle } from '@/ui/components/Chip';
+import { NumberField, NumberInput } from '@/ui/components/NumberField';
 import { Confirm } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { ChevronIcon, TopBar } from '@/ui/components/TopBar';
@@ -23,6 +25,8 @@ import { HevyImportSheet, ReconcileSheet } from '@/ui/HevyImportSheet';
 import { RestoreSheet } from '@/ui/RestoreSheet';
 import { applyTheme } from '@/ui/theme';
 import { useSettings } from '@/ui/hooks';
+
+const PLATE_SIZES = [25, 20, 15, 10, 5, 2.5, 1.25, 0.5];
 
 export function SettingsScreen() {
   const nav = useNavigate();
@@ -39,7 +43,7 @@ export function SettingsScreen() {
         {settings && (
           <>
             <SectionTitle>Targets</SectionTitle>
-            <TargetsCard key={settings.savedAt ?? 'initial'} settings={settings} />
+            <TargetsCard settings={settings} />
 
             <SectionTitle>Logging</SectionTitle>
             <Card className="p-4">
@@ -58,7 +62,7 @@ export function SettingsScreen() {
             </Card>
 
             <SectionTitle>Rest timer</SectionTitle>
-            <RestCard key={settings.savedAt ?? 'initial'} settings={settings} />
+            <RestCard settings={settings} />
 
             <SectionTitle>Appearance</SectionTitle>
             <Card className="p-4">
@@ -87,7 +91,7 @@ export function SettingsScreen() {
                   }
                 }}
                 label="Look up labels online"
-                sub="Sends the product name to Open Food Facts. Nothing else in this app makes a network request."
+                sub="See About for everything that leaves the device."
               />
             </Card>
 
@@ -95,6 +99,18 @@ export function SettingsScreen() {
             <Card>
               <Row title="Fortnightly check-in" subtitle="Current lifts, bodyweight trend, niggles" onClick={() => nav('/checkin')} right={<ChevronIcon />} />
             </Card>
+
+            <SectionTitle>Plates</SectionTitle>
+            <PlatesCard settings={settings} />
+
+            <SectionTitle>Progression</SectionTitle>
+            <ProgressionCard settings={settings} />
+
+            <SectionTitle>Assistant</SectionTitle>
+            <AssistantSettingsCard />
+
+            <SectionTitle>About</SectionTitle>
+            <AboutCard />
 
             <SectionTitle>Developer</SectionTitle>
             <DeveloperCard />
@@ -251,9 +267,22 @@ function fmtKey(key: string): string {
   return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(dateKeyToDate(key));
 }
 
+function draftFromTargets(settings: Settings): Record<TargetKey, number | null> {
+  return Object.fromEntries(TARGET_FIELDS.map((f) => [f.key, settings[f.key]])) as Record<TargetKey, number | null>;
+}
+
 function TargetsCard({ settings }: { settings: Settings }) {
-  const [draft, setDraft] = useState<Record<TargetKey, number | null>>(() => Object.fromEntries(TARGET_FIELDS.map((f) => [f.key, settings[f.key]])) as Record<TargetKey, number | null>);
+  // Re-seeds the draft whenever a save lands, without a `key`-driven remount: that briefly left
+  // two copies of this card in the DOM (the old instance did not unmount before the new one
+  // committed), which a plain state update during render does not risk.
+  const [savedAt, setSavedAt] = useState(settings.savedAt);
+  const [draft, setDraft] = useState<Record<TargetKey, number | null>>(() => draftFromTargets(settings));
   const [startDate, setStartDate] = useState(settings.calorieStartDate ?? '');
+  if (settings.savedAt !== savedAt) {
+    setSavedAt(settings.savedAt);
+    setDraft(draftFromTargets(settings));
+    setStartDate(settings.calorieStartDate ?? '');
+  }
   const today = calorieTargetOn(toDateKey(), settings);
 
   const save = async () => {
@@ -318,11 +347,19 @@ const PERMISSION_LABEL: Record<ReturnType<typeof notificationPermission>, string
 };
 
 function RestCard({ settings }: { settings: Settings }) {
+  // See TargetsCard: re-seeded on `savedAt` change via a plain state update, not a `key` remount.
+  const [savedAt, setSavedAt] = useState(settings.savedAt);
   const [compound, setCompound] = useState<number | null>(settings.restCompoundSec);
   const [isolation, setIsolation] = useState<number | null>(settings.restIsolationSec);
   const [carry, setCarry] = useState<number | null>(settings.restCarrySec);
   const [applyOpen, setApplyOpen] = useState(false);
   const [perm, setPerm] = useState(() => notificationPermission());
+  if (settings.savedAt !== savedAt) {
+    setSavedAt(settings.savedAt);
+    setCompound(settings.restCompoundSec);
+    setIsolation(settings.restIsolationSec);
+    setCarry(settings.restCarrySec);
+  }
 
   // The numbers on screen (falling back to what is saved); a rest under 5 s would fire the cue at once.
   const effective = () => ({
@@ -409,6 +446,119 @@ function RestCard({ settings }: { settings: Settings }) {
           }
         }}
       />
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Plates
+
+function PlatesCard({ settings }: { settings: Settings }) {
+  const plates = settings.plates ?? [25, 20, 15, 10, 5, 2.5, 1.25];
+  // See TargetsCard above: re-seeded on `savedAt` change via a plain state update, not a `key`
+  // remount (a remount here briefly left two copies of this card in the DOM).
+  const [savedAt, setSavedAt] = useState(settings.savedAt);
+  const [barKg, setBarKg] = useState<number | null>(settings.barKg ?? 20);
+  if (settings.savedAt !== savedAt) {
+    setSavedAt(settings.savedAt);
+    setBarKg(settings.barKg ?? 20);
+  }
+
+  const toggle = async (size: number) => {
+    const next = plates.includes(size) ? plates.filter((p) => p !== size) : [...plates, size];
+    await saveSettings({ plates: next });
+  };
+
+  return (
+    <Card className="p-4" data-testid="plates-card">
+      <NumberField
+        label="Bar (kg)"
+        value={barKg}
+        onChange={(v) => {
+          setBarKg(v);
+          void saveSettings({ barKg: v ?? 20 });
+        }}
+        step={2.5}
+        min={0}
+        unit="kg"
+        size="md"
+        testId="plates-bar-kg"
+      />
+      <div className="mt-3 flex flex-wrap gap-2">
+        {PLATE_SIZES.map((size) => (
+          <Chip key={size} className="min-h-11" active={plates.includes(size)} onClick={() => void toggle(size)}>
+            {fmtNum(size)} kg
+          </Chip>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Progression
+
+function setTargetsFrom(settings: Settings): Record<MuscleGroup, number | null> {
+  return Object.fromEntries(MUSCLE_GROUPS.map((g) => [g, settings.weeklySetTargets?.[g] ?? null])) as Record<MuscleGroup, number | null>;
+}
+
+function ProgressionCard({ settings }: { settings: Settings }) {
+  // See TargetsCard above: re-seeded on `savedAt` change via a plain state update, not a `key`
+  // remount (a remount here briefly left two copies of this card in the DOM).
+  const [savedAt, setSavedAt] = useState(settings.savedAt);
+  const [deloadPercent, setDeloadPercent] = useState<number | null>(Math.round((settings.deloadPercent ?? 0.9) * 100));
+  const [weeklyTarget, setWeeklyTarget] = useState<number | null>(settings.weeklySessionTarget ?? 3);
+  const [setTargets, setSetTargets] = useState<Record<MuscleGroup, number | null>>(() => setTargetsFrom(settings));
+  if (settings.savedAt !== savedAt) {
+    setSavedAt(settings.savedAt);
+    setDeloadPercent(Math.round((settings.deloadPercent ?? 0.9) * 100));
+    setWeeklyTarget(settings.weeklySessionTarget ?? 3);
+    setSetTargets(setTargetsFrom(settings));
+  }
+
+  const save = async () => {
+    const weeklySetTargets: Partial<Record<MuscleGroup, number>> = {};
+    for (const g of MUSCLE_GROUPS) {
+      const v = setTargets[g];
+      if (v !== null) weeklySetTargets[g] = v;
+    }
+    await saveSettings({
+      deloadPercent: Math.min(1, Math.max(0, (deloadPercent ?? 90) / 100)),
+      weeklySessionTarget: weeklyTarget ?? 3,
+      weeklySetTargets,
+    });
+    toast('Saved', 'ok');
+  };
+
+  return (
+    <Card className="p-4">
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Deload (%)">
+          <NumberInput value={deloadPercent} onChange={setDeloadPercent} mode="numeric" min={0} max={100} placeholder="90" />
+        </Field>
+        <Field label="Sessions per week">
+          <NumberInput value={weeklyTarget} onChange={setWeeklyTarget} mode="numeric" min={1} placeholder="3" />
+        </Field>
+      </div>
+      <Divider />
+      <div className="mt-3 mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Weekly set targets</div>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-3">
+        {MUSCLE_GROUPS.filter((g) => g !== 'full body' && g !== 'other').map((g) => (
+          <Field key={g} label={g}>
+            <NumberInput
+              value={setTargets[g]}
+              onChange={(v) => setSetTargets((t) => ({ ...t, [g]: v }))}
+              mode="numeric"
+              min={0}
+              placeholder="none"
+              testId={`set-target-${g}`}
+            />
+          </Field>
+        ))}
+      </div>
+      <Button variant="primary" full className="mt-4" onClick={() => void save()}>
+        Save
+      </Button>
     </Card>
   );
 }
