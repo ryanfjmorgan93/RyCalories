@@ -67,6 +67,12 @@ export function RoutineExerciseEditor({
   const weightLabel = kind === 'bodyweight_plus' ? 'Added kg' : 'Current weight (kg)';
   const repLabel = kind === 'timed' ? 'Seconds' : 'Reps';
 
+  // A new routine-exercise starts at `currentWeight: 0, mode: 'calibrating'`, so switching Mode to
+  // Normal without touching the pre-filled 0 would store a working weight of nothing and the lift
+  // would prescribe 0 kg for ever. 0 is only meaningful for bodyweight_plus, where it means
+  // bodyweight alone.
+  const zeroWeightNormal = mode === 'normal' && exercise.kind !== 'bodyweight_plus' && (weight ?? rx?.currentWeight ?? 0) <= 0;
+
   const save = async () => {
     const notices: string[] = [];
     const patch: Partial<Omit<RoutineExercise, 'id' | 'routineId'>> = {};
@@ -105,6 +111,8 @@ export function RoutineExerciseEditor({
 
     patch.mode = mode;
     if (mode === 'normal') patch.currentWeight = Math.max(0, weight ?? rx.currentWeight);
+    // Guarded at the button too (see `zeroWeightNormal`); this is the second line of defence,
+    // since nothing below the UI has a floor of its own.
     patch.increment = Math.max(0.25, increment ?? rx.increment);
     patch.restSecOverride = rest !== null && rest > 0 ? Math.round(rest) : undefined;
     patch.cue = cue.trim() || undefined;
@@ -125,7 +133,7 @@ export function RoutineExerciseEditor({
         title={exercise.name}
         footer={
           <div className="grid gap-3">
-            <Button size="lg" variant="primary" full onClick={() => void save()} data-testid="rx-save">
+            <Button size="lg" variant="primary" full disabled={zeroWeightNormal} onClick={() => void save()} data-testid="rx-save">
               Save
             </Button>
             <Button size="md" variant="danger" full onClick={() => setRemoveOpen(true)}>

@@ -349,9 +349,12 @@ function BodyweightQuickAdd() {
         <NumberInput value={kg} onChange={setKg} placeholder={latest ? fmtNum(latest.kg) : 'kg'} testId="bw-input" />
         <Button
           variant="primary"
-          disabled={kg === null}
+          // Same floor BodyweightScreen applies to the identical action. logBodyweight does not
+          // validate, and a 0 or negative reading feeds the weekly delta, the moving average and
+          // the "to target" stat — a trend the owner reverse-diets against.
+          disabled={kg === null || kg <= 0}
           onClick={async () => {
-            if (kg === null) return;
+            if (kg === null || kg <= 0) return;
             await logBodyweight(todayKey, kg);
             setKg(null);
             toast(`Logged ${fmtKg(kg)}`, 'ok');

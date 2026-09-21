@@ -67,8 +67,20 @@ export function SummaryScreen() {
   }, [id, nav]);
 
   const decided = useMemo(() => (summary?.items ?? []).filter((i) => i.status === 'done' && i.decision), [summary]);
-  // Every Override / Lock in needs a number before the session can be saved.
-  const invalid = Object.values(choices).some((c) => (c.mode === 'override' && c.overrideTo === null) || (c.lockIn && c.lockInAt === null));
+  // Every Override / Lock in needs a number before the session can be saved — and for a weighted
+  // lift that number cannot be 0. Nothing below this screen has a floor: neither engine.ts's
+  // lockIn() nor repo.ts's lockInRoutineExercise() rejects it, so a lift locked in at 0 kg
+  // prescribes nothing for ever. 0 is only meaningful for bodyweight_plus, where it means
+  // bodyweight alone. ExerciseDetailScreen's own lock-in sheet guards this; this is the path taken
+  // at the end of every session, so it needs the same guard.
+  const invalid = decided.some((item) => {
+    const c = choices[item.rx!.id];
+    if (!c) return false;
+    if (c.mode === 'override' && c.overrideTo === null) return true;
+    if (!c.lockIn) return false;
+    if (c.lockInAt === null) return true;
+    return c.lockInAt <= 0 && item.exercise.kind !== 'bodyweight_plus';
+  });
   const others = useMemo(() => (summary?.items ?? []).filter((i) => !(i.status === 'done' && i.decision)), [summary]);
 
   if (!summary) {
@@ -314,7 +326,6 @@ function DecisionCard({ item, choice, onChange }: { item: SummaryItem; choice: C
           {c.lockIn && (
             <div className="mt-2">
               <NumberField label="Working weight (kg)" value={c.lockInAt} onChange={(v) => onChange({ ...c, lockInAt: v })} step={rx.increment} testId="lock-in-input" />
-              <div className="mt-1 text-xs text-muted">Double progression starts next session at this weight.</div>
             </div>
           )}
         </div>

@@ -390,7 +390,6 @@ function LockInSheet({
   const blocked = weight === null || (weight === 0 && !hasHistory);
   return (
     <Sheet open onClose={onClose} title="Lock in">
-      <div className="text-sm text-muted">Double progression starts next session from this weight.</div>
       <div className="mt-4">
         <NumberField label={kind === 'bodyweight_plus' ? 'Added kg' : 'kg'} value={weight} onChange={setWeight} step={rx.increment} testId="lock-in-weight" />
       </div>

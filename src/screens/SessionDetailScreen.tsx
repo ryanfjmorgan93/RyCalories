@@ -93,10 +93,12 @@ export function SessionDetailScreen() {
 
         <SessionExtras session={session} />
 
+        {/* A session with no sets builds a routine with no exercises — a button that leads nowhere. */}
         <Button
           className="mt-4"
           full
           size="lg"
+          disabled={groups.length === 0}
           data-testid="save-as-routine"
           onClick={async () => {
             const routine = await createRoutineFromSession(session.id);
