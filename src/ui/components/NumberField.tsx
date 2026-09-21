@@ -61,9 +61,7 @@ export function NumberField({
   };
 
   const bump = (dir: 1 | -1) => {
-    // Empty field: step from the explicit fallback (e.g. repMin) or the minimum — never from the placeholder text.
-    const base = value ?? fallback ?? min;
-    const next = clamp(Math.round((value === null ? base : base + dir * step) * 100) / 100, min, max);
+    const next = stepValue(value, dir, step, min, max, fallback);
     onChange(next);
     setText(fieldText(next));
   };
@@ -133,6 +131,23 @@ function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
 }
 
+/**
+ * The value one tap of −/+ lands on. Exported so the maths can be tested directly, with no DOM.
+ *
+ * Empty field: the first tap steps from the explicit fallback (e.g. repMin) or the minimum —
+ * never from the placeholder text. When that base is non-zero, the first tap lands exactly on it
+ * (e.g. an empty rep field with fallback 8 shows 8, not 9) — that landing is the point, so it does
+ * not also apply a step. But when the base is 0 (the usual fallback for an empty weight field),
+ * landing there looks like nothing happened — 0 reads the same as empty — so the first tap steps
+ * off zero straight away instead of stopping on it, in whichever direction was pressed.
+ */
+export function stepValue(value: number | null, dir: 1 | -1, step: number, min: number, max: number, fallback?: number): number {
+  const base = value ?? fallback ?? min;
+  const landsOnBase = value === null && base !== 0;
+  const raw = landsOnBase ? base : base + dir * step;
+  return clamp(Math.round(raw * 100) / 100, min, max);
+}
+
 /** Plain digits for the input box (no thousands grouping, so re-parsing never breaks). */
 function fieldText(n: number): string {
   return String(Math.round(n * 100) / 100);
@@ -149,6 +164,7 @@ export function NumberInput({
   max,
   disabled,
   testId,
+  onBlur,
 }: {
   value: number | null | undefined;
   onChange: (v: number | null) => void;
@@ -159,6 +175,8 @@ export function NumberInput({
   max?: number;
   disabled?: boolean;
   testId?: string;
+  /** Fires after the field's own blur handling — e.g. to refill a value a caller cannot let sit blank. */
+  onBlur?: () => void;
 }) {
   const [text, setText] = useState(value === null || value === undefined ? '' : String(value));
   const focused = useRef(false);
@@ -180,6 +198,7 @@ export function NumberInput({
       }}
       onBlur={() => {
         focused.current = false;
+        onBlur?.();
       }}
       onChange={(e) => {
         const raw = e.target.value;
