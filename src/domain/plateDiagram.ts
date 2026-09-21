@@ -137,6 +137,45 @@ export function plateColor(kg: number): string {
   return PLATE_COLOR[kg] ?? FALLBACK_PLATE_COLOR;
 }
 
+const INK_DARK = '#111316';
+const INK_LIGHT = '#ffffff';
+
+/** WCAG relative luminance of a `#rrggbb` colour. */
+function relativeLuminance(hex: string): number {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const lin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+/** WCAG contrast ratio between two `#rrggbb` colours, 1 (identical) to 21 (black on white). */
+export function contrastRatio(a: string, b: string): number {
+  const [hi, lo] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/**
+ * Ink for the number printed ON a plate: whichever of near-black and near-white actually contrasts
+ * better against that plate, measured rather than guessed.
+ *
+ * A fixed luminance threshold was tried first and got the muted 15 kg yellow wrong — at luminance
+ * 0.38 it fell on the "dark plate" side and took white ink, which is 2.5:1 and barely readable,
+ * when black on it is 7.6:1. Measuring both candidates cannot make that mistake, and it stays
+ * correct if a plate colour is ever retuned.
+ */
+export function plateLabelColor(kg: number): string {
+  const plate = plateColor(kg);
+  return contrastRatio(plate, INK_DARK) >= contrastRatio(plate, INK_LIGHT) ? INK_DARK : INK_LIGHT;
+}
+
+/**
+ * Point size for that number. Bounded so it stays legible on the thinnest plate and never
+ * overflows the thickest — the text runs along the plate (rotated), so the constraint that
+ * matters is the plate's thickness, not its height.
+ */
+export function plateLabelSize(kg: number): number {
+  return Math.min(14, Math.max(9, drawnPlateThickness(kg) * 0.52));
+}
+
 // ---------------------------------------------------------------------------------------------
 // Full diagram geometry
 // ---------------------------------------------------------------------------------------------
@@ -148,6 +187,9 @@ export interface PlateBlock {
   width: number;
   height: number;
   color: string;
+  /** Ink and point size for the weight printed along the plate itself. */
+  labelColor: string;
+  labelSize: number;
 }
 
 export interface DiagramPart {
@@ -163,8 +205,6 @@ export interface PlateDiagramSpec {
   height: number;
   /** y of the bar's centreline — every part is drawn symmetrically around this. */
   barY: number;
-  /** y for every plate's weight label (one shared row, so labels line up left to right). */
-  labelY: number;
   /** The bar continuing in towards the lifter, cut off at the diagram's edge. */
   shaft: DiagramPart;
   /** Where the plates actually sit. */
@@ -184,10 +224,15 @@ const LEAD_MARGIN = 8;
 const TRAIL_MARGIN = 12;
 
 const SHAFT_HEIGHT = 16;
-const SLEEVE_HEIGHT = 34;
+const SLEEVE_HEIGHT = 24;
 const CLIP_HEIGHT = 30;
 
-const LABEL_SPACE = 26;
+// Room above and below the tallest plate. The weight used to be printed in a shared row above the
+// diagram, which collided: two adjacent plates are only ~15-23 units apart, far narrower than the
+// text, so a 20 next to a 2.5 ran together and read as "202.5" — a wrong number on the one screen
+// whose job is telling you what to load. The number is now printed along each plate, the way a
+// real plate is stamped, and cannot collide with its neighbour whatever the load.
+const TOP_MARGIN = 10;
 const BOTTOM_MARGIN = 10;
 
 /**
@@ -199,8 +244,8 @@ const BOTTOM_MARGIN = 10;
  * plates grow or shrink around it.
  */
 export function buildPlateDiagram(perSide: number[]): PlateDiagramSpec {
-  const height = LABEL_SPACE + DRAWN_HEIGHT_MAX + BOTTOM_MARGIN;
-  const barY = LABEL_SPACE + DRAWN_HEIGHT_MAX / 2;
+  const height = TOP_MARGIN + DRAWN_HEIGHT_MAX + BOTTOM_MARGIN;
+  const barY = TOP_MARGIN + DRAWN_HEIGHT_MAX / 2;
 
   let x = LEAD_MARGIN;
   const shaft: DiagramPart = { x, y: barY - SHAFT_HEIGHT / 2, width: SHAFT_LEN, height: SHAFT_HEIGHT };
@@ -211,7 +256,16 @@ export function buildPlateDiagram(perSide: number[]): PlateDiagramSpec {
   const plates: PlateBlock[] = perSide.map((kg) => {
     const width = drawnPlateThickness(kg);
     const plateHeight = drawnPlateHeight(kg);
-    const block: PlateBlock = { kg, x, y: barY - plateHeight / 2, width, height: plateHeight, color: plateColor(kg) };
+    const block: PlateBlock = {
+      kg,
+      x,
+      y: barY - plateHeight / 2,
+      width,
+      height: plateHeight,
+      color: plateColor(kg),
+      labelColor: plateLabelColor(kg),
+      labelSize: plateLabelSize(kg),
+    };
     x += width + PLATE_GAP;
     return block;
   });
@@ -220,5 +274,5 @@ export function buildPlateDiagram(perSide: number[]): PlateDiagramSpec {
   const clip: DiagramPart = { x, y: barY - CLIP_HEIGHT / 2, width: CLIP_LEN, height: CLIP_HEIGHT };
   x += CLIP_LEN + TRAIL_MARGIN;
 
-  return { width: x, height, barY, labelY: LABEL_SPACE - 8, shaft, sleeve, clip, plates };
+  return { width: x, height, barY, shaft, sleeve, clip, plates };
 }

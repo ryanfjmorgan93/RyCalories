@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_PLATES } from './plates';
-import { buildPlateDiagram, drawnPlateHeight, drawnPlateThickness, plateColor, realPlateDiameterMm } from './plateDiagram';
+import { buildPlateDiagram, contrastRatio, drawnPlateHeight, drawnPlateThickness, plateColor, plateLabelColor, plateLabelSize, realPlateDiameterMm } from './plateDiagram';
 
 // The plate sizes this app actually ships with (DEFAULT_SETTINGS.plates, mirrored here as
 // DEFAULT_PLATES.plates — see plates.ts), ascending — the ones a real lifter's diagram has to get
@@ -117,5 +117,52 @@ describe('buildPlateDiagram', () => {
     const loaded = buildPlateDiagram([25, 25, 20, 1.25]);
     expect(loaded.height).toBe(bare.height);
     expect(loaded.barY).toBe(bare.barY);
+  });
+});
+
+/**
+ * The number printed on each plate. This replaced a shared label row above the diagram, which
+ * collided in the real render: adjacent plates are far narrower than the text, so a 20 beside a
+ * 2.5 ran together and read as "202.5" — a wrong number on the screen that tells you what to
+ * load. Thirteen green tests and a full e2e run all missed it, because nothing asserted on what
+ * the thing actually looked like.
+ */
+describe('plate labels', () => {
+  // The assertion that matters is not WHICH ink it picks but that the number is readable on the
+  // plate. A first attempt used a fixed luminance threshold and gave the muted 15 kg yellow white
+  // ink at 2.5:1; this catches that class of mistake instead of encoding one right answer.
+  it('gives every standard plate an ink that clears 4.5:1 against it', () => {
+    for (const kg of [1.25, 2.5, 5, 10, 15, 20, 25]) {
+      expect(contrastRatio(plateColor(kg), plateLabelColor(kg))).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('picks the better of the two inks, not a fixed one', () => {
+    expect(plateLabelColor(5)).toBe('#111316'); // near-white plate
+    expect(plateLabelColor(20)).toBe('#ffffff'); // mid blue
+  });
+
+  it('gives an unknown plate size a readable ink rather than throwing', () => {
+    expect(contrastRatio(plateColor(7.5), plateLabelColor(7.5))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('keeps every standard plate label within legible bounds', () => {
+    for (const kg of [1.25, 2.5, 5, 10, 15, 20, 25]) {
+      const size = plateLabelSize(kg);
+      expect(size).toBeGreaterThanOrEqual(9);
+      expect(size).toBeLessThanOrEqual(14);
+    }
+  });
+
+  it('never shrinks the label as the plate gets heavier', () => {
+    const sizes = [1.25, 2.5, 5, 10, 15, 20, 25].map(plateLabelSize);
+    for (let i = 1; i < sizes.length; i++) expect(sizes[i]).toBeGreaterThanOrEqual(sizes[i - 1]);
+  });
+
+  it('carries the ink and size on every block the diagram lays out', () => {
+    for (const block of buildPlateDiagram([20, 2.5]).plates) {
+      expect(block.labelColor).toBe(plateLabelColor(block.kg));
+      expect(block.labelSize).toBe(plateLabelSize(block.kg));
+    }
   });
 });

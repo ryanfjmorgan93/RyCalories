@@ -46,11 +46,22 @@ async function denyCamera(browser: Browser, context: BrowserContext, page: Page)
   });
 }
 
+/**
+ * `animations: 'disabled'` is not a nicety. A sheet slides up over 180ms (`.sheet-in`), and
+ * `toBeVisible()` resolves while it is still part-way through — so a shot taken right after it
+ * caught the sheet mid-slide, with its lower content hanging off the bottom of the frame. That
+ * read exactly like a layout bug and sent me trimming a diagram that was never too big. Playwright
+ * finishes and freezes CSS animations for the capture, so the shot is of the settled screen.
+ */
 async function shot(page: Page, name: string, opts: { full?: boolean } = {}) {
   n += 1;
   const full = opts.full ?? false;
   const handle = full ? await page.addStyleTag({ content: PIN_NAV }) : null;
-  await page.screenshot({ path: `${OUT}/${String(n).padStart(2, '0')}-${name}.png`, fullPage: full });
+  await page.screenshot({
+    path: `${OUT}/${String(n).padStart(2, '0')}-${name}.png`,
+    fullPage: full,
+    animations: 'disabled',
+  });
   if (handle) await handle.evaluate((el) => (el as HTMLElement).remove());
 }
 

@@ -40,13 +40,26 @@ export function PlateSheet({ open, onClose, weight, plates }: { open: boolean; o
                 width={diagram.sleeve.width}
                 height={diagram.sleeve.height}
                 rx={4}
-                className="fill-muted stroke-line"
+                className="fill-dim stroke-line"
                 strokeWidth={1}
               />
               {diagram.plates.map((p, i) => (
                 <g key={i} data-testid="plate-block">
                   <rect x={p.x} y={p.y} width={p.width} height={p.height} rx={3} fill={p.color} className="stroke-dim" strokeWidth={1.5} />
-                  <text x={p.x + p.width / 2} y={diagram.labelY} textAnchor="middle" fontSize={15} fontWeight={700} className="fill-fg num">
+                  {/* Printed along the plate, the way a real plate is stamped. A shared label row
+                      above the diagram collided: adjacent plates are far narrower than the text, so
+                      a 20 beside a 2.5 ran together and read as "202.5". */}
+                  <text
+                    x={p.x + p.width / 2}
+                    y={diagram.barY}
+                    transform={`rotate(-90 ${p.x + p.width / 2} ${diagram.barY})`}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fontSize={p.labelSize}
+                    fontWeight={700}
+                    fill={p.labelColor}
+                    className="num"
+                  >
                     {fmtNum(p.kg)}
                   </text>
                 </g>
