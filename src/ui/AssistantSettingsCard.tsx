@@ -5,6 +5,7 @@ import { NanoBackend, useAssistant } from '../state/assistant';
 import { Button } from './components/Button';
 import { Card, Row } from './components/Card';
 import { Chip } from './components/Chip';
+import { toast } from './components/Toast';
 
 // One stateless backend instance for the "Test" button — deliberately not the shared useAssistant
 // store, so a smoke test here never writes to the user's actual conversation thread.
@@ -34,6 +35,37 @@ function chipTone(state: NanoState | undefined, isDownloading: boolean): 'ok' | 
   return 'neutral';
 }
 
+/**
+ * Copies `text` to the clipboard. Tries the Clipboard API first, then falls back to the legacy
+ * selection-and-execCommand method — the Android WebView this app actually ships in can have
+ * `navigator.clipboard` missing or rejecting even though a copy is otherwise possible there.
+ * Returns whether a copy actually happened; never claims success it didn't get.
+ */
+async function copyText(text: string): Promise<boolean> {
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Fall through to the legacy method below.
+    }
+  }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 /** Settings card for the on-device assistant: status, download, a smoke test, and the one fact about data leaving the device. */
 export function AssistantSettingsCard() {
   const { status, refreshStatus, download } = useAssistant();
@@ -41,6 +73,7 @@ export function AssistantSettingsCard() {
   const [downloading, setDownloading] = useState(false);
   const [testBusy, setTestBusy] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
+  const [rechecking, setRechecking] = useState(false);
 
   useEffect(() => {
     void refreshStatus();
@@ -82,6 +115,20 @@ export function AssistantSettingsCard() {
     }
   };
 
+  const recheck = async () => {
+    setRechecking(true);
+    try {
+      await refreshStatus();
+    } finally {
+      setRechecking(false);
+    }
+  };
+
+  const copyDiagnostics = async () => {
+    const ok = await copyText(status?.detail ?? '');
+    toast(ok ? 'Copied' : 'Could not copy.', ok ? 'ok' : 'danger');
+  };
+
   const isDownloading = downloading || status?.state === 'downloading';
 
   return (
@@ -92,7 +139,13 @@ export function AssistantSettingsCard() {
         right={<Chip tone={chipTone(status?.state, isDownloading)}>{(status?.state ?? 'checking').toUpperCase()}</Chip>}
       />
 
-      <div className="flex gap-2 px-4 pb-3">
+      {status && (
+        <div className="num px-4 pb-3 text-xs text-muted" data-testid="assistant-detail">
+          {status.detail}
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2 px-4 pb-3">
         {status?.state !== 'ready' && (
           <Button size="sm" variant="secondary" disabled={isDownloading} onClick={() => void download()}>
             {isDownloading ? 'Downloading…' : 'Download'}
@@ -101,19 +154,18 @@ export function AssistantSettingsCard() {
         <Button size="sm" variant="outline" disabled={testBusy || status?.state !== 'ready'} onClick={() => void runTest()}>
           {testBusy ? 'Testing…' : 'Test'}
         </Button>
+        <Button size="sm" variant="outline" disabled={rechecking} onClick={() => void recheck()} data-testid="assistant-recheck">
+          {rechecking ? 'Checking…' : 'Re-check'}
+        </Button>
+        <Button size="sm" variant="outline" disabled={!status?.detail} onClick={() => void copyDiagnostics()} data-testid="assistant-copy-diagnostics">
+          Copy diagnostics
+        </Button>
       </div>
 
       {testResult !== null && (
         <div className="px-4 pb-3 text-sm" data-testid="assistant-test-result">
           {testResult}
         </div>
-      )}
-
-      {status && (
-        <details className="px-4 pb-3 text-xs text-muted">
-          <summary className="cursor-pointer select-none">Details</summary>
-          <div className="num mt-1">{status.detail}</div>
-        </details>
       )}
 
       <div className="border-t border-line px-4 py-3 text-xs text-muted">
