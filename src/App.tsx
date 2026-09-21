@@ -40,10 +40,14 @@ function LiveBanner() {
   if (!active) return null;
   const elapsed = Math.max(0, Math.floor((now - Date.parse(active.startedAt)) / 1000));
   return (
+    // pt-safe, the same utility TopBar uses. Without it this bar renders UNDER the system status
+    // bar on a device with a top inset: its text collides with the clock and battery, and the tap
+    // target for Resume sits beneath them where it cannot be pressed. h-11 was the bar's height
+    // INCLUDING nothing for the inset, so it becomes min-h-11 plus padding rather than a fixed h.
     <button
       type="button"
       onClick={() => nav(`/session/${active.id}`)}
-      className="sticky top-0 z-40 flex h-11 w-full items-center justify-between bg-accent px-4 text-accent-fg"
+      className="pt-safe sticky top-0 z-40 flex min-h-11 w-full items-center justify-between bg-accent px-4 py-2.5 text-accent-fg"
       data-testid="live-banner"
     >
       <span className="truncate text-sm font-bold">Live · {active.title}</span>
