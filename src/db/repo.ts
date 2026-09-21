@@ -96,8 +96,9 @@ export async function migrateSeed(): Promise<void> {
       if (stored.standard === undefined && seedEx.standard !== undefined) patch.standard = seedEx.standard;
       if (Object.keys(patch).length > 0) await db.exercises.update(seedEx.id, patch);
     }
-    // Deliberately db.settings.update, not saveSettings: saveSettings stamps calorieStartDate on
-    // an install that never saved Settings, which this migration must not trigger as a side effect.
+    // Deliberately db.settings.update, not saveSettings: a migration is not a user save, so it
+    // should not bump `savedAt` (or, before `saveSettings` learned to leave calorieStartDate
+    // alone for an unrelated patch, stamp the reverse-diet start date as a side effect).
     if (settings) await db.settings.update('settings', { seedVersion: 2 });
   });
 }
@@ -112,11 +113,23 @@ export async function getSettings(): Promise<Settings> {
   return (await db.settings.get('settings'))!;
 }
 
-/** Save settings. The reverse-diet start date is stamped on the first save if not set. */
+/**
+ * Fields that materialize the reverse-diet / calorie target (see `calorieTargetOn`, which reads
+ * `null` until `calorieStartDate` is set). Saving one of these is what "the first save" means for
+ * stamping it below — an unrelated save (a plate chip, a toggle, the theme, a rest-timer number,
+ * ...) must never start the reverse diet as a side effect of touching something else entirely.
+ */
+const CALORIE_TARGET_KEYS: (keyof Settings)[] = ['calorieStart', 'calorieStep', 'calorieStepDays', 'calorieCeiling', 'calorieStartDate'];
+
+/**
+ * Save settings. The reverse-diet start date is stamped on the first save that actually concerns
+ * the calorie targets, if it is not set yet — never as a side effect of an unrelated save.
+ */
 export async function saveSettings(patch: Partial<Omit<Settings, 'id'>>): Promise<Settings> {
   const cur = await getSettings();
   const next: Settings = { ...cur, ...patch, id: 'settings', savedAt: nowIso() };
-  if (!next.calorieStartDate) next.calorieStartDate = toDateKey();
+  const concernsCalorieTargets = CALORIE_TARGET_KEYS.some((k) => k in patch);
+  if (!next.calorieStartDate && concernsCalorieTargets) next.calorieStartDate = toDateKey();
   await db.settings.put(next);
   return next;
 }

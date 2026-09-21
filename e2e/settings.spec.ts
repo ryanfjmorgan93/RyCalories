@@ -39,7 +39,15 @@ test.describe('settings — draft survives an unrelated instant-save', () => {
     await page.getByTestId('target-calorieStart').fill('2222');
 
     // Toggle a plate chip — an instant save that has nothing to do with Targets.
-    await page.getByTestId('plates-card').getByRole('button', { name: '0.5 kg' }).click();
+    const chip = page.getByTestId('plates-card').getByRole('button', { name: '0.5 kg' });
+    await chip.click();
+
+    // Wait until the save has demonstrably landed — the chip's own active styling only flips once
+    // the live query has pushed the new `settings.plates` back down, which is the same render the
+    // old calorieStartDate-stamping bug rode in on (see saveSettings's CALORIE_TARGET_KEYS). An
+    // assertion taken straight after the click can pass before that render ever happens, proving
+    // nothing; this one is taken after it, so it cannot pass by a timing accident.
+    await expect(chip).toHaveClass(/bg-fg/);
 
     // The Targets draft is unchanged.
     await expect(page.getByTestId('target-calorieStart')).toHaveValue('2222');

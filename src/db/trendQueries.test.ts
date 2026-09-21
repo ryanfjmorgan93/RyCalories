@@ -85,7 +85,9 @@ describe('the trend window', () => {
   });
 
   it('carries the calorie target once the reverse diet has started', async () => {
-    await saveSettings({});
+    // A save that actually concerns the calorie targets — not an unrelated one — is what starts
+    // the reverse diet. See saveSettings's CALORIE_TARGET_KEYS.
+    await saveSettings({ calorieStart: (await getSettings()).calorieStart });
     const s = await getSettings();
     await meal(TODAY, 2000, 100);
     const { trend } = await trendWindow(TODAY, 3, s);

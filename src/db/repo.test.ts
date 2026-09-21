@@ -29,6 +29,8 @@ import {
   wipeAll,
 } from './repo';
 import { SEED_EXERCISE_IDS, SEED_EXERCISES, SEED_ROUTINE_IDS } from './seed';
+import { toDateKey } from '@/domain/dates';
+import { calorieTargetOn } from '@/domain/nutrition';
 import { DEFAULT_SETTINGS, type RoutineExercise } from '@/domain/types';
 
 const HINGE = SEED_ROUTINE_IDS['Lower (Hinge)'];
@@ -93,11 +95,31 @@ describe('seeding', () => {
     expect(squat[1].exercise.unilateral).toBe(true);
   });
 
-  it('stamps the reverse-diet start date on the first settings save', async () => {
+  it('an unrelated settings save (proteinTarget) does not stamp the reverse-diet start date', async () => {
+    // calorieTargetOn reads `null` until calorieStartDate is set — a save that has nothing to do
+    // with the calorie targets must never start the reverse diet as a side effect.
     const s = await saveSettings({ proteinTarget: 175 });
+    expect(s.calorieStartDate).toBeUndefined();
+  });
+
+  it('an unrelated settings save (a plate list) leaves calorieStartDate unset and the calorie target off', async () => {
+    const s = await saveSettings({ plates: [20, 10] });
+    expect(s.calorieStartDate).toBeUndefined();
+    expect(calorieTargetOn(toDateKey(), s)).toBeNull();
+  });
+
+  it('stamps the reverse-diet start date on the first save that actually concerns the calorie targets', async () => {
+    const s = await saveSettings({ calorieStart: 2000 });
     expect(s.calorieStartDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    const s2 = await saveSettings({ proteinTarget: 180 });
+    expect(calorieTargetOn(toDateKey(), s)).not.toBeNull();
+
+    // Stable across further saves of a calorie-target field...
+    const s2 = await saveSettings({ calorieStart: 2100 });
     expect(s2.calorieStartDate).toBe(s.calorieStartDate);
+
+    // ...and across an unrelated one too.
+    const s3 = await saveSettings({ proteinTarget: 180 });
+    expect(s3.calorieStartDate).toBe(s.calorieStartDate);
   });
 });
 
