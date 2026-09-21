@@ -71,3 +71,21 @@ export async function waitForServiceWorker(page: Page, timeout = 60_000): Promis
   });
   await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, { timeout });
 }
+
+/**
+ * Assert a class is (or is not) in an element's class list, RETRYING.
+ *
+ * The obvious `getAttribute('class')` version samples the DOM exactly once with no waiting, so it
+ * races anything that arrives asynchronously — and in this app nearly everything does: a set is
+ * logged by a fired-and-forgotten handler, the Dexie write lands later, and only then does the
+ * liveQuery re-render move `border-accent` to the next card. A one-shot read of that is a
+ * coin-flip, and it duly failed in CI and passed on retry. `toHaveClass` polls, so it waits out
+ * the same round-trip the assertion is actually about.
+ *
+ * Matches on class-list membership, not substring: "bg-warn" must not match "bg-warn/10".
+ */
+export async function expectClass(locator: Locator, cls: string, present = true): Promise<void> {
+  const re = new RegExp(`(^|\\s)${cls.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|$)`);
+  if (present) await expect(locator).toHaveClass(re);
+  else await expect(locator).not.toHaveClass(re);
+}

@@ -1,5 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
-import { clickIfPresent, fresh } from './fresh';
+import { expect, test, type Page } from '@playwright/test';
+import { clickIfPresent, expectClass, fresh } from './fresh';
 
 /**
  * HomeScreen.tsx's "Next up" plan card now leads with the weight change instead of burying it in
@@ -18,7 +18,11 @@ async function keepOnlyLowerHinge(page: Page): Promise<void> {
     await page.getByTestId(`routine-more-${name}`).click();
     await page.getByRole('button', { name: 'Delete', exact: true }).click();
     await page.getByRole('button', { name: 'Delete', exact: true }).click();
-    await expect(page.getByText(/Routine (deleted|archived)/)).toBeVisible();
+    // Assert THIS routine is gone, not that a "Routine deleted" toast is on screen: a toast lives
+    // 2200 ms and every one of these four reads identically, so the previous iteration's toast
+    // satisfies the next iteration's assertion and a delete that silently did not happen sails
+    // through. Same check e2e/guidance.spec.ts already uses.
+    await expect(page.getByTestId(`routine-more-${name}`)).toBeHidden();
   }
   await page.goto('/');
   await expect(page.getByTestId('next-up')).toContainText('Lower (Hinge)');
@@ -44,12 +48,6 @@ async function finishAndSave(page: Page): Promise<void> {
   await expect(page).toHaveURL(/\/$/);
 }
 
-/** Class-list membership, not a substring match — "text-warn" must not match "text-warn/10". */
-async function hasClass(locator: Locator, cls: string): Promise<boolean> {
-  const attr = await locator.getAttribute('class');
-  return (attr ?? '').split(/\s+/).includes(cls);
-}
-
 test('a lift whose weight went up last time shows a +N kg chip in ok tone', async ({ page }) => {
   await fresh(page);
   await keepOnlyLowerHinge(page);
@@ -67,7 +65,7 @@ test('a lift whose weight went up last time shows a +N kg chip in ok tone', asyn
   const chip = item.getByTestId('weight-delta-Romanian Deadlift (Barbell)');
   await expect(chip).toBeVisible();
   await expect(chip).toContainText('+5 kg');
-  expect(await hasClass(chip.locator('span').first(), 'text-ok')).toBe(true);
+  await expectClass(chip.locator('span').first(), 'text-ok');
 
   // The numeric chip stands alongside the existing prose reason, not in place of it.
   await expect(item).toContainText('up 5 kg last time');
@@ -97,5 +95,5 @@ test('a deload shows the drop honestly, in warn tone — never hidden', async ({
   await expect(chip).toBeVisible();
   await expect(chip).toContainText(`${deloadWeight - 110} kg`);
   await expect(chip).not.toContainText('+');
-  expect(await hasClass(chip.locator('span').first(), 'text-warn')).toBe(true);
+  await expectClass(chip.locator('span').first(), 'text-warn');
 });

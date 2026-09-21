@@ -1,4 +1,4 @@
-import { defineConfig, devices } from '@playwright/test';
+import { chromium, defineConfig, devices } from '@playwright/test';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Y4M_PATH } from './e2e/fixtures/ean13';
@@ -6,10 +6,29 @@ import { Y4M_PATH } from './e2e/fixtures/ean13';
 // Overridable so two suites can run side by side (each worktree of a parallel build gets its own port).
 const PORT = Number(process.env.PW_PORT ?? 4173);
 
-// The sandbox ships a pre-installed Chromium at a fixed path; CI installs its own. Only pin an
-// executable when one is actually there, so the same config works in both.
+// Run the SAME browser build CI runs, or the suite is not testing what CI tests.
+//
+// CI pins nothing, so Playwright uses the Chromium build its own version ships with. The sandbox
+// used to pin /opt/pw-browsers/chromium, which is an older build than this @playwright/test
+// expects — twelve major Chromium versions apart at the time of writing — and local and CI results
+// duly disagreed on real tests. `npx playwright install chromium chromium-headless-shell` puts the
+// matching build where Playwright looks (PLAYWRIGHT_BROWSERS_PATH), and then leaving
+// executablePath undefined gives local and CI the same binary, in both projects.
+//
+// The sandbox binary stays as a FALLBACK only, for an environment where the matching build was
+// never installed — running something is better than running nothing, but it is second choice and
+// no longer the default.
 const SANDBOX_CHROMIUM = '/opt/pw-browsers/chromium';
-const executablePath = process.env.CHROMIUM_PATH ?? (existsSync(SANDBOX_CHROMIUM) ? SANDBOX_CHROMIUM : undefined);
+const managedChromium = (() => {
+  try {
+    return chromium.executablePath();
+  } catch {
+    return undefined;
+  }
+})();
+const executablePath =
+  process.env.CHROMIUM_PATH ??
+  (managedChromium && existsSync(managedChromium) ? undefined : existsSync(SANDBOX_CHROMIUM) ? SANDBOX_CHROMIUM : undefined);
 
 // Chromium wants an absolute path for the fake video capture file. global-setup.ts draws it
 // before any project launches a browser.
@@ -21,9 +40,12 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   fullyParallel: false,
   workers: 1,
-  // One retry in CI only: a genuine flake should not block a build, but it still shows in the
-  // report, and locally a flake must fail so it gets fixed rather than absorbed.
-  retries: process.env.CI ? 1 : 0,
+  // No retries, anywhere. A retry in CI used to be allowed on the grounds that a genuine flake
+  // should not block a build — but Playwright reports "failed once, passed on retry" as a plain
+  // success in the step result, so a flake became invisible exactly where it mattered. CI is the
+  // only gate this app has (the owner does not check on device), and a gate that absorbs flakes is
+  // not a gate. A flake now goes red and gets fixed.
+  retries: 0,
   reporter: [['list']],
   globalSetup: './e2e/global-setup.ts',
   use: {

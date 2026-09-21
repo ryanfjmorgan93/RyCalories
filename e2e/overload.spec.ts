@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { clickIfPresent, fresh } from './fresh';
+import { clickIfPresent, expectClass, fresh } from './fresh';
 
 /**
  * WP4 — the live-session overlays (deload, supersets, warm-ups, plate maths, personal records,
@@ -59,12 +59,6 @@ async function logSets(page: Page, exercise: string, weight: number, reps: numbe
   }
 }
 
-/** Class-list membership, not a substring match — "bg-warn" must not match "bg-warn/10". */
-async function hasClass(locator: import('@playwright/test').Locator, cls: string): Promise<boolean> {
-  const attr = await locator.getAttribute('class');
-  return (attr ?? '').split(/\s+/).includes(cls);
-}
-
 test.describe('WP4 overlays', () => {
   test('deload: reduces the prescribed weight, the summary shows it, the stored weight is unchanged', async ({ page }) => {
     await fresh(page);
@@ -112,15 +106,17 @@ test.describe('WP4 overlays', () => {
     await expect(inclineCard).toBeVisible();
 
     // A (Bench) is current first — both start at 0 done, ties go to order.
-    expect(await hasClass(benchCard, 'border-accent')).toBe(true);
+    await expectClass(benchCard, 'border-accent');
 
     await benchCard.getByTestId('weight-input').fill('65');
     await benchCard.getByTestId('reps-input').fill('6');
     await benchCard.getByTestId('set-done').click();
-    // A isn't the last member of the group — no rest timer yet, and B is now current.
+    // A isn't the last member of the group, so the current-card highlight moves to B and no rest
+    // timer starts. Wait for the highlight to actually move first: the rest-timer count is 0 before
+    // the click too, so asserting it first would wait for nothing and race the check that matters.
+    await expectClass(inclineCard, 'border-accent');
+    await expectClass(benchCard, 'border-accent', false);
     await expect(page.getByTestId('rest-timer')).toHaveCount(0);
-    expect(await hasClass(inclineCard, 'border-accent')).toBe(true);
-    expect(await hasClass(benchCard, 'border-accent')).toBe(false);
 
     await inclineCard.getByTestId('weight-input').fill('20');
     await inclineCard.getByTestId('reps-input').fill('8');

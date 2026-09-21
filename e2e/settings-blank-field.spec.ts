@@ -28,6 +28,9 @@ test('blanking a Settings target field and saving keeps the intended value, hone
   // save below exercises the ordinary steady-state case.
   await page.getByRole('button', { name: 'Save targets' }).click();
   await expect(page.getByText('Saved')).toBeVisible();
+  // Wait for this toast to clear before the next save, or the second "Saved" assertion below can
+  // be satisfied by this one still on screen and prove nothing about the save that matters.
+  await expect(page.getByText('Saved')).toBeHidden();
 
   await field.fill('');
   await expect(field).toHaveValue('');
