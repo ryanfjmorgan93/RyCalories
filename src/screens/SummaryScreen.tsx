@@ -53,7 +53,9 @@ export function SummaryScreen() {
       const init: Record<string, Choice> = {};
       for (const item of s.items) {
         if (!item.rx || !item.decision) continue;
-        init[item.rx.id] = { mode: 'accept', overrideTo: item.decision.toWeight, lockIn: false, lockInAt: item.lockIn?.suggested ?? null };
+        // A suggested lock-in weight seeds `lockIn: true` — locking a calibrating lift in is the
+        // path of least resistance, not "Keep calibrating" (§5: the calibrating trap).
+        init[item.rx.id] = { mode: 'accept', overrideTo: item.decision.toWeight, lockIn: item.lockIn !== null, lockInAt: item.lockIn?.suggested ?? null };
       }
       setChoices(init);
       setNiggles(s.session.niggles ?? []);
@@ -219,7 +221,7 @@ function DecisionCard({ item, choice, onChange }: { item: SummaryItem; choice: C
   const rx = item.rx!;
   const d = item.decision!;
   const kind = item.exercise.kind;
-  const c: Choice = choice ?? { mode: 'accept', overrideTo: d.toWeight, lockIn: false, lockInAt: item.lockIn?.suggested ?? null };
+  const c: Choice = choice ?? { mode: 'accept', overrideTo: d.toWeight, lockIn: item.lockIn !== null, lockInAt: item.lockIn?.suggested ?? null };
   const isWeightDecision = d.rule === 'increase' || d.rule === 'hold' || d.rule === 'hold_missing_sets';
   // Chip and colour follow what actually happens to the prescription, not the rule name:
   // lifting below the prescribed weight can make an "increase" a net drop.

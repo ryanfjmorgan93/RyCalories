@@ -8,11 +8,13 @@ import {
   addExtraExercise,
   deleteSet,
   discardSession,
+  lockInRoutineExercise,
   logSet,
   previousSets,
   removeExtraExercise,
   setSkipped,
   swapExercise,
+  toEngine,
   undoSwap,
   updateSession,
   updateSet,
@@ -20,13 +22,16 @@ import {
 } from '@/db/repo';
 import type { AssistantContext } from '@/domain/assistant';
 import { toDateKey } from '@/domain/dates';
+import { roundKg, suggestedLockInWeight } from '@/domain/engine';
 import { fmtDate, fmtDuration, fmtKg, fmtNum, fmtWeight, targetLine } from '@/domain/format';
 import { DEFAULT_PLATES, plateLabel, platesPerSide } from '@/domain/plates';
 import { prescribe } from '@/domain/prescription';
 import type { PersonalRecord } from '@/domain/records';
 import { countsForProgression, effortOptions, type EffortScale, formatEffort, setBadges } from '@/domain/sets';
 import { DEFAULT_SETTINGS, type Exercise, type RoutineExercise, type Session, type SetLog, type SetType, type Settings } from '@/domain/types';
+import { liveVerdict } from '@/domain/verdict';
 import { warmupRamp } from '@/domain/warmup';
+import { useAssistant } from '@/state/assistant';
 import { primeAudio, requestNotificationsOnce, vibrate } from '@/state/notify';
 import { useTimer } from '@/state/timer';
 import { AssistantBox } from '@/ui/AssistantBox';
@@ -82,6 +87,11 @@ export function LiveSessionScreen() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [finishOpen, setFinishOpen] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
+  // Explicit expand/collapse choices, keyed by group key (a superset's members share one key, so
+  // the bracket collapses as a unit). `currentKey` below only *seeds* the default for a group that
+  // has no entry here — once the user taps a card, that choice sticks even as `currentKey` moves
+  // on, so a finished exercise can still be reopened and a not-yet-current one logged into early.
+  const [expandOverride, setExpandOverride] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (session === null) nav('/', { replace: true });
@@ -166,6 +176,10 @@ export function LiveSessionScreen() {
     return null;
   }, [groups, setsBySlot, skipped]);
 
+  // The group (lone slot or superset bracket) that owns `currentKey`, if any — the default seed
+  // for every group's expand state (see `expandOverride` above).
+  const currentGroupKey = useMemo(() => groups.find((g) => g.slots.some((s) => s.key === currentKey))?.key ?? null, [groups, currentKey]);
+
   // Per group, the key of the last member (in array order) that isn't skipped — logging that one
   // is what actually finishes the group's rotation, so it's the one that should start the rest
   // timer. If every member is skipped nothing logs from that group anyway, so no key matches.
@@ -217,6 +231,8 @@ export function LiveSessionScreen() {
           const prevSlot = prevGroup ? prevGroup.slots[prevGroup.slots.length - 1] : null;
           const showOptionalDivider = firstSlot.optional && (!prevSlot || !prevSlot.optional);
           const isSuperset = group.slots.length > 1;
+          const isExpanded = expandOverride[group.key] ?? group.key === currentGroupKey;
+          const onToggleExpand = () => setExpandOverride((prev) => ({ ...prev, [group.key]: !isExpanded }));
           return (
             <div key={group.key}>
               {showOptionalDivider && (
@@ -240,6 +256,8 @@ export function LiveSessionScreen() {
                       isCurrent={slot.key === currentKey}
                       isSkipped={slot.rx ? skipped.has(slot.rx.id) : false}
                       startsRestTimer={slot.key === lastActiveKeyByGroup.get(group.key)}
+                      isExpanded={isExpanded}
+                      onToggleExpand={onToggleExpand}
                     />
                   ))}
                 </div>
@@ -253,6 +271,8 @@ export function LiveSessionScreen() {
                   isCurrent={firstSlot.key === currentKey}
                   isSkipped={firstSlot.rx ? skipped.has(firstSlot.rx.id) : false}
                   startsRestTimer
+                  isExpanded={isExpanded}
+                  onToggleExpand={onToggleExpand}
                 />
               )}
             </div>
@@ -351,6 +371,13 @@ function SessionHeader({
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantContext, setAssistantContext] = useState<AssistantContext>({ today: toDateKey() });
   const deloadPercent = settings.deloadPercent ?? DEFAULT_SETTINGS.deloadPercent!;
+  // On the PWA build the web backend always reports 'unavailable' (see state/nano.ts) — gate the
+  // button the same way AssistantSettingsCard gates its own Test button, so it isn't decorative.
+  const { status: assistantStatus, refreshStatus: refreshAssistantStatus } = useAssistant();
+
+  useEffect(() => {
+    void refreshAssistantStatus();
+  }, [refreshAssistantStatus]);
 
   useEffect(() => {
     if (!assistantOpen) return;
@@ -383,7 +410,12 @@ function SessionHeader({
         }
         right={
           <>
-            <IconButton label="Ask" onClick={() => setAssistantOpen(true)} data-testid="ask-assistant">
+            <IconButton
+              label="Ask"
+              onClick={() => setAssistantOpen(true)}
+              disabled={assistantStatus?.state !== 'ready'}
+              data-testid="ask-assistant"
+            >
               <AskIcon />
             </IconButton>
             <IconButton label="Session options" onClick={() => setSessionMenuOpen(true)} data-testid="session-options">
@@ -425,6 +457,114 @@ function restSecondsFor(rx: RoutineExercise | null, exercise: Exercise, settings
   return exercise.isCompound ? settings.restCompoundSec : settings.restIsolationSec;
 }
 
+/**
+ * A warm-up ramp for equipment with no bar to reason about (dumbbell/machine/cable/bodyweight):
+ * the same step fractions `domain/warmup.ts`'s barbell ramp uses, rounded to the exercise's own
+ * increment instead of a plate set, and with no empty-bar first step — there is no bar.
+ */
+function genericWarmupRamp(workingKg: number, increment: number): { weight: number; reps: number }[] {
+  const steps: [fraction: number, reps: number][] = [
+    [0.5, 5],
+    [0.7, 3],
+    [0.9, 1],
+  ];
+  const step = Number.isFinite(increment) && increment > 0 ? increment : 2.5;
+  const result: { weight: number; reps: number }[] = [];
+  let previous = 0;
+  for (const [fraction, reps] of steps) {
+    const weight = roundKg(Math.round((fraction * workingKg) / step) * step);
+    if (weight <= previous || weight <= 0) continue;
+    result.push({ weight, reps });
+    previous = weight;
+  }
+  return result;
+}
+
+function ChevronIcon({ expanded }: { expanded?: boolean }) {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={expanded ? 'rotate-180' : ''}
+    >
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
+/**
+ * A collapsed card: name, target line, sets done and any state chip, all on one tappable line
+ * (§4). Every card but the current one renders this instead of the entry block; tapping it
+ * expands the card (or, for a superset member, its whole bracket — the group shares one expand
+ * state, see `expandOverride` in `LiveSessionScreen`).
+ */
+function CollapsedRow({
+  exercise,
+  rx,
+  kind,
+  tLine,
+  perSide,
+  workingDone,
+  target,
+  isSkipped,
+  isOptional,
+  isExtra,
+  deload,
+  dimmed,
+  isCurrent,
+  testId,
+  onExpand,
+}: {
+  exercise: Exercise;
+  rx: RoutineExercise | null;
+  kind: Exercise['kind'];
+  tLine: string;
+  perSide: string;
+  workingDone: number;
+  target: number;
+  isSkipped: boolean;
+  isOptional: boolean;
+  isExtra: boolean;
+  deload: boolean;
+  dimmed: boolean;
+  isCurrent: boolean;
+  testId: string;
+  onExpand: () => void;
+}) {
+  return (
+    <Card
+      className={`overflow-hidden ${isCurrent ? 'border-accent shadow-[0_0_0_1px_var(--c-accent)]' : ''} ${dimmed ? 'opacity-60' : ''}`}
+      data-testid={testId}
+    >
+      <button type="button" onClick={onExpand} className="flex w-full items-center gap-3 px-4 py-3 text-left active:bg-surface-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="truncate text-base font-bold leading-tight">{exercise.name}</span>
+            {rx?.mode === 'calibrating' && kind !== 'carry' && <Chip size="sm" tone="info">calibrating</Chip>}
+            {isOptional && <Chip size="sm">optional</Chip>}
+            {isExtra && <Chip size="sm">extra</Chip>}
+            {isSkipped && <Chip size="sm" tone="warn">skipped</Chip>}
+            {deload && rx && <Chip size="sm" tone="info">deload</Chip>}
+          </div>
+          <div className="mt-0.5 truncate text-sm text-muted">
+            {tLine}
+            {perSide} · {workingDone}/{target} sets
+          </div>
+        </div>
+        <span className="shrink-0 text-dim">
+          <ChevronIcon />
+        </span>
+      </button>
+    </Card>
+  );
+}
+
 function ExerciseCard({
   session,
   slot,
@@ -434,6 +574,8 @@ function ExerciseCard({
   isCurrent,
   isSkipped,
   startsRestTimer,
+  isExpanded,
+  onToggleExpand,
 }: {
   session: Session;
   slot: Slot;
@@ -445,6 +587,9 @@ function ExerciseCard({
   isSkipped: boolean;
   /** False for a superset member that isn't the last active one — its partner still owes a set. */
   startsRestTimer: boolean;
+  /** Whether this card (or, for a superset member, its whole bracket) shows its entry block. */
+  isExpanded: boolean;
+  onToggleExpand: () => void;
 }) {
   const nav = useNavigate();
   const { rx, exercise } = slot;
@@ -597,13 +742,65 @@ function ExerciseCard({
   const perSide = exercise.unilateral ? ' · per side' : '';
   const dimmed = isSkipped || (slot.optional && !isCurrent && sets.length === 0);
 
-  const showWarmup = exercise.isCompound && exercise.equipment === 'barbell' && workingDone === 0 && workingWeight !== null && workingWeight > 0;
-  const warmupPills = showWarmup ? warmupRamp(workingWeight as number, { barKg, plates: plateSizes }) : [];
+  // Any reps/bodyweight_plus exercise with a known working weight gets a warm-up ramp before its
+  // first counted set — plate-rounded for a barbell, increment-rounded otherwise (no bar to reason
+  // about for a dumbbell/machine/cable lift).
+  const showWarmup = (kind === 'reps' || kind === 'bodyweight_plus') && workingDone === 0 && workingWeight !== null && workingWeight > 0;
+  const warmupPills = showWarmup
+    ? exercise.equipment === 'barbell'
+      ? warmupRamp(workingWeight as number, { barKg, plates: plateSizes })
+      : genericWarmupRamp(workingWeight as number, inc)
+    : [];
 
   const plateLoad =
     exercise.equipment === 'barbell' && draft.weight !== null && Number.isFinite(draft.weight) && draft.weight >= barKg
       ? platesPerSide(draft.weight, { barKg, plates: plateSizes })
       : null;
+
+  // The live verdict: what the engine would decide right now, and what the current set needs to
+  // keep an increase alive (§1/§3). Null for extras and carry/timed — decide() would call those
+  // not_applicable anyway, but there's no routine-exercise to build an EngineRoutineExercise from.
+  const engineRx = useMemo(() => (rx ? toEngine(rx, exercise) : null), [rx, exercise]);
+  const verdict = useMemo(() => (engineRx ? liveVerdict(engineRx, sets, { deload: !!session.deload }) : null), [engineRx, sets, session.deload]);
+
+  // §5 — the calibrating trap: once a calibrating exercise has one counted set, offer a one-tap
+  // lock-in named on the button, so getting the lift moving is the path of least resistance.
+  const lockInWeight = verdict?.decision.rule === 'calibrating' ? suggestedLockInWeight(sets) : null;
+  const showLockIn = verdict?.decision.rule === 'calibrating' && workingDone >= 1 && lockInWeight !== null;
+  const [lockingIn, setLockingIn] = useState(false);
+  const handleLockIn = async () => {
+    if (!rx || lockInWeight === null || lockingIn) return;
+    setLockingIn(true);
+    try {
+      await lockInRoutineExercise(rx.id, lockInWeight, session.id);
+    } finally {
+      setLockingIn(false);
+    }
+  };
+
+  if (!isExpanded) {
+    return (
+      <div ref={ref} className="pt-3">
+        <CollapsedRow
+          exercise={exercise}
+          rx={rx}
+          kind={kind}
+          tLine={tLine}
+          perSide={perSide}
+          workingDone={workingDone}
+          target={target}
+          isSkipped={isSkipped}
+          isOptional={slot.optional}
+          isExtra={!rx}
+          deload={!!session.deload}
+          dimmed={dimmed}
+          isCurrent={isCurrent}
+          testId={`exercise-card-${exercise.name}`}
+          onExpand={onToggleExpand}
+        />
+      </div>
+    );
+  }
 
   return (
     <div ref={ref} className="pt-3">
@@ -623,6 +820,9 @@ function ExerciseCard({
               {perSide} · rest {Math.round(restSecondsFor(rx, exercise, settings))} s
             </div>
           </button>
+          <IconButton label="Collapse" onClick={onToggleExpand}>
+            <ChevronIcon expanded />
+          </IconButton>
           <IconButton label="More" onClick={() => setMenuOpen(true)}>
             <MoreIcon />
           </IconButton>
@@ -694,7 +894,11 @@ function ExerciseCard({
           <div className="px-4 pb-4 pt-3">
             <div className="mb-2 flex items-center justify-between">
               <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">
-                {draft.type === 'warmup' ? 'Warm-up' : complete ? `Set ${nextIndex + 1} (target ${target})` : `Set ${nextIndex + 1} of ${target}`}
+                {draft.type === 'warmup'
+                  ? 'Warm-up'
+                  : complete
+                    ? `Set ${nextIndex + 1} (target ${target})`
+                    : `Set ${nextIndex + 1} of ${target}${verdict?.repsToGoUp != null ? ` · ${verdict.repsToGoUp} to go up` : ''}`}
               </div>
               {(kind === 'reps' || kind === 'bodyweight_plus') && (
                 <Chip size="lg" active={showRir} onClick={() => setShowRir((v) => !v)}>
@@ -702,20 +906,18 @@ function ExerciseCard({
                 </Chip>
               )}
             </div>
-            <div className="mb-2 flex items-center gap-2 overflow-x-auto no-scrollbar">
-              <Chip size="lg" tone="warn" active={draft.type === 'warmup'} onClick={() => update({ type: 'warmup' })}>
-                Warm-up
-              </Chip>
-              <Chip size="lg" active={draft.type === 'working'} onClick={() => update({ type: 'working' })}>
-                Working
-              </Chip>
-              <Chip size="lg" tone="danger" active={draft.type === 'failure'} onClick={() => update({ type: 'failure' })}>
-                Failure
-              </Chip>
-              <Chip size="lg" tone="info" active={draft.type === 'drop'} onClick={() => update({ type: 'drop' })}>
-                Drop
-              </Chip>
-            </div>
+            {verdict?.line && (
+              <div
+                className={`mb-2 text-sm font-bold ${verdict.tone === 'ok' ? 'text-ok' : verdict.tone === 'accent' ? 'text-accent' : 'text-muted'}`}
+              >
+                {verdict.line}
+              </div>
+            )}
+            {showLockIn && (
+              <Button className="mb-3" full size="lg" variant="primary" disabled={lockingIn} onClick={() => void handleLockIn()} data-testid="lock-in">
+                Lock in {fmtWeight(kind, lockInWeight as number)}
+              </Button>
+            )}
             <div className="grid grid-cols-2 gap-2">
               {kind !== 'timed' && (
                 <div className="min-w-0">
