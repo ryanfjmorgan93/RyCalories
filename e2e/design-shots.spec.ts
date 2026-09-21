@@ -326,9 +326,14 @@ test('capture every screen for a design session', async ({ page, browser, contex
   await expect(benchCard.getByTestId('plate-line')).toBeVisible();
   await shot(page, 'session-live-superset', { full: true });
 
-  // 23 Plate sheet open
+  // 23 Plate sheet open — Bench Press's prescribed 65 kg (bar 20 kg + 20 kg and 2.5 kg per side)
+  // is a genuine multi-plate load, so the shot shows the loaded-bar diagram with more than one
+  // plate on it, not just the bar.
   await benchCard.getByTestId('plate-line').click();
   await expect(page.getByText('Plates', { exact: true })).toBeVisible();
+  const plateSheet = page.getByRole('dialog');
+  await expect(plateSheet.getByTestId('plate-diagram')).toBeVisible();
+  await expect(plateSheet.getByTestId('plate-block')).toHaveCount(2);
   await shot(page, 'plate-sheet');
   await page.keyboard.press('Escape');
 

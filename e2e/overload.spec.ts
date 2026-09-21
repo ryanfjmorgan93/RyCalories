@@ -175,10 +175,14 @@ test.describe('WP4 overlays', () => {
     await expect(card).toBeVisible();
     await expect(card.getByTestId('weight-input')).toHaveValue('60');
 
-    // Plate maths for the 60 kg default, before anything changes the draft.
+    // Plate maths for the 60 kg default, before anything changes the draft: one 20 kg plate per
+    // side, drawn as one plate block in the diagram.
     await expect(card.getByTestId('plate-line')).toHaveText('20 per side');
     await card.getByTestId('plate-line').click();
     await expect(page.getByText('Plates', { exact: true })).toBeVisible();
+    const sheet = page.getByRole('dialog');
+    await expect(sheet.getByTestId('plate-diagram')).toBeVisible();
+    await expect(sheet.getByTestId('plate-block')).toHaveCount(1);
     await page.keyboard.press('Escape');
 
     // Warm-up pills, shown only before a counted set exists. The session no longer has a set-type
@@ -188,6 +192,33 @@ test.describe('WP4 overlays', () => {
     await card.getByTestId('warmup-pill-0').click();
     await expect(card.getByTestId('set-done')).toHaveText(/Warm-up done/);
     await expect(card.getByTestId('weight-input')).toHaveValue('20');
+
+    // That pill set the draft weight to the bar itself (20 kg) — the "bar only" state: a plate
+    // line with no plates, and a diagram with no plate blocks (just the bar).
+    await expect(card.getByTestId('plate-line')).toHaveText('bar only');
+    await card.getByTestId('plate-line').click();
+    await expect(sheet.getByTestId('plate-diagram')).toBeVisible();
+    await expect(sheet.getByTestId('plate-block')).toHaveCount(0);
+    await expect(sheet.getByText('bar only', { exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    // 61 kg with the default plate set can't be made exactly (20 kg per side is the closest,
+    // 0.5 kg per side short) — the diagram still draws the one plate that IS loaded, plus the
+    // honest "1 kg short" warning; the shortfall is never rounded away or hidden.
+    await card.getByTestId('weight-input').fill('61');
+    await expect(card.getByTestId('plate-line')).toHaveText('20 per side (+1 kg short)');
+    await card.getByTestId('plate-line').click();
+    await expect(sheet.getByTestId('plate-diagram')).toBeVisible();
+    await expect(sheet.getByTestId('plate-block')).toHaveCount(1);
+    await expect(sheet.getByText('1 kg short', { exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    // "Below the bar" is not exercised here: the plate line (and so the sheet itself) only ever
+    // mounts when the draft weight is at or above barKg — see the `plateLoad` guard in
+    // LiveSessionScreen.tsx — so a weight below the bar makes the plate line disappear rather
+    // than open the sheet in that state. That branch in PlateSheet.tsx is real (it's what runs if
+    // a future caller ever passes a sub-bar weight) but is not reachable through today's live-
+    // session UI, so there is no real user path here to drive an e2e assertion through.
   });
 
   test('personal record: a beaten reps-at-weight gets a PR chip and the summary lists it', async ({ page }) => {
