@@ -146,7 +146,10 @@ export function AssistantSettingsCard() {
       )}
 
       <div className="flex flex-wrap gap-2 px-4 pb-3">
-        {status?.state !== 'ready' && (
+        {/* Only when there is something to download. On 'unavailable' AICore cannot serve the
+            model at all, so a Download button there is a control that cannot work — the same
+            decorative-control fault the Ask gating fixes. */}
+        {(status?.state === 'downloadable' || isDownloading) && (
           <Button size="sm" variant="secondary" disabled={isDownloading} onClick={() => void download()}>
             {isDownloading ? 'Downloading…' : 'Download'}
           </Button>

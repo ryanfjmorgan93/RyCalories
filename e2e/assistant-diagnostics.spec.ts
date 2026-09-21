@@ -38,6 +38,20 @@ test.describe('Settings — assistant diagnostics', () => {
     await expect(page.getByTestId('assistant-detail')).toHaveText(detail);
   });
 
+  test('Download is not offered while the model is unavailable, but is once it is downloadable', async ({ page }) => {
+    // UNAVAILABLE means AICore cannot serve the model on this handset at all, so a Download button
+    // there is a control that cannot work — the same decorative-control fault as an ungated Ask.
+    await setFakeNano(page, { state: 'unavailable', detail: 'UNAVAILABLE · samsung SM-F968B · SDK 36 · AICore not installed' });
+    await fresh(page);
+    await page.goto('/settings');
+
+    const card = page.getByTestId('assistant-card');
+    await expect(card.getByRole('button', { name: 'Download', exact: true })).toHaveCount(0);
+    // Re-check and Copy diagnostics are the actions that DO mean something here, so they stay.
+    await expect(page.getByTestId('assistant-recheck')).toBeEnabled();
+    await expect(page.getByTestId('assistant-copy-diagnostics')).toBeEnabled();
+  });
+
   test('Re-check re-runs the status check and the card reflects the new result', async ({ page }) => {
     await setFakeNano(page, { state: 'unavailable', detail: 'first check: binder not ready' });
     await fresh(page);
