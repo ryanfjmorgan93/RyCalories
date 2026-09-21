@@ -371,8 +371,12 @@ function SessionHeader({
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantContext, setAssistantContext] = useState<AssistantContext>({ today: toDateKey() });
   const deloadPercent = settings.deloadPercent ?? DEFAULT_SETTINGS.deloadPercent!;
-  // On the PWA build the web backend always reports 'unavailable' (see state/nano.ts) — gate the
-  // button the same way AssistantSettingsCard gates its own Test button, so it isn't decorative.
+  // On the PWA build the web backend always reports 'unavailable' (see state/nano.ts), so an
+  // ungated Ask button is decorative there. Gate on 'unavailable' only, not on `!== 'ready'`:
+  // AssistantBox carries the Download button for the downloadable/downloading states and this
+  // screen has no other route to it, so disabling those would be a dead end. Matches
+  // ExerciseDetailScreen; AssistantSettingsCard can be stricter because its Download sits beside
+  // its Test button.
   const { status: assistantStatus, refreshStatus: refreshAssistantStatus } = useAssistant();
 
   useEffect(() => {
@@ -413,7 +417,7 @@ function SessionHeader({
             <IconButton
               label="Ask"
               onClick={() => setAssistantOpen(true)}
-              disabled={assistantStatus?.state !== 'ready'}
+              disabled={assistantStatus?.state === 'unavailable'}
               data-testid="ask-assistant"
             >
               <AskIcon />
@@ -914,7 +918,7 @@ function ExerciseCard({
               </div>
             )}
             {showLockIn && (
-              <Button className="mb-3" full size="lg" variant="primary" disabled={lockingIn} onClick={() => void handleLockIn()} data-testid="lock-in">
+              <Button className="mb-3" full size="lg" variant="primary" disabled={lockingIn} onClick={() => void handleLockIn()} data-testid="session-lock-in">
                 Lock in {fmtWeight(kind, lockInWeight as number)}
               </Button>
             )}

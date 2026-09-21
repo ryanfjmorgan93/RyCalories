@@ -68,17 +68,17 @@ test.describe('locking in from the card', () => {
     await clickIfPresent(page.getByRole('button', { name: 'Start anyway' }));
     const card = page.getByTestId('exercise-card-Barbell Back Squat');
     await expect(card).toContainText('calibrating');
-    await expect(card.getByTestId('lock-in')).toHaveCount(0); // not yet — no counted set logged
+    await expect(card.getByTestId('session-lock-in')).toHaveCount(0); // not yet — no counted set logged
 
     await card.getByTestId('weight-input').fill('60');
     await card.getByTestId('reps-input').fill('8');
     await card.getByTestId('set-done').click();
     await skipRest(page);
 
-    await expect(card.getByTestId('lock-in')).toHaveText('Lock in 60 kg');
-    await card.getByTestId('lock-in').click();
+    await expect(card.getByTestId('session-lock-in')).toHaveText('Lock in 60 kg');
+    await card.getByTestId('session-lock-in').click();
     await expect(card).not.toContainText('calibrating');
-    await expect(card.getByTestId('lock-in')).toHaveCount(0);
+    await expect(card.getByTestId('session-lock-in')).toHaveCount(0);
     await expect(card).toContainText('4 × 6–8 @ 60 kg');
 
     await page.getByTestId('finish-session').click();
