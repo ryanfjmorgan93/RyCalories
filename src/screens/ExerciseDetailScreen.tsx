@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
 import { db } from '@/db/db';
@@ -11,6 +11,7 @@ import type { Bests } from '@/domain/records';
 import { strengthLevel, type StrengthStandard } from '@/domain/standards';
 import { countsForProgression, countsForRecords } from '@/domain/sets';
 import type { Exercise, ExerciseKind, ProgressionDecision, ProgressionRule, RoutineExercise, SetLog } from '@/domain/types';
+import { useAssistant } from '@/state/assistant';
 import { AssistantBox } from '@/ui/AssistantBox';
 import { Button, IconButton } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row, SectionTitle } from '@/ui/components/Card';
@@ -61,6 +62,12 @@ export function ExerciseDetailScreen() {
   const [chartMode, setChartMode] = useState<ChartMode>('top');
   const [askOpen, setAskOpen] = useState(false);
 
+  const assistantStatus = useAssistant((s) => s.status);
+  const refreshAssistantStatus = useAssistant((s) => s.refreshStatus);
+  useEffect(() => {
+    void refreshAssistantStatus();
+  }, [refreshAssistantStatus]);
+
   if (exercise === undefined || usage === undefined || history === undefined) {
     return (
       <div>
@@ -94,7 +101,12 @@ export function ExerciseDetailScreen() {
         back="/exercises"
         right={
           <div className="flex items-center">
-            <IconButton label="Ask" onClick={() => setAskOpen(true)} data-testid="ask-assistant">
+            <IconButton
+              label="Ask"
+              onClick={() => setAskOpen(true)}
+              disabled={assistantStatus?.state !== 'ready'}
+              data-testid="ask-assistant"
+            >
               <AskIcon />
             </IconButton>
             <Button size="md" variant="ghost" className="mr-1" onClick={() => nav(`/exercises/${exercise.id}/edit`)}>
@@ -180,6 +192,7 @@ export function ExerciseDetailScreen() {
           rx={lockRx}
           kind={kind}
           suggested={history[0]?.topWeight ?? 0}
+          hasHistory={history.length > 0}
           onClose={() => setLockRx(null)}
           onSave={async (w) => {
             await lockInRoutineExercise(lockRx.id, w);
@@ -360,16 +373,21 @@ function LockInSheet({
   rx,
   kind,
   suggested,
+  hasHistory,
   onClose,
   onSave,
 }: {
   rx: RoutineExercise;
   kind: ExerciseKind;
   suggested: number;
+  hasHistory: boolean;
   onClose: () => void;
   onSave: (weight: number) => void;
 }) {
   const [weight, setWeight] = useState<number | null>(suggested);
+  // 0 kg with no history at all would silently set this lift's working weight to nothing — block
+  // that specific combination rather than a bare `weight === null` check.
+  const blocked = weight === null || (weight === 0 && !hasHistory);
   return (
     <Sheet open onClose={onClose} title="Lock in">
       <div className="text-sm text-muted">Double progression starts next session from this weight.</div>
@@ -383,7 +401,7 @@ function LockInSheet({
         <Button size="lg" onClick={onClose}>
           Cancel
         </Button>
-        <Button size="lg" variant="primary" disabled={weight === null} onClick={() => weight !== null && onSave(weight)} data-testid="lock-in-save">
+        <Button size="lg" variant="primary" disabled={blocked} onClick={() => weight !== null && onSave(weight)} data-testid="lock-in-save">
           Save
         </Button>
       </div>
