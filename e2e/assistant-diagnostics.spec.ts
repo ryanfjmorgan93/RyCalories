@@ -126,7 +126,10 @@ test.describe('Exercise Detail — Ask is gated on assistant status', () => {
     await expect(page.getByTestId('ask-assistant')).toBeDisabled();
   });
 
-  test('Ask is disabled while the model is downloadable but not yet downloaded', async ({ page }) => {
+  test('Ask stays enabled while the model is downloadable, and the sheet offers Download rather than dead-ending', async ({ page }) => {
+    // Exercise Detail has no Download control of its own — AssistantBox is the only place it can
+    // route to one, so the entry point must not be disabled out from under it here (unlike the
+    // Settings card's Test button, which sits right beside its own Download button).
     await setFakeNano(page, { state: 'downloadable', detail: 'DOWNLOADABLE · samsung SM-F968B · SDK 36 · AICore 2026.9.4' });
     await fresh(page);
     await page.goto('/exercises');
@@ -134,7 +137,10 @@ test.describe('Exercise Detail — Ask is gated on assistant status', () => {
     await page.getByRole('button', { name: /Romanian Deadlift/ }).first().click();
     await expect(page.getByRole('heading', { name: 'Romanian Deadlift (Barbell)' })).toBeVisible();
 
-    await expect(page.getByTestId('ask-assistant')).toBeDisabled();
+    await expect(page.getByTestId('ask-assistant')).toBeEnabled();
+    await page.getByTestId('ask-assistant').click();
+    await expect(page.getByTestId('assistant-status-detail')).toHaveText('DOWNLOADABLE · samsung SM-F968B · SDK 36 · AICore 2026.9.4');
+    await expect(page.getByRole('button', { name: 'Download', exact: true })).toBeVisible();
   });
 
   test('Ask is enabled once the on-device status is ready', async ({ page }) => {

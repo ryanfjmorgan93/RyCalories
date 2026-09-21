@@ -104,7 +104,7 @@ export function ExerciseDetailScreen() {
             <IconButton
               label="Ask"
               onClick={() => setAskOpen(true)}
-              disabled={assistantStatus?.state !== 'ready'}
+              disabled={assistantStatus?.state === 'unavailable'}
               data-testid="ask-assistant"
             >
               <AskIcon />
