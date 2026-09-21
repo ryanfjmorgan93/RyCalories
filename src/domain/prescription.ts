@@ -30,6 +30,13 @@ export interface Prescription {
   line: string;
   /** one short factual reason from the last outcome, e.g. "up 2.5 kg last time"; '' when there is none */
   reason: string;
+  /**
+   * kg the prescribed weight actually moved by — a number, not the `reason` sentence, so a caller
+   * isn't reduced to parsing it back out. Positive for an increase or a lock-in, negative for a
+   * deviated hold that came in under prescription or a deload drop (today's own deload wins over
+   * an older increase); null when nothing moved. Never hides a decrease.
+   */
+  weightDelta: number | null;
   flags: ('calibrating' | 'stalled' | 'deload' | 'regression')[];
 }
 
@@ -65,6 +72,44 @@ function reasonFor(lastOutcome: SessionOutcome | null | undefined): string {
     default:
       return '';
   }
+}
+
+/**
+ * The numeric counterpart of `reasonFor`. Not a per-rule lookup: for every outcome except a
+ * deload, the stored weight simply moved from `fromWeight` to `appliedWeight` — that covers an
+ * increase, an overridden increase, a deviated hold (§4.1's "re-prescribes the deviated weight
+ * visibly rather than snapping back silently" — see `decide` in `engine.ts`), hold_missing_sets
+ * and a lock-in alike, with no list of rules to keep in step with the engine. A deload outcome is
+ * the one case that needs reconstructing: it stores `appliedWeight === fromWeight` (progression
+ * doesn't move on a deload), so its drop is recomputed with the same `deloadLoad` maths `prescribe`
+ * itself uses to show a deload weight — i.e. what that session's own prescription card would have
+ * shown.
+ *
+ * But today's own prescription wins if today is itself a deload: the chip sits beside today's
+ * line, so once that line reads a reduced weight the chip must describe that drop, not an increase
+ * from a session ago — otherwise a green "+2.5 kg" would sit right next to a deload weight.
+ */
+function weightDeltaFor(
+  lastOutcome: SessionOutcome | null | undefined,
+  today: { deload: boolean; weight: number | null; currentWeight: number },
+  increment: number,
+  equipment: Equipment | undefined,
+  barKg: number,
+  plateSizes: number[],
+  deloadPercent: number,
+): number | null {
+  if (today.deload && today.weight !== null) {
+    const delta = roundKg(today.weight - today.currentWeight);
+    return delta < 0 ? delta : null;
+  }
+  if (!lastOutcome) return null;
+  if (lastOutcome.rule === 'deload') {
+    const deloaded = deloadLoad(lastOutcome.fromWeight, deloadPercent, increment, equipment === 'barbell' ? { barKg, plates: plateSizes } : undefined);
+    const delta = roundKg(deloaded - lastOutcome.fromWeight);
+    return delta < 0 ? delta : null;
+  }
+  const delta = roundKg(lastOutcome.appliedWeight - lastOutcome.fromWeight);
+  return delta !== 0 ? delta : null;
 }
 
 export function prescribe(input: PrescriptionInput): Prescription {
@@ -106,5 +151,7 @@ export function prescribe(input: PrescriptionInput): Prescription {
   if (deload) flags.push('deload');
   if (stall?.kind === 'regression') flags.push('regression');
 
-  return { weight, sets: rx.targetSets, repMin, repMax, line, reason: reasonFor(lastOutcome), flags };
+  const weightDelta = weightDeltaFor(lastOutcome, { deload: !!deload, weight, currentWeight: rx.currentWeight }, rx.increment, equipment, barKg, plateSizes, deloadPercent);
+
+  return { weight, sets: rx.targetSets, repMin, repMax, line, reason: reasonFor(lastOutcome), weightDelta, flags };
 }

@@ -152,8 +152,16 @@ export function HomeScreen() {
                   <div key={it.rx.id} className="rounded-xl border border-line bg-surface-2 px-3 py-2" data-testid={`plan-item-${it.exercise.name}`}>
                     <div className="flex items-center justify-between gap-2">
                       <span className="min-w-0 truncate font-semibold">{it.exercise.name}</span>
-                      {it.prescription.flags.length > 0 && (
+                      {(it.prescription.weightDelta !== null || it.prescription.flags.length > 0) && (
                         <div className="flex shrink-0 gap-1">
+                          {it.prescription.weightDelta !== null && (
+                            <span data-testid={`weight-delta-${it.exercise.name}`}>
+                              <Chip size="sm" tone={it.prescription.weightDelta > 0 ? 'ok' : 'warn'}>
+                                {it.prescription.weightDelta > 0 ? '+' : ''}
+                                {fmtNum(it.prescription.weightDelta)} kg
+                              </Chip>
+                            </span>
+                          )}
                           {it.prescription.flags.map((f) => (
                             <Chip key={f} size="sm" tone={FLAG_CHIPS[f].tone}>
                               {FLAG_CHIPS[f].label}

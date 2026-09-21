@@ -23,6 +23,7 @@ describe('prescribe — reps', () => {
       repMax: 8,
       line: '110 kg × 6–8 × 4',
       reason: '',
+      weightDelta: null,
       flags: [],
     });
   });
@@ -197,6 +198,89 @@ describe('prescribe — reason from lastOutcome', () => {
   it('no lastOutcome gives no reason', () => {
     expect(prescribe({ ...base }).reason).toBe('');
     expect(prescribe({ ...base, lastOutcome: null }).reason).toBe('');
+  });
+});
+
+describe('prescribe — weightDelta from lastOutcome (the numeric counterpart of reason)', () => {
+  const base = { rx: repsRx, kind: 'reps' as const, settings };
+
+  it('increase → positive kg, matching the number in reason', () => {
+    const lastOutcome: SessionOutcome = { fromWeight: 100, appliedWeight: 105, rule: 'increase' };
+    expect(prescribe({ ...base, lastOutcome }).weightDelta).toBe(5);
+  });
+
+  it('a fractional increase stays a clean 2.5-kg step', () => {
+    const lastOutcome: SessionOutcome = { fromWeight: 100, appliedWeight: 102.5, rule: 'increase' };
+    expect(prescribe({ ...base, lastOutcome }).weightDelta).toBe(2.5);
+  });
+
+  it('deload → negative kg — the drop the deload session itself would have shown, even though the stored fromWeight/appliedWeight do not move', () => {
+    // 100 kg current, 90% deload, 5 kg increment grid → 90 kg (matches the "prescribe — deload" tests above).
+    const lastOutcome: SessionOutcome = { fromWeight: 100, appliedWeight: 100, rule: 'deload' };
+    expect(prescribe({ ...base, lastOutcome }).weightDelta).toBe(-10);
+  });
+
+  it('deload snaps to plates for a barbell exercise, same as the deload prescription itself', () => {
+    const lastOutcome: SessionOutcome = { fromWeight: 100, appliedWeight: 100, rule: 'deload' };
+    const p = prescribe({
+      ...base,
+      equipment: 'barbell',
+      lastOutcome,
+      settings: { barKg: 20, plates: [20, 10], deloadPercent: 0.9 },
+    });
+    // deloadLoad(100, 0.9, 5, {barKg:20, plates:[20,10]}) = 80 (see the deloadLoad tests below).
+    expect(p.weightDelta).toBe(-20);
+  });
+
+  it('an unchanged hold, calibrating or not_applicable outcome gives no weightDelta', () => {
+    const rules: SessionOutcome['rule'][] = ['hold', 'hold_missing_sets', 'calibrating', 'not_applicable'];
+    for (const rule of rules) {
+      const lastOutcome: SessionOutcome = { fromWeight: 100, appliedWeight: 100, rule };
+      expect(prescribe({ ...base, lastOutcome }).weightDelta, rule).toBeNull();
+    }
+  });
+
+  // §4.1: a hold "re-prescribes the deviated weight visibly rather than snapping back silently"
+  // (see `decide` in engine.ts) — so a hold whose stored weight actually moved must show it too,
+  // not just an 'increase'. This is read generically as appliedWeight − fromWeight, not by
+  // special-casing the 'increase' rule, precisely so a deviated hold like this one is not missed.
+  it('a deviated hold that came in under prescription shows the drop, in the same negative direction as a deload — never hidden', () => {
+    const lastOutcome: SessionOutcome = { fromWeight: 105, appliedWeight: 100, rule: 'hold' };
+    expect(prescribe({ ...base, lastOutcome }).weightDelta).toBe(-5);
+  });
+
+  it('a deviated hold_missing_sets that came in over prescription shows the rise', () => {
+    const lastOutcome: SessionOutcome = { fromWeight: 100, appliedWeight: 102.5, rule: 'hold_missing_sets' };
+    expect(prescribe({ ...base, lastOutcome }).weightDelta).toBe(2.5);
+  });
+
+  it('lock_in shows the locked-in starting weight as a rise', () => {
+    const lastOutcome: SessionOutcome = { fromWeight: 0, appliedWeight: 80, rule: 'lock_in' };
+    expect(prescribe({ ...base, lastOutcome }).weightDelta).toBe(80);
+  });
+
+  it('no lastOutcome gives no weightDelta', () => {
+    expect(prescribe({ ...base }).weightDelta).toBeNull();
+    expect(prescribe({ ...base, lastOutcome: null }).weightDelta).toBeNull();
+  });
+
+  // A deload prescribed for TODAY sits right next to this chip's own line, so it must win over
+  // whatever happened last time — otherwise a green "+5 kg" would sit beside a line that itself
+  // reads as a deload drop.
+  it("today's own deload wins over an increase from last time: shows today's drop, not last time's rise", () => {
+    const lastOutcome: SessionOutcome = { fromWeight: 95, appliedWeight: 100, rule: 'increase' };
+    const rx = { ...repsRx, currentWeight: 100 };
+    const p = prescribe({ rx, kind: 'reps', deload: true, lastOutcome, settings });
+    // deloadLoad(100, 0.9, 5) = 90 (grid math shared with the "prescribe — deload" tests above).
+    expect(p.weight).toBe(90);
+    expect(p.weightDelta).toBe(-10);
+  });
+
+  it("today's deload still wins even when last time was itself a deload (no double-counting the two drops)", () => {
+    const lastOutcome: SessionOutcome = { fromWeight: 100, appliedWeight: 100, rule: 'deload' };
+    const rx = { ...repsRx, currentWeight: 100 };
+    const p = prescribe({ rx, kind: 'reps', deload: true, lastOutcome, settings });
+    expect(p.weightDelta).toBe(-10);
   });
 });
 
