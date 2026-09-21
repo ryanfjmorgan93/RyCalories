@@ -78,16 +78,28 @@ describe('useAssistant (via createAssistantStore)', () => {
     expect(store.getState().thread[0]).toEqual({ role: 'user', text: 'Question one?' });
   });
 
-  it('reports "On-device model unavailable." when status is unavailable, without calling the backend', async () => {
-    const backend = fakeBackend({ status: vi.fn(async (): Promise<NanoStatus> => ({ state: 'unavailable', detail: 'UNAVAILABLE' })) });
+  it('surfaces the status detail — the real diagnostic, not a canned line — when status is unavailable, without calling the backend', async () => {
+    const detail = 'UNAVAILABLE · samsung SM-F968B · SDK 36 · AICore 2026.9.4';
+    const backend = fakeBackend({ status: vi.fn(async (): Promise<NanoStatus> => ({ state: 'unavailable', detail })) });
     const store = createAssistantStore(backend);
     await store.getState().refreshStatus();
 
     await store.getState().ask('Anything?', ctx);
 
     expect(backend.ask).not.toHaveBeenCalled();
-    expect(store.getState().error).toBe('On-device model unavailable.');
+    expect(store.getState().error).toBe(detail);
     expect(store.getState().thread).toEqual([]);
+  });
+
+  it('reports "Status not checked yet." when asked before any status check has completed', async () => {
+    const backend = fakeBackend();
+    const store = createAssistantStore(backend);
+    // Deliberately skip refreshStatus(): status is still null.
+
+    await store.getState().ask('Anything?', ctx);
+
+    expect(backend.ask).not.toHaveBeenCalled();
+    expect(store.getState().error).toBe('Status not checked yet.');
   });
 
   it('reports "Model not downloaded." when status is downloadable or downloading', async () => {
@@ -128,6 +140,35 @@ describe('useAssistant (via createAssistantStore)', () => {
 
     expect(store.getState().error).toBe('The model did not answer.');
     expect(store.getState().thread).toEqual([]);
+  });
+
+  it('refreshStatus keeps the thrown Error\'s own message in detail, not a canned string', async () => {
+    const backend = fakeBackend({
+      status: vi.fn(async () => {
+        throw new Error('NoClassDefFoundError: com.google.mlkit.genai.prompt.PromptClient');
+      }),
+    });
+    const store = createAssistantStore(backend);
+
+    await store.getState().refreshStatus();
+
+    expect(store.getState().status).toEqual({
+      state: 'unavailable',
+      detail: 'NoClassDefFoundError: com.google.mlkit.genai.prompt.PromptClient',
+    });
+  });
+
+  it('refreshStatus stringifies a thrown non-Error value into detail rather than discarding it', async () => {
+    const backend = fakeBackend({
+      status: vi.fn(async () => {
+        throw 'binder died';
+      }),
+    });
+    const store = createAssistantStore(backend);
+
+    await store.getState().refreshStatus();
+
+    expect(store.getState().status).toEqual({ state: 'unavailable', detail: 'binder died' });
   });
 
   it('reset() clears the thread and any error but keeps the last known status', async () => {

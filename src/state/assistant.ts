@@ -56,8 +56,10 @@ export function createAssistantStore(backend: AssistantBackend) {
       try {
         const status = await backend.status();
         set({ status });
-      } catch {
-        set({ status: { state: 'unavailable', detail: 'Status check failed.' } });
+      } catch (e) {
+        // Whatever the backend threw — a class-loading failure, a binder error, anything — is the
+        // one thing that can say why the model can never come up on this handset. Keep it.
+        set({ status: { state: 'unavailable', detail: e instanceof Error ? e.message : String(e) } });
       }
     },
 
@@ -73,8 +75,14 @@ export function createAssistantStore(backend: AssistantBackend) {
       const { busy, thread, status } = get();
       if (busy || !question.trim()) return;
 
-      if (!status || status.state === 'unavailable') {
-        set({ error: 'On-device model unavailable.' });
+      if (!status) {
+        set({ error: 'Status not checked yet.' });
+        return;
+      }
+      if (status.state === 'unavailable') {
+        // status.detail is the diagnostic buildDetail() assembled on the phone — the actual reason
+        // the model can't run there. Show that, not a line that could mean anything.
+        set({ error: status.detail });
         return;
       }
       if (status.state !== 'ready') {
