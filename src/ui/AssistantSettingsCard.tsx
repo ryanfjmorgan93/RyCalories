@@ -132,7 +132,7 @@ export function AssistantSettingsCard() {
   const isDownloading = downloading || status?.state === 'downloading';
 
   return (
-    <Card>
+    <Card data-testid="assistant-card">
       <Row
         title="On-device assistant"
         subtitle={statusLabel(status?.state, isDownloading, percent)}
