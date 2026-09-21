@@ -353,7 +353,17 @@ function TargetsCard({ settings }: { settings: Settings }) {
       <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3">
         {TARGET_FIELDS.map((f) => (
           <Field key={f.key} label={f.label}>
-            <NumberInput value={draft[f.key]} mode={f.mode} onChange={(v) => setDraft((d) => ({ ...d, [f.key]: v }))} testId={`target-${f.key}`} />
+            <NumberInput
+              value={draft[f.key]}
+              mode={f.mode}
+              onChange={(v) => setDraft((d) => ({ ...d, [f.key]: v }))}
+              // A blanked field is dropped from the save patch (its old value is what stays), so a
+              // box left empty at Save time would show "Saved" while quietly keeping the number it
+              // had before. Refilling from the saved value on blur means the box can never lie
+              // about what Save is about to do with it.
+              onBlur={() => setDraft((d) => (d[f.key] === null ? { ...d, [f.key]: settings[f.key] } : d))}
+              testId={`target-${f.key}`}
+            />
           </Field>
         ))}
         <Field label="Reverse diet start">
@@ -421,16 +431,40 @@ function RestCard({ settings }: { settings: Settings }) {
   };
 
   return (
-    <Card className="p-4">
+    <Card className="p-4" data-testid="rest-card">
       <div className="grid grid-cols-3 gap-3">
         <Field label="Compound (s)">
-          <NumberInput value={compound} mode="numeric" min={5} max={900} onChange={setCompound} />
+          <NumberInput
+            value={compound}
+            mode="numeric"
+            min={5}
+            max={900}
+            onChange={setCompound}
+            onBlur={() => setCompound((v) => v ?? settings.restCompoundSec)}
+            testId="rest-compound"
+          />
         </Field>
         <Field label="Isolation (s)">
-          <NumberInput value={isolation} mode="numeric" min={5} max={900} onChange={setIsolation} />
+          <NumberInput
+            value={isolation}
+            mode="numeric"
+            min={5}
+            max={900}
+            onChange={setIsolation}
+            onBlur={() => setIsolation((v) => v ?? settings.restIsolationSec)}
+            testId="rest-isolation"
+          />
         </Field>
         <Field label="Carry (s)">
-          <NumberInput value={carry} mode="numeric" min={5} max={900} onChange={setCarry} />
+          <NumberInput
+            value={carry}
+            mode="numeric"
+            min={5}
+            max={900}
+            onChange={setCarry}
+            testId="rest-carry"
+            onBlur={() => setCarry((v) => v ?? settings.restCarrySec)}
+          />
         </Field>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-3">
@@ -580,10 +614,26 @@ function ProgressionCard({ settings }: { settings: Settings }) {
     <Card className="p-4" data-testid="progression-card">
       <div className="grid grid-cols-2 gap-4">
         <Field label="Deload (%)">
-          <NumberInput value={deloadPercent} onChange={setDeloadPercent} mode="numeric" min={0} max={100} placeholder="90" testId="deload-percent" />
+          <NumberInput
+            value={deloadPercent}
+            onChange={setDeloadPercent}
+            mode="numeric"
+            min={0}
+            max={100}
+            placeholder="90"
+            testId="deload-percent"
+            onBlur={() => setDeloadPercent((v) => v ?? Math.round((settings.deloadPercent ?? 0.9) * 100))}
+          />
         </Field>
         <Field label="Sessions per week">
-          <NumberInput value={weeklyTarget} onChange={setWeeklyTarget} mode="numeric" min={1} placeholder="3" />
+          <NumberInput
+            value={weeklyTarget}
+            onChange={setWeeklyTarget}
+            mode="numeric"
+            min={1}
+            placeholder="3"
+            onBlur={() => setWeeklyTarget((v) => v ?? (settings.weeklySessionTarget ?? 3))}
+          />
         </Field>
       </div>
       <Divider />
@@ -594,6 +644,11 @@ function ProgressionCard({ settings }: { settings: Settings }) {
             <NumberInput
               value={setTargets[g]}
               onChange={(v) => setSetTargets((t) => ({ ...t, [g]: v }))}
+              // Save rebuilds `weeklySetTargets` from every group's draft value and that whole map
+              // replaces the saved one (no per-key merge) — so a blanked group here would not just
+              // look wrong, it would permanently delete that group's target on Save. Refill it from
+              // its own saved value (or null, if it never had one) so blank can never reach Save.
+              onBlur={() => setSetTargets((t) => (t[g] === null ? { ...t, [g]: settings.weeklySetTargets?.[g] ?? null } : t))}
               mode="numeric"
               min={0}
               placeholder="none"
