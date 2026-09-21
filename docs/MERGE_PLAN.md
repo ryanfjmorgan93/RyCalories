@@ -447,6 +447,30 @@ overwriting the wrong item, applies only to the photo-enrichment path and lands 
 separates `date` from `loggedAt`, and `photoPath` is documented as relative to the data
 directory, never absolute.
 
+### 6.3 Three ways a Playwright assertion proves nothing
+
+Found the hard way in September 2026, after a real data bug (an unrelated Settings tap silently
+starting the reverse diet, `saveSettings` stamping `calorieStartDate` on any save) sat behind a
+green CI tick for days.
+
+| The shape | Why it passes without proving anything |
+|---|---|
+| Do an async thing, then assert something is **unchanged** | `toHaveValue` / `toBeVisible` / `toContainText` pass on the FIRST poll that matches. At the moment of the click the old value is still correct, so the assertion passes instantly — before the change it guards against can arrive. `settings.spec.ts` passed this way in CI in 675 ms while failing 4/4 times locally. |
+| Wait on a **transient signal a previous occurrence could satisfy** | A toast lives 2200 ms (`Toast.tsx`) and repeats verbatim. `home-weight-delta.spec.ts` deleted four routines in a loop waiting on a shared "Routine deleted" toast; the last iteration had no following click to force a real wait, `page.goto('/')` tore down the document mid-transaction, a routine survived, and the rotation then moved off the routine the test asserted on. Wait on the item's own row disappearing, as `guidance.spec.ts` does. |
+| **Sample state once, without retrying** | `getAttribute('class')` does not poll. Sets are logged by a fired-and-forgotten handler, so the Dexie write and the liveQuery re-render land after the click resolves. That is what made `overload.spec.ts`'s superset test fail once and pass on retry. Use `expectClass` in `e2e/fresh.ts`. |
+
+Two structural consequences, both now in place:
+- **`retries: 0`.** Playwright reports "failed once, passed on retry" as a plain success, so the
+  flake was invisible in the CI step result. CI is the only gate this app has.
+- **Run the browser CI runs.** Local runs pinned `/opt/pw-browsers/chromium`, twelve major Chromium
+  versions behind the build `@playwright/test` ships, and local and CI disagreed on real tests.
+  `playwright.config.ts` now prefers the Playwright-managed build and keeps the sandbox binary only
+  as a fallback.
+
+Related: **a fix scoped to one screen is not a fix.** The 0 kg lock-in guard went onto
+`ExerciseDetailScreen`'s sheet and missed `SummaryScreen`'s — the path taken at the end of every
+session. Nothing below the UI has a floor, so ask where else the same control appears.
+
 ---
 
 ## 7. Repo and release
