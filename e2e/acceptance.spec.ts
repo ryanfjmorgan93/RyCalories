@@ -45,6 +45,10 @@ test.describe('Phase 1 acceptance', () => {
     await expect(card).toContainText('4 × 6–8 @ 110 kg');
     await expect(card).toContainText('Straps. 3-sec lower. Depth over load.');
     await logSets(page, 'Romanian Deadlift (Barbell)', 110, [8, 8, 8, 8]);
+    // Target met — Romanian Deadlift is no longer the current exercise, so the card collapses
+    // (§4). It can still be reopened, and the entry block still offers a bonus 5th set.
+    await expect(card).toContainText('4/4 sets');
+    await card.click();
     await expect(card).toContainText('Set 5 (target 4)');
     await finishToSummary(page);
 
@@ -133,9 +137,13 @@ test.describe('Phase 1 acceptance', () => {
     await fresh(page);
     await page.getByTestId('start-session').click();
     const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
-    await card.getByRole('button', { name: 'Warm-up' }).click();
+    // The session no longer has a set-type chip to pick "Warm-up" before logging: tap the pill
+    // (it sets the draft to type: 'warmup' in one go), then overwrite its preset weight/reps.
+    await expect(card.getByTestId('warmup-pill-0')).toBeVisible();
+    await card.getByTestId('warmup-pill-0').click();
     await card.getByTestId('weight-input').fill('60');
     await card.getByTestId('reps-input').fill('5');
+    await expect(card.getByTestId('set-done')).toHaveText(/Warm-up done/);
     await card.getByTestId('set-done').click();
     await page.getByTestId('rest-timer').getByRole('button', { name: 'Skip' }).click();
     await logSets(page, 'Romanian Deadlift (Barbell)', 110, [8, 8, 8]);

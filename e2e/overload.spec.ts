@@ -185,10 +185,12 @@ test.describe('WP4 overlays', () => {
     await expect(page.getByText('Plates', { exact: true })).toBeVisible();
     await page.keyboard.press('Escape');
 
-    // Warm-up pills, shown only before a counted set exists.
+    // Warm-up pills, shown only before a counted set exists. The session no longer has a set-type
+    // chip row to check for the "active" state; the pill's own tap sets the draft type, provable
+    // by the log button now reading "Warm-up done".
     await expect(card.getByTestId('warmup-pill-0')).toHaveText('20 × 10');
     await card.getByTestId('warmup-pill-0').click();
-    expect(await hasClass(card.getByRole('button', { name: 'Warm-up', exact: true }), 'bg-warn')).toBe(true);
+    await expect(card.getByTestId('set-done')).toHaveText(/Warm-up done/);
     await expect(card.getByTestId('weight-input')).toHaveValue('20');
   });
 
@@ -222,6 +224,8 @@ test.describe('WP4 overlays', () => {
     // substitute (Overhead Triceps Extension) lives only in "Arms", so no duplicate card appears.
     const card = page.getByTestId('exercise-card-Triceps Pushdown');
     await expect(card).toBeVisible();
+    // Not the current exercise (order 3 of 4) — starts collapsed; tap it open to reach "More".
+    await card.click();
     await card.getByRole('button', { name: 'More' }).click();
     await page.getByRole('button', { name: 'Swap exercise' }).click();
     await page.getByText('Overhead Triceps Extension', { exact: true }).click();
@@ -250,6 +254,8 @@ test.describe('WP4 overlays', () => {
     // biceps) isn't, so it's the only exercise the swap sheet offers.
     const card = page.getByTestId('exercise-card-DB Curl');
     await expect(card).toBeVisible();
+    // Not the current exercise (order 3 of 4) — starts collapsed; tap it open to reach "More".
+    await card.click();
     await card.getByRole('button', { name: 'More' }).click();
     await page.getByRole('button', { name: 'Swap exercise' }).click();
 
@@ -310,10 +316,27 @@ test.describe('WP4 overlays', () => {
   });
 
   test('ask: opens the assistant sheet with a live question box', async ({ page }) => {
+    // The "Ask" button is gated on the assistant's status (§6) — 'unavailable' by default on the
+    // web build (see state/nano.ts), so the fake stands in for a ready on-device model. Must be
+    // set before the app's first script runs, so this goes in before `fresh()` navigates at all.
+    await page.addInitScript((cfg: { state: string; detail: string }) => {
+      (window as unknown as { __ironNanoFake?: unknown }).__ironNanoFake = {
+        status: { state: cfg.state, detail: cfg.detail },
+        generate: async () => ({ text: 'unused' }),
+      };
+    }, { state: 'ready', detail: 'fake, ready' });
+
     await fresh(page);
     await page.getByTestId('start-session').click();
+    await expect(page.getByTestId('ask-assistant')).toBeEnabled();
     await page.getByTestId('ask-assistant').click();
     await expect(page.getByText('Assistant', { exact: true })).toBeVisible();
     await expect(page.getByTestId('assistant-input')).toBeVisible();
+  });
+
+  test('ask: is disabled while the on-device model is unavailable (the default on the web build)', async ({ page }) => {
+    await fresh(page);
+    await page.getByTestId('start-session').click();
+    await expect(page.getByTestId('ask-assistant')).toBeDisabled();
   });
 });
