@@ -1,0 +1,11 @@
+[
+  {
+    "slug": "neck",
+    "name": "Neck Curl (Plate)",
+    "equipment": "other",
+    "primaryMuscle": "Neck",
+    "secondaryMuscles": [],
+    "instructions": [],
+    "photo": true
+  }
+]

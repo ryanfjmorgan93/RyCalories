@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { clickIfPresent, fresh } from './fresh';
+import { clickIfPresent, expectClass, fresh } from './fresh';
 import { fileURLToPath } from 'node:url';
 
 const HEVY_CSV = fileURLToPath(new URL('../hevy_export.csv', import.meta.url));
@@ -73,6 +73,27 @@ test.describe('Exercise library', () => {
     await page.getByTestId('lock-in-weight').fill('82.5');
     await page.getByTestId('lock-in-save').click();
     await expect(page.getByText('4 × 6–8 @ 82.5 kg')).toBeVisible();
+  });
+
+  test('a photo demo does not get the light-theme line-art invert filter; a line-art demo does', async ({ page }) => {
+    // src/index.css puts `filter: invert(1)` on `.demo-frame` in light theme, correct for white
+    // line art drawn for the dark theme — but wrong for a real photograph, which it would render
+    // as a negative. src/ui/ExerciseDemo.tsx must withhold the class from a `photo: true` demo.
+    await fresh(page);
+
+    // Line art (@bryllim/workout-guide, via public/exercises/): carries demo-frame.
+    await page.goto('/exercises');
+    await page.getByTestId('exercise-search').fill('Back Squat');
+    await page.getByRole('button', { name: /Barbell Back Squat/ }).click();
+    await expect(page.getByRole('heading', { name: 'Barbell Back Squat' })).toBeVisible();
+    await expectClass(page.getByRole('img', { name: 'Barbell Back Squat', exact: true }), 'demo-frame', true);
+
+    // Photo (assets/custom-demos/neck/, free-exercise-db): must not carry demo-frame.
+    await page.goto('/exercises');
+    await page.getByTestId('exercise-search').fill('Neck');
+    await page.getByRole('button', { name: /Neck/ }).click();
+    await expect(page.getByRole('heading', { name: 'Neck', exact: true })).toBeVisible();
+    await expectClass(page.getByRole('img', { name: 'Neck', exact: true }), 'demo-frame', false);
   });
 });
 

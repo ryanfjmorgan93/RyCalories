@@ -12,6 +12,8 @@ export interface ExerciseDemo {
   frames: number;
   /** Instructions from free-exercise-db when matched. */
   instructions: string[];
+  /** True for a real photograph (object-cover, no palette quantisation, no light-theme invert). False for line art. */
+  photo: boolean;
 }
 
 export const EXERCISE_DEMOS: ExerciseDemo[] = [
@@ -24,6 +26,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'active-hang',
@@ -34,6 +37,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'lats',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'archer-push-up',
@@ -44,6 +48,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'chest',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'arm-circles',
@@ -54,6 +59,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'shoulders',
     frames: 3,
     instructions: ['Stand up and extend your arms straight out by the sides. The arms should be parallel to the floor and perpendicular (90-degree angle) to your torso. This will be your starting position.', 'Slowly start to make circles of about 1 foot in diameter with each outstretched arm. Breathe normally as you perform the movement.', 'Continue the circular motion of the outstretched arms for about ten seconds. Then reverse the movement, going the opposite direction.'],
+    photo: false,
   },
   {
     slug: 'arnold-press',
@@ -64,6 +70,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'shoulders',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'assault-bike',
@@ -74,6 +81,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'assisted-chin-up',
@@ -84,6 +92,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'biceps',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'assisted-dip',
@@ -94,6 +103,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'triceps',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'assisted-pistol-squat',
@@ -104,6 +114,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'assisted-pull-up',
@@ -114,6 +125,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'lats',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'back-extension',
@@ -124,6 +136,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'lower back',
     frames: 3,
     instructions: ['Lie face down on a hyperextension bench, tucking your ankles securely under the footpads.', 'Adjust the upper pad if possible so your upper thighs lie flat across the wide pad, leaving enough room for you to bend at the waist without any restriction.', 'With your body straight, cross your arms in front of you (my preference) or behind your head. This will be your starting position. Tip: You can also hold a weight plate for extra resistance in front of you under your crossed arms.', 'Start bending forward slowly at the waist as far as you can while keeping your back flat. Inhale as you perform this movement. Keep moving forward until you feel a nice stretch on the hamstrings and you can no longer keep going without a rounding of the back. Tip: Never round the back as you perform this exercise. Also, some people can go farther than others. The key thing is that you go as far as your body allows you to without rounding the back.', 'Slowly raise your torso back to the initial position as you inhale. Tip: Avoid the temptation to arch your back past a straight line. Also, do not swing the torso at any time in order to protect the back from injury.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'band-pull-apart',
@@ -134,6 +147,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: ['Begin with your arms extended straight out in front of you, holding the band with both hands.', 'Initiate the movement by performing a reverse fly motion, moving your hands out laterally to your sides.', 'Keep your elbows extended as you perform the movement, bringing the band to your chest. Ensure that you keep your shoulders back during the exercise.', 'Pause as you complete the movement, returning to the starting position under control.'],
+    photo: false,
   },
   {
     slug: 'banded-clamshell',
@@ -144,6 +158,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'banded-dead-bug',
@@ -154,6 +169,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'banded-donkey-kick',
@@ -164,6 +180,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'banded-face-pull',
@@ -174,6 +191,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'banded-fire-hydrant',
@@ -184,6 +202,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'banded-frog-pump',
@@ -194,6 +213,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'banded-glute-bridge',
@@ -204,6 +224,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'banded-hip-thrust',
@@ -214,6 +235,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'banded-kickback',
@@ -224,6 +246,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'banded-lat-pulldown',
@@ -234,6 +257,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'lats',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'banded-lateral-walk',
@@ -244,6 +268,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'banded-monster-walk',
@@ -254,6 +279,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'banded-pallof-press',
@@ -264,6 +290,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'banded-row',
@@ -274,6 +301,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'banded-seated-hip-abduction',
@@ -284,6 +312,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'banded-squat',
@@ -294,6 +323,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'banded-standing-hip-abduction',
@@ -304,6 +334,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'banded-woodchop',
@@ -314,6 +345,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'barbell-glute-bridge',
@@ -324,6 +356,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: ['Begin seated on the ground with a loaded barbell over your legs. Using a fat bar or having a pad on the bar can greatly reduce the discomfort caused by this exercise. Roll the bar so that it is directly above your hips, and lay down flat on the floor.', 'Begin the movement by driving through with your heels, extending your hips vertically through the bar. Your weight should be supported by your upper back and the heels of your feet.', 'Extend as far as possible, then reverse the motion to return to the starting position.'],
+    photo: false,
   },
   {
     slug: 'barbell-row',
@@ -334,6 +367,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'battle-ropes',
@@ -344,6 +378,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'shoulders',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'bear-crawl',
@@ -354,6 +389,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'bear-plank',
@@ -364,6 +400,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'belt-squat',
@@ -374,6 +411,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'bench-dip',
@@ -384,6 +422,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'triceps',
     frames: 3,
     instructions: ['For this exercise you will need to place a bench behind your back. With the bench perpendicular to your body, and while looking away from it, hold on to the bench on its edge with the hands fully extended, separated at shoulder width. The legs will be extended forward, bent at the waist and perpendicular to your torso. This will be your starting position.', 'Slowly lower your body as you inhale by bending at the elbows until you lower yourself far enough to where there is an angle slightly smaller than 90 degrees between the upper arm and the forearm. Tip: Keep the elbows as close as possible throughout the movement. Forearms should always be pointing down.', 'Using your triceps to bring your torso up again, lift yourself back to the starting position.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'bench-press',
@@ -394,6 +433,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'chest',
     frames: 3,
     instructions: ['Lie back on a flat bench. Using a medium width grip (a grip that creates a 90-degree angle in the middle of the movement between the forearms and the upper arms), lift the bar from the rack and hold it straight over you with your arms locked. This will be your starting position.', 'From the starting position, breathe in and begin coming down slowly until the bar touches your middle chest.', 'After a brief pause, push the bar back to the starting position as you breathe out. Focus on pushing the bar using your chest muscles. Lock your arms and squeeze your chest in the contracted position at the top of the motion, hold for a second and then start coming down slowly again. Tip: Ideally, lowering the weight should take about twice as long as raising it.', 'Repeat the movement for the prescribed amount of repetitions.', 'When you are done, place the bar back in the rack.'],
+    photo: false,
   },
   {
     slug: 'bent-over-rear-delt-raise',
@@ -404,6 +444,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'rear delts',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'bicep-curl',
@@ -414,6 +455,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'biceps',
     frames: 3,
     instructions: ['Stand up straight with a dumbbell in each hand at arm\'s length. Keep your elbows close to your torso and rotate the palms of your hands until they are facing forward. This will be your starting position.', 'Now, keeping the upper arms stationary, exhale and curl the weights while contracting your biceps. Continue to raise the weights until your biceps are fully contracted and the dumbbells are at shoulder level. Hold the contracted position for a brief pause as you squeeze your biceps.', 'Then, inhale and slowly begin to lower the dumbbells back to the starting position.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'bicycle-crunch',
@@ -424,6 +466,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'bird-dog',
@@ -434,6 +477,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'bodyweight-squat',
@@ -444,6 +488,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: ['Stand with your feet shoulder width apart. You can place your hands behind your head. This will be your starting position.', 'Begin the movement by flexing your knees and hips, sitting back with your hips.', 'Continue down to full depth if you are able,and quickly reverse the motion until you return to the starting position. As you squat, keep your head and chest up and push your knees out.'],
+    photo: false,
   },
   {
     slug: 'bulgarian-split-squat',
@@ -454,6 +499,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'burpee',
@@ -464,6 +510,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'butterfly-stretch',
@@ -474,6 +521,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'cable-crunch',
@@ -484,6 +532,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: ['Kneel below a high pulley that contains a rope attachment.', 'Grasp cable rope attachment and lower the rope until your hands are placed next to your face.', 'Flex your hips slightly and allow the weight to hyperextend the lower back. This will be your starting position.', 'With the hips stationary, flex the waist as you contract the abs so that the elbows travel towards the middle of the thighs. Exhale as you perform this portion of the movement and hold the contraction for a second.', 'Slowly return to the starting position as you inhale. Tip: Make sure that you keep constant tension on the abs throughout the movement. Also, do not choose a weight so heavy that the lower back handles the brunt of the work.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'cable-curl',
@@ -494,6 +543,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'biceps',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'cable-fly',
@@ -504,6 +554,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'chest',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'cable-front-raise',
@@ -514,6 +565,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'shoulders',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'cable-kickback',
@@ -524,6 +576,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'cable-lateral-raise',
@@ -534,6 +587,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'shoulders',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'cable-pallof-hold',
@@ -544,6 +598,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'cable-pull-through',
@@ -554,6 +609,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'cable-rear-delt-fly',
@@ -564,6 +620,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'rear delts',
     frames: 3,
     instructions: ['Adjust the pulleys to the appropriate height and adjust the weight. The pulleys should be above your head.', 'Grab the left pulley with your right hand and the right pulley with your left hand, crossing them in front of you. This will be your starting position.', 'Initiate the movement by moving your arms back and outward, keeping your arms straight as you execute the movement.', 'Pause at the end of the motion before returning the handles to the start position.'],
+    photo: false,
   },
   {
     slug: 'cable-standing-hip-abduction',
@@ -574,6 +631,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'cable-standing-hip-adduction',
@@ -584,6 +642,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'adductors',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'cable-woodchop',
@@ -594,6 +653,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'calf-raise',
@@ -604,6 +664,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'calves',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'captains-chair-knee-raise',
@@ -614,6 +675,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'cat-cow-stretch',
@@ -624,6 +686,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: null,
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'chair-dip',
@@ -634,6 +697,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'triceps',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'chest-dip',
@@ -644,6 +708,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'chest',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'chest-supported-row',
@@ -654,6 +719,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'childs-pose',
@@ -664,6 +730,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: ['Get on your hands and knees, walk your hands in front of you.', 'Lower your buttocks down to sit on your heels. Let your arms drag along the floor as you sit back to stretch your entire spine.', 'Once you settle onto your heels, bring your hands next to your feet and relax. "breathe" into your back. Rest your forehead on the floor. Avoid this position if you have knee problems.'],
+    photo: false,
   },
   {
     slug: 'chin-up',
@@ -674,6 +741,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'biceps',
     frames: 3,
     instructions: ['Grab the pull-up bar with the palms facing your torso and a grip closer than the shoulder width.', 'As you have both arms extended in front of you holding the bar at the chosen grip width, keep your torso as straight as possible while creating a curvature on your lower back and sticking your chest out. This is your starting position. Tip: Keeping the torso as straight as possible maximizes biceps stimulation while minimizing back involvement.', 'As you breathe out, pull your torso up until your head is around the level of the pull-up bar. Concentrate on using the biceps muscles in order to perform the movement. Keep the elbows close to your body. Tip: The upper torso should remain stationary as it moves through space and only the arms should move. The forearms should do no other work other than hold the bar.', 'After a second of squeezing the biceps in the contracted position, slowly lower your torso back to the starting position; when your arms are fully extended. Breathe in as you perform this portion of the movement.', 'Repeat this motion for the prescribed amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'clamshell',
@@ -684,6 +752,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'close-grip-bench-press',
@@ -694,6 +763,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'triceps',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'close-grip-lat-pulldown',
@@ -704,6 +774,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'lats',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'commando-pull-up',
@@ -714,6 +785,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'lats',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'concentration-curl',
@@ -724,6 +796,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'biceps',
     frames: 3,
     instructions: ['Sit down on a flat bench with one dumbbell in front of you between your legs. Your legs should be spread with your knees bent and feet on the floor.', 'Use your right arm to pick the dumbbell up. Place the back of your right upper arm on the top of your inner right thigh. Rotate the palm of your hand until it is facing forward away from your thigh. Tip: Your arm should be extended and the dumbbell should be above the floor. This will be your starting position.', 'While holding the upper arm stationary, curl the weights forward while contracting the biceps as you breathe out. Only the forearms should move. Continue the movement until your biceps are fully contracted and the dumbbells are at shoulder level. Tip: At the top of the movement make sure that the little finger of your arm is higher than your thumb. This guarantees a good contraction. Hold the contracted position for a second as you squeeze the biceps.', 'Slowly begin to bring the dumbbells back to starting position as your breathe in. Caution: Avoid swinging motions at any time.', 'Repeat for the recommended amount of repetitions. Then repeat the movement with the left arm.'],
+    photo: false,
   },
   {
     slug: 'copenhagen-plank',
@@ -734,6 +807,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'cossack-squat',
@@ -744,6 +818,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'crab-walk',
@@ -754,6 +829,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'triceps',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'cross-body-shoulder-stretch',
@@ -764,6 +840,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'shoulders',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'crunch',
@@ -774,6 +851,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'curtsy-lunge',
@@ -784,6 +862,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'cycling',
@@ -794,6 +873,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'dead-bug',
@@ -804,6 +884,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: ['Begin lying on your back with your hands extended above you toward the ceiling.', 'Bring your feet, knees, and hips up to 90 degrees.', 'Exhale hard to bring your ribcage down and flatten your back onto the floor, rotating your pelvis up and squeezing your glutes. Hold this position throughout the movement. This will be your starting position.', 'Initiate the exercise by extending one leg, straightening the knee and hip to bring the leg just above the ground.', 'Maintain the position of your lumbar and pelvis as you perform the movement, as your back is going to want to arch.', 'Stay tight and return the working leg to the starting position.', 'Repeat on the opposite side, alternating until the set is complete.'],
+    photo: false,
   },
   {
     slug: 'dead-hang',
@@ -814,6 +895,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'forearms',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'deadlift',
@@ -824,6 +906,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'hamstrings',
     frames: 3,
     instructions: ['Stand in front of a loaded barbell.', 'While keeping the back as straight as possible, bend your knees, bend forward and grasp the bar using a medium (shoulder width) overhand grip. This will be the starting position of the exercise. Tip: If it is difficult to hold on to the bar with this grip, alternate your grip or use wrist straps.', 'While holding the bar, start the lift by pushing with your legs while simultaneously getting your torso to the upright position as you breathe out. In the upright position, stick your chest out and contract the back by bringing the shoulder blades back. Think of how the soldiers in the military look when they are in standing in attention.', 'Go back to the starting position by bending at the knees while simultaneously leaning the torso forward at the waist while keeping the back straight. When the weights on the bar touch the floor you are back at the starting position and ready to perform another repetition.', 'Perform the amount of repetitions prescribed in the program.'],
+    photo: false,
   },
   {
     slug: 'decline-bench-press',
@@ -834,6 +917,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'chest',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'decline-dumbbell-press',
@@ -844,6 +928,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'chest',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'decline-push-up',
@@ -854,6 +939,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'chest',
     frames: 3,
     instructions: ['Lie on the floor face down and place your hands about 36 inches apart while holding your torso up at arms length. Move your feet up to a box or bench. This will be your starting position.', 'Next, lower yourself downward until your chest almost touches the floor as you inhale.', 'Now breathe out and press your upper body back up to the starting position while squeezing your chest.', 'After a brief pause at the top contracted position, you can begin to lower yourself downward again for as many repetitions as needed.'],
+    photo: false,
   },
   {
     slug: 'decline-sit-up',
@@ -864,6 +950,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'deficit-reverse-lunge',
@@ -874,6 +961,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'diamond-push-up',
@@ -884,6 +972,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'triceps',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'dip',
@@ -894,6 +983,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'triceps',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'donkey-calf-raise',
@@ -904,6 +994,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'calves',
     frames: 3,
     instructions: ['For this exercise you will need access to a donkey calf raise machine. Start by positioning your lower back and hips under the padded lever provided. The tailbone area should be the one making contact with the pad.', 'Place both of your arms on the side handles and place the balls of your feet on the calf block with the heels extending off. Align the toes forward, inward or outward, depending on the area you wish to target, and straighten the knees without locking them. This will be your starting position.', 'Raise your heels as you breathe out by extending your ankles as high as possible and flexing your calf. Ensure that the knee is kept stationary at all times. There should be no bending at any time. Hold the contracted position by a second before you start to go back down.', 'Go back slowly to the starting position as you breathe in by lowering your heels as you bend the ankles until calves are stretched.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'donkey-kick',
@@ -914,6 +1005,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'doorway-chest-stretch',
@@ -924,6 +1016,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'chest',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'doorway-row',
@@ -934,6 +1027,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'drag-curl',
@@ -944,6 +1038,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'biceps',
     frames: 3,
     instructions: ['Grab a barbell with a supinated grip (palms facing forward) and get your elbows close to your torso and back. This will be your starting position.', 'As you exhale, curl the bar up while keeping the elbows to the back as you "Drag" the bar up by keeping it in contact with your torso. Tip: As you can see, you will not be keeping the elbows pinned to your sides, but instead you will be bringing them back. Also, do not lift your shoulders.', 'Slowly go back to the starting position as you keep the bar in contact with the torso at all times.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'dragon-flag',
@@ -954,6 +1049,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'dumbbell-bench-press',
@@ -964,6 +1060,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'chest',
     frames: 3,
     instructions: ['Lie down on a flat bench with a dumbbell in each hand resting on top of your thighs. The palms of your hands will be facing each other.', 'Then, using your thighs to help raise the dumbbells up, lift the dumbbells one at a time so that you can hold them in front of you at shoulder width.', 'Once at shoulder width, rotate your wrists forward so that the palms of your hands are facing away from you. The dumbbells should be just to the sides of your chest, with your upper arm and forearm creating a 90 degree angle. Be sure to maintain full control of the dumbbells at all times. This will be your starting position.', 'Then, as you breathe out, use your chest to push the dumbbells up. Lock your arms at the top of the lift and squeeze your chest, hold for a second and then begin coming down slowly. Tip: Ideally, lowering the weight should take about twice as long as raising it.', 'Repeat the movement for the prescribed amount of repetitions of your training program.'],
+    photo: false,
   },
   {
     slug: 'dumbbell-bent-over-row',
@@ -974,6 +1071,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'dumbbell-curtsy-lunge',
@@ -984,6 +1082,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'dumbbell-fly',
@@ -994,6 +1093,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'chest',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'dumbbell-glute-bridge',
@@ -1004,6 +1104,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'dumbbell-hip-thrust',
@@ -1014,6 +1115,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'dumbbell-lateral-lunge',
@@ -1024,6 +1126,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'dumbbell-overhead-tricep-extension',
@@ -1034,6 +1137,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'triceps',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'dumbbell-romanian-deadlift',
@@ -1044,6 +1148,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'hamstrings',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'dumbbell-shrug',
@@ -1054,6 +1159,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: ['Stand erect with a dumbbell on each hand (palms facing your torso), arms extended on the sides.', 'Lift the dumbbells by elevating the shoulders as high as possible while you exhale. Hold the contraction at the top for a second. Tip: The arms should remain extended at all times. Refrain from using the biceps to help lift the dumbbells. Only the shoulders should be moving up and down.', 'Lower the dumbbells back to the original position.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'dumbbell-side-bend',
@@ -1064,6 +1170,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: ['Stand up straight while holding a dumbbell on the left hand (palms facing the torso) as you have the right hand holding your waist. Your feet should be placed at shoulder width. This will be your starting position.', 'While keeping your back straight and your head up, bend only at the waist to the right as far as possible. Breathe in as you bend to the side. Then hold for a second and come back up to the starting position as you exhale. Tip: Keep the rest of the body stationary.', 'Now repeat the movement but bending to the left instead. Hold for a second and come back to the starting position.', 'Repeat for the recommended amount of repetitions and then change hands.'],
+    photo: false,
   },
   {
     slug: 'dumbbell-skull-crusher',
@@ -1074,6 +1181,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'triceps',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'dumbbell-sumo-deadlift',
@@ -1084,6 +1192,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'hamstrings',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'dumbbell-sumo-squat',
@@ -1094,6 +1203,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'elliptical',
@@ -1104,6 +1214,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'explosive-push-up',
@@ -1114,6 +1225,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'chest',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'ez-bar-curl',
@@ -1124,6 +1236,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'biceps',
     frames: 3,
     instructions: ['Stand up straight while holding an EZ curl bar at the wide outer handle. The palms of your hands should be facing forward and slightly tilted inward due to the shape of the bar. Keep your elbows close to your torso. This will be your starting position.', 'Now, while keeping your upper arms stationary, exhale and curl the weights forward while contracting the biceps. Focus on only moving your forearms.', 'Continue to raise the weight until your biceps are fully contracted and the bar is at shoulder level. Hold the top contracted position for a moment and squeeze the biceps.', 'Then inhale and slowly lower the bar back to the starting position.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'face-pull',
@@ -1134,6 +1247,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: ['Facing a high pulley with a rope or dual handles attached, pull the weight directly towards your face, separating your hands as you do so. Keep your upper arms parallel to the ground.'],
+    photo: false,
   },
   {
     slug: 'farmer-carry',
@@ -1144,6 +1258,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'forearms',
     frames: 3,
     instructions: ['There are various implements that can be used for the farmers walk. These can also be performed with heavy dumbbells or short bars if these implements aren\'t available. Begin by standing between the implements.', 'After gripping the handles, lift them up by driving through your heels, keeping your back straight and your head up.', 'Walk taking short, quick steps, and don\'t forget to breathe. Move for a given distance, typically 50-100 feet, as fast as possible.'],
+    photo: false,
   },
   {
     slug: 'fast-feet',
@@ -1154,6 +1269,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'calves',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'feet-elevated-pike-push-up',
@@ -1164,6 +1280,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'shoulders',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'fire-hydrant',
@@ -1174,6 +1291,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'flutter-kick',
@@ -1184,6 +1302,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: ['On a flat bench lie facedown with the hips on the edge of the bench, the legs straight with toes high off the floor and with the arms on top of the bench holding on to the front edge.', 'Squeeze your glutes and hamstrings and straighten the legs until they are level with the hips. This will be your starting position.', 'Start the movement by lifting the left leg higher than the right leg.', 'Then lower the left leg as you lift the right leg.', 'Continue alternating in this manner (as though you are doing a flutter kick in water) until you have done the recommended amount of repetitions for each leg. Make sure that you keep a controlled movement at all times. Tip: You will breathe normally as you perform this movement.'],
+    photo: false,
   },
   {
     slug: 'forward-lunge',
@@ -1194,6 +1313,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'frog-pump',
@@ -1204,6 +1324,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'front-foot-elevated-split-squat',
@@ -1214,6 +1335,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'front-raise',
@@ -1224,6 +1346,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'shoulders',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'front-squat',
@@ -1234,6 +1357,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'glute-bridge',
@@ -1244,6 +1368,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'glute-bridge-march',
@@ -1254,6 +1379,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'glute-focused-back-extension',
@@ -1264,6 +1390,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'goblet-squat',
@@ -1274,6 +1401,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: ['Stand holding a light kettlebell by the horns close to your chest. This will be your starting position.', 'Squat down between your legs until your hamstrings are on your calves. Keep your chest and head up and your back straight.', 'At the bottom position, pause and use your elbows to push your knees out. Return to the starting position, and repeat for 10-20 repetitions.'],
+    photo: false,
   },
   {
     slug: 'good-morning',
@@ -1284,6 +1412,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'hamstrings',
     frames: 3,
     instructions: ['Begin with a bar on a rack at shoulder height. Rack the bar across the rear of your shoulders as you would a power squat, not on top of your shoulders. Keep your back tight, shoulder blades pinched together, and your knees slightly bent. Step back from the rack.', 'Begin by bending at the hips, moving them back as you bend over to near parallel. Keep your back arched and your cervical spine in proper alignment.', 'Reverse the motion by extending through the hips with your glutes and hamstrings. Continue until you have returned to the starting position.'],
+    photo: false,
   },
   {
     slug: 'hack-squat',
@@ -1294,6 +1423,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: ['Place the back of your torso against the back pad of the machine and hook your shoulders under the shoulder pads provided.', 'Position your legs in the platform using a shoulder width medium stance with the toes slightly pointed out. Tip: Keep your head up at all times and also maintain the back on the pad at all times.', 'Place your arms on the side handles of the machine and disengage the safety bars (which on most designs is done by moving the side handles from a facing front position to a diagonal position).', 'Now straighten your legs without locking the knees. This will be your starting position. (Note: For the purposes of this discussion we will use the medium stance described above which targets overall development; however you can choose any of the three stances described in the foot positioning section).', 'Begin to slowly lower the unit by bending the knees as you maintain a straight posture with the head up (back on the pad at all times). Continue down until the angle between the upper leg and the calves becomes slightly less than 90-degrees (which is the point in which the upper legs are below parallel to the floor). Inhale as you perform this portion of the movement. Tip: If you performed the exercise correctly, the front of the knees should make an imaginary straight line with the toes that is perpendicular to the front. If your knees are past that imaginary line (if they are past your toes) then you are placing undue stress on the knee and the exercise has been performed incorrectly.', 'Begin to raise the unit as you exhale by pushing the floor with mainly with the heel of your foot as you straighten the legs again and go back to the starting position.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'half-burpee',
@@ -1304,6 +1434,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'half-kneeling-pallof-press',
@@ -1314,6 +1445,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'hammer-curl',
@@ -1324,6 +1456,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'biceps',
     frames: 3,
     instructions: ['Stand up with your torso upright and a dumbbell on each hand being held at arms length. The elbows should be close to the torso.', 'The palms of the hands should be facing your torso. This will be your starting position.', 'Now, while holding your upper arm stationary, exhale and curl the weight forward while contracting the biceps. Continue to raise the weight until the biceps are fully contracted and the dumbbell is at shoulder level. Hold the contracted position for a brief moment as you squeeze the biceps. Tip: Focus on keeping the elbow stationary and only moving your forearm.', 'After the brief pause, inhale and slowly begin the lower the dumbbells back down to the starting position.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'hamstring-stretch',
@@ -1334,6 +1467,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'hamstrings',
     frames: 3,
     instructions: ['Lie on your back with one leg extended above you, with the hip at ninety degrees. Keep the other leg flat on the floor.', 'Loop a belt, band, or rope over the ball of your foot. This will be your starting position.', 'Pull on the belt to create tension in the calves and hamstrings. Hold this stretch for 10-30 seconds, and repeat with the other leg.'],
+    photo: false,
   },
   {
     slug: 'handstand-push-up',
@@ -1344,6 +1478,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'shoulders',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'hanging-knee-raise',
@@ -1354,6 +1489,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'hanging-leg-raise',
@@ -1364,6 +1500,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: ['Hang from a chin-up bar with both arms extended at arms length in top of you using either a wide grip or a medium grip. The legs should be straight down with the pelvis rolled slightly backwards. This will be your starting position.', 'Raise your legs until the torso makes a 90-degree angle with the legs. Exhale as you perform this movement and hold the contraction for a second or so.', 'Go back slowly to the starting position as you breathe in.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'heel-elevated-goblet-squat',
@@ -1374,6 +1511,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'heel-tap',
@@ -1384,6 +1522,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'high-knees',
@@ -1394,6 +1533,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'hiking',
@@ -1404,6 +1544,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'hindu-push-up',
@@ -1414,6 +1555,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'chest',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'hip-abduction-machine',
@@ -1424,6 +1566,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'hip-adduction-machine',
@@ -1434,6 +1577,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'adductors',
     frames: 3,
     instructions: ['To begin, sit down on the adductor machine and select a weight you are comfortable with. When your legs are positioned properly on the leg pads of the machine, grip the handles on each side. Your entire upper body (from the waist up) should be stationary. This is the starting position.', 'Slowly press against the machine with your legs to move them towards each other while exhaling.', 'Feel the contraction for a second and begin to move your legs back to the starting position while breathing in. Note: Remember to keep your upper body stationary and avoid fast jerking motions in order to prevent any injuries from occurring.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'hip-airplane',
@@ -1444,6 +1588,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'hip-thrust',
@@ -1454,6 +1599,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: ['Begin seated on the ground with a bench directly behind you. Have a loaded barbell over your legs. Using a fat bar or having a pad on the bar can greatly reduce the discomfort caused by this exercise.', 'Roll the bar so that it is directly above your hips, and lean back against the bench so that your shoulder blades are near the top of it.', 'Begin the movement by driving through your feet, extending your hips vertically through the bar. Your weight should be supported by your shoulder blades and your feet. Extend as far as possible, then reverse the motion to return to the starting position.'],
+    photo: false,
   },
   {
     slug: 'hollow-body-hold',
@@ -1464,6 +1610,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'hollow-rock',
@@ -1474,6 +1621,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'inchworm',
@@ -1484,6 +1632,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: ['Stand with your feet close together. Keeping your legs straight, stretch down and put your hands on the floor directly in front of you. This will be your starting position.', 'Begin by walking your hands forward slowly, alternating your left and your right. As you do so, bend only at the hip, keeping your legs straight.', 'Keep going until your body is parallel to the ground in a pushup position.', 'Now, keep your hands in place and slowly take short steps with your feet, moving only a few inches at a time.', 'Continue walking until your feet are by hour hands, keeping your legs straight as you do so.'],
+    photo: false,
   },
   {
     slug: 'incline-bench-press',
@@ -1494,6 +1643,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'chest',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'incline-cable-fly',
@@ -1504,6 +1654,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'chest',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'incline-dumbbell-curl',
@@ -1514,6 +1665,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'biceps',
     frames: 3,
     instructions: ['Sit back on an incline bench with a dumbbell in each hand held at arms length. Keep your elbows close to your torso and rotate the palms of your hands until they are facing forward. This will be your starting position.', 'While holding the upper arm stationary, curl the weights forward while contracting the biceps as you breathe out. Only the forearms should move. Continue the movement until your biceps are fully contracted and the dumbbells are at shoulder level. Hold the contracted position for a second.', 'Slowly begin to bring the dumbbells back to starting position as your breathe in.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'incline-dumbbell-press',
@@ -1524,6 +1676,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'chest',
     frames: 3,
     instructions: ['Lie back on an incline bench with a dumbbell in each hand atop your thighs. The palms of your hands will be facing each other.', 'Then, using your thighs to help push the dumbbells up, lift the dumbbells one at a time so that you can hold them at shoulder width.', 'Once you have the dumbbells raised to shoulder width, rotate your wrists forward so that the palms of your hands are facing away from you. This will be your starting position.', 'Be sure to keep full control of the dumbbells at all times. Then breathe out and push the dumbbells up with your chest.', 'Lock your arms at the top, hold for a second, and then start slowly lowering the weight. Tip Ideally, lowering the weights should take about twice as long as raising them.', 'Repeat the movement for the prescribed amount of repetitions.', 'When you are done, place the dumbbells back on your thighs and then on the floor. This is the safest manner to release the dumbbells.'],
+    photo: false,
   },
   {
     slug: 'incline-push-up',
@@ -1534,6 +1687,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'chest',
     frames: 3,
     instructions: ['Stand facing bench or sturdy elevated platform. Place hands on edge of bench or platform, slightly wider than shoulder width.', 'Position forefoot back from bench or platform with arms and body straight. Arms should be perpendicular to body. Keeping body straight, lower chest to edge of box or platform by bending arms.', 'Push body up until arms are extended. Repeat.'],
+    photo: false,
   },
   {
     slug: 'inverted-row',
@@ -1544,6 +1698,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: ['Position a bar in a rack to about waist height. You can also use a smith machine.', 'Take a wider than shoulder width grip on the bar and position yourself hanging underneath the bar. Your body should be straight with your heels on the ground with your arms fully extended. This will be your starting position.', 'Begin by flexing the elbow, pulling your chest towards the bar. Retract your shoulder blades as you perform the movement.', 'Pause at the top of the motion, and return yourself to the start position.', 'Repeat for the desired number of repetitions.'],
+    photo: false,
   },
   {
     slug: 'jump-rope',
@@ -1554,6 +1709,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'calves',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'jump-squat',
@@ -1564,6 +1720,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'jumping-jack',
@@ -1574,6 +1731,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'kettlebell-romanian-deadlift',
@@ -1584,6 +1742,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'hamstrings',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'kettlebell-swing',
@@ -1594,6 +1753,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'knee-push-up',
@@ -1604,6 +1764,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'chest',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'kneeling-hip-flexor-stretch',
@@ -1614,6 +1775,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'l-sit-hold',
@@ -1624,6 +1786,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'l-sit-pull-up',
@@ -1634,6 +1797,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'lats',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'landmine-press',
@@ -1644,6 +1808,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'shoulders',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'landmine-romanian-deadlift',
@@ -1654,6 +1819,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'hamstrings',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'landmine-squat',
@@ -1664,6 +1830,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'lat-pulldown',
@@ -1674,6 +1841,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'lats',
     frames: 3,
     instructions: ['Sit down on a pull-down machine with a wide bar attached to the top pulley. Make sure that you adjust the knee pad of the machine to fit your height. These pads will prevent your body from being raised by the resistance attached to the bar.', 'Grab the bar with the palms facing forward using the prescribed grip. Note on grips: For a wide grip, your hands need to be spaced out at a distance wider than shoulder width. For a medium grip, your hands need to be spaced out at a distance equal to your shoulder width and for a close grip at a distance smaller than your shoulder width.', 'As you have both arms extended in front of you holding the bar at the chosen grip width, bring your torso back around 30 degrees or so while creating a curvature on your lower back and sticking your chest out. This is your starting position.', 'As you breathe out, bring the bar down until it touches your upper chest by drawing the shoulders and the upper arms down and back. Tip: Concentrate on squeezing the back muscles once you reach the full contracted position. The upper torso should remain stationary and only the arms should move. The forearms should do no other work except for holding the bar; therefore do not try to pull down the bar using the forearms.', 'After a second at the contracted position squeezing your shoulder blades together, slowly raise the bar back to the starting position when your arms are fully extended and the lats are fully stretched. Inhale during this portion of the movement.', 'Repeat this motion for the prescribed amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'lateral-lunge',
@@ -1684,6 +1852,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'lateral-raise',
@@ -1694,6 +1863,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'shoulders',
     frames: 3,
     instructions: ['Pick a couple of dumbbells and stand with a straight torso and the dumbbells by your side at arms length with the palms of the hand facing you. This will be your starting position.', 'While maintaining the torso in a stationary position (no swinging), lift the dumbbells to your side with a slight bend on the elbow and the hands slightly tilted forward as if pouring water in a glass. Continue to go up until you arms are parallel to the floor. Exhale as you execute this movement and pause for a second at the top.', 'Lower the dumbbells back down slowly to the starting position as you inhale.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'lateral-shuffle',
@@ -1704,6 +1874,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'leg-curl',
@@ -1714,6 +1885,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'hamstrings',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'leg-extension',
@@ -1724,6 +1896,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: ['For this exercise you will need to use a leg extension machine. First choose your weight and sit on the machine with your legs under the pad (feet pointed forward) and the hands holding the side bars. This will be your starting position. Tip: You will need to adjust the pad so that it falls on top of your lower leg (just above your feet). Also, make sure that your legs form a 90-degree angle between the lower and upper leg. If the angle is less than 90-degrees then that means the knee is over the toes which in turn creates undue stress at the knee joint. If the machine is designed that way, either look for another machine or just make sure that when you start executing the exercise you stop going down once you hit the 90-degree angle.', 'Using your quadriceps, extend your legs to the maximum as you exhale. Ensure that the rest of the body remains stationary on the seat. Pause a second on the contracted position.', 'Slowly lower the weight back to the original position as you inhale, ensuring that you do not go past the 90-degree angle limit.', 'Repeat for the recommended amount of times.'],
+    photo: false,
   },
   {
     slug: 'leg-press',
@@ -1734,6 +1907,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: ['Using a leg press machine, sit down on the machine and place your legs on the platform directly in front of you at a medium (shoulder width) foot stance. (Note: For the purposes of this discussion we will use the medium stance described above which targets overall development; however you can choose any of the three stances described in the foot positioning section).', 'Lower the safety bars holding the weighted platform in place and press the platform all the way up until your legs are fully extended in front of you. Tip: Make sure that you do not lock your knees. Your torso and the legs should make a perfect 90-degree angle. This will be your starting position.', 'As you inhale, slowly lower the platform until your upper and lower legs make a 90-degree angle.', 'Pushing mainly with the heels of your feet and using the quadriceps go back to the starting position as you exhale.', 'Repeat for the recommended amount of repetitions and ensure to lock the safety pins properly once you are done. You do not want that platform falling on you fully loaded.'],
+    photo: false,
   },
   {
     slug: 'leg-press-calf-raise',
@@ -1744,6 +1918,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'calves',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'leg-swings-stretch',
@@ -1754,6 +1929,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: null,
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'lying-hamstring-walkout',
@@ -1764,6 +1940,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'hamstrings',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'lying-leg-curl',
@@ -1774,6 +1951,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'hamstrings',
     frames: 3,
     instructions: ['Adjust the machine lever to fit your height and lie face down on the leg curl machine with the pad of the lever on the back of your legs (just a few inches under the calves). Tip: Preferably use a leg curl machine that is angled as opposed to flat since an angled position is more favorable for hamstrings recruitment.', 'Keeping the torso flat on the bench, ensure your legs are fully stretched and grab the side handles of the machine. Position your toes straight (or you can also use any of the other two stances described on the foot positioning section). This will be your starting position.', 'As you exhale, curl your legs up as far as possible without lifting the upper legs from the pad. Once you hit the fully contracted position, hold it for a second.', 'As you inhale, bring the legs back to the initial position. Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'lying-leg-raise',
@@ -1784,6 +1962,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'machine-chest-press',
@@ -1794,6 +1973,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'chest',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'machine-glute-kickback',
@@ -1804,6 +1984,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'machine-lateral-raise',
@@ -1814,6 +1995,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'shoulders',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'machine-row',
@@ -1824,6 +2006,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'machine-shoulder-press',
@@ -1834,6 +2017,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'shoulders',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'meadows-row',
@@ -1844,6 +2028,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'mountain-climber',
@@ -1854,6 +2039,18 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: ['Begin in a pushup position, with your weight supported by your hands and toes. Flexing the knee and hip, bring one leg until the knee is approximately under the hip. This will be your starting position.', 'Explosively reverse the positions of your legs, extending the bent leg until the leg is straight and supported by the toe, and bringing the other foot up with the hip and knee flexed. Repeat in an alternating fashion for 20-30 seconds.'],
+    photo: false,
+  },
+  {
+    slug: 'neck',
+    name: 'Neck Curl (Plate)',
+    equipment: 'other',
+    primaryMuscle: 'Neck',
+    secondaryMuscles: [],
+    muscleGroup: 'neck',
+    frames: 2,
+    instructions: [],
+    photo: true,
   },
   {
     slug: 'negative-pull-up',
@@ -1864,6 +2061,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'lats',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'neutral-grip-pull-up',
@@ -1874,6 +2072,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'lats',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'nordic-hamstring-curl',
@@ -1884,6 +2083,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'hamstrings',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'one-arm-dumbbell-row',
@@ -1894,6 +2094,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: ['Choose a flat bench and place a dumbbell on each side of it.', 'Place the right leg on top of the end of the bench, bend your torso forward from the waist until your upper body is parallel to the floor, and place your right hand on the other end of the bench for support.', 'Use the left hand to pick up the dumbbell on the floor and hold the weight while keeping your lower back straight. The palm of the hand should be facing your torso. This will be your starting position.', 'Pull the resistance straight up to the side of your chest, keeping your upper arm close to your side and keeping the torso stationary. Breathe out as you perform this step. Tip: Concentrate on squeezing the back muscles once you reach the full contracted position. Also, make sure that the force is performed with the back muscles and not the arms. Finally, the upper torso should remain stationary and only the arms should move. The forearms should do no other work except for holding the dumbbell; therefore do not try to pull the dumbbell up using the forearms.', 'Lower the resistance straight down to the starting position. Breathe in as you perform this step.', 'Repeat the movement for the specified amount of repetitions.', 'Switch sides and repeat again with the other arm.'],
+    photo: false,
   },
   {
     slug: 'overhead-press',
@@ -1904,6 +2105,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'shoulders',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'overhead-tricep-extension',
@@ -1914,6 +2116,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'triceps',
     frames: 3,
     instructions: ['Attach a rope to the bottom pulley of the pulley machine.', 'Grasping the rope with both hands, extend your arms with your hands directly above your head using a neutral grip (palms facing each other). Your elbows should be in close to your head and the arms should be perpendicular to the floor with the knuckles aimed at the ceiling. This will be your starting position.', 'Slowly lower the rope behind your head as you hold the upper arms stationary. Inhale as you perform this movement and pause when your triceps are fully stretched.', 'Return to the starting position by flexing your triceps as you breathe out.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'pallof-press',
@@ -1924,6 +2127,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: ['Connect a standard handle to a tower, and—if possible—position the cable to shoulder height. If not, a low pulley will suffice.', 'With your side to the cable, grab the handle with both hands and step away from the tower. You should be approximately arm\'s length away from the pulley, with the tension of the weight on the cable.', 'With your feet positioned hip-width apart and knees slightly bent, hold the cable to the middle of your chest. This will be your starting position.', 'Press the cable away from your chest, fully extending both arms. You core should be tight and engaged.', 'Hold the repetition for several seconds before returning to the starting position.', 'At the conclusion of the set, repeat facing the other direction.'],
+    photo: false,
   },
   {
     slug: 'pec-deck',
@@ -1934,6 +2138,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'chest',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'pendlay-row',
@@ -1944,6 +2149,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'pike-push-up',
@@ -1954,6 +2160,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'shoulders',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'pistol-squat',
@@ -1964,6 +2171,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'plank',
@@ -1974,6 +2182,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: ['Get into a prone position on the floor, supporting your weight on your toes and your forearms. Your arms are bent and directly below the shoulder.', 'Keep your body straight at all times, and hold this position as long as possible. To increase difficulty, an arm or leg can be raised.'],
+    photo: false,
   },
   {
     slug: 'plank-jack',
@@ -1984,6 +2193,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'plank-shoulder-tap',
@@ -1994,6 +2204,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'plate-front-raise',
@@ -2004,6 +2215,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'shoulders',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'preacher-curl',
@@ -2014,6 +2226,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'biceps',
     frames: 3,
     instructions: ['To perform this movement you will need a preacher bench and an E-Z bar. Grab the E-Z curl bar at the close inner handle (either have someone hand you the bar which is preferable or grab the bar from the front bar rest provided by most preacher benches). The palm of your hands should be facing forward and they should be slightly tilted inwards due to the shape of the bar.', 'With the upper arms positioned against the preacher bench pad and the chest against it, hold the E-Z Curl Bar at shoulder length. This will be your starting position.', 'As you breathe in, slowly lower the bar until your upper arm is extended and the biceps is fully stretched.', 'As you exhale, use the biceps to curl the weight up until your biceps is fully contracted and the bar is at shoulder height. Squeeze the biceps hard and hold this position for a second.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'prone-t-raise',
@@ -2024,6 +2237,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'prone-y-raise',
@@ -2034,6 +2248,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'pull-up',
@@ -2044,6 +2259,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'lats',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'push-press',
@@ -2054,6 +2270,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'shoulders',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'push-up',
@@ -2064,6 +2281,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'chest',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'push-up-shoulder-tap',
@@ -2074,6 +2292,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'rack-pull',
@@ -2084,6 +2303,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: ['Set up in a power rack with the bar on the pins. The pins should be set to the desired point; just below the knees, just above, or in the mid thigh position. Position yourself against the bar in proper deadlifting position. Your feet should be under your hips, your grip shoulder width, back arched, and hips back to engage the hamstrings. Since the weight is typically heavy, you may use a mixed grip, a hook grip, or use straps to aid in holding the weight.', 'With your head looking forward, extend through the hips and knees, pulling the weight up and back until lockout. Be sure to pull your shoulders back as you complete the movement.', 'Return the weight to the pins and repeat.'],
+    photo: false,
   },
   {
     slug: 'rear-delt-fly',
@@ -2094,6 +2314,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'rear delts',
     frames: 3,
     instructions: ['Stand up straight while holding a dumbbell in each hand and with an incline bench in front of you.', 'While keeping your back straight and maintaining the natural arch of your back, lean forward until your forehead touches the bench in front of you. Let the arms hang in front of you perpendicular to the ground. The palms of your hands should be facing each other and your torso should be parallel to the floor. This will be your starting position.', 'Keeping your torso forward and stationary, and the arms straight with a slight bend at the elbows, lift the dumbbells straight to the side until both arms are parallel to the floor. Exhale as you lift the weights. Caution: avoid swinging the torso or bringing the arms back as opposed to the side.', 'After a one second contraction at the top, slowly lower the dumbbells back to the starting position.', 'Repeat the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'reverse-crunch',
@@ -2104,6 +2325,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: ['Lie down on the floor with your legs fully extended and arms to the side of your torso with the palms on the floor. Your arms should be stationary for the entire exercise.', 'Move your legs up so that your thighs are perpendicular to the floor and feet are together and parallel to the floor. This is the starting position.', 'While inhaling, move your legs towards the torso as you roll your pelvis backwards and you raise your hips off the floor. At the end of this movement your knees will be touching your chest.', 'Hold the contraction for a second and move your legs back to the starting position while exhaling.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'reverse-curl',
@@ -2114,6 +2336,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'forearms',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'reverse-hyperextension',
@@ -2124,6 +2347,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: ['Place your feet between the pads after loading an appropriate weight. Lay on the top pad, allowing your hips to hang off the back, while grasping the handles to hold your position.', 'To begin the movement, flex the hips, pulling the legs forward.', 'Reverse the motion by extending the hips, kicking the leg back. It is very important not to over-extend the hip on this movement, stopping short of your full range of motion.', 'Return by again flexing the hip, pulling the carriage forward as far as you can.', 'Repeat for the desired number of repetitions.'],
+    photo: false,
   },
   {
     slug: 'reverse-lunge',
@@ -2134,6 +2358,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'reverse-pec-deck',
@@ -2144,6 +2369,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'rear delts',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'reverse-snow-angel',
@@ -2154,6 +2380,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'romanian-deadlift',
@@ -2164,6 +2391,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'hamstrings',
     frames: 3,
     instructions: ['Put a barbell in front of you on the ground and grab it using a pronated (palms facing down) grip that a little wider than shoulder width. Tip: Depending on the weight used, you may need wrist wraps to perform the exercise and also a raised platform in order to allow for better range of motion.', 'Bend the knees slightly and keep the shins vertical, hips back and back straight. This will be your starting position.', 'Keeping your back and arms completely straight at all times, use your hips to lift the bar as you exhale. Tip: The movement should not be fast but steady and under control.', 'Once you are standing completely straight up, lower the bar by pushing the hips back, only slightly bending the knees, unlike when squatting. Tip: Take a deep breath at the start of the movement and keep your chest up. Hold your breath as you lower and exhale as you complete the movement.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'rope-hammer-curl',
@@ -2174,6 +2402,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'biceps',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'rope-tricep-pushdown',
@@ -2184,6 +2413,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'triceps',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'rowing',
@@ -2194,6 +2424,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'running',
@@ -2204,6 +2435,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'russian-twist',
@@ -2214,6 +2446,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: ['Lie down on the floor placing your feet either under something that will not move or by having a partner hold them. Your legs should be bent at the knees.', 'Elevate your upper body so that it creates an imaginary V-shape with your thighs. Your arms should be fully extended in front of you perpendicular to your torso and with the hands clasped. This is the starting position.', 'Twist your torso to the right side until your arms are parallel with the floor while breathing out.', 'Hold the contraction for a second and move back to the starting position while breathing out. Now move to the opposite side performing the same techniques you applied to the right side.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'scapular-pull-up',
@@ -2224,6 +2457,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'lats',
     frames: 3,
     instructions: ['Take a pronated grip on a pull-up bar.', 'From a hanging position, raise yourself a few inches without using your arms. Do this by depressing your shoulder girdle in a reverse shrugging motion.', 'Pause at the completion of the movement, and then slowly return to the starting position before performing more repetitions.'],
+    photo: false,
   },
   {
     slug: 'scapular-push-up',
@@ -2234,6 +2468,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'seal-jack',
@@ -2244,6 +2479,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'chest',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'seated-calf-raise',
@@ -2254,6 +2490,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'calves',
     frames: 3,
     instructions: ['Sit on the machine and place your toes on the lower portion of the platform provided with the heels extending off. Choose the toe positioning of your choice (forward, in, or out) as per the beginning of this chapter.', 'Place your lower thighs under the lever pad, which will need to be adjusted according to the height of your thighs. Now place your hands on top of the lever pad in order to prevent it from slipping forward.', 'Lift the lever slightly by pushing your heels up and release the safety bar. This will be your starting position.', 'Slowly lower your heels by bending at the ankles until the calves are fully stretched. Inhale as you perform this movement.', 'Raise the heels by extending the ankles as high as possible as you contract the calves and breathe out. Hold the top contraction for a second.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'seated-dumbbell-press',
@@ -2264,6 +2501,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'shoulders',
     frames: 3,
     instructions: ['While holding a dumbbell in each hand, sit on a military press bench or utility bench that has back support. Place the dumbbells upright on top of your thighs.', 'Now raise the dumbbells to shoulder height one at a time using your thighs to help propel them up into position.', 'Make sure to rotate your wrists so that the palms of your hands are facing forward. This is your starting position.', 'Now, exhale and push the dumbbells upward until they touch at the top.', 'Then, after a brief pause at the top contracted position, slowly lower the weights back down to the starting position while inhaling.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'seated-forward-fold-stretch',
@@ -2274,6 +2512,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'hamstrings',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'seated-knee-tuck',
@@ -2284,6 +2523,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'seated-leg-curl',
@@ -2294,6 +2534,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'hamstrings',
     frames: 3,
     instructions: ['Adjust the machine lever to fit your height and sit on the machine with your back against the back support pad.', 'Place the back of lower leg on top of padded lever (just a few inches under the calves) and secure the lap pad against your thighs, just above the knees. Then grasp the side handles on the machine as you point your toes straight (or you can also use any of the other two stances) and ensure that the legs are fully straight right in front of you. This will be your starting position.', 'As you exhale, pull the machine lever as far as possible to the back of your thighs by flexing at the knees. Keep your torso stationary at all times. Hold the contracted position for a second.', 'Slowly return to the starting position as you breathe in.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'seated-row',
@@ -2304,6 +2545,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: ['For this exercise you will need access to a low pulley row machine with a V-bar. Note: The V-bar will enable you to have a neutral grip where the palms of your hands face each other. To get into the starting position, first sit down on the machine and place your feet on the front platform or crossbar provided making sure that your knees are slightly bent and not locked.', 'Lean over as you keep the natural alignment of your back and grab the V-bar handles.', 'With your arms extended pull back until your torso is at a 90-degree angle from your legs. Your back should be slightly arched and your chest should be sticking out. You should be feeling a nice stretch on your lats as you hold the bar in front of you. This is the starting position of the exercise.', 'Keeping the torso stationary, pull the handles back towards your torso while keeping the arms close to it until you touch the abdominals. Breathe out as you perform that movement. At that point you should be squeezing your back muscles hard. Hold that contraction for a second and slowly go back to the original position while breathing in.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'shrimp-squat',
@@ -2314,6 +2556,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'shrug',
@@ -2324,6 +2567,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: ['Stand up straight with your feet at shoulder width as you hold a barbell with both hands in front of you using a pronated grip (palms facing the thighs). Tip: Your hands should be a little wider than shoulder width apart. You can use wrist wraps for this exercise for a better grip. This will be your starting position.', 'Raise your shoulders up as far as you can go as you breathe out and hold the contraction for a second. Tip: Refrain from trying to lift the barbell by using your biceps.', 'Slowly return to the starting position as you breathe in.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'side-lying-hip-abduction',
@@ -2334,6 +2578,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'side-lying-leg-raise',
@@ -2344,6 +2589,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'side-plank',
@@ -2354,6 +2600,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'side-plank-hip-dip',
@@ -2364,6 +2611,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'single-arm-cable-row',
@@ -2374,6 +2622,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'single-arm-dumbbell-tricep-extension',
@@ -2384,6 +2633,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'triceps',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'single-dumbbell-skullcrusher',
@@ -2394,6 +2644,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'triceps',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'single-leg-box-squat',
@@ -2404,6 +2655,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'single-leg-calf-raise',
@@ -2414,6 +2666,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'calves',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'single-leg-glute-bridge',
@@ -2424,6 +2677,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: ['Lay on the floor with your feet flat and knees bent.', 'Raise one leg off of the ground, pulling the knee to your chest. This will be your starting position.', 'Execute the movement by driving through the heel, extending your hip upward and raising your glutes off of the ground.', 'Extend as far as possible, pause and then return to the starting position.'],
+    photo: false,
   },
   {
     slug: 'single-leg-romanian-deadlift',
@@ -2434,6 +2688,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'hamstrings',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'sissy-squat',
@@ -2444,6 +2699,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'skater-hop',
@@ -2454,6 +2710,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'skater-squat',
@@ -2464,6 +2721,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'skierg',
@@ -2474,6 +2732,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'skull-crusher',
@@ -2484,6 +2743,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'triceps',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'smith-machine-bench-press',
@@ -2494,6 +2754,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'chest',
     frames: 3,
     instructions: ['Place a flat bench underneath the smith machine. Now place the barbell at a height that you can reach when lying down and your arms are almost fully extended. Once the weight you need is selected, lie down on the flat bench. Using a pronated grip that is wider than shoulder width, unlock the bar from the rack and hold it straight over you with your arms locked. This will be your starting position.', 'As you breathe in, come down slowly until you feel the bar on your middle chest.', 'After a second pause, bring the bar back to the starting position as you breathe out and push the bar using your chest muscles. Lock your arms in the contracted position, hold for a second and then start coming down slowly again. Tip: It should take at least twice as long to go down than to come up.', 'Repeat the movement for the prescribed amount of repetitions.', 'When you are done, lock the bar back in the rack.'],
+    photo: false,
   },
   {
     slug: 'smith-machine-bulgarian-split-squat',
@@ -2504,6 +2765,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'smith-machine-hip-thrust',
@@ -2514,6 +2776,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'glutes',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'smith-machine-reverse-lunge',
@@ -2524,6 +2787,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'smith-machine-romanian-deadlift',
@@ -2534,6 +2798,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'hamstrings',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'smith-machine-split-squat',
@@ -2544,6 +2809,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'smith-machine-squat',
@@ -2554,6 +2820,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: ['To begin, first set the bar on the height that best matches your height. Once the correct height is chosen and the bar is loaded, step under the bar and place the back of your shoulders (slightly below the neck) across it.', 'Hold on to the bar using both arms at each side (palms facing forward), unlock it and lift it off the rack by first pushing with your legs and at the same time straightening your torso.', 'Position your legs using a shoulder width medium stance with the toes slightly pointed out. Keep your head up at all times and also maintain a straight back. This will be your starting position. (Note: For the purposes of this discussion we will use the medium stance which targets overall development; however you can choose any of the three stances discussed in the foot stances section).', 'Begin to slowly lower the bar by bending the knees as you maintain a straight posture with the head up. Continue down until the angle between the upper leg and the calves becomes slightly less than 90-degrees (which is the point in which the upper legs are below parallel to the floor). Inhale as you perform this portion of the movement. Tip: If you performed the exercise correctly, the front of the knees should make an imaginary straight line with the toes that is perpendicular to the front. If your knees are past that imaginary line (if they are past your toes) then you are placing undue stress on the knee and the exercise has been performed incorrectly.', 'Begin to raise the bar as you exhale by pushing the floor with the heel of your foot as you straighten the legs again and go back to the starting position.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'spider-curl',
@@ -2564,6 +2831,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'biceps',
     frames: 3,
     instructions: ['Start out by setting the bar on the part of the preacher bench that you would normally sit on. Make sure to align the barbell properly so that it is balanced and will not fall off.', 'Move to the front side of the preacher bench (the part where the arms usually lay) and position yourself to lay at a 45 degree slant with your torso and stomach pressed against the front side of the preacher bench.', 'Make sure that your feet (especially the toes) are well positioned on the floor and place your upper arms on top of the pad located on the inside part of the preacher bench.', 'Use your arms to grab the barbell with a supinated grip (palms facing up) at about shoulder width apart or slightly closer from each other.', 'Slowly begin to lift the barbell upwards and exhale. Hold the contracted position for a second as you squeeze the biceps.', 'Slowly begin to bring the barbell back to the starting position as your breathe in. .', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'split-squat',
@@ -2574,6 +2842,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: ['Being in a standing position. Jump into a split leg position, with one leg forward and one leg back, flexing the knees and lowering your hips slightly as you do so.', 'As you descend, immediately reverse direction, standing back up and jumping, reversing the position of your legs. Repeat 5-10 times on each leg.'],
+    photo: false,
   },
   {
     slug: 'sprawl',
@@ -2584,6 +2853,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'squat',
@@ -2594,6 +2864,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: ['This exercise is best performed inside a squat rack for safety purposes. To begin, first set the bar on a rack to just below shoulder level. Once the correct height is chosen and the bar is loaded, step under the bar and place the back of your shoulders (slightly below the neck) across it.', 'Hold on to the bar using both arms at each side and lift it off the rack by first pushing with your legs and at the same time straightening your torso.', 'Step away from the rack and position your legs using a shoulder width medium stance with the toes slightly pointed out. Keep your head up at all times and also maintain a straight back. This will be your starting position. (Note: For the purposes of this discussion we will use the medium stance described above which targets overall development; however you can choose any of the three stances discussed in the foot stances section).', 'Begin to slowly lower the bar by bending the knees and hips as you maintain a straight posture with the head up. Continue down until the angle between the upper leg and the calves becomes slightly less than 90-degrees. Inhale as you perform this portion of the movement. Tip: If you performed the exercise correctly, the front of the knees should make an imaginary straight line with the toes that is perpendicular to the front. If your knees are past that imaginary line (if they are past your toes) then you are placing undue stress on the knee and the exercise has been performed incorrectly.', 'Begin to raise the bar as you exhale by pushing the floor with the heel of your foot as you straighten the legs again and go back to the starting position.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'squat-thrust',
@@ -2604,6 +2875,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'stability-ball-hamstring-curl',
@@ -2614,6 +2886,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'hamstrings',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'stair-climber',
@@ -2624,6 +2897,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'standing-calf-raise',
@@ -2634,6 +2908,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'calves',
     frames: 3,
     instructions: ['Adjust the padded lever of the calf raise machine to fit your height.', 'Place your shoulders under the pads provided and position your toes facing forward (or using any of the two other positions described at the beginning of the chapter). The balls of your feet should be secured on top of the calf block with the heels extending off it. Push the lever up by extending your hips and knees until your torso is standing erect. The knees should be kept with a slight bend; never locked. Toes should be facing forward, outwards or inwards as described at the beginning of the chapter. This will be your starting position.', 'Raise your heels as you breathe out by extending your ankles as high as possible and flexing your calf. Ensure that the knee is kept stationary at all times. There should be no bending at any time. Hold the contracted position by a second before you start to go back down.', 'Go back slowly to the starting position as you breathe in by lowering your heels as you bend the ankles until calves are stretched.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'standing-dumbbell-press',
@@ -2644,6 +2919,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'shoulders',
     frames: 3,
     instructions: ['Standing with your feet shoulder width apart, take a dumbbell in each hand. Raise the dumbbells to head height, the elbows out and about 90 degrees. This will be your starting position.', 'Maintaining strict technique with no leg drive or leaning back, extend through the elbow to raise the weights together directly above your head.', 'Pause, and slowly return the weight to the starting position.'],
+    photo: false,
   },
   {
     slug: 'standing-quad-stretch',
@@ -2654,6 +2930,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'step-down',
@@ -2664,6 +2941,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'step-up',
@@ -2674,6 +2952,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'straight-arm-pulldown',
@@ -2684,6 +2963,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'lats',
     frames: 3,
     instructions: ['You will start by grabbing the wide bar from the top pulley of a pulldown machine and using a wider than shoulder-width pronated (palms down) grip. Step backwards two feet or so.', 'Bend your torso forward at the waist by around 30-degrees with your arms fully extended in front of you and a slight bend at the elbows. If your arms are not fully extended then you need to step a bit more backwards until they are. Once your arms are fully extended and your torso is slightly bent at the waist, tighten the lats and then you are ready to begin.', 'While keeping the arms straight, pull the bar down by contracting the lats until your hands are next to the side of the thighs. Breathe out as you perform this step.', 'While keeping the arms straight, go back to the starting position while breathing in.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'sumo-deadlift',
@@ -2694,6 +2974,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'hamstrings',
     frames: 3,
     instructions: ['Begin with a bar loaded on the ground. Approach the bar so that the bar intersects the middle of the feet. The feet should be set very wide, near the collars. Bend at the hips to grip the bar. The arms should be directly below the shoulders, inside the legs, and you can use a pronated grip, a mixed grip, or hook grip. Relax the shoulders, which in effect lengthens your arms.', 'Take a breath, and then lower your hips, looking forward with your head with your chest up. Drive through the floor, spreading your feet apart, with your weight on the back half of your feet. Extend through the hips and knees.', 'As the bar passes through the knees, lean back and drive the hips into the bar, pulling your shoulder blades together.', 'Return the weight to the ground by bending at the hips and controlling the weight on the way down.'],
+    photo: false,
   },
   {
     slug: 'superman',
@@ -2704,6 +2985,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'lower back',
     frames: 3,
     instructions: ['To begin, lie straight and face down on the floor or exercise mat. Your arms should be fully extended in front of you. This is the starting position.', 'Simultaneously raise your arms, legs, and chest off of the floor and hold this contraction for 2 seconds. Tip: Squeeze your lower back to get the best results from this exercise. Remember to exhale during this movement. Note: When holding the contracted position, you should look like superman when he is flying.', 'Slowly begin to lower your arms, legs and chest back down to the starting position while inhaling.', 'Repeat for the recommended amount of repetitions prescribed in your program.'],
+    photo: false,
   },
   {
     slug: 'superman-hold',
@@ -2714,6 +2996,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'lower back',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'swimming',
@@ -2724,6 +3007,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 't-bar-row',
@@ -2734,6 +3018,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'toe-touch',
@@ -2744,6 +3029,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'torso-twist-stretch',
@@ -2754,6 +3040,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: null,
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'towel-hamstring-curl',
@@ -2764,6 +3051,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'hamstrings',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'towel-pull-up',
@@ -2774,6 +3062,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'lats',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'towel-row',
@@ -2784,6 +3073,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'upper back',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'trap-bar-deadlift',
@@ -2794,6 +3084,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'hamstrings',
     frames: 3,
     instructions: ['For this exercise load a trap bar, also known as a hex bar, to an appropriate weight resting on the ground. Stand in the center of the apparatus and grasp both handles.', 'Lower your hips, look forward with your head and keep your chest up.', 'Begin the movement by driving through the heels and extend your hips and knees. Avoid rounding your back at all times.', 'At the completion of the movement, lower the weight back to the ground under control.'],
+    photo: false,
   },
   {
     slug: 'treadmill-incline-walk',
@@ -2804,6 +3095,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'tricep-kickback',
@@ -2814,6 +3106,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'triceps',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'tricep-pushdown',
@@ -2824,6 +3117,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'triceps',
     frames: 3,
     instructions: ['Attach a straight or angled bar to a high pulley and grab with an overhand grip (palms facing down) at shoulder width.', 'Standing upright with the torso straight and a very small inclination forward, bring the upper arms close to your body and perpendicular to the floor. The forearms should be pointing up towards the pulley as they hold the bar. This is your starting position.', 'Using the triceps, bring the bar down until it touches the front of your thighs and the arms are fully extended perpendicular to the floor. The upper arms should always remain stationary next to your torso and only the forearms should move. Exhale as you perform this movement.', 'After a second hold at the contracted position, bring the bar slowly up to the starting point. Breathe in as you perform this step.', 'Repeat for the recommended amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'typewriter-push-up',
@@ -2834,6 +3128,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'chest',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'upright-row',
@@ -2844,6 +3139,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'shoulders',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'v-up',
@@ -2854,6 +3150,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'walking',
@@ -2864,6 +3161,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'walking-lunge',
@@ -2874,6 +3172,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'wall-calf-stretch',
@@ -2884,6 +3183,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'calves',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'wall-handstand-push-up',
@@ -2894,6 +3194,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'shoulders',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'wall-push-up',
@@ -2904,6 +3205,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'chest',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'wall-sit',
@@ -2914,6 +3216,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'quads',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'wall-walk',
@@ -2924,6 +3227,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'shoulders',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'weighted-chin-up',
@@ -2934,6 +3238,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'biceps',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'weighted-crunch',
@@ -2944,6 +3249,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'weighted-dip',
@@ -2954,6 +3260,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'triceps',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'weighted-pull-up',
@@ -2964,6 +3271,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'lats',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'weighted-push-up',
@@ -2974,6 +3282,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'chest',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'weighted-russian-twist',
@@ -2984,6 +3293,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'abs',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'wide-grip-lat-pulldown',
@@ -2994,6 +3304,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'lats',
     frames: 3,
     instructions: ['Sit down on a pull-down machine with a wide bar attached to the top pulley. Make sure that you adjust the knee pad of the machine to fit your height. These pads will prevent your body from being raised by the resistance attached to the bar.', 'Grab the bar with the palms facing forward using the prescribed grip. Note on grips: For a wide grip, your hands need to be spaced out at a distance wider than shoulder width. For a medium grip, your hands need to be spaced out at a distance equal to your shoulder width and for a close grip at a distance smaller than your shoulder width.', 'As you have both arms extended in front of you holding the bar at the chosen grip width, bring your torso back around 30 degrees or so while creating a curvature on your lower back and sticking your chest out. This is your starting position.', 'As you breathe out, bring the bar down until it touches your upper chest by drawing the shoulders and the upper arms down and back. Tip: Concentrate on squeezing the back muscles once you reach the full contracted position. The upper torso should remain stationary and only the arms should move. The forearms should do no other work except for holding the bar; therefore do not try to pull down the bar using the forearms.', 'After a second at the contracted position squeezing your shoulder blades together, slowly raise the bar back to the starting position when your arms are fully extended and the lats are fully stretched. Inhale during this portion of the movement.', 'Repeat this motion for the prescribed amount of repetitions.'],
+    photo: false,
   },
   {
     slug: 'wide-push-up',
@@ -3004,6 +3315,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'chest',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'worlds-greatest-stretch',
@@ -3014,6 +3326,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: null,
     frames: 3,
     instructions: ['This is a three-part stretch. Begin by lunging forward, with your front foot flat on the ground and on the toes of your back foot. With your knees bent, squat down until your knee is almost touching the ground. Keep your torso erect, and hold this position for 10-20 seconds.', 'Now, place the arm on the same side as your front leg on the ground, with the elbow next to the foot. Your other hand should be placed on the ground, parallel to your lead leg, to help support you during this portion of the stretch.', 'After 10-20 seconds, place your hands on either side of your front foot. Raise the toes of the front foot off of the ground, and straighten your leg. You may need to reposition your rear leg to do so. Hold for 10-20 seconds, and then repeat the entire sequence for the other side.'],
+    photo: false,
   },
   {
     slug: 'wrist-curl',
@@ -3024,6 +3337,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'forearms',
     frames: 3,
     instructions: [],
+    photo: false,
   },
   {
     slug: 'wrist-extension',
@@ -3034,6 +3348,7 @@ export const EXERCISE_DEMOS: ExerciseDemo[] = [
     muscleGroup: 'forearms',
     frames: 3,
     instructions: [],
+    photo: false,
   },
 ];
 
@@ -3050,9 +3365,10 @@ export function demoFrameUrl(slug: string, frame: number): string {
 /**
  * The workout-guide manifest's own curation order (major/canonical lifts first, e.g. "Bench Press"
  * before its variants), used only to break search ties — not exported, and unrelated to the
- * alphabetical order of EXERCISE_DEMOS above.
+ * alphabetical order of EXERCISE_DEMOS above. Bespoke assets/custom-demos/ entries are appended
+ * after the package's own order.
  */
-const MANIFEST_ORDER: string[] = ['bench-press', 'incline-bench-press', 'incline-dumbbell-press', 'dumbbell-bench-press', 'decline-bench-press', 'machine-chest-press', 'pec-deck', 'cable-fly', 'push-up', 'weighted-push-up', 'overhead-press', 'seated-dumbbell-press', 'arnold-press', 'lateral-raise', 'cable-lateral-raise', 'front-raise', 'rear-delt-fly', 'reverse-pec-deck', 'face-pull', 'upright-row', 'deadlift', 'romanian-deadlift', 'barbell-row', 't-bar-row', 'dumbbell-bent-over-row', 'one-arm-dumbbell-row', 'chest-supported-row', 'seated-row', 'machine-row', 'lat-pulldown', 'close-grip-lat-pulldown', 'straight-arm-pulldown', 'pull-up', 'assisted-pull-up', 'weighted-pull-up', 'chin-up', 'shrug', 'squat', 'front-squat', 'hack-squat', 'leg-press', 'bulgarian-split-squat', 'walking-lunge', 'step-up', 'leg-extension', 'leg-curl', 'seated-leg-curl', 'hip-thrust', 'glute-bridge', 'good-morning', 'standing-calf-raise', 'seated-calf-raise', 'bicep-curl', 'hammer-curl', 'preacher-curl', 'cable-curl', 'reverse-curl', 'wrist-curl', 'tricep-pushdown', 'overhead-tricep-extension', 'skull-crusher', 'close-grip-bench-press', 'dip', 'assisted-dip', 'plank', 'side-plank', 'hanging-leg-raise', 'cable-crunch', 'ab-wheel', 'running', 'walking', 'cycling', 'rowing', 'stair-climber', 'dumbbell-fly', 'incline-cable-fly', 'decline-dumbbell-press', 'smith-machine-bench-press', 'landmine-press', 'chest-dip', 'weighted-dip', 'machine-shoulder-press', 'standing-dumbbell-press', 'push-press', 'machine-lateral-raise', 'cable-front-raise', 'plate-front-raise', 'bent-over-rear-delt-raise', 'cable-rear-delt-fly', 'pendlay-row', 'inverted-row', 'meadows-row', 'single-arm-cable-row', 'wide-grip-lat-pulldown', 'neutral-grip-pull-up', 'assisted-chin-up', 'weighted-chin-up', 'rack-pull', 'back-extension', 'dumbbell-shrug', 'goblet-squat', 'smith-machine-squat', 'belt-squat', 'sumo-deadlift', 'trap-bar-deadlift', 'lying-leg-curl', 'nordic-hamstring-curl', 'single-leg-romanian-deadlift', 'reverse-lunge', 'split-squat', 'cable-kickback', 'hip-abduction-machine', 'single-leg-glute-bridge', 'barbell-glute-bridge', 'dumbbell-glute-bridge', 'dumbbell-hip-thrust', 'smith-machine-hip-thrust', 'smith-machine-romanian-deadlift', 'dumbbell-romanian-deadlift', 'kettlebell-romanian-deadlift', 'cable-pull-through', 'machine-glute-kickback', 'cable-standing-hip-abduction', 'cable-standing-hip-adduction', 'hip-adduction-machine', 'smith-machine-bulgarian-split-squat', 'smith-machine-reverse-lunge', 'smith-machine-split-squat', 'heel-elevated-goblet-squat', 'dumbbell-sumo-squat', 'dumbbell-sumo-deadlift', 'front-foot-elevated-split-squat', 'deficit-reverse-lunge', 'dumbbell-lateral-lunge', 'dumbbell-curtsy-lunge', 'landmine-squat', 'landmine-romanian-deadlift', 'kettlebell-swing', 'glute-focused-back-extension', 'reverse-hyperextension', 'donkey-calf-raise', 'leg-press-calf-raise', 'wall-sit', 'jump-squat', 'incline-dumbbell-curl', 'concentration-curl', 'ez-bar-curl', 'spider-curl', 'rope-hammer-curl', 'drag-curl', 'rope-tricep-pushdown', 'dumbbell-skull-crusher', 'single-dumbbell-skullcrusher', 'dumbbell-overhead-tricep-extension', 'single-arm-dumbbell-tricep-extension', 'bench-dip', 'tricep-kickback', 'wrist-extension', 'farmer-carry', 'crunch', 'reverse-crunch', 'russian-twist', 'bicycle-crunch', 'mountain-climber', 'dead-bug', 'bird-dog', 'pallof-press', 'cable-woodchop', 'half-kneeling-pallof-press', 'cable-pallof-hold', 'hanging-knee-raise', 'captains-chair-knee-raise', 'decline-sit-up', 'weighted-crunch', 'weighted-russian-twist', 'dumbbell-side-bend', 'elliptical', 'swimming', 'jump-rope', 'assault-bike', 'skierg', 'hiking', 'treadmill-incline-walk', 'battle-ropes', 'incline-push-up', 'knee-push-up', 'wide-push-up', 'diamond-push-up', 'decline-push-up', 'pike-push-up', 'feet-elevated-pike-push-up', 'archer-push-up', 'typewriter-push-up', 'explosive-push-up', 'hindu-push-up', 'scapular-push-up', 'push-up-shoulder-tap', 'wall-push-up', 'wall-walk', 'wall-handstand-push-up', 'handstand-push-up', 'chair-dip', 'doorway-row', 'towel-row', 'prone-y-raise', 'prone-t-raise', 'superman', 'superman-hold', 'reverse-snow-angel', 'dead-hang', 'active-hang', 'scapular-pull-up', 'negative-pull-up', 'commando-pull-up', 'l-sit-pull-up', 'towel-pull-up', 'bodyweight-squat', 'pistol-squat', 'assisted-pistol-squat', 'shrimp-squat', 'cossack-squat', 'sissy-squat', 'forward-lunge', 'lateral-lunge', 'curtsy-lunge', 'skater-squat', 'single-leg-box-squat', 'step-down', 'calf-raise', 'single-leg-calf-raise', 'glute-bridge-march', 'frog-pump', 'donkey-kick', 'fire-hydrant', 'clamshell', 'hip-airplane', 'side-lying-hip-abduction', 'side-lying-leg-raise', 'lying-hamstring-walkout', 'towel-hamstring-curl', 'stability-ball-hamstring-curl', 'banded-glute-bridge', 'banded-hip-thrust', 'banded-frog-pump', 'banded-clamshell', 'banded-lateral-walk', 'banded-monster-walk', 'banded-squat', 'banded-donkey-kick', 'banded-fire-hydrant', 'banded-kickback', 'banded-standing-hip-abduction', 'banded-seated-hip-abduction', 'band-pull-apart', 'banded-face-pull', 'banded-row', 'banded-lat-pulldown', 'banded-pallof-press', 'banded-woodchop', 'banded-dead-bug', 'hollow-body-hold', 'hollow-rock', 'v-up', 'flutter-kick', 'lying-leg-raise', 'toe-touch', 'heel-tap', 'plank-shoulder-tap', 'plank-jack', 'bear-plank', 'bear-crawl', 'crab-walk', 'inchworm', 'l-sit-hold', 'seated-knee-tuck', 'side-plank-hip-dip', 'copenhagen-plank', 'dragon-flag', 'burpee', 'half-burpee', 'squat-thrust', 'high-knees', 'jumping-jack', 'skater-hop', 'lateral-shuffle', 'fast-feet', 'sprawl', 'seal-jack', 'cat-cow-stretch', 'arm-circles', 'worlds-greatest-stretch', 'leg-swings-stretch', 'torso-twist-stretch', 'doorway-chest-stretch', 'childs-pose', 'kneeling-hip-flexor-stretch', 'hamstring-stretch', 'standing-quad-stretch', 'seated-forward-fold-stretch', 'cross-body-shoulder-stretch', 'wall-calf-stretch', 'butterfly-stretch'];
+const MANIFEST_ORDER: string[] = ['bench-press', 'incline-bench-press', 'incline-dumbbell-press', 'dumbbell-bench-press', 'decline-bench-press', 'machine-chest-press', 'pec-deck', 'cable-fly', 'push-up', 'weighted-push-up', 'overhead-press', 'seated-dumbbell-press', 'arnold-press', 'lateral-raise', 'cable-lateral-raise', 'front-raise', 'rear-delt-fly', 'reverse-pec-deck', 'face-pull', 'upright-row', 'deadlift', 'romanian-deadlift', 'barbell-row', 't-bar-row', 'dumbbell-bent-over-row', 'one-arm-dumbbell-row', 'chest-supported-row', 'seated-row', 'machine-row', 'lat-pulldown', 'close-grip-lat-pulldown', 'straight-arm-pulldown', 'pull-up', 'assisted-pull-up', 'weighted-pull-up', 'chin-up', 'shrug', 'squat', 'front-squat', 'hack-squat', 'leg-press', 'bulgarian-split-squat', 'walking-lunge', 'step-up', 'leg-extension', 'leg-curl', 'seated-leg-curl', 'hip-thrust', 'glute-bridge', 'good-morning', 'standing-calf-raise', 'seated-calf-raise', 'bicep-curl', 'hammer-curl', 'preacher-curl', 'cable-curl', 'reverse-curl', 'wrist-curl', 'tricep-pushdown', 'overhead-tricep-extension', 'skull-crusher', 'close-grip-bench-press', 'dip', 'assisted-dip', 'plank', 'side-plank', 'hanging-leg-raise', 'cable-crunch', 'ab-wheel', 'running', 'walking', 'cycling', 'rowing', 'stair-climber', 'dumbbell-fly', 'incline-cable-fly', 'decline-dumbbell-press', 'smith-machine-bench-press', 'landmine-press', 'chest-dip', 'weighted-dip', 'machine-shoulder-press', 'standing-dumbbell-press', 'push-press', 'machine-lateral-raise', 'cable-front-raise', 'plate-front-raise', 'bent-over-rear-delt-raise', 'cable-rear-delt-fly', 'pendlay-row', 'inverted-row', 'meadows-row', 'single-arm-cable-row', 'wide-grip-lat-pulldown', 'neutral-grip-pull-up', 'assisted-chin-up', 'weighted-chin-up', 'rack-pull', 'back-extension', 'dumbbell-shrug', 'goblet-squat', 'smith-machine-squat', 'belt-squat', 'sumo-deadlift', 'trap-bar-deadlift', 'lying-leg-curl', 'nordic-hamstring-curl', 'single-leg-romanian-deadlift', 'reverse-lunge', 'split-squat', 'cable-kickback', 'hip-abduction-machine', 'single-leg-glute-bridge', 'barbell-glute-bridge', 'dumbbell-glute-bridge', 'dumbbell-hip-thrust', 'smith-machine-hip-thrust', 'smith-machine-romanian-deadlift', 'dumbbell-romanian-deadlift', 'kettlebell-romanian-deadlift', 'cable-pull-through', 'machine-glute-kickback', 'cable-standing-hip-abduction', 'cable-standing-hip-adduction', 'hip-adduction-machine', 'smith-machine-bulgarian-split-squat', 'smith-machine-reverse-lunge', 'smith-machine-split-squat', 'heel-elevated-goblet-squat', 'dumbbell-sumo-squat', 'dumbbell-sumo-deadlift', 'front-foot-elevated-split-squat', 'deficit-reverse-lunge', 'dumbbell-lateral-lunge', 'dumbbell-curtsy-lunge', 'landmine-squat', 'landmine-romanian-deadlift', 'kettlebell-swing', 'glute-focused-back-extension', 'reverse-hyperextension', 'donkey-calf-raise', 'leg-press-calf-raise', 'wall-sit', 'jump-squat', 'incline-dumbbell-curl', 'concentration-curl', 'ez-bar-curl', 'spider-curl', 'rope-hammer-curl', 'drag-curl', 'rope-tricep-pushdown', 'dumbbell-skull-crusher', 'single-dumbbell-skullcrusher', 'dumbbell-overhead-tricep-extension', 'single-arm-dumbbell-tricep-extension', 'bench-dip', 'tricep-kickback', 'wrist-extension', 'farmer-carry', 'crunch', 'reverse-crunch', 'russian-twist', 'bicycle-crunch', 'mountain-climber', 'dead-bug', 'bird-dog', 'pallof-press', 'cable-woodchop', 'half-kneeling-pallof-press', 'cable-pallof-hold', 'hanging-knee-raise', 'captains-chair-knee-raise', 'decline-sit-up', 'weighted-crunch', 'weighted-russian-twist', 'dumbbell-side-bend', 'elliptical', 'swimming', 'jump-rope', 'assault-bike', 'skierg', 'hiking', 'treadmill-incline-walk', 'battle-ropes', 'incline-push-up', 'knee-push-up', 'wide-push-up', 'diamond-push-up', 'decline-push-up', 'pike-push-up', 'feet-elevated-pike-push-up', 'archer-push-up', 'typewriter-push-up', 'explosive-push-up', 'hindu-push-up', 'scapular-push-up', 'push-up-shoulder-tap', 'wall-push-up', 'wall-walk', 'wall-handstand-push-up', 'handstand-push-up', 'chair-dip', 'doorway-row', 'towel-row', 'prone-y-raise', 'prone-t-raise', 'superman', 'superman-hold', 'reverse-snow-angel', 'dead-hang', 'active-hang', 'scapular-pull-up', 'negative-pull-up', 'commando-pull-up', 'l-sit-pull-up', 'towel-pull-up', 'bodyweight-squat', 'pistol-squat', 'assisted-pistol-squat', 'shrimp-squat', 'cossack-squat', 'sissy-squat', 'forward-lunge', 'lateral-lunge', 'curtsy-lunge', 'skater-squat', 'single-leg-box-squat', 'step-down', 'calf-raise', 'single-leg-calf-raise', 'glute-bridge-march', 'frog-pump', 'donkey-kick', 'fire-hydrant', 'clamshell', 'hip-airplane', 'side-lying-hip-abduction', 'side-lying-leg-raise', 'lying-hamstring-walkout', 'towel-hamstring-curl', 'stability-ball-hamstring-curl', 'banded-glute-bridge', 'banded-hip-thrust', 'banded-frog-pump', 'banded-clamshell', 'banded-lateral-walk', 'banded-monster-walk', 'banded-squat', 'banded-donkey-kick', 'banded-fire-hydrant', 'banded-kickback', 'banded-standing-hip-abduction', 'banded-seated-hip-abduction', 'band-pull-apart', 'banded-face-pull', 'banded-row', 'banded-lat-pulldown', 'banded-pallof-press', 'banded-woodchop', 'banded-dead-bug', 'hollow-body-hold', 'hollow-rock', 'v-up', 'flutter-kick', 'lying-leg-raise', 'toe-touch', 'heel-tap', 'plank-shoulder-tap', 'plank-jack', 'bear-plank', 'bear-crawl', 'crab-walk', 'inchworm', 'l-sit-hold', 'seated-knee-tuck', 'side-plank-hip-dip', 'copenhagen-plank', 'dragon-flag', 'burpee', 'half-burpee', 'squat-thrust', 'high-knees', 'jumping-jack', 'skater-hop', 'lateral-shuffle', 'fast-feet', 'sprawl', 'seal-jack', 'cat-cow-stretch', 'arm-circles', 'worlds-greatest-stretch', 'leg-swings-stretch', 'torso-twist-stretch', 'doorway-chest-stretch', 'childs-pose', 'kneeling-hip-flexor-stretch', 'hamstring-stretch', 'standing-quad-stretch', 'seated-forward-fold-stretch', 'cross-body-shoulder-stretch', 'wall-calf-stretch', 'butterfly-stretch', 'neck'];
 const ORDER_INDEX = new Map(MANIFEST_ORDER.map((slug, i) => [slug, i]));
 const byManifestOrder = (a: ExerciseDemo, b: ExerciseDemo) => (ORDER_INDEX.get(a.slug) ?? 0) - (ORDER_INDEX.get(b.slug) ?? 0);
 

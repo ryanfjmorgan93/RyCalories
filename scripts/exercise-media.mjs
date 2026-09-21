@@ -4,8 +4,12 @@
  *
  * For every exercise in @bryllim/workout-guide's manifest, converts its three 512×512 PNG frames
  * to 4-colour palette PNG at 384px wide into public/exercises/<slug>/{1,2,3}.png, skipping files that
- * are already newer than their source so re-runs are fast. Then writes src/data/exerciseDemos.ts
- * deterministically (sorted by slug).
+ * are already newer than their source so re-runs are fast. Also picks up bespoke demos committed
+ * under assets/custom-demos/ (see assets/custom-demos/manifest.json) — SVG/PNG/JPEG frames run
+ * through the same sharp pipeline (resize + recompress) so they're indistinguishable in weight from
+ * the generated ones, except that a manifest entry marked `"photo": true` skips the 4-colour palette
+ * quantisation that would posterise a photograph (see PHOTO_ note below). Then writes
+ * src/data/exerciseDemos.ts deterministically (sorted by slug).
  *
  * Usage: node scripts/exercise-media.mjs
  */
@@ -19,10 +23,12 @@ import { dirname, join } from 'node:path';
 const PKG_ROOT = fileURLToPath(new URL('../node_modules/@bryllim/workout-guide/', import.meta.url));
 const OUT_DIR = fileURLToPath(new URL('../public/exercises/', import.meta.url));
 const DATA_FILE = fileURLToPath(new URL('../src/data/exerciseDemos.ts', import.meta.url));
+const CUSTOM_ROOT = fileURLToPath(new URL('../assets/custom-demos/', import.meta.url));
 
 const WIDTH = 384;
-// The frames are monochrome line art on a transparent background. A 4-colour palette PNG keeps
+// Most frames are monochrome line art on a transparent background. A 4-colour palette PNG keeps
 // them crisp at a quarter of the size of lossy WebP (measured: ~4 KB a frame against ~15 KB).
+// Photo demos (manifest `"photo": true`) skip this — see convertFrame below.
 const COLOURS = 4;
 const TARGET_BYTES = 8 * 1024 * 1024;
 
@@ -45,6 +51,9 @@ const MUSCLE_MAP = {
   Legs: 'quads',
   'Lower Back': 'lower back',
   Mobility: null,
+  // No workout-guide category has a neck entry — this key exists only for bespoke demos
+  // committed under assets/custom-demos/ (e.g. "neck").
+  Neck: 'neck',
   'Posterior Chain': 'hamstrings',
   Quads: 'quads',
   'Rear Delts': 'rear delts',
@@ -61,28 +70,118 @@ try {
   console.warn('src/data/exerciseInstructions.json not found — demos will have no instructions. Run scripts/fetch-instructions.mjs first.');
 }
 
+// ---------------------------------------------------------------------------
+// Bespoke, hand-drawn demos committed under assets/custom-demos/ (manifest.json + <slug>/<n>.svg).
+// Not present in the @bryllim/workout-guide package (e.g. "neck", which the package has no
+// muscle group or exercises for at all).
+
+/** @type {{slug:string, name:string, equipment:string, primaryMuscle:string, secondaryMuscles:string[], instructions:string[], photo?:boolean}[]} */
+let customManifest = [];
+try {
+  customManifest = JSON.parse(await readFile(join(CUSTOM_ROOT, 'manifest.json'), 'utf8'));
+} catch (err) {
+  if (err.code !== 'ENOENT') throw err;
+}
+
+const packageSlugs = new Set(manifest.map((ex) => ex.slug));
+const seenCustomSlugs = new Set();
+for (const custom of customManifest) {
+  if (packageSlugs.has(custom.slug)) {
+    throw new Error(
+      `assets/custom-demos/manifest.json: slug "${custom.slug}" collides with a @bryllim/workout-guide package slug. Rename the custom demo.`,
+    );
+  }
+  if (seenCustomSlugs.has(custom.slug)) {
+    throw new Error(`assets/custom-demos/manifest.json: duplicate slug "${custom.slug}".`);
+  }
+  seenCustomSlugs.add(custom.slug);
+}
+
+/**
+ * Reads assets/custom-demos/<slug>/<n>.{svg,png,jpg,jpeg}, sorted by n — frame count comes from
+ * whatever files are actually present, not a fixed number. Throws if the folder or frames are
+ * missing.
+ */
+function customFrames(slug) {
+  const dir = join(CUSTOM_ROOT, slug);
+  if (!existsSync(dir)) {
+    throw new Error(`assets/custom-demos/${slug}/ is missing (referenced by assets/custom-demos/manifest.json).`);
+  }
+  const frames = readdirSync(dir)
+    .map((f) => /^(\d+)\.(svg|png|jpe?g)$/.exec(f))
+    .filter((m) => m !== null)
+    .map((m) => ({ index: Number(m[1]), path: join(dir, m[0]) }))
+    .sort((a, b) => a.index - b.index);
+  if (frames.length === 0) {
+    throw new Error(`assets/custom-demos/${slug}/ has no <n>.{svg,png,jpg,jpeg} frames.`);
+  }
+  return frames;
+}
+
+/**
+ * Normalised shape shared by package and custom demos, used for both the PNG conversion pass and
+ * the exerciseDemos.ts generation below.
+ * @typedef {{slug:string, name:string, equipment:string, primaryMuscle:string, secondaryMuscles:string[], frames:{index:number, srcPath:string}[], instructions:string[]|null, photo:boolean}} DemoSource
+ */
+
+/** @type {DemoSource[]} */
+const packageSources = manifest.map((ex) => ({
+  slug: ex.slug,
+  name: ex.name,
+  equipment: ex.equipment,
+  primaryMuscle: ex.primaryMuscle,
+  secondaryMuscles: ex.secondaryMuscles,
+  frames: ex.frames.map((f) => ({ index: f.index, srcPath: join(PKG_ROOT, f.path) })),
+  // null means "look up in instructionsBySlug below", distinct from a custom demo's explicit [].
+  instructions: null,
+  // The whole package is monochrome line art.
+  photo: false,
+}));
+
+/** @type {DemoSource[]} */
+const customSources = customManifest.map((ex) => ({
+  slug: ex.slug,
+  name: ex.name,
+  equipment: ex.equipment,
+  primaryMuscle: ex.primaryMuscle,
+  secondaryMuscles: ex.secondaryMuscles,
+  frames: customFrames(ex.slug).map((f) => ({ index: f.index, srcPath: f.path })),
+  instructions: ex.instructions ?? [],
+  photo: ex.photo ?? false,
+}));
+
+const allSources = [...packageSources, ...customSources];
+
 mkdirSync(OUT_DIR, { recursive: true });
 
-async function convertFrame(srcPath, destPath) {
+async function convertFrame(srcPath, destPath, photo) {
   const srcStat = statSync(srcPath);
   if (existsSync(destPath)) {
     const destStat = statSync(destPath);
     if (destStat.mtimeMs >= srcStat.mtimeMs) return false; // already up to date
   }
-  await sharp(srcPath).resize({ width: WIDTH }).png({ palette: true, colours: COLOURS, compressionLevel: 9 }).toFile(destPath);
+  const pipeline = sharp(srcPath).resize({ width: WIDTH });
+  // Line art is flat colour on a transparent ground, so a 4-colour palette keeps it crisp at a
+  // quarter of lossy WebP's size (measured: ~4 KB a frame against ~15 KB). A photo has continuous
+  // tone — the same quantisation would posterise it into blotches, so photos skip palette/colours
+  // and just get resized + recompressed losslessly.
+  if (photo) {
+    await pipeline.png({ compressionLevel: 9 }).toFile(destPath);
+  } else {
+    await pipeline.png({ palette: true, colours: COLOURS, compressionLevel: 9 }).toFile(destPath);
+  }
   return true;
 }
 
 let converted = 0;
 let skipped = 0;
 
-for (const ex of manifest) {
+for (const ex of allSources) {
   const destDir = join(OUT_DIR, ex.slug);
   mkdirSync(destDir, { recursive: true });
   for (const frame of ex.frames) {
-    const srcPath = join(PKG_ROOT, frame.path);
     const destPath = join(destDir, `${frame.index}.png`);
-    const didConvert = await convertFrame(srcPath, destPath);
+    const didConvert = await convertFrame(frame.srcPath, destPath, ex.photo);
     if (didConvert) converted++;
     else skipped++;
   }
@@ -112,7 +211,7 @@ if (totalBytes > TARGET_BYTES) {
 // ---------------------------------------------------------------------------
 // src/data/exerciseDemos.ts
 
-const sorted = [...manifest].sort((a, b) => a.slug.localeCompare(b.slug));
+const sorted = [...allSources].sort((a, b) => a.slug.localeCompare(b.slug));
 
 /** @param {string} s */
 function esc(s) {
@@ -125,7 +224,7 @@ const demoEntries = sorted.map((ex) => {
   if (muscleGroup === undefined) {
     throw new Error(`No MuscleGroup mapping for workout-guide primaryMuscle "${ex.primaryMuscle}" (slug ${ex.slug})`);
   }
-  const instructions = instructionsBySlug[ex.slug] ?? [];
+  const instructions = ex.instructions ?? instructionsBySlug[ex.slug] ?? [];
   const secondary = ex.secondaryMuscles.map((m) => `'${esc(m)}'`).join(', ');
   const instructionsLiteral = instructions.map((s) => `'${esc(s)}'`).join(', ');
   return `  {
@@ -137,6 +236,7 @@ const demoEntries = sorted.map((ex) => {
     muscleGroup: ${muscleGroupLiteral},
     frames: ${ex.frames.length},
     instructions: [${instructionsLiteral}],
+    photo: ${ex.photo},
   },`;
 });
 
@@ -154,6 +254,8 @@ export interface ExerciseDemo {
   frames: number;
   /** Instructions from free-exercise-db when matched. */
   instructions: string[];
+  /** True for a real photograph (object-cover, no palette quantisation, no light-theme invert). False for line art. */
+  photo: boolean;
 }
 
 export const EXERCISE_DEMOS: ExerciseDemo[] = [
@@ -173,9 +275,10 @@ export function demoFrameUrl(slug: string, frame: number): string {
 /**
  * The workout-guide manifest's own curation order (major/canonical lifts first, e.g. "Bench Press"
  * before its variants), used only to break search ties — not exported, and unrelated to the
- * alphabetical order of EXERCISE_DEMOS above.
+ * alphabetical order of EXERCISE_DEMOS above. Bespoke assets/custom-demos/ entries are appended
+ * after the package's own order.
  */
-const MANIFEST_ORDER: string[] = [${manifest.map((ex) => `'${esc(ex.slug)}'`).join(', ')}];
+const MANIFEST_ORDER: string[] = [${allSources.map((ex) => `'${esc(ex.slug)}'`).join(', ')}];
 const ORDER_INDEX = new Map(MANIFEST_ORDER.map((slug, i) => [slug, i]));
 const byManifestOrder = (a: ExerciseDemo, b: ExerciseDemo) => (ORDER_INDEX.get(a.slug) ?? 0) - (ORDER_INDEX.get(b.slug) ?? 0);
 

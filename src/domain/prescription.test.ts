@@ -343,16 +343,16 @@ describe('seed data (WP2-c fields)', () => {
     }
   });
 
-  it('26 seed exercises have a demo slug that resolves through findDemo', async () => {
+  it('every seed exercise has a demo slug that resolves through findDemo', async () => {
     const { SEED_EXERCISES } = await import('@/db/seed');
     const { findDemo } = await import('@/data/exerciseDemos');
     const withDemo = SEED_EXERCISES.filter((ex) => ex.demo !== undefined);
-    expect(withDemo).toHaveLength(26);
+    expect(withDemo).toHaveLength(27);
     for (const ex of withDemo) {
       expect(findDemo(ex.demo!), `${ex.name}'s demo slug "${ex.demo}" does not resolve`).toBeDefined();
     }
     const withoutDemo = SEED_EXERCISES.filter((ex) => ex.demo === undefined);
-    expect(withoutDemo.map((ex) => ex.name)).toEqual(['Neck']);
+    expect(withoutDemo.map((ex) => ex.name)).toEqual([]);
   });
 
   it('exactly two seed exercises carry a strength standard', async () => {

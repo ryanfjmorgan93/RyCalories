@@ -6,8 +6,8 @@ import { demoFrameUrl, EXERCISE_DEMOS, findDemo, searchDemos } from './exerciseD
 const SEED_DEMOS: Record<string, string> = JSON.parse(readFileSync(new URL('../../scripts/seed-demos.json', import.meta.url), 'utf8'));
 
 describe('EXERCISE_DEMOS', () => {
-  it('has 302 entries', () => {
-    expect(EXERCISE_DEMOS.length).toBe(302);
+  it('has 303 entries (302 from @bryllim/workout-guide + 1 bespoke)', () => {
+    expect(EXERCISE_DEMOS.length).toBe(303);
   });
 
   it('has unique slugs', () => {
@@ -15,9 +15,9 @@ describe('EXERCISE_DEMOS', () => {
     expect(slugs.size).toBe(EXERCISE_DEMOS.length);
   });
 
-  it('gives every entry 3 frames and a non-empty name', () => {
+  it('gives every @bryllim/workout-guide entry 3 frames and a non-empty name; the bespoke "neck" photo demo has 2', () => {
     for (const demo of EXERCISE_DEMOS) {
-      expect(demo.frames).toBe(3);
+      expect(demo.frames).toBe(demo.slug === 'neck' ? 2 : 3);
       expect(demo.name.length).toBeGreaterThan(0);
     }
   });
@@ -27,6 +27,12 @@ describe('EXERCISE_DEMOS', () => {
       if (demo.muscleGroup !== null) {
         expect(MUSCLE_GROUPS).toContain(demo.muscleGroup);
       }
+    }
+  });
+
+  it('marks photo true only for the bespoke "neck" demo; every @bryllim/workout-guide entry is line art', () => {
+    for (const demo of EXERCISE_DEMOS) {
+      expect(demo.photo).toBe(demo.slug === 'neck');
     }
   });
 });
@@ -42,6 +48,18 @@ describe('findDemo', () => {
 
   it('returns undefined for an unknown slug', () => {
     expect(findDemo('not-a-real-exercise')).toBeUndefined();
+  });
+
+  it('resolves the bespoke "neck" demo (assets/custom-demos/), not present upstream — a 2-frame photo', () => {
+    const demo = findDemo('neck');
+    expect(demo).toBeDefined();
+    expect(demo?.muscleGroup).toBe('neck');
+    expect(demo?.frames).toBe(2);
+    expect(demo?.photo).toBe(true);
+  });
+
+  it('marks a line-art demo as not a photo', () => {
+    expect(findDemo('bench-press')?.photo).toBe(false);
   });
 });
 
