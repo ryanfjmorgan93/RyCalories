@@ -58,6 +58,11 @@ export function AssistantBox({
         {status && status.state !== 'ready' && (
           <div className="rounded-xl border border-line bg-surface-2 px-3 py-3">
             <div className="text-sm text-muted">{status.state === 'unavailable' ? 'On-device model unavailable.' : 'Model not downloaded.'}</div>
+            {status.detail && (
+              <div className="num mt-1 text-xs text-dim" data-testid="assistant-status-detail">
+                {status.detail}
+              </div>
+            )}
             {status.state !== 'unavailable' && (
               <Button
                 variant="secondary"
