@@ -71,7 +71,7 @@ export function NumberField({
   return (
     <div className={`min-w-0 ${className}`}>
       {label && <div className="mb-1 px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">{label}</div>}
-      <div className={`flex ${h} items-stretch overflow-hidden rounded-xl border border-line bg-surface-2 ${disabled ? 'opacity-50' : ''}`}>
+      <div className={`flex ${h} items-stretch overflow-hidden rounded-control border border-line bg-surface-2 ${disabled ? 'opacity-50' : ''}`}>
         <button
           type="button"
           aria-label={`${label ?? 'value'} minus ${step}`}
@@ -218,7 +218,7 @@ export function NumberInput({
       onKeyDown={(e) => {
         if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
       }}
-      className={`num h-12 w-full rounded-xl border border-line bg-surface-2 px-3 text-lg font-bold outline-none focus:border-accent placeholder:text-dim ${className}`}
+      className={`num h-12 w-full rounded-control border border-line bg-surface-2 px-3 text-lg font-bold outline-none focus:border-accent placeholder:text-dim ${className}`}
     />
   );
 }
@@ -240,7 +240,7 @@ export function TextInput({
   testId?: string;
   autoFocus?: boolean;
 }) {
-  const cls = `w-full rounded-xl border border-line bg-surface-2 px-3 text-base outline-none focus:border-accent placeholder:text-dim ${className}`;
+  const cls = `w-full rounded-control border border-line bg-surface-2 px-3 text-base outline-none focus:border-accent placeholder:text-dim ${className}`;
   if (multiline) {
     return (
       <textarea data-testid={testId} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} rows={3} className={`${cls} py-3`} autoFocus={autoFocus} />

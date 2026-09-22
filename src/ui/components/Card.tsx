@@ -1,8 +1,20 @@
 import type { HTMLAttributes, ReactNode } from 'react';
 
-export function Card({ className = '', children, ...rest }: HTMLAttributes<HTMLDivElement> & { children: ReactNode }) {
+/**
+ * Fake glass: a tint (one of three tiers), a 1px luminous border and an inset top highlight
+ * (`.glass-card` in src/index.css), no `backdrop-filter` — a Card scrolls with the page, and a
+ * blur that scrolls repaints every frame on an Android WebView. Real blur is reserved for layers
+ * fixed to the viewport (TopBar, BottomNav, the session dock, Sheet, Toast).
+ */
+export function Card({
+  className = '',
+  tier = 2,
+  children,
+  ...rest
+}: HTMLAttributes<HTMLDivElement> & { children: ReactNode; tier?: 1 | 2 | 3 }) {
+  const tint = tier === 1 ? 'bg-glass-1' : tier === 3 ? 'bg-glass-3' : 'bg-glass-2';
   return (
-    <div {...rest} className={`rounded-2xl bg-surface border border-line ${className}`}>
+    <div {...rest} className={`glass-card rounded-card border border-glass-border ${tint} ${className}`}>
       {children}
     </div>
   );

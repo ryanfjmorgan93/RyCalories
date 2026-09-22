@@ -27,10 +27,10 @@ export function toast(message: string, tone: ToastState['tone'] = 'neutral'): vo
 export function ToastHost() {
   const { message, tone, id } = useToast();
   if (!message) return null;
-  const color = tone === 'ok' ? 'bg-ok text-ok-fg' : tone === 'danger' ? 'bg-danger text-bg' : 'bg-fg text-bg';
+  const tint = tone === 'ok' ? 'glass-fixed-ok text-ok' : tone === 'danger' ? 'glass-fixed-danger text-danger' : 'text-fg';
   return (
     <div key={id} className="toast-in bottom-toast pointer-events-none fixed inset-x-0 z-[60] flex justify-center px-4">
-      <div className={`rounded-full px-4 py-2 text-sm font-bold shadow-lg ${color}`}>{message}</div>
+      <div className={`glass-fixed rounded-pill border px-4 py-2 text-sm font-bold ${tint}`}>{message}</div>
     </div>
   );
 }

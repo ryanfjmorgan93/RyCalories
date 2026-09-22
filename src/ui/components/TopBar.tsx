@@ -23,7 +23,7 @@ export function TopBar({
     else nav('/');
   };
   return (
-    <header className="pt-safe sticky top-0 z-30 bg-bg/90 backdrop-blur">
+    <header className="glass-fixed pt-safe sticky top-0 z-30 border-b">
       <div className="flex h-14 items-center gap-1 px-2">
         {back ? (
           <IconButton label="Back" onClick={goBack}>

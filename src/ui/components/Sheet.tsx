@@ -49,7 +49,7 @@ export function Sheet({
   return createPortal(
     <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="sheet-in relative max-h-[92dvh] rounded-t-3xl bg-surface border-t border-line flex flex-col">
+      <div className="glass-fixed sheet-in relative flex max-h-[92dvh] flex-col rounded-t-card border-t">
         <button type="button" aria-label="Close" onClick={onClose} className="flex w-full justify-center pt-2 pb-1">
           <span className="h-1.5 w-12 rounded-full bg-line" />
         </button>

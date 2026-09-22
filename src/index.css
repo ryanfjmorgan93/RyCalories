@@ -1,4 +1,8 @@
 @import 'tailwindcss';
+/* Archivo Variable, bundled locally (offline). Only the `wdth` entry: it carries both the wght
+   100–900 and wdth 62–125% axes, so the condensed numerals in `.num` come from the same family
+   file. The package's default entry is wght-only — importing both would duplicate every glyph. */
+@import '@fontsource-variable/archivo/wdth.css';
 
 /* Palette as runtime variables so the theme can switch without a rebuild. Dark is the default. */
 :root {
@@ -8,7 +12,8 @@
   --c-line: #2b2b33;
   --c-fg: #f4f4f5;
   --c-muted: #9a9aa4;
-  --c-dim: #62626c;
+  /* Never used for text below 4.5:1 against bg, surface OR a glass tile — see src/ui/tokens.test.ts. */
+  --c-dim: #8a8a94;
   --c-accent: #ff8a2a;
   --c-accent-fg: #140a02;
   --c-ok: #4ade80;
@@ -16,7 +21,58 @@
   --c-warn: #fbbf24;
   --c-danger: #f87171;
   --c-info: #7dd3fc;
+  /* A Toggle's knob: white in both themes (the usual switch convention — a light disc against a
+     coloured or grey track either way), tokenised so it is never a bare `bg-white` in the
+     component and a later theme pass can still retune it in one place. */
+  --c-knob: #ffffff;
   color-scheme: dark;
+
+  /* --- Phase 3 visual system -------------------------------------------------------------- */
+
+  /* Glass: Card and friends fake it (tint + border + inner highlight, no blur — it scrolls).
+     Only fixed layers (TopBar, BottomNav, the session dock, Sheet, Toast) spend the real
+     `backdrop-filter: blur(var(--blur-glass))`, over --glass-fixed-bg instead of these tiers. */
+  --glass-1: rgba(255, 255, 255, 0.07); /* most emphasis — hero cards */
+  --glass-2: rgba(255, 255, 255, 0.055); /* the default card */
+  --glass-3: rgba(255, 255, 255, 0.04); /* nested / low-emphasis rows */
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-highlight: rgba(255, 255, 255, 0.08); /* inset top edge, 1px */
+  --glass-fixed-bg: rgba(20, 20, 25, 0.6);
+  --glass-fixed-border: rgba(255, 255, 255, 0.1);
+  --blur-glass: 16px;
+
+  /* Radii */
+  --r-card: 1.5rem;
+  --r-control: 0.875rem;
+  --r-pill: 1.25rem;
+
+  /* Elevation. Fixed/floating layers (nav, dock, sheets) get the stronger one. */
+  --shadow-card: 0 24px 48px -28px rgba(0, 0, 0, 0.55);
+  --shadow-float: 0 18px 40px -20px rgba(0, 0, 0, 0.85);
+
+  /* Motion */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 180ms;
+  --dur-base: 320ms;
+  --dur-slow: 560ms;
+
+  /* State colours used outside the ok/warn/danger/info vocabulary. */
+  --c-done: var(--c-ok);
+  --c-record: #f5c542;
+  --c-record-fg: #140a02;
+  --c-rest: var(--c-info);
+
+  /* One width, everywhere a screen centres itself on a phone. */
+  --content-max: 36rem;
+
+  /* <Ambient/> ground-layer colour fields (src/ui/Ambient.tsx). Decorative — never load-bearing
+     for contrast, since text never sits directly on them. */
+  --amb-ember: rgba(255, 122, 38, 0.22);
+  --amb-base: rgba(99, 102, 241, 0.14);
+  --amb-cool: rgba(125, 211, 252, 0.17);
+  --amb-done: rgba(74, 222, 128, 0.26);
+  --amb-record: rgba(245, 197, 66, 0.26);
+  --amb-grain-opacity: 0.08;
 
   /* Safe-area insets, read once. Everything that pads for the status bar or the gesture bar goes
      through these rather than env() directly, so a test can set them and prove the layout clears a
@@ -38,20 +94,51 @@
   --c-line: #d8d8de;
   --c-fg: #131316;
   --c-muted: #5d5d68;
-  --c-dim: #9b9ba5;
-  --c-accent: #e8620c;
+  /* Never used for text below 4.5:1 against bg, surface OR a glass tile — see src/ui/tokens.test.ts. */
+  --c-dim: #6a6a73;
+  /* Darkened from #e8620c: that read 3.12:1 as text-accent on bg and 3.40:1 as accent-fg on
+     accent, both short of 4.5:1. This clears both. */
+  --c-accent: #b84508;
   --c-accent-fg: #ffffff;
   --c-ok: #15803d;
   --c-ok-fg: #ffffff;
   --c-warn: #b45309;
-  --c-danger: #dc2626;
+  /* Darkened from #dc2626 (4.44:1 on bg, short of 4.5:1). */
+  --c-danger: #b81d1d;
   --c-info: #0369a1;
   color-scheme: light;
+
+  /* Light glass reads as a bright, faintly bordered card against the grey page bg rather than a
+     tinted pane — a translucent WHITE tile over a near-white page is the only tint direction that
+     stays visible, and it is also the direction that can only ever raise text contrast, never
+     lower it (see src/ui/tokens.test.ts). */
+  --glass-1: rgba(255, 255, 255, 0.75);
+  --glass-2: rgba(255, 255, 255, 0.62);
+  --glass-3: rgba(255, 255, 255, 0.5);
+  --glass-border: rgba(20, 20, 30, 0.1);
+  --glass-highlight: rgba(255, 255, 255, 0.9);
+  --glass-fixed-bg: rgba(255, 255, 255, 0.72);
+  --glass-fixed-border: rgba(20, 20, 30, 0.08);
+
+  --shadow-card: 0 20px 40px -28px rgba(15, 15, 20, 0.16);
+  --shadow-float: 0 16px 34px -20px rgba(15, 15, 20, 0.2);
+
+  --c-done: var(--c-ok);
+  --c-record: #8a6a00;
+  --c-record-fg: #ffffff;
+  --c-rest: var(--c-info);
+
+  --amb-ember: rgba(255, 122, 38, 0.1);
+  --amb-base: rgba(99, 102, 241, 0.06);
+  --amb-cool: rgba(125, 211, 252, 0.1);
+  --amb-done: rgba(74, 222, 128, 0.14);
+  --amb-record: rgba(245, 197, 66, 0.16);
+  --amb-grain-opacity: 0.035;
 }
 
 @theme inline {
-  --font-sans:
-    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+  --font-sans: 'Archivo Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    'Noto Sans', sans-serif;
   --color-bg: var(--c-bg);
   --color-surface: var(--c-surface);
   --color-surface-2: var(--c-surface-2);
@@ -66,6 +153,20 @@
   --color-warn: var(--c-warn);
   --color-danger: var(--c-danger);
   --color-info: var(--c-info);
+  --color-done: var(--c-done);
+  --color-record: var(--c-record);
+  --color-record-fg: var(--c-record-fg);
+  --color-rest: var(--c-rest);
+  --color-knob: var(--c-knob);
+  --color-glass-1: var(--glass-1);
+  --color-glass-2: var(--glass-2);
+  --color-glass-3: var(--glass-3);
+  --color-glass-border: var(--glass-border);
+  --color-glass-highlight: var(--glass-highlight);
+  --color-glass-fixed: var(--glass-fixed-bg);
+  --radius-card: var(--r-card);
+  --radius-control: var(--r-control);
+  --radius-pill: var(--r-pill);
 }
 
 @layer base {
@@ -163,10 +264,59 @@
     display: none;
   }
 
-  /* Big numbers */
+  /* Big numbers: tabular so columns of them line up, and pulled in on the wdth axis so more digits
+     fit the same tap target (the variable font carries wdth 62–125%; 75% is the mockup's figure). */
   .num {
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.01em;
+    font-stretch: 75%;
+  }
+
+  /* Fake glass — Card and anything else that tints a scrolling surface. No backdrop-filter: this
+     paints under normal content, so it costs nothing extra per frame while the page scrolls. */
+  .glass-card {
+    box-shadow:
+      var(--shadow-card),
+      inset 0 1px 0 var(--glass-highlight);
+  }
+
+  /* Real glass — only for layers fixed to the viewport (TopBar, BottomNav, the session dock, Sheet,
+     Toast, the rest pill): a backdrop-filter that moves with a scrolling page repaints every frame;
+     one pinned to the viewport is composited once. */
+  .glass-fixed {
+    background: var(--glass-fixed-bg);
+    border-color: var(--glass-fixed-border);
+    -webkit-backdrop-filter: blur(var(--blur-glass)) saturate(150%);
+    backdrop-filter: blur(var(--blur-glass)) saturate(150%);
+    box-shadow:
+      var(--shadow-float),
+      inset 0 1px 0 var(--glass-highlight);
+  }
+
+  .content-max {
+    max-width: var(--content-max);
+  }
+
+  /* Tinted variants of `.glass-fixed`, for the one fixed layer that also has to read as "the live
+     thing" (App.tsx's session dock) or carry a toast's tone — the same real blur, mixed from a
+     state token already in the contract rather than a second raw colour. */
+  .glass-fixed-accent {
+    background: color-mix(in srgb, var(--c-accent) 22%, var(--glass-fixed-bg));
+    border-color: color-mix(in srgb, var(--c-accent) 45%, transparent);
+  }
+  .glass-fixed-ok {
+    background: color-mix(in srgb, var(--c-ok) 20%, var(--glass-fixed-bg));
+    border-color: color-mix(in srgb, var(--c-ok) 45%, transparent);
+  }
+  .glass-fixed-danger {
+    background: color-mix(in srgb, var(--c-danger) 20%, var(--glass-fixed-bg));
+    border-color: color-mix(in srgb, var(--c-danger) 45%, transparent);
+  }
+
+  /* The same inset top highlight glass cards use, on a solid fill instead of a tint — a primary
+     Button reads as one glossy surface rather than a flat rectangle. */
+  .fill-highlight {
+    box-shadow: inset 0 1px 0 var(--glass-highlight);
   }
 }
 
@@ -211,4 +361,24 @@
 /* Exercise diagrams are white line art on a transparent ground, drawn for the dark theme. */
 [data-theme='light'] .demo-frame {
   filter: invert(1);
+}
+
+/* Every animation and transition, current or future, collapses to its end state: near-zero
+   duration and delay so a `forwards`-filled keyframe (a completion ring, a sheet sliding in)
+   still lands where it was going rather than sitting on its `from` frame, and a single iteration
+   so a looping pulse settles rather than flashing once at full speed. A sheet or toast that
+   normally animates in still ends up on screen, just without the motion. This is deliberately
+   global (`*`) rather than a list of known animation classes, so a component added after this
+   file was written is still covered. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
 }

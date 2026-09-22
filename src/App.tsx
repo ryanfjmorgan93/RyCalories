@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation, useNavigat
 import { fmtDuration } from './domain/format';
 import { useNow, useSessionDock } from './ui/hooks';
 import { useTimer } from './state/timer';
+import { Ambient } from './ui/Ambient';
 import { BottomNav } from './ui/components/BottomNav';
 import { ToastHost } from './ui/components/Toast';
 import { RestTimerBar } from './ui/RestTimerBar';
@@ -30,7 +31,7 @@ function Shell() {
   const resting = useTimer((s) => s.endsAt !== null);
   const pad = dock ? (resting ? 'pb-safe-nav-dock-timer' : 'pb-safe-nav-dock') : resting ? 'pb-safe-nav-timer' : 'pb-safe-nav';
   return (
-    <div className={`mx-auto min-h-dvh max-w-xl ${pad}`}>
+    <div className={`content-max mx-auto min-h-dvh ${pad}`}>
       <Outlet />
       {dock && <SessionDock session={dock} />}
       <BottomNav />
@@ -52,20 +53,21 @@ function SessionDock({ session }: { session: { id: string; title: string; starte
   const now = useNow(1000, true);
   const elapsed = Math.max(0, Math.floor((now - Date.parse(session.startedAt)) / 1000));
   return (
-    <div className="bottom-dock fixed inset-x-0 z-30 mx-auto max-w-xl px-3">
+    <div className="bottom-dock content-max fixed inset-x-0 z-30 mx-auto px-3">
       <button
         type="button"
         onClick={() => nav(`/session/${session.id}`)}
-        className="flex h-[var(--dock-h)] w-full items-center justify-between gap-3 rounded-2xl bg-accent px-4 text-left text-accent-fg shadow-[0_10px_30px_rgb(0_0_0/0.45)] active:brightness-95"
+        className="glass-fixed glass-fixed-accent active:brightness-95 flex h-[var(--dock-h)] w-full items-center gap-3 rounded-pill border py-0 pl-4 pr-2 text-left text-fg"
         data-testid="live-banner"
       >
-        <span className="min-w-0">
-          <span className="block text-[11px] font-bold uppercase tracking-[0.12em] opacity-75">Live</span>
+        <span aria-hidden="true" className="pulse-ring h-2.5 w-2.5 shrink-0 rounded-full bg-accent" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Live</span>
           <span className="block truncate text-base font-extrabold leading-tight">{session.title}</span>
         </span>
         <span className="flex shrink-0 items-center gap-2">
           <span className="num text-base font-extrabold">{fmtDuration(elapsed)}</span>
-          <span className="rounded-xl bg-accent-fg/15 px-3 py-1.5 text-sm font-bold">Resume</span>
+          <span className="rounded-control bg-accent px-3 py-1.5 text-sm font-bold text-accent-fg">Resume</span>
         </span>
       </button>
     </div>
@@ -74,7 +76,7 @@ function SessionDock({ session }: { session: { id: string; title: string; starte
 
 function SessionShell() {
   return (
-    <div className="mx-auto min-h-dvh max-w-xl">
+    <div className="content-max mx-auto min-h-dvh">
       <Outlet />
     </div>
   );
@@ -93,6 +95,7 @@ export function App() {
   return (
     <BrowserRouter>
       <ScrollToTop />
+      <Ambient />
       <Routes>
         <Route element={<Shell />}>
           <Route index element={<HomeScreen />} />
