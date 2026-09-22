@@ -6,6 +6,7 @@ import { gatherContext } from '@/db/assistantQueries';
 import { routineUsageForExercise, type RoutineUsage } from '@/db/exerciseDetailQueries';
 import { bestsForExercise } from '@/db/recordsQueries';
 import { lockInRoutineExercise, unlockRoutineExercise, type HistoryEntry } from '@/db/repo';
+import { lockInBlocked } from '@/domain/engine';
 import { fmtDate, fmtDateLong, fmtKg, fmtNum, fmtSetsLine, fmtWeight, targetLine } from '@/domain/format';
 import type { Bests } from '@/domain/records';
 import { strengthLevel, type StrengthStandard } from '@/domain/standards';
@@ -192,7 +193,6 @@ export function ExerciseDetailScreen() {
           rx={lockRx}
           kind={kind}
           suggested={history[0]?.topWeight ?? 0}
-          hasHistory={history.length > 0}
           onClose={() => setLockRx(null)}
           onSave={async (w) => {
             await lockInRoutineExercise(lockRx.id, w);
@@ -373,21 +373,20 @@ function LockInSheet({
   rx,
   kind,
   suggested,
-  hasHistory,
   onClose,
   onSave,
 }: {
   rx: RoutineExercise;
   kind: ExerciseKind;
   suggested: number;
-  hasHistory: boolean;
   onClose: () => void;
   onSave: (weight: number) => void;
 }) {
   const [weight, setWeight] = useState<number | null>(suggested);
-  // 0 kg with no history at all would silently set this lift's working weight to nothing — block
-  // that specific combination rather than a bare `weight === null` check.
-  const blocked = weight === null || (weight === 0 && !hasHistory);
+  // Shared with Summary's own lock-in floor. 0 kg is only meaningful for bodyweight_plus (added
+  // kg over bodyweight); for every other kind it would silently set this lift's working weight to
+  // nothing, whether or not history exists — history was never the right thing to gate on.
+  const blocked = lockInBlocked(weight, kind);
   return (
     <Sheet open onClose={onClose} title="Lock in">
       <div className="mt-4">

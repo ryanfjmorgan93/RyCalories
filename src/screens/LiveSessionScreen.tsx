@@ -637,7 +637,10 @@ function ExerciseCard({
   const swappedToId = rx ? session.swaps?.[rx.id] : undefined;
   const swappedExercise = useLiveQuery(() => (swappedToId ? db.exercises.get(swappedToId) : undefined), [swappedToId]);
 
-  const prRecords = useLiveQuery<PersonalRecord[]>(() => recordsForNewSets(exercise.id, session.id, sets), [exercise.id, session.id, sets]);
+  const prRecords = useLiveQuery<PersonalRecord[]>(
+    () => recordsForNewSets(exercise.id, session.id, sets, { calibrating: rx?.mode === 'calibrating' }),
+    [exercise.id, session.id, sets, rx?.mode],
+  );
   const prIndices = useMemo(() => new Set((prRecords ?? []).map((r) => r.setIndex)), [prRecords]);
 
   const defaultDraft = useCallback((): Draft => {
@@ -729,7 +732,7 @@ function ExerciseCard({
       // A drop set follows a working set the timer is already running for; a superset member
       // that isn't last in its group leaves the timer to whoever logs last.
       if (draft.type !== 'drop' && startsRestTimer) timer.start(restSecondsFor(rx, exercise, settings), exercise.name);
-      const newRecords = await recordsForNewSets(exercise.id, session.id, [newSet]);
+      const newRecords = await recordsForNewSets(exercise.id, session.id, [newSet], { calibrating: rx?.mode === 'calibrating' });
       if (newRecords.length > 0) toast(`PR · ${setLabel(newSet, kind)}`, 'ok');
     } finally {
       busy.current = false;
