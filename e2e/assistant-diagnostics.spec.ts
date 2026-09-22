@@ -197,7 +197,7 @@ test.describe('Exercise Detail — Ask is gated on assistant status', () => {
   });
 });
 
-test.describe('Exercise Detail — lock-in cannot zero a lift with no history', () => {
+test.describe('Exercise Detail — lock-in floor (lockInBlocked, shared with Summary)', () => {
   test('Save is blocked at 0 kg for a lift that has never been logged', async ({ page }) => {
     await fresh(page);
     await page.goto('/exercises');
@@ -211,7 +211,7 @@ test.describe('Exercise Detail — lock-in cannot zero a lift with no history', 
     await expect(page.getByTestId('lock-in-save')).toBeDisabled();
   });
 
-  test('Save is allowed at 0 kg once the lift has history', async ({ page }) => {
+  test('Save is blocked at 0 kg even once the lift has history — 0 kg is only ever meaningful for bodyweight_plus', async ({ page }) => {
     await fresh(page);
 
     // Bench Press (Barbell) starts in normal (not calibrating) mode with a prescribed weight, so
@@ -248,9 +248,30 @@ test.describe('Exercise Detail — lock-in cannot zero a lift with no history', 
     await page.getByTestId('lock-in-Upper (Push)').click();
     await page.getByTestId('lock-in-weight').fill('0');
     await expect(page.getByTestId('lock-in-weight')).toHaveValue('0');
-    // History exists (the session just saved), so 0 kg is not blocked the way it is with no history.
+    // History used to be enough to allow 0 kg here — but 0 kg for a barbell lift would silently
+    // prescribe nothing for ever, whether or not history exists, so the shared floor blocks it
+    // regardless. Only a positive weight (or bodyweight_plus's 0 added kg — see the next test)
+    // unblocks Save.
+    await expect(page.getByTestId('lock-in-save')).toBeDisabled();
+    await page.getByTestId('lock-in-weight').fill('62.5');
     await expect(page.getByTestId('lock-in-save')).toBeEnabled();
+  });
 
+  test('Save is allowed at 0 kg for bodyweight_plus — 0 added kg is bodyweight alone, a real working weight', async ({ page }) => {
+    await fresh(page);
+    await page.goto('/exercises');
+    await page.getByTestId('exercise-search').fill('Back Extension');
+    await page.getByRole('button', { name: /Back Extension/ }).first().click();
+    await expect(page.getByRole('heading', { name: 'Back Extension' })).toBeVisible();
+
+    // Back Extension starts in normal mode with no history — Set calibrating to reach the sheet.
+    await page.getByRole('button', { name: 'Set calibrating' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Set calibrating', exact: true }).click();
+    await expect(page.getByText('Set calibrating?')).toBeHidden();
+
+    await page.getByTestId('lock-in-Lower (Hinge)').click();
+    await expect(page.getByTestId('lock-in-weight')).toHaveValue('0');
+    await expect(page.getByTestId('lock-in-save')).toBeEnabled();
     await page.getByTestId('lock-in-save').click();
     await expect(page.getByText('Locked in at', { exact: false })).toBeVisible();
   });
