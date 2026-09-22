@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  FEEL_OPTIONS,
   SET_TYPES,
   countsForProgression,
   countsForRecords,
   countsForVolume,
   effortOptions,
   effortRir,
+  feelLabel,
+  feelOf,
   formatEffort,
   rirFromRpe,
   rpeFromRir,
@@ -68,5 +71,72 @@ describe('set types', () => {
     expect(formatEffort(2, 'rir')).toBe('RIR 2');
     expect(formatEffort(2, 'rpe')).toBe('RPE 8');
     expect(formatEffort(0.5, 'rpe')).toBe('RPE 9.5');
+  });
+});
+
+describe('feel', () => {
+  it('offers Easy/Good/Hard/Maxed at RIR 3/2/1/0', () => {
+    expect(FEEL_OPTIONS).toEqual([
+      { rir: 3, label: 'Easy' },
+      { rir: 2, label: 'Good' },
+      { rir: 1, label: 'Hard' },
+      { rir: 0, label: 'Maxed' },
+    ]);
+  });
+
+  it('labels a logged RIR as the matching feel word', () => {
+    expect(feelLabel(0)).toBe('Maxed');
+    expect(feelLabel(1)).toBe('Hard');
+    expect(feelLabel(2)).toBe('Good');
+    expect(feelLabel(3)).toBe('Easy');
+  });
+
+  it('reads a Hevy 4 or 5 as Easy, not a fifth chip', () => {
+    expect(feelLabel(4)).toBe('Easy');
+    expect(feelLabel(5)).toBe('Easy');
+  });
+
+  it('is null for an unlogged RIR, never a guess', () => {
+    expect(feelLabel(undefined)).toBeNull();
+  });
+
+  it('feelOf reads the shared RIR of the slot\'s counted, non-failure sets', () => {
+    const sets = [
+      { type: 'warmup' as const, rir: 5 }, // ignored: never counted
+      { type: 'working' as const, rir: 3 },
+      { type: 'drop' as const, rir: 3 }, // ignored: not counted
+      { type: 'working' as const, rir: 3 },
+    ];
+    expect(feelOf(sets)).toBe(3);
+  });
+
+  it('feelOf excludes failure sets from the agreement, even when they would agree', () => {
+    const sets = [
+      { type: 'working' as const, rir: 3 },
+      { type: 'working' as const, rir: 3 },
+      { type: 'failure' as const, rir: 3 }, // excluded regardless of its own rir
+    ];
+    expect(feelOf(sets)).toBe(3);
+  });
+
+  it('feelOf is null when the counted non-failure sets disagree', () => {
+    const sets = [
+      { type: 'working' as const, rir: 3 },
+      { type: 'working' as const, rir: 1 },
+    ];
+    expect(feelOf(sets)).toBeNull();
+  });
+
+  it('feelOf is null when none of the counted non-failure sets carry an RIR', () => {
+    expect(feelOf([{ type: 'working' as const }, { type: 'working' as const }])).toBeNull();
+  });
+
+  it('feelOf is null when a counted non-failure set is missing its RIR while another has one', () => {
+    expect(feelOf([{ type: 'working' as const, rir: 3 }, { type: 'working' as const }])).toBeNull();
+  });
+
+  it('feelOf is null with no sets at all, or only sets that never count', () => {
+    expect(feelOf([])).toBeNull();
+    expect(feelOf([{ type: 'warmup' as const, rir: 3 }, { type: 'drop' as const, rir: 3 }])).toBeNull();
   });
 });

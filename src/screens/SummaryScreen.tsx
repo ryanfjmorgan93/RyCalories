@@ -368,7 +368,7 @@ function SuggestionRow({ s, kind, onUse }: { s: Suggestion; kind: SummaryItem['e
     return (
       <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-ok/40 bg-ok/10 px-3 py-2 text-sm">
         <span>
-          Every set at RIR ≥ {s.minRir}. Double increment: <b className="num">{fmtWeight(kind, s.toWeight)}</b>
+          Every set felt easy. Double increment: <b className="num">{fmtWeight(kind, s.toWeight)}</b>
         </span>
         <Button size="sm" variant="ok" onClick={() => onUse(s.toWeight)}>
           Use

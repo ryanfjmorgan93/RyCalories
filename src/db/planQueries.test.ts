@@ -40,6 +40,32 @@ describe('nextSessionPlan', () => {
     expect(item.lastTime!.line).toBe('110 × 8, 8, 7');
   });
 
+  it('shows last time\'s feel word, read from the last logged set\'s RIR', async () => {
+    const rx = await rxFor(HINGE, RDL);
+    const session = await startSession(HINGE);
+    await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 110, reps: 8, rir: 0 });
+    await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 110, reps: 7, rir: 2 });
+    await updateSession(session.id, { endedAt: '2026-09-01T19:00:00.000Z' });
+
+    const settings = (await db.settings.get('settings'))!;
+    const plan = await nextSessionPlan(HINGE, settings);
+    const item = plan!.items.find((i) => i.exercise.id === RDL)!;
+    // The last set carried RIR 2 ("Good"), not the first set's RIR 0 ("Maxed").
+    expect(item.lastTime!.feel).toBe('Good');
+  });
+
+  it('leaves out the feel word when the last set carries no RIR', async () => {
+    const rx = await rxFor(HINGE, RDL);
+    const session = await startSession(HINGE);
+    for (const r of [8, 8, 7]) await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 110, reps: r });
+    await updateSession(session.id, { endedAt: '2026-09-01T19:00:00.000Z' });
+
+    const settings = (await db.settings.get('settings'))!;
+    const plan = await nextSessionPlan(HINGE, settings);
+    const item = plan!.items.find((i) => i.exercise.id === RDL)!;
+    expect(item.lastTime!.feel).toBeUndefined();
+  });
+
   it('counts stalled exercises and suggests a deload at 2 or more', async () => {
     const rx = await rxFor(HINGE, RDL);
     // Three sessions at the same weight = stalled.

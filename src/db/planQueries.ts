@@ -7,14 +7,14 @@ import { outcomesForRoutineExercise, previousSets, routineItems, stallStatus, ty
 import type { Suggestion } from '@/domain/engine';
 import { fmtSetsLine } from '@/domain/format';
 import { prescribe, type Prescription } from '@/domain/prescription';
-import { countsForProgression, effortRir, formatEffort } from '@/domain/sets';
+import { countsForProgression, effortRir, feelLabel } from '@/domain/sets';
 import type { Exercise, ExerciseKind, Routine, RoutineExercise, Settings } from '@/domain/types';
 
 export interface PlanItem {
   rx: RoutineExercise;
   exercise: Exercise;
   prescription: Prescription;
-  lastTime: { date: string; line: string; rir?: string } | null;
+  lastTime: { date: string; line: string; feel?: string } | null;
   stall: Suggestion | null;
 }
 
@@ -25,15 +25,14 @@ export interface SessionPlan {
   deloadSuggested: boolean;
 }
 
-async function lastTimeFor(prev: PreviousSets | null, kind: ExerciseKind, settings: Settings): Promise<PlanItem['lastTime']> {
+async function lastTimeFor(prev: PreviousSets | null, kind: ExerciseKind): Promise<PlanItem['lastTime']> {
   if (!prev) return null;
   const counted = prev.sets.filter((s) => countsForProgression(s.type));
   if (counted.length === 0) return null;
   const line = fmtSetsLine(counted, kind);
   const last = counted[counted.length - 1];
-  const rir = effortRir(last);
-  const scale = settings.effortScale ?? 'rir';
-  return { date: prev.startedAt, line, ...(rir !== undefined ? { rir: formatEffort(rir, scale) } : {}) };
+  const feel = feelLabel(effortRir(last));
+  return { date: prev.startedAt, line, ...(feel ? { feel } : {}) };
 }
 
 export async function nextSessionPlan(routineId: string, settings: Settings, opts?: { deload?: boolean }): Promise<SessionPlan | null> {
@@ -56,7 +55,7 @@ export async function nextSessionPlan(routineId: string, settings: Settings, opt
       settings,
     });
     const prev = await previousSets(rx.id, exercise.id, '');
-    const lastTime = await lastTimeFor(prev, exercise.kind, settings);
+    const lastTime = await lastTimeFor(prev, exercise.kind);
     items.push({ rx, exercise, prescription, lastTime, stall });
   }
 

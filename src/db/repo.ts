@@ -580,6 +580,28 @@ export async function updateSet(
   await db.setLogs.update(id, clean);
 }
 
+/**
+ * Write a feel (as RIR) across every counted set in one slot of this session — the "How did that
+ * feel?" answer at completion, and what re-answering it or clearing it (`rir: null`) does to sets
+ * already logged. A `failure` set is left alone: it keeps `effortRir`'s implicit RIR 0 regardless
+ * of the slot's answer, so it can never feed `suggestDoubleIncrement`. Warm-up and drop sets are
+ * never counted, so they are left alone too. One transaction.
+ */
+export async function setSlotFeel(
+  sessionId: string,
+  routineExerciseId: string | null,
+  exerciseId: string,
+  rir: number | null,
+): Promise<void> {
+  await db.transaction('rw', db.setLogs, async () => {
+    const sets = await setsForSlot(sessionId, routineExerciseId, exerciseId);
+    for (const s of sets) {
+      if (!countsForProgression(s.type) || s.type === 'failure') continue;
+      await db.setLogs.update(s.id, { rir: rir === null ? undefined : rir });
+    }
+  });
+}
+
 /** Delete a set and close the gap in `index` for its slot. */
 export async function deleteSet(id: string): Promise<void> {
   const set = await db.setLogs.get(id);

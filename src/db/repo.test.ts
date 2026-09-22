@@ -19,6 +19,7 @@ import {
   routineItems,
   saveSettings,
   setSkipped,
+  setSlotFeel,
   stallStatus,
   startSession,
   swapExercise,
@@ -599,6 +600,85 @@ describe('swap and undo swap (WP3)', () => {
     expect(s?.swaps ?? {}).toEqual({});
     expect(s?.skippedRoutineExerciseIds ?? []).not.toContain(hipRx.id);
     expect(await db.setLogs.where('[sessionId+exerciseId]').equals([session.id, FACE_PULL]).count()).toBe(0);
+  });
+});
+
+describe('setSlotFeel (Phase 3 feel)', () => {
+  beforeEach(async () => {
+    await resetToSeed();
+  });
+
+  it('writes the RIR to every counted set of the slot except failure, warm-up and drop sets', async () => {
+    const session = await startSession(HINGE);
+    const rx = await rxFor(HINGE, RDL);
+    const warmup = await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'warmup', weight: 60, reps: 5 });
+    const w1 = await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 110, reps: 8 });
+    const drop = await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'drop', weight: 90, reps: 10 });
+    const w2 = await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 110, reps: 8 });
+    const failure = await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'failure', weight: 110, reps: 6 });
+
+    await setSlotFeel(session.id, rx.id, RDL, 3);
+
+    const byId = async (id: string) => (await db.setLogs.get(id))!;
+    expect((await byId(w1.id)).rir).toBe(3);
+    expect((await byId(w2.id)).rir).toBe(3);
+    expect((await byId(warmup.id)).rir).toBeUndefined();
+    expect((await byId(drop.id)).rir).toBeUndefined();
+    expect((await byId(failure.id)).rir).toBeUndefined();
+  });
+
+  it('writes only the given slot, leaving a sibling exercise in the same session untouched', async () => {
+    const session = await startSession(HINGE);
+    const rdlRx = await rxFor(HINGE, RDL);
+    const hipRx = await rxFor(HINGE, HIP_THRUST);
+    const rdlSet = await logSet({ sessionId: session.id, routineExerciseId: rdlRx.id, exerciseId: RDL, type: 'working', weight: 110, reps: 8 });
+    const hipSet = await logSet({ sessionId: session.id, routineExerciseId: hipRx.id, exerciseId: HIP_THRUST, type: 'working', weight: 60, reps: 8 });
+
+    await setSlotFeel(session.id, rdlRx.id, RDL, 3);
+
+    expect((await db.setLogs.get(rdlSet.id))?.rir).toBe(3);
+    expect((await db.setLogs.get(hipSet.id))?.rir).toBeUndefined();
+  });
+
+  it('null clears the RIR on the slot\'s counted sets', async () => {
+    const session = await startSession(HINGE);
+    const rx = await rxFor(HINGE, RDL);
+    const s1 = await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 110, reps: 8, rir: 3 });
+    const s2 = await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 110, reps: 8, rir: 3 });
+
+    await setSlotFeel(session.id, rx.id, RDL, null);
+
+    expect((await db.setLogs.get(s1.id))?.rir).toBeUndefined();
+    expect((await db.setLogs.get(s2.id))?.rir).toBeUndefined();
+  });
+
+  it('surfaces the double-increment suggestion once every working set is answered Easy (RIR 3)', async () => {
+    const session = await startSession(HINGE);
+    const rx = await rxFor(HINGE, RDL);
+    for (const r of [8, 8, 8, 8]) await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 110, reps: r });
+
+    await setSlotFeel(session.id, rx.id, RDL, 3);
+
+    const summary = await buildSummary(session.id);
+    const item = summary.items.find((i) => i.exercise.id === RDL)!;
+    expect(item.decision).toMatchObject({ rule: 'increase' });
+    // Double increment is base weight + 2×increment (110 + 2×5), distinct from the plain +1×increment hold-line above.
+    expect(item.suggestions).toContainEqual({ kind: 'double_increment', toWeight: 120, minRir: 3 });
+  });
+
+  it('does not surface double-increment when one of the slot\'s counted sets was a failure', async () => {
+    const session = await startSession(HINGE);
+    const rx = await rxFor(HINGE, RDL);
+    for (const r of [8, 8, 8]) await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 110, reps: r });
+    await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'failure', weight: 110, reps: 8 });
+
+    // setSlotFeel skips the failure set, which keeps its implicit RIR 0.
+    await setSlotFeel(session.id, rx.id, RDL, 3);
+
+    const summary = await buildSummary(session.id);
+    const item = summary.items.find((i) => i.exercise.id === RDL)!;
+    expect(item.decision).toMatchObject({ rule: 'increase' });
+    expect(item.suggestions.find((s) => s.kind === 'double_increment')).toBeUndefined();
   });
 });
 
