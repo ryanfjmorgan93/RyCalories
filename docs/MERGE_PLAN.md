@@ -471,6 +471,33 @@ Related: **a fix scoped to one screen is not a fix.** The 0 kg lock-in guard wen
 `ExerciseDetailScreen`'s sheet and missed `SummaryScreen`'s — the path taken at the end of every
 session. Nothing below the UI has a floor, so ask where else the same control appears.
 
+### 6.4 History safety — what the backup work taught
+
+The owner lost workout history across an ordinary update, and nothing in the code explains it:
+the signing key, `applicationId`, monotonic `versionCode`, WebView origin, Dexie name and the
+additive schema were all checked clean. So the defence is detection and recovery, not a cause:
+automatic backups to `Documents/Iron` (daily, after every finished workout, before every
+migration and every reset, wipe or replace-restore), a loss notice on Home when session or set
+counts drop below a baseline without an in-app delete, and a Backups card in Settings.
+
+- **Pruning by age alone destroys the copy that matters.** After a loss the app keeps backing up
+  the smaller data set, so the newest-14 rule would evict the last complete copy within two
+  weeks. The backups holding the most sessions and the most sets are never pruned.
+- **A Dexie DBCore middleware must not be `async`.** Its own return value is a plain Promise that
+  drops Dexie's transaction zone, and every multi-table transaction that deleted through it
+  failed with `PrematureCommitError`. Chain `.then()` on the promise `mutate` returns.
+- **`Table.clear()` fires no `deleting` hook.** Only a `dbcore` `mutate` hook sees every delete
+  path (`delete`, `bulkDelete`, `where().delete()`, `clear()`).
+- **A wait on persisted state can be satisfied by the previous page load.** The baseline and the
+  notice outlive a reload; waiting on them made "no notice after reload" pass before the check
+  ran. `main.tsx` marks `<html data-history-check="done">` once per load for tests to wait on.
+- **A re-import cannot tell "edited in Iron" from "changed in Hevy" without a fingerprint.**
+  Sessions carry `importHash`; one without it that already matches the CSV is unchanged (and
+  adopts one), not an edit.
+- **Only the phone can prove** that files land in the public Documents folder, survive an update,
+  and whether a reinstall can still list them. Restore after a reinstall is designed for the worst
+  case: a file picker.
+
 ---
 
 ## 7. Repo and release
