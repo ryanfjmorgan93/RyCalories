@@ -19,7 +19,8 @@ import { Button } from '@/ui/components/Button';
 import { Card, Divider, Row, SectionTitle, Stat } from '@/ui/components/Card';
 import { Chip, Segmented, Toggle } from '@/ui/components/Chip';
 import { NumberField, NumberInput } from '@/ui/components/NumberField';
-import { Confirm } from '@/ui/components/Sheet';
+import { HoldToConfirm } from '@/ui/components/HoldToConfirm';
+import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { ChevronIcon, TopBar } from '@/ui/components/TopBar';
 import { HevyImportSheet, ReconcileSheet } from '@/ui/HevyImportSheet';
@@ -668,8 +669,14 @@ function ProgressionCard({ settings }: { settings: Settings }) {
 // ---------------------------------------------------------------------------
 // Developer
 
+/** "1 session" / "2 sessions" — every count on this card is either 0, 1 or plural. */
+function pluralCount(count: number, word: string): string {
+  return `${count} ${word}${count === 1 ? '' : 's'}`;
+}
+
 function DeveloperCard() {
   const counts = useLiveQuery(() => dataCounts(), []);
+  const [dangerOpen, setDangerOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [wipeOpen, setWipeOpen] = useState(false);
   const pending = useRef(false);
@@ -685,6 +692,13 @@ function DeveloperCard() {
     }
   };
 
+  const resetBody = counts
+    ? `Deletes ${pluralCount(counts.sessions, 'session')}, ${pluralCount(counts.sets, 'set')} and ${pluralCount(counts.meals, 'meal')}. Routines and exercises go back to the seed.`
+    : '';
+  const wipeBody = counts
+    ? `Deletes ${pluralCount(counts.sessions, 'session')}, ${pluralCount(counts.sets, 'set')}, ${pluralCount(counts.meals, 'meal')}, ${pluralCount(counts.routines, 'routine')} and ${pluralCount(counts.exercises, 'exercise')}.`
+    : '';
+
   return (
     <Card className="p-4">
       {/* Live row counts and the schema version the database is actually open at. This is the
@@ -692,7 +706,7 @@ function DeveloperCard() {
           completed on a real WebView, only that it completed under fake-indexeddb. */}
       <div className="num text-sm text-muted" data-testid="data-counts">
         {counts
-          ? `${counts.exercises} exercises · ${counts.routines} routines · ${counts.sessions} sessions · ${counts.sets} sets · ${counts.meals} meals`
+          ? `${pluralCount(counts.exercises, 'exercise')} · ${pluralCount(counts.routines, 'routine')} · ${pluralCount(counts.sessions, 'session')} · ${pluralCount(counts.sets, 'set')} · ${pluralCount(counts.meals, 'meal')}`
           : 'Counting…'}
       </div>
       {counts && (
@@ -701,34 +715,68 @@ function DeveloperCard() {
           {counts.behind ? ` — build expects v${DB_VERSION}` : ''}
         </div>
       )}
-      <div className="mt-3 grid gap-2">
-        <Button full variant="danger" onClick={() => setResetOpen(true)}>
-          Reset to seed data
-        </Button>
-        <Button full variant="danger" onClick={() => setWipeOpen(true)}>
-          Wipe all data
-        </Button>
-      </div>
+
+      <button
+        type="button"
+        onClick={() => setDangerOpen((v) => !v)}
+        aria-expanded={dangerOpen}
+        data-testid="danger-zone-toggle"
+        className="mt-3 flex h-11 w-full items-center justify-between rounded-xl border border-line px-3 text-sm font-semibold text-muted active:bg-surface-2"
+      >
+        Reset / wipe data
+        <ChevronIcon className={`transition-transform ${dangerOpen ? 'rotate-90' : ''}`} />
+      </button>
+
+      {dangerOpen && (
+        <div className="mt-2 grid gap-2" data-testid="danger-zone">
+          <Button full variant="danger" onClick={() => setResetOpen(true)}>
+            Reset to seed data
+          </Button>
+          <Button full variant="danger" onClick={() => setWipeOpen(true)}>
+            Wipe all data
+          </Button>
+        </div>
+      )}
+
       <div className="num mt-3 text-xs text-dim" data-testid="build-id">{BUILD_LABEL}</div>
 
-      <Confirm
-        open={resetOpen}
-        title="Reset to seed data?"
-        body="Everything is replaced with the seed routines. Meals are deleted too."
-        confirmLabel="Reset"
-        danger
-        onCancel={() => setResetOpen(false)}
-        onConfirm={run(resetToSeed)}
-      />
-      <Confirm
-        open={wipeOpen}
-        title="Wipe all data?"
-        body="Every routine, exercise, session, reading and meal is deleted."
-        confirmLabel="Wipe"
-        danger
-        onCancel={() => setWipeOpen(false)}
-        onConfirm={run(wipeAll)}
-      />
+      <Sheet open={resetOpen} onClose={() => setResetOpen(false)} title="Reset to seed data?">
+        <div className="text-muted" data-testid="reset-confirm-body">
+          {resetBody}
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-3">
+          <Button size="lg" variant="secondary" onClick={() => setResetOpen(false)}>
+            Cancel
+          </Button>
+          <HoldToConfirm
+            label="Hold to reset"
+            testId="reset-hold"
+            onComplete={() => {
+              setResetOpen(false);
+              void run(resetToSeed)();
+            }}
+          />
+        </div>
+      </Sheet>
+
+      <Sheet open={wipeOpen} onClose={() => setWipeOpen(false)} title="Wipe all data?">
+        <div className="text-muted" data-testid="wipe-confirm-body">
+          {wipeBody}
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-3">
+          <Button size="lg" variant="secondary" onClick={() => setWipeOpen(false)}>
+            Cancel
+          </Button>
+          <HoldToConfirm
+            label="Hold to wipe"
+            testId="wipe-hold"
+            onComplete={() => {
+              setWipeOpen(false);
+              void run(wipeAll)();
+            }}
+          />
+        </div>
+      </Sheet>
     </Card>
   );
 }

@@ -162,6 +162,15 @@ export interface Session {
    * the substitute is logged as an extra.
    */
   swaps?: Record<string, string>;
+  /**
+   * Fingerprint of the import-controlled fields of this session's sets exactly as the last Hevy
+   * import wrote them (see `importFingerprint` in `db/hevy.ts`). Only present on `source: 'hevy'`
+   * sessions. Absent means either the session was never imported, or it was imported before this
+   * field existed — either way a re-import treats it as unknown and keeps the in-app version
+   * rather than guessing. Comparing the CURRENT stored sets against this value is how a re-import
+   * tells "untouched since import" (safe to replace) from "edited in Iron" (kept by default).
+   */
+  importHash?: string;
 }
 
 export interface SetLog {
@@ -297,7 +306,7 @@ export const DEFAULT_SETTINGS: Omit<Settings, 'id' | 'createdAt'> = {
   restVibrate: true,
   restNotify: true,
   productLookup: true,
-  seedVersion: 2,
+  seedVersion: 3,
   barKg: 20,
   plates: [25, 20, 15, 10, 5, 2.5, 1.25],
   deloadPercent: 0.9,

@@ -117,6 +117,9 @@ test.describe('Data', () => {
     await expect(page.getByRole('dialog')).toContainText('21 sessions');
     // Pair-total halving is pre-ticked for the dumbbell presses, not curls.
     await page.getByRole('button', { name: /Import 21 sessions/ }).click();
+    // Result step: reports the counts (facts only), then on to the reconcile step.
+    await expect(page.getByTestId('hevy-counts')).toContainText('21 new session');
+    await page.getByTestId('hevy-result-continue').click();
     // Reconcile step: keep the brief's numbers.
     await page.getByRole('button', { name: 'Keep mine' }).click();
     await expect(page.getByRole('dialog')).toBeHidden();
@@ -126,11 +129,15 @@ test.describe('Data', () => {
     const rows = page.getByRole('button', { name: /Routine \d - / });
     await expect(rows).toHaveCount(21);
 
-    // Import again: still 21.
+    // Import again: same file, untouched since the first import — every session is unchanged and
+    // nothing is written, but it is still shown, and still 21 sessions in History.
     await page.goto('/settings');
     await page.locator('input[type="file"][accept*="csv"]').setInputFiles(HEVY_CSV);
     await page.getByRole('button', { name: /Import 21 sessions/ }).click();
+    await expect(page.getByTestId('hevy-counts')).toContainText('21 session');
+    await expect(page.getByTestId('hevy-counts')).toContainText('unchanged');
     // The reconcile step appears again on a re-import, once the import has actually run.
+    await page.getByTestId('hevy-result-continue').click();
     await page.getByRole('button', { name: 'Keep mine' }).click();
     await expect(page.getByRole('dialog')).toBeHidden();
     await page.goto('/history');
@@ -149,6 +156,7 @@ test.describe('Data', () => {
     await page.goto('/settings');
     await page.locator('input[type="file"][accept*="csv"]').setInputFiles(HEVY_MEASUREMENTS);
     await page.getByRole('button', { name: 'Import', exact: true }).click();
+    await page.getByTestId('hevy-result-continue').click(); // "Done" on the result step
     await expect(page.getByRole('dialog')).toBeHidden();
     await page.goto('/body');
     await expect(page.getByText('74.5 kg').first()).toBeVisible();

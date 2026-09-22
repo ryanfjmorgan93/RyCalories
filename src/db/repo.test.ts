@@ -726,6 +726,8 @@ describe('personal records attached to summary items (WP3)', () => {
 });
 
 describe('migrateSeed (WP3)', () => {
+  const NECK = SEED_EXERCISE_IDS['Neck'];
+
   beforeEach(async () => {
     await resetToSeed();
   });
@@ -736,6 +738,17 @@ describe('migrateSeed (WP3)', () => {
     for (const seedEx of SEED_EXERCISES) {
       await db.exercises.update(seedEx.id, { equipment: undefined, demo: undefined, standard: undefined });
     }
+  }
+
+  /**
+   * Simulate a v2-shaped install: everything backfilled by the version-2 migration is present
+   * (equipment/demo/standard on every row that had them at v2), but the Neck row still lacks
+   * `demo` because it was only added in a later commit while `DEFAULT_SETTINGS.seedVersion`
+   * stayed at 2 — the exact regression this fix is for.
+   */
+  async function downgradeToV2(): Promise<void> {
+    await db.settings.update('settings', { seedVersion: 2 });
+    await db.exercises.update(NECK, { demo: undefined });
   }
 
   function backupWithUnmigratedSeed(): Backup {
@@ -762,10 +775,10 @@ describe('migrateSeed (WP3)', () => {
     };
   }
 
-  it('backfills equipment/demo/standard onto a v1-shaped install and bumps seedVersion to 2', async () => {
+  it('backfills equipment/demo/standard onto a v1-shaped install and bumps seedVersion to current', async () => {
     await downgradeToV1();
     await migrateSeed();
-    expect((await db.settings.get('settings'))?.seedVersion).toBe(2);
+    expect((await db.settings.get('settings'))?.seedVersion).toBe(DEFAULT_SETTINGS.seedVersion);
     const rdl = await db.exercises.get(RDL);
     expect(rdl?.equipment).toBe('barbell');
     expect(rdl?.demo).toBe('romanian-deadlift');
@@ -773,11 +786,29 @@ describe('migrateSeed (WP3)', () => {
     expect(benchPress?.standard).toBe('bench');
   });
 
+  it('an install stamped seedVersion 2 whose Neck row lacks demo gets it backfilled and is stamped current', async () => {
+    await downgradeToV2();
+    expect((await db.exercises.get(NECK))?.demo).toBeUndefined();
+    await migrateSeed();
+    expect((await db.exercises.get(NECK))?.demo).toBe('neck');
+    expect((await db.settings.get('settings'))?.seedVersion).toBe(DEFAULT_SETTINGS.seedVersion);
+    // Fields already backfilled at v2 are untouched.
+    const rdl = await db.exercises.get(RDL);
+    expect(rdl?.equipment).toBe('barbell');
+  });
+
   it('never overwrites a field the user has already edited', async () => {
     await downgradeToV1();
     await db.exercises.update(RDL, { equipment: 'machine' });
     await migrateSeed();
     expect((await db.exercises.get(RDL))?.equipment).toBe('machine');
+  });
+
+  it('never overwrites a demo the user has already set, even when backfilling from v2', async () => {
+    await downgradeToV2();
+    await db.exercises.update(NECK, { demo: 'my-own-photo' });
+    await migrateSeed();
+    expect((await db.exercises.get(NECK))?.demo).toBe('my-own-photo');
   });
 
   it('running it twice is a no-op the second time', async () => {
@@ -788,9 +819,15 @@ describe('migrateSeed (WP3)', () => {
     expect((await db.exercises.get(RDL))?.equipment).toBe('dumbbell');
   });
 
+  it('a fresh install is already at the current seed version', async () => {
+    expect((await db.settings.get('settings'))?.seedVersion).toBe(DEFAULT_SETTINGS.seedVersion);
+    const neck = await db.exercises.get(NECK);
+    expect(neck?.demo).toBe('neck');
+  });
+
   it('re-runs after importBackup merges an old-shaped backup', async () => {
     await importBackup(backupWithUnmigratedSeed(), 'merge');
-    expect((await db.settings.get('settings'))?.seedVersion).toBe(2);
+    expect((await db.settings.get('settings'))?.seedVersion).toBe(DEFAULT_SETTINGS.seedVersion);
     const rdl = await db.exercises.get(RDL);
     expect(rdl?.equipment).toBe('barbell');
     expect(rdl?.demo).toBe('romanian-deadlift');

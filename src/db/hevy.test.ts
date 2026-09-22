@@ -1,10 +1,20 @@
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from './db';
-import { applyReconciledWeights, parseHevyCsv, parseHevyDate, planHevyImport, reconcileWeights, runHevyImport } from './hevy';
-import { lastCompletedSession, previousSets, resetToSeed } from './repo';
+import {
+  applyReconciledWeights,
+  classifySessionImport,
+  importFingerprint,
+  parseHevyCsv,
+  parseHevyDate,
+  planHevyImport,
+  reconcileWeights,
+  runHevyImport,
+} from './hevy';
+import { lastCompletedSession, previousSets, resetToSeed, updateSet } from './repo';
 import { SEED_EXERCISE_IDS, SEED_ROUTINE_IDS } from './seed';
 import { suggestNextRoutine } from '@/domain/schedule';
+import type { Session, SetLog } from '@/domain/types';
 
 const WORKOUTS = readFileSync(new URL('../../hevy_export.csv', import.meta.url), 'utf8');
 const MEASUREMENTS = readFileSync(new URL('../../hevy_measurements.csv', import.meta.url), 'utf8');
@@ -140,7 +150,7 @@ describe('importing into a seeded database', () => {
     expect(push.every((s) => s.source === 'hevy' && !!s.endedAt && (s.durationSec ?? 0) > 0)).toBe(true);
   });
 
-  it('is idempotent: importing the same file twice creates no duplicates', async () => {
+  it('is idempotent: importing the same untouched file twice creates no duplicates and writes nothing the second time', async () => {
     const parsed = parseHevyCsv(WORKOUTS);
     await runHevyImport(parsed, await planHevyImport(parsed));
     const before = {
@@ -149,14 +159,26 @@ describe('importing into a seeded database', () => {
       exercises: await db.exercises.count(),
       ids: (await db.setLogs.toCollection().primaryKeys()).sort(),
     };
+    // Stamp a sentinel field on one row. bulkPut always replaces the whole record, so this
+    // sentinel surviving the second import is a positive, checkable signal that the row was never
+    // rewritten — not merely that its visible fields happen to look the same afterwards.
+    const sentinelId = before.ids[0] as string;
+    await db.setLogs.update(sentinelId, { __untouched: true } as unknown as Partial<SetLog>);
+
     const again = await runHevyImport(parsed, await planHevyImport(parsed));
     expect(again.sessionsNew).toBe(0);
-    expect(again.sessionsUpdated).toBe(21);
+    expect(again.sessionsUpdated).toBe(0);
+    expect(again.sessionsUnchanged).toBe(21);
+    expect(again.sessionsEditedKept).toBe(0);
+    expect(again.setsWritten).toBe(0);
     expect(again.exercisesCreated).toEqual([]);
     expect(await db.sessions.count()).toBe(before.sessions);
     expect(await db.setLogs.count()).toBe(before.sets);
     expect(await db.exercises.count()).toBe(before.exercises);
     expect((await db.setLogs.toCollection().primaryKeys()).sort()).toEqual(before.ids);
+
+    const sentinelRow = (await db.setLogs.get(sentinelId)) as unknown as Record<string, unknown>;
+    expect(sentinelRow.__untouched).toBe(true);
   });
 
   it('remembers Hevy titles as aliases so a second import auto-matches created exercises', async () => {
@@ -217,5 +239,188 @@ describe('importing into a seeded database', () => {
     const parsed = parseHevyCsv('a,b,c\n1,2,3\n');
     expect(parsed.kind).toBe('unknown');
     expect(parsed.warnings[0]).toMatch(/Not a Hevy export/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// classifySessionImport / importFingerprint — pure decision logic (WP1b)
+
+describe('classifySessionImport / importFingerprint (pure)', () => {
+  const row = (over: Partial<SetLog> = {}): SetLog => ({
+    id: 'set-1',
+    sessionId: 's1',
+    routineExerciseId: null,
+    exerciseId: 'ex1',
+    index: 0,
+    type: 'working',
+    weight: 100,
+    reps: 8,
+    completedAt: '2026-01-01T00:00:00.000Z',
+    ...over,
+  });
+  const existingSession = (importHash?: string): Session => ({
+    id: 's1',
+    routineId: '',
+    title: 'Workout',
+    startedAt: '2026-01-01T00:00:00.000Z',
+    source: 'hevy',
+    importHash,
+  });
+
+  it('a session Iron has never imported is new', () => {
+    expect(classifySessionImport(undefined, [], importFingerprint([row()]))).toBe('new');
+  });
+
+  it('a session with no importHash (imported before fingerprints existed) is treated as edited and kept', () => {
+    const stored = [row()];
+    expect(classifySessionImport(existingSession(undefined), stored, importFingerprint(stored))).toBe('editedKept');
+  });
+
+  it('a session whose stored sets still match the recorded fingerprint, and the CSV has not changed, is unchanged', () => {
+    const stored = [row()];
+    const fp = importFingerprint(stored);
+    expect(classifySessionImport(existingSession(fp), stored, fp)).toBe('unchanged');
+  });
+
+  it('a session whose stored sets still match the recorded fingerprint, and the CSV changed, is updated', () => {
+    const stored = [row()];
+    const fp = importFingerprint(stored);
+    const newFp = importFingerprint([row({ weight: 105 })]);
+    expect(classifySessionImport(existingSession(fp), stored, newFp)).toBe('updated');
+  });
+
+  it('a session whose stored sets no longer match the recorded fingerprint (edited in Iron) is kept, even if the CSV also changed', () => {
+    const original = [row()];
+    const fp = importFingerprint(original);
+    const editedInApp = [row({ weight: 999 })];
+    const newFp = importFingerprint([row({ weight: 105 })]);
+    expect(classifySessionImport(existingSession(fp), editedInApp, newFp)).toBe('editedKept');
+  });
+
+  it('the fingerprint is order-independent', () => {
+    const a = [row({ id: 'a', index: 0 }), row({ id: 'b', index: 1, weight: 105 })];
+    const b = [a[1], a[0]];
+    expect(importFingerprint(a)).toBe(importFingerprint(b));
+  });
+
+  it('the fingerprint changes when an import-controlled field changes', () => {
+    expect(importFingerprint([row()])).not.toBe(importFingerprint([row({ reps: 9 })]));
+    expect(importFingerprint([row()])).not.toBe(importFingerprint([row({ type: 'drop' })]));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Edit-safe re-import against fake-indexeddb (WP1b)
+
+describe('re-import does not silently discard edits made in Iron', () => {
+  const header =
+    'title,start_time,end_time,description,exercise_title,superset_id,exercise_notes,set_index,set_type,weight_kg,reps,distance_km,duration_seconds,rpe';
+  const csv = (weight: number) =>
+    [
+      header,
+      `"Lower (Hinge)","1 Sep 2026, 18:00","1 Sep 2026, 19:00","","Romanian Deadlift (Barbell)",,"",0,"normal",${weight},8,,,`,
+      `"Lower (Hinge)","1 Sep 2026, 18:00","1 Sep 2026, 19:00","","Romanian Deadlift (Barbell)",,"",1,"normal",${weight},8,,,`,
+    ].join('\n');
+
+  async function importedSession() {
+    return (await db.sessions.toArray()).find((s) => s.source === 'hevy')!;
+  }
+
+  beforeEach(async () => {
+    await resetToSeed();
+  });
+
+  it('a fresh import is all new, with no editedKept/unchanged sessions', async () => {
+    const parsed = parseHevyCsv(csv(100));
+    const plan = await planHevyImport(parsed);
+    expect(plan.counts).toEqual({ sessionsNew: 1, sessionsUpdated: 0, sessionsUnchanged: 0, sessionsEditedKept: 0, sessionsEditedOverwritten: 0 });
+    const result = await runHevyImport(parsed, plan);
+    expect(result.sessionsNew).toBe(1);
+    expect(result.setsWritten).toBe(2);
+  });
+
+  it('an edit made in Iron survives a re-import and is counted as kept', async () => {
+    const parsed = parseHevyCsv(csv(100));
+    await runHevyImport(parsed, await planHevyImport(parsed));
+    const session = await importedSession();
+    const sets = await db.setLogs.where('sessionId').equals(session.id).sortBy('index');
+    expect(sets.map((s) => s.weight)).toEqual([100, 100]);
+
+    // Edit made in Iron: bump the first set's weight.
+    await updateSet(sets[0].id, { weight: 110 });
+
+    // Re-import the exact same (unchanged) CSV.
+    const parsed2 = parseHevyCsv(csv(100));
+    const plan2 = await planHevyImport(parsed2);
+    expect(plan2.counts.sessionsEditedKept).toBe(1);
+    expect(plan2.counts.sessionsUpdated).toBe(0);
+    expect(plan2.counts.sessionsUnchanged).toBe(0);
+
+    const result2 = await runHevyImport(parsed2, plan2);
+    expect(result2.sessionsEditedKept).toBe(1);
+    expect(result2.sessionsUpdated).toBe(0);
+    expect(result2.setsWritten).toBe(0);
+
+    const setsAfter = await db.setLogs.where('sessionId').equals(session.id).sortBy('index');
+    expect(setsAfter.map((s) => s.weight)).toEqual([110, 100]); // the edit survives
+  });
+
+  it('the overwrite opt-in replaces an edited session with the current Hevy version', async () => {
+    const parsed = parseHevyCsv(csv(100));
+    await runHevyImport(parsed, await planHevyImport(parsed));
+    const session = await importedSession();
+    const sets = await db.setLogs.where('sessionId').equals(session.id).sortBy('index');
+    await updateSet(sets[0].id, { weight: 110 }); // edit in Iron
+
+    const parsed2 = parseHevyCsv(csv(100));
+    const plan2 = await planHevyImport(parsed2);
+    const result2 = await runHevyImport(parsed2, plan2, { overwriteEdited: true });
+    expect(result2.sessionsEditedOverwritten).toBe(1);
+    expect(result2.sessionsEditedKept).toBe(0);
+    expect(result2.setsWritten).toBe(2);
+
+    const setsAfter = await db.setLogs.where('sessionId').equals(session.id).sortBy('index');
+    expect(setsAfter.map((s) => s.weight)).toEqual([100, 100]); // Hevy's version wins
+  });
+
+  it('an untouched session is updated when the Hevy CSV changes', async () => {
+    const parsed = parseHevyCsv(csv(100));
+    await runHevyImport(parsed, await planHevyImport(parsed));
+    const session = await importedSession();
+
+    const parsed2 = parseHevyCsv(csv(105)); // weight changed on the Hevy side
+    const plan2 = await planHevyImport(parsed2);
+    expect(plan2.counts.sessionsUpdated).toBe(1);
+    expect(plan2.counts.sessionsUnchanged).toBe(0);
+    expect(plan2.counts.sessionsEditedKept).toBe(0);
+
+    const result2 = await runHevyImport(parsed2, plan2);
+    expect(result2.sessionsUpdated).toBe(1);
+    expect(result2.setsWritten).toBe(2);
+    const sets = await db.setLogs.where('sessionId').equals(session.id).sortBy('index');
+    expect(sets.every((s) => s.weight === 105)).toBe(true);
+  });
+
+  it('an identical re-import of an untouched session is unchanged and writes nothing', async () => {
+    const parsed = parseHevyCsv(csv(100));
+    await runHevyImport(parsed, await planHevyImport(parsed));
+    const session = await importedSession();
+    const before = await db.setLogs.where('sessionId').equals(session.id).sortBy('index');
+
+    // A sentinel field bulkPut would always wipe, so it surviving proves the row was never rewritten.
+    await db.setLogs.update(before[0].id, { __untouched: true } as unknown as Partial<SetLog>);
+
+    const parsed2 = parseHevyCsv(csv(100));
+    const plan2 = await planHevyImport(parsed2);
+    expect(plan2.counts.sessionsUnchanged).toBe(1);
+
+    const result2 = await runHevyImport(parsed2, plan2);
+    expect(result2.sessionsUnchanged).toBe(1);
+    expect(result2.sessionsUpdated).toBe(0);
+    expect(result2.setsWritten).toBe(0);
+
+    const after = (await db.setLogs.get(before[0].id)) as unknown as Record<string, unknown>;
+    expect(after.__untouched).toBe(true);
+    expect(after.completedAt).toBe(before[0].completedAt);
   });
 });

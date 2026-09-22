@@ -251,9 +251,40 @@ export interface HevyRoutinePlan {
   sessions: number;
 }
 
+/**
+ * Session-level counts for the plan and the result screen — facts only, computed the same way in
+ * both places (see `tallySessionImport` / `runHevyImport`) so what the plan promises is what the
+ * result reports.
+ */
+export interface HevyImportCounts {
+  sessionsNew: number;
+  /** Existing, untouched since its last import, and the CSV now differs: safely replaced. */
+  sessionsUpdated: number;
+  /** Existing, untouched since its last import, and the CSV is identical: nothing written. */
+  sessionsUnchanged: number;
+  /** Existing and edited in Iron since import (or imported before fingerprints existed): kept. */
+  sessionsEditedKept: number;
+  /** Existing and edited in Iron, but the overwrite opt-in was on: replaced with Hevy's version. */
+  sessionsEditedOverwritten: number;
+}
+
+const EMPTY_IMPORT_COUNTS: HevyImportCounts = {
+  sessionsNew: 0,
+  sessionsUpdated: 0,
+  sessionsUnchanged: 0,
+  sessionsEditedKept: 0,
+  sessionsEditedOverwritten: 0,
+};
+
 export interface HevyImportPlan {
   exercises: HevyExercisePlan[];
   routines: HevyRoutinePlan[];
+  /**
+   * What re-importing `plan` right now would do to sessions, computed as if the overwrite opt-in
+   * is off (so `sessionsEditedKept` is the full count of sessions edited in Iron; `runHevyImport`
+   * moves some of that into `sessionsEditedOverwritten` when the opt-in is actually turned on).
+   */
+  counts: HevyImportCounts;
 }
 
 function guessRoutine(title: string, routines: Routine[]): Routine | null {
@@ -298,7 +329,14 @@ export async function planHevyImport(parsed: HevyParsed): Promise<HevyImportPlan
     const r = guessRoutine(title, routines);
     return { title, routineId: r?.id ?? null, routineName: r?.name ?? null, sessions };
   });
-  return { exercises, routines: routinePlans };
+  const plan: HevyImportPlan = { exercises, routines: routinePlans, counts: { ...EMPTY_IMPORT_COUNTS } };
+  if (parsed.kind === 'workouts' && parsed.sessions.length > 0) {
+    const exerciseIdByTitle = new Map<string, string>();
+    for (const p of exercises) exerciseIdByTitle.set(p.title, p.exerciseId ?? (await stableUuid('hevy-exercise', p.title)));
+    const { sessions, sets } = await buildHevyRows(parsed, plan, exerciseIdByTitle);
+    plan.counts = await tallySessionImport(sessions, sets);
+  }
+  return plan;
 }
 
 // ---------------------------------------------------------------------------
@@ -365,63 +403,66 @@ export function guessExercise(stat: HevyExerciseStat): Omit<Exercise, 'id' | 'cr
 }
 
 // ---------------------------------------------------------------------------
-// Running the import
+// Edit-safe re-import
+//
+// Re-importing used to delete and rewrite every already-imported session's setLogs wholesale, so
+// any correction made in Iron (a weight, reps, a set type, a deleted or added set) was silently
+// lost the next time the same (or an updated) Hevy export was imported. Now each imported session
+// carries `importHash`: a fingerprint of exactly what the import wrote. A re-import only replaces
+// a session's sets when the sets CURRENTLY stored still match that fingerprint — i.e. nobody has
+// touched them in Iron since. A mismatch (or no fingerprint at all, from a session imported before
+// this existed) means "edited in Iron, or unknown", and the session is kept by default.
 
-export interface HevyImportResult {
-  sessionsNew: number;
-  sessionsUpdated: number;
-  setsWritten: number;
-  exercisesCreated: string[];
-  bodyweightWritten: number;
-  skippedRows: number;
+type ImportControlledSet = Pick<SetLog, 'index' | 'exerciseId' | 'type' | 'weight' | 'reps' | 'distanceM' | 'seconds' | 'rir'>;
+
+/**
+ * Order-independent fingerprint of the import-controlled fields of a session's sets. Pure: same
+ * rows in any order produce the same string, so it can be compared across imports and across a
+ * store round-trip.
+ */
+export function importFingerprint(sets: ImportControlledSet[]): string {
+  return sets
+    .map((s) => [s.index, s.exerciseId, s.type, s.weight, s.reps ?? '', s.distanceM ?? '', s.seconds ?? '', s.rir ?? ''].join('\u0001'))
+    .sort()
+    .join('\u0002');
 }
 
-export async function runHevyImport(parsed: HevyParsed, plan: HevyImportPlan): Promise<HevyImportResult> {
-  const result: HevyImportResult = {
-    sessionsNew: 0,
-    sessionsUpdated: 0,
-    setsWritten: 0,
-    exercisesCreated: [],
-    bodyweightWritten: 0,
-    skippedRows: parsed.skippedRows,
-  };
+export type SessionImportStatus = 'new' | 'updated' | 'unchanged' | 'editedKept';
 
-  if (parsed.kind === 'measurements') {
-    for (const m of parsed.measurements) {
-      await logBodyweight(m.date, m.kg);
-      result.bodyweightWritten++;
-    }
-    return result;
+/**
+ * Decide what a re-import should do with one already-known Hevy session, given what is actually
+ * stored for it now and what the import would newly write. Pure — no IO.
+ */
+export function classifySessionImport(existing: Session | undefined, existingSets: ImportControlledSet[], newFingerprint: string): SessionImportStatus {
+  if (!existing) return 'new';
+  const storedFingerprint = importFingerprint(existingSets);
+  const edited = existing.importHash === undefined || existing.importHash !== storedFingerprint;
+  if (edited) return 'editedKept';
+  return newFingerprint === storedFingerprint ? 'unchanged' : 'updated';
+}
+
+function groupBySessionId(sets: SetLog[]): Map<string, SetLog[]> {
+  const m = new Map<string, SetLog[]>();
+  for (const s of sets) {
+    const arr = m.get(s.sessionId);
+    if (arr) arr.push(s);
+    else m.set(s.sessionId, [s]);
   }
-  if (parsed.kind !== 'workouts') return result;
+  return m;
+}
 
-  // 1. Resolve / create exercises.
-  const exerciseByTitle = new Map<string, Exercise>();
-  const halveByTitle = new Map<string, boolean>();
-  const statByTitle = new Map(parsed.exercises.map((s) => [s.title, s]));
-  for (const p of plan.exercises) {
-    halveByTitle.set(p.title, p.halve);
-    let ex: Exercise | undefined = p.exerciseId ? await db.exercises.get(p.exerciseId) : undefined;
-    if (!ex) {
-      const stat = statByTitle.get(p.title);
-      if (!stat) continue;
-      const guessed = guessExercise(stat);
-      ex = { ...guessed, id: await stableUuid('hevy-exercise', p.title), createdAt: new Date().toISOString() };
-      const existing = await db.exercises.get(ex.id);
-      if (!existing) {
-        await db.exercises.put(ex);
-        result.exercisesCreated.push(ex.name);
-      } else {
-        ex = existing;
-      }
-    } else if (normaliseName(ex.name) !== normaliseName(p.title) && !(ex.aliases ?? []).some((a) => normaliseName(a) === normaliseName(p.title))) {
-      // Remember the Hevy title so the next import auto-matches.
-      await db.exercises.update(ex.id, { aliases: [...(ex.aliases ?? []), p.title] });
-    }
-    exerciseByTitle.set(p.title, ex);
-  }
-
-  // 2. Routine mapping and routine-exercise lookup.
+/**
+ * Build the session/set rows a full import of `parsed` would produce, given already-resolved
+ * exercise ids per Hevy title. Read-only (routine/routine-exercise lookups only) — used both to
+ * count what an import WOULD do (the plan) and, with the real created-exercise ids, to actually
+ * do it (`runHevyImport`), so the two can never disagree.
+ */
+async function buildHevyRows(
+  parsed: HevyParsed,
+  plan: HevyImportPlan,
+  exerciseIdByTitle: Map<string, string>,
+): Promise<{ sessions: Session[]; sets: SetLog[]; skippedRows: number }> {
+  const halveByTitle = new Map(plan.exercises.map((p) => [p.title, p.halve]));
   const routineByTitle = new Map<string, Routine | null>();
   const rxByRoutine = new Map<string, RoutineExercise[]>();
   for (const rp of plan.routines) {
@@ -430,9 +471,9 @@ export async function runHevyImport(parsed: HevyParsed, plan: HevyImportPlan): P
     if (r && !rxByRoutine.has(r.id)) rxByRoutine.set(r.id, (await routineItems(r.id)).map((i) => i.rx));
   }
 
-  // 3. Build rows with deterministic ids.
   const sessions: Session[] = [];
   const sets: SetLog[] = [];
+  let skippedRows = 0;
   for (const hs of parsed.sessions) {
     const id = await stableUuid('hevy-session', hs.key);
     const routine = routineByTitle.get(hs.title) ?? null;
@@ -454,19 +495,19 @@ export async function runHevyImport(parsed: HevyParsed, plan: HevyImportPlan): P
     const span = Math.max(endMs - startMs, n * 1000);
     for (let i = 0; i < n; i++) {
       const s = hs.sets[i];
-      const ex = exerciseByTitle.get(s.exerciseTitle);
-      if (!ex) {
-        result.skippedRows++;
+      const exerciseId = exerciseIdByTitle.get(s.exerciseTitle);
+      if (!exerciseId) {
+        skippedRows++;
         continue;
       }
-      const rx = rxs.find((r) => r.exerciseId === ex.id) ?? null;
+      const rx = rxs.find((r) => r.exerciseId === exerciseId) ?? null;
       const halve = halveByTitle.get(s.exerciseTitle) ?? false;
       const weight = s.weight === null ? 0 : halve ? roundKg(s.weight / 2) : roundKg(s.weight);
       sets.push({
         id: await stableUuid('hevy-set', `${hs.key}|${s.exerciseTitle}|${s.ordinal}`),
         sessionId: id,
         routineExerciseId: rx?.id ?? null,
-        exerciseId: ex.id,
+        exerciseId,
         index: s.ordinal,
         type: s.type,
         weight,
@@ -478,21 +519,133 @@ export async function runHevyImport(parsed: HevyParsed, plan: HevyImportPlan): P
       });
     }
   }
+  return { sessions, sets, skippedRows };
+}
 
-  // 4. Write. Existing imported sessions are replaced wholesale so edits/deletions in Hevy propagate.
-  await db.transaction('rw', [db.sessions, db.setLogs], async () => {
-    const existing = await db.sessions.bulkGet(sessions.map((s) => s.id));
-    for (let i = 0; i < sessions.length; i++) {
-      if (existing[i]) {
-        result.sessionsUpdated++;
-        await db.setLogs.where('sessionId').equals(sessions[i].id).delete();
-      } else {
-        result.sessionsNew++;
-      }
+/** Read-only counts for the plan step: what a full import right now would do to each session. */
+async function tallySessionImport(sessions: Session[], sets: SetLog[]): Promise<HevyImportCounts> {
+  const counts: HevyImportCounts = { ...EMPTY_IMPORT_COUNTS };
+  if (sessions.length === 0) return counts;
+  const setsBySession = groupBySessionId(sets);
+  const existingSessions = await db.sessions.bulkGet(sessions.map((s) => s.id));
+  for (let i = 0; i < sessions.length; i++) {
+    const newFingerprint = importFingerprint(setsBySession.get(sessions[i].id) ?? []);
+    const existing = existingSessions[i];
+    const existingSets = existing ? await db.setLogs.where('sessionId').equals(existing.id).toArray() : [];
+    const status = classifySessionImport(existing, existingSets, newFingerprint);
+    if (status === 'new') counts.sessionsNew++;
+    else if (status === 'updated') counts.sessionsUpdated++;
+    else if (status === 'unchanged') counts.sessionsUnchanged++;
+    else counts.sessionsEditedKept++;
+  }
+  return counts;
+}
+
+// ---------------------------------------------------------------------------
+// Running the import
+
+export interface HevyImportResult extends HevyImportCounts {
+  setsWritten: number;
+  exercisesCreated: string[];
+  bodyweightWritten: number;
+  skippedRows: number;
+}
+
+export interface RunHevyImportOptions {
+  /** Replace sessions edited in Iron with Hevy's current version instead of keeping them. Off by default. */
+  overwriteEdited?: boolean;
+}
+
+export async function runHevyImport(parsed: HevyParsed, plan: HevyImportPlan, options: RunHevyImportOptions = {}): Promise<HevyImportResult> {
+  const overwriteEdited = options.overwriteEdited ?? false;
+  const result: HevyImportResult = {
+    ...EMPTY_IMPORT_COUNTS,
+    setsWritten: 0,
+    exercisesCreated: [],
+    bodyweightWritten: 0,
+    skippedRows: parsed.skippedRows,
+  };
+
+  if (parsed.kind === 'measurements') {
+    for (const m of parsed.measurements) {
+      await logBodyweight(m.date, m.kg);
+      result.bodyweightWritten++;
     }
-    await db.sessions.bulkPut(sessions);
-    await db.setLogs.bulkPut(sets);
-    result.setsWritten = sets.length;
+    return result;
+  }
+  if (parsed.kind !== 'workouts') return result;
+
+  // 1. Resolve / create exercises.
+  const exerciseIdByTitle = new Map<string, string>();
+  const statByTitle = new Map(parsed.exercises.map((s) => [s.title, s]));
+  for (const p of plan.exercises) {
+    let ex: Exercise | undefined = p.exerciseId ? await db.exercises.get(p.exerciseId) : undefined;
+    if (!ex) {
+      const stat = statByTitle.get(p.title);
+      if (!stat) continue;
+      const guessed = guessExercise(stat);
+      ex = { ...guessed, id: await stableUuid('hevy-exercise', p.title), createdAt: new Date().toISOString() };
+      const existing = await db.exercises.get(ex.id);
+      if (!existing) {
+        await db.exercises.put(ex);
+        result.exercisesCreated.push(ex.name);
+      } else {
+        ex = existing;
+      }
+    } else if (normaliseName(ex.name) !== normaliseName(p.title) && !(ex.aliases ?? []).some((a) => normaliseName(a) === normaliseName(p.title))) {
+      // Remember the Hevy title so the next import auto-matches.
+      await db.exercises.update(ex.id, { aliases: [...(ex.aliases ?? []), p.title] });
+    }
+    exerciseIdByTitle.set(p.title, ex.id);
+  }
+
+  // 2/3. Build candidate rows with deterministic ids.
+  const { sessions, sets, skippedRows } = await buildHevyRows(parsed, plan, exerciseIdByTitle);
+  result.skippedRows += skippedRows;
+  const setsBySession = groupBySessionId(sets);
+  const existingSessions = sessions.length ? await db.sessions.bulkGet(sessions.map((s) => s.id)) : [];
+
+  // 4. Classify each session against what is actually stored for it, then write only what changed.
+  const sessionsToPut: Session[] = [];
+  const setsToPut: SetLog[] = [];
+  const sessionIdsToClearSets: string[] = [];
+  for (let i = 0; i < sessions.length; i++) {
+    const session = sessions[i];
+    const newSets = setsBySession.get(session.id) ?? [];
+    const newFingerprint = importFingerprint(newSets);
+    const existing = existingSessions[i];
+    const existingSets = existing ? await db.setLogs.where('sessionId').equals(existing.id).toArray() : [];
+    const status = classifySessionImport(existing, existingSets, newFingerprint);
+
+    const replace = () => {
+      if (existing) sessionIdsToClearSets.push(session.id);
+      sessionsToPut.push({ ...session, importHash: newFingerprint });
+      setsToPut.push(...newSets);
+      result.setsWritten += newSets.length;
+    };
+
+    if (status === 'new') {
+      result.sessionsNew++;
+      replace();
+    } else if (status === 'updated') {
+      result.sessionsUpdated++;
+      replace();
+    } else if (status === 'unchanged') {
+      result.sessionsUnchanged++;
+      // Nothing written: the rows already in the store match exactly what this import would write.
+    } else if (overwriteEdited) {
+      result.sessionsEditedOverwritten++;
+      replace();
+    } else {
+      result.sessionsEditedKept++;
+      // Nothing written: the owner's edits in Iron stand.
+    }
+  }
+
+  await db.transaction('rw', [db.sessions, db.setLogs], async () => {
+    for (const id of sessionIdsToClearSets) await db.setLogs.where('sessionId').equals(id).delete();
+    if (sessionsToPut.length > 0) await db.sessions.bulkPut(sessionsToPut);
+    if (setsToPut.length > 0) await db.setLogs.bulkPut(setsToPut);
   });
 
   return result;

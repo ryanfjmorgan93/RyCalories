@@ -186,7 +186,9 @@ test.describe('nutrition', () => {
 
     await page.goto('/settings');
     // The line to check on the phone after a schema bump: history intact, version current.
-    await expect(page.getByTestId('data-counts')).toContainText('1 meals');
+    // Singular: this line used to render "1 meals" regardless of count. Meals is the final
+    // segment, so anchor to the end to tell "1 meal" apart from "1 meals".
+    await expect(page.getByTestId('data-counts')).toHaveText(/· 1 meal$/);
     await expect(page.getByTestId('db-version')).toHaveText('Database v2');
   });
 

@@ -141,12 +141,14 @@ test('capture every screen for a design session', async ({ page, browser, contex
   await page.locator('input[type="file"][accept*="csv"]').setInputFiles(HEVY_CSV);
   await expect(page.getByRole('dialog')).toContainText('21 sessions');
   await page.getByRole('button', { name: /Import 21 sessions/ }).click();
+  await page.getByTestId('hevy-result-continue').click(); // result step: "Continue" into the reconcile step
   await page.getByRole('button', { name: 'Keep mine' }).click();
   await expect(page.getByRole('dialog')).toBeHidden();
 
   await page.goto('/settings');
   await page.locator('input[type="file"][accept*="csv"]').setInputFiles(HEVY_MEASUREMENTS);
   await page.getByRole('button', { name: 'Import', exact: true }).click();
+  await page.getByTestId('hevy-result-continue').click(); // result step: "Done"
   await expect(page.getByRole('dialog')).toBeHidden();
 
   for (const [back, kg] of [[0, 80.4], [2, 80.1], [4, 79.8], [6, 79.9]] as const) {

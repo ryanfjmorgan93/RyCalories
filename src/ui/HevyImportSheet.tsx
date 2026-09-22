@@ -4,6 +4,7 @@ import {
   planHevyImport,
   reconcileWeights,
   runHevyImport,
+  type HevyImportCounts,
   type HevyImportPlan,
   type HevyImportResult,
   type HevyParsed,
@@ -13,13 +14,32 @@ import { dateKeyToDate } from '@/domain/dates';
 import { fmtDate, fmtWeight } from '@/domain/format';
 import { Button } from '@/ui/components/Button';
 import { Stat } from '@/ui/components/Card';
-import { Chip } from '@/ui/components/Chip';
+import { Chip, Toggle } from '@/ui/components/Chip';
 import { Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { CheckIcon } from '@/ui/components/TopBar';
 import { useExercises, useRoutines } from '@/ui/hooks';
 
 const DATE_OPTS: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' };
+
+/** "1 session" / "2 sessions" — pluralising only the final word of `singular` is always correct here. */
+function plural(n: number, singular: string): string {
+  return `${n} ${singular}${n === 1 ? '' : 's'}`;
+}
+
+/** New / updated / unchanged / kept — the same four facts shown before import (the plan) and after (the result). */
+function CountsLines({ counts, extra }: { counts: HevyImportCounts; extra?: ReactNode }) {
+  return (
+    <div className="grid gap-1 text-sm" data-testid="hevy-counts">
+      <div>{plural(counts.sessionsNew, 'new session')}</div>
+      <div>{plural(counts.sessionsUpdated, 'session')} updated from Hevy</div>
+      <div>{plural(counts.sessionsUnchanged, 'session')} unchanged</div>
+      {counts.sessionsEditedKept > 0 && <div>{plural(counts.sessionsEditedKept, 'session')} edited in Iron — kept</div>}
+      {counts.sessionsEditedOverwritten > 0 && <div>{plural(counts.sessionsEditedOverwritten, 'session')} edited in Iron — overwritten</div>}
+      {extra}
+    </div>
+  );
+}
 
 export function HevyImportSheet({
   parsed,
@@ -37,8 +57,10 @@ export function HevyImportSheet({
   const [plan, setPlan] = useState<HevyImportPlan | null>(null);
   // Only dumbbell lifts can have been logged as a pair total; keep the toggle off the rest.
   const dumbbellTitles = new Set(parsed.exercises.filter((e) => e.isDumbbell).map((e) => e.title));
+  const [overwriteEdited, setOverwriteEdited] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<HevyImportResult | null>(null);
+  const [resultAck, setResultAck] = useState(false);
   const [rows, setRows] = useState<WeightReconcileRow[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -46,7 +68,9 @@ export function HevyImportSheet({
     if (!open) return;
     let alive = true;
     setPlan(null);
+    setOverwriteEdited(false);
     setResult(null);
+    setResultAck(false);
     setRows(null);
     void planHevyImport(parsed).then((p) => {
       if (alive) setPlan(p);
@@ -62,28 +86,21 @@ export function HevyImportSheet({
     return dates.length ? { first: dates[0], last: dates[dates.length - 1] } : null;
   }, [parsed]);
 
-  const finish = (r: HevyImportResult) => {
-    if (parsed.kind === 'measurements') toast(`Imported ${r.bodyweightWritten} bodyweight readings`, 'ok');
-    else toast(`Imported ${r.sessionsNew + r.sessionsUpdated} sessions, ${r.setsWritten} sets (${r.sessionsUpdated} updated)`, 'ok');
-    onDone(r);
-  };
+  const finish = (r: HevyImportResult) => onDone(r);
 
   const runImport = async () => {
     if (!plan || busy) return;
     setBusy(true);
     try {
-      const r = await runHevyImport(parsed, plan);
-      if (parsed.kind === 'measurements') {
-        finish(r);
-        return;
-      }
-      const rec = await reconcileWeights();
-      if (rec.length === 0) {
-        finish(r);
-        return;
-      }
+      const r = await runHevyImport(parsed, plan, { overwriteEdited });
+      const rec = parsed.kind === 'measurements' ? [] : await reconcileWeights();
+      // Set every piece of state the result step reads together, as the last synchronous act of
+      // this handler. Setting `result` and only later, after another await, setting `rows` left a
+      // render in between where the result step had to decide "Continue" vs "Done" — i.e. whether
+      // there is a reconcile step to go to — before it actually knew, so a fast tap could close
+      // the sheet and skip a reconcile that was a moment away from existing.
       setResult(r);
-      setRows(rec);
+      setRows(parsed.kind === 'measurements' ? null : rec);
       setSelected(new Set(rec.map((x) => x.rx.id)));
     } catch {
       toast('Import failed', 'danger');
@@ -125,7 +142,47 @@ export function HevyImportSheet({
     );
   };
 
-  // Reconcile step (same sheet, after the import has run).
+  // Result step (same sheet, straight after the write): reports what actually happened, before
+  // anything else — including before the reconcile step, so the counts are never buried under it.
+  if (result && !(rows && rows.length > 0 && resultAck)) {
+    const hasReconcile = !!rows && rows.length > 0;
+    return (
+      <Sheet
+        open={open}
+        onClose={() => (hasReconcile ? setResultAck(true) : finish(result))}
+        title="Import complete"
+        footer={
+          <Button
+            size="xl"
+            variant="primary"
+            full
+            onClick={() => (hasReconcile ? setResultAck(true) : finish(result))}
+            data-testid="hevy-result-continue"
+          >
+            {hasReconcile ? 'Continue' : 'Done'}
+          </Button>
+        }
+      >
+        {parsed.kind === 'measurements' ? (
+          <div className="text-base" data-testid="hevy-result">
+            {plural(result.bodyweightWritten, 'bodyweight reading')} imported
+          </div>
+        ) : (
+          <CountsLines
+            counts={result}
+            extra={
+              <>
+                <div className="text-muted">{plural(result.setsWritten, 'set')} written</div>
+                {result.exercisesCreated.length > 0 && <div className="text-muted">{plural(result.exercisesCreated.length, 'exercise')} created</div>}
+              </>
+            }
+          />
+        )}
+      </Sheet>
+    );
+  }
+
+  // Reconcile step (same sheet, after the result has been acknowledged).
   if (rows && result) {
     return (
       <Sheet
@@ -197,6 +254,20 @@ export function HevyImportSheet({
             </div>
           )}
           {parsed.skippedRows > 0 && <div className="mt-1 text-sm text-muted">{parsed.skippedRows} rows skipped</div>}
+
+          {plan && (
+            <div className="mt-3">
+              <CountsLines counts={plan.counts} />
+              {plan.counts.sessionsEditedKept > 0 && (
+                <Toggle
+                  checked={overwriteEdited}
+                  onChange={setOverwriteEdited}
+                  label={`Overwrite the ${plural(plan.counts.sessionsEditedKept, 'session')} edited in Iron`}
+                  sub="Off keeps what was edited in Iron. On replaces it with Hevy's version."
+                />
+              )}
+            </div>
+          )}
 
           <Heading>Exercises</Heading>
           {!plan && <div className="text-sm text-muted">Matching…</div>}

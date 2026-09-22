@@ -77,16 +77,22 @@ export async function wipeAll(): Promise<void> {
 }
 
 /**
- * Backfill `equipment` / `demo` / `standard` onto the seed exercise rows for installs seeded
- * before those fields existed. Idempotent (guarded by `settings.seedVersion`), and never
- * overwrites a field the user has already set — only fields the stored row lacks are patched.
- * Fresh installs are already seeded with the fields (seedAll writes the current SEED_EXERCISES
- * and DEFAULT_SETTINGS.seedVersion is 2), so this is a no-op for them.
+ * Backfill `equipment` / `demo` / `standard` onto the seed exercise rows for installs whose
+ * `settings.seedVersion` is behind `DEFAULT_SETTINGS.seedVersion` (the current value, never a
+ * literal — comparing against a hardcoded number is what let this migration go stale once
+ * already: it stopped at version 2 while the seed kept changing underneath it, so the Neck
+ * exercise's `demo` never reached an install already stamped 2). Idempotent, and never overwrites
+ * a field the user has already set — only fields the stored row lacks are patched, regardless of
+ * which version introduced them, so an install several versions behind or one version behind is
+ * fixed the same way: run the backfill, then stamp the current version. Fresh installs are
+ * already seeded with every field (seedAll writes the current SEED_EXERCISES and
+ * DEFAULT_SETTINGS.seedVersion directly), so this is a no-op for them.
  */
 export async function migrateSeed(): Promise<void> {
   await db.transaction('rw', [db.exercises, db.settings], async () => {
     const settings = await db.settings.get('settings');
-    if (settings && (settings.seedVersion ?? 1) >= 2) return;
+    if (!settings) return;
+    if ((settings.seedVersion ?? 1) >= DEFAULT_SETTINGS.seedVersion) return;
     for (const seedEx of SEED_EXERCISES) {
       const stored = await db.exercises.get(seedEx.id);
       if (!stored) continue;
@@ -99,7 +105,7 @@ export async function migrateSeed(): Promise<void> {
     // Deliberately db.settings.update, not saveSettings: a migration is not a user save, so it
     // should not bump `savedAt` (or, before `saveSettings` learned to leave calorieStartDate
     // alone for an unrelated patch, stamp the reverse-diet start date as a side effect).
-    if (settings) await db.settings.update('settings', { seedVersion: 2 });
+    await db.settings.update('settings', { seedVersion: DEFAULT_SETTINGS.seedVersion });
   });
 }
 
