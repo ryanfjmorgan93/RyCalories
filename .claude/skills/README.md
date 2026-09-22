@@ -49,3 +49,10 @@ needs Node 22+, FFmpeg and the Hyperframes CLI at run time.
 ## Updating
 
 These are vendored copies, not submodules — re-copy from upstream to update.
+
+## Slash commands
+
+`.claude/commands/` holds one generated shim per skill, so each appears in the
+`/` picker (including in the mobile and web apps, whose autocomplete lists
+slash commands rather than skills). Each shim just invokes the matching skill
+and forwards `$ARGUMENTS`. Regenerate them after adding or removing a skill.
