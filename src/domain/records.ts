@@ -50,6 +50,19 @@ interface BestsOpts {
   bodyweightKg?: number;
 }
 
+interface NewRecordsOpts extends BestsOpts {
+  /**
+   * True only when at least one real, completed prior session exists for this exercise (a Hevy
+   * import or a restored backup counts; an in-progress session never does). Defaults to false —
+   * a caller has to prove history exists, rather than a missing flag silently letting a
+   * first-ever session look like it beat something. A first-ever session must never show a
+   * record, not even a later set beating an earlier one logged minutes ago in the same session.
+   */
+  hasPriorHistory?: boolean;
+  /** True while the routine-exercise is still calibrating: no working weight is established yet, so nothing it produces can be a record. */
+  calibrating?: boolean;
+}
+
 interface Candidate {
   value: number;
   setIndex: number;
@@ -124,16 +137,21 @@ function pickBest(
  * New personal records set by `newSets`, against the bests already held in `prior`. Each kind is
  * reported at most once, for whichever new set produced the best value of that kind. A record
  * needs a strict improvement over the prior best — a tie sets nothing.
+ *
+ * `opts.hasPriorHistory` must be computed by the caller from real completed sessions — see its
+ * doc comment. `opts.calibrating` suppresses records for a slot that hasn't found its working
+ * weight yet. Either one, and this returns no records at all.
  */
 export function newRecords(
   kind: ExerciseKind,
   newSets: RecordSet[],
   prior: RecordSession[],
-  opts: BestsOpts = {},
+  opts: NewRecordsOpts = {},
 ): PersonalRecord[] {
   // A carry is a distance/load exercise and a timed hold has no reps or weight progression in
   // the sense the other kinds do — neither produces a meaningful personal record here.
   if (kind === 'carry' || kind === 'timed') return [];
+  if (!opts.hasPriorHistory || opts.calibrating) return [];
 
   const priorBests = bestsFor(kind, prior, opts);
   const counted = (sets: RecordSet[]) => countedSets(sets);

@@ -217,3 +217,14 @@ export function suggestedLockInWeight(sets: EngineSet[]): number | null {
   if (w.length === 0) return null;
   return roundKg(Math.max(...w));
 }
+
+/**
+ * The one floor for a lock-in weight, wherever it is offered (Summary and Exercise Detail both
+ * use this — no more diverging rules). A missing, non-finite or negative weight is always
+ * blocked. 0 is blocked too, except for `bodyweight_plus`, where 0 added kg is a real working
+ * weight — bodyweight alone — not an unset field.
+ */
+export function lockInBlocked(weight: number | null, kind: ExerciseKind): boolean {
+  if (weight === null || !Number.isFinite(weight) || weight < 0) return true;
+  return weight === 0 && kind !== 'bodyweight_plus';
+}

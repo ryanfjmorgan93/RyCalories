@@ -3,6 +3,7 @@ import {
   decide,
   detectStall,
   lockIn,
+  lockInBlocked,
   resolveWeight,
   roundKg,
   suggestDoubleIncrement,
@@ -210,6 +211,34 @@ describe('calibrating exercises produce no decision', () => {
       suggestedLockInWeight([warmup(100, 5), { type: 'working', weight: 60, reps: 8 }, { type: 'working', weight: 70, reps: 8 }]),
     ).toBe(70);
     expect(suggestedLockInWeight([warmup(100, 5)])).toBeNull();
+  });
+
+  describe('lockInBlocked', () => {
+    it('blocks a missing or non-finite weight', () => {
+      expect(lockInBlocked(null, 'reps')).toBe(true);
+      expect(lockInBlocked(NaN, 'reps')).toBe(true);
+      expect(lockInBlocked(Infinity, 'reps')).toBe(true);
+    });
+
+    it('blocks a negative weight for every kind, including bodyweight_plus', () => {
+      expect(lockInBlocked(-5, 'reps')).toBe(true);
+      expect(lockInBlocked(-5, 'bodyweight_plus')).toBe(true);
+    });
+
+    it('blocks 0 for a weighted kind — it would prescribe nothing for ever', () => {
+      expect(lockInBlocked(0, 'reps')).toBe(true);
+      expect(lockInBlocked(0, 'carry')).toBe(true);
+      expect(lockInBlocked(0, 'timed')).toBe(true);
+    });
+
+    it('allows 0 only for bodyweight_plus — 0 added kg is bodyweight alone, a real working weight', () => {
+      expect(lockInBlocked(0, 'bodyweight_plus')).toBe(false);
+    });
+
+    it('allows any positive finite weight', () => {
+      expect(lockInBlocked(60, 'reps')).toBe(false);
+      expect(lockInBlocked(0.5, 'bodyweight_plus')).toBe(false);
+    });
   });
 });
 
