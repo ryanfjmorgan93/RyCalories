@@ -8,6 +8,7 @@ import {
   deleteSet,
   ensureSeeded,
   exerciseHistory,
+  clearSessionLockIn,
   finishSession,
   getActiveSession,
   lockInRoutineExercise,
@@ -18,6 +19,7 @@ import {
   resetToSeed,
   routineItems,
   saveSettings,
+  setSessionLockIn,
   setSkipped,
   stallStatus,
   startSession,
@@ -201,6 +203,97 @@ describe('sessions and progression (acceptance §11)', () => {
     const rx = await rxFor(SQUAT, BACK_SQUAT);
     await lockInRoutineExercise(rx.id, 77.5);
     expect(await rxFor(SQUAT, BACK_SQUAT)).toMatchObject({ mode: 'normal', currentWeight: 77.5 });
+  });
+
+  describe('pending lock-in (session.lockIns)', () => {
+    it('setSessionLockIn stores the pending choice on the session, and does not touch the routine-exercise', async () => {
+      const session = await startSession(SQUAT);
+      const rx = await rxFor(SQUAT, BACK_SQUAT);
+      await setSessionLockIn(session.id, rx.id, 24);
+      expect((await db.sessions.get(session.id))?.lockIns).toEqual({ [rx.id]: 24 });
+      expect((await rxFor(SQUAT, BACK_SQUAT)).mode).toBe('calibrating');
+      expect(await db.decisions.count()).toBe(0);
+    });
+
+    it('setSessionLockIn refuses a blocked weight — 0 or negative for a weighted lift', async () => {
+      const session = await startSession(SQUAT);
+      const rx = await rxFor(SQUAT, BACK_SQUAT); // kind: reps, not bodyweight_plus
+      await setSessionLockIn(session.id, rx.id, 0);
+      expect((await db.sessions.get(session.id))?.lockIns).toBeUndefined();
+      await setSessionLockIn(session.id, rx.id, -10);
+      expect((await db.sessions.get(session.id))?.lockIns).toBeUndefined();
+    });
+
+    it('clearSessionLockIn removes a pending choice', async () => {
+      const session = await startSession(SQUAT);
+      const rx = await rxFor(SQUAT, BACK_SQUAT);
+      await setSessionLockIn(session.id, rx.id, 24);
+      await clearSessionLockIn(session.id, rx.id);
+      expect((await db.sessions.get(session.id))?.lockIns).toEqual({});
+    });
+
+    it('a Summary-seeded lock-in choice commits at finish: normal mode, the chosen weight, one lock_in decision — no surprise increase even though every set was at rep-max', async () => {
+      const session = await startSession(SQUAT);
+      const rx = await rxFor(SQUAT, BACK_SQUAT); // repMax 8, increment 5
+      await setSessionLockIn(session.id, rx.id, 24);
+      for (let i = 0; i < 4; i++)
+        await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: BACK_SQUAT, type: 'working', weight: 24, reps: 8 });
+      // The routine-exercise stays calibrating right up to finish — a mid-session change of mind
+      // costs nothing, and buildSummary never sees a normal-progression decision to suggest.
+      expect((await rxFor(SQUAT, BACK_SQUAT)).mode).toBe('calibrating');
+      const summary = await buildSummary(session.id);
+      expect(summary.items.find((i) => i.exercise.id === BACK_SQUAT)?.decision?.rule).toBe('calibrating');
+
+      // Summary seeds its choice from session.lockIns (SummaryScreen.tsx) and sends it through unchanged.
+      const pending = (await db.sessions.get(session.id))!.lockIns![rx.id];
+      await finishSession(session.id, { choices: [{ routineExerciseId: rx.id, lockInAt: pending }] });
+
+      expect(await rxFor(SQUAT, BACK_SQUAT)).toMatchObject({ mode: 'normal', currentWeight: 24 });
+      const decisions = await db.decisions.where('routineExerciseId').equals(rx.id).toArray();
+      expect(decisions).toHaveLength(1);
+      expect(decisions[0]).toMatchObject({ rule: 'lock_in', toWeight: 24, accepted: true });
+    });
+
+    it('untoggled: a pending choice Summary does not carry through leaves the exercise calibrating', async () => {
+      const session = await startSession(SQUAT);
+      const rx = await rxFor(SQUAT, BACK_SQUAT);
+      await setSessionLockIn(session.id, rx.id, 24);
+      await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: BACK_SQUAT, type: 'working', weight: 24, reps: 8 });
+      // The user switched back to "Keep calibrating" on Summary — no lockInAt choice is sent, even
+      // though a pending one is still sitting on the session.
+      await finishSession(session.id, { choices: [] });
+      expect((await rxFor(SQUAT, BACK_SQUAT)).mode).toBe('calibrating');
+      const decisions = await db.decisions.where('routineExerciseId').equals(rx.id).toArray();
+      expect(decisions).toHaveLength(1);
+      expect(decisions[0].rule).toBe('calibrating');
+    });
+
+    it(
+      'documents the retired path: lockInRoutineExercise called mid-session (with the real sessionId) is silently ' +
+        'overwritten by finishSession — exactly why the live session now records a pending choice via setSessionLockIn instead',
+      async () => {
+        const session = await startSession(SQUAT);
+        const rx = await rxFor(SQUAT, BACK_SQUAT); // repMax 8, increment 5
+        for (let i = 0; i < 4; i++)
+          await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: BACK_SQUAT, type: 'working', weight: 24, reps: 8 });
+
+        // The old path: commit the lock-in immediately, mid-session, against the live sessionId.
+        await lockInRoutineExercise(rx.id, 24, session.id);
+        expect(await rxFor(SQUAT, BACK_SQUAT)).toMatchObject({ mode: 'normal', currentWeight: 24 });
+        const justAfterLockIn = await db.decisions.where('sessionId').equals(session.id).toArray();
+        expect(justAfterLockIn).toMatchObject([{ rule: 'lock_in', toWeight: 24 }]);
+
+        // finishSession deletes every decision for this session and rebuilds from scratch. Since
+        // rx.mode is already 'normal', decide() now runs a normal progression decision against
+        // sets that were logged while still calibrating — at rep-max, that is an unrequested
+        // increase, stacked on top of the weight the user only just locked in.
+        await finishSession(session.id, { choices: [] });
+        const after = await db.decisions.where('sessionId').equals(session.id).toArray();
+        expect(after).toHaveLength(1);
+        expect(after[0].rule).toBe('increase'); // the lock_in row above is gone, not "kept"
+        expect((await rxFor(SQUAT, BACK_SQUAT)).currentWeight).toBe(29); // 24 + increment 5 — the surprise increase
+      },
+    );
   });
 
   it('warm-ups are ignored and missing sets hold', async () => {
@@ -389,6 +482,21 @@ describe('linked progression (§4.8 Phase 2)', () => {
     expect((await rxFor(DAY5, CURL)).mode).toBe('calibrating');
     await lockInRoutineExercise(day5Rx.id, 10);
     expect((await rxFor(PULL, CURL))).toMatchObject({ mode: 'normal', currentWeight: 10 });
+  });
+
+  it('a pending lock-in committed at finish propagates to linked siblings', async () => {
+    const pullRx = await rxFor(PULL, CURL);
+    const day5Rx = await rxFor(DAY5, CURL);
+    await updateRoutineExercise(pullRx.id, { linkProgression: true, mode: 'calibrating' });
+    await updateRoutineExercise(day5Rx.id, { linkProgression: true, mode: 'calibrating' });
+
+    const session = await startSession(PULL);
+    await setSessionLockIn(session.id, pullRx.id, 12);
+    await logSet({ sessionId: session.id, routineExerciseId: pullRx.id, exerciseId: CURL, type: 'working', weight: 12, reps: 12 });
+    await finishSession(session.id, { choices: [{ routineExerciseId: pullRx.id, lockInAt: 12 }] });
+
+    expect(await rxFor(PULL, CURL)).toMatchObject({ mode: 'normal', currentWeight: 12 });
+    expect(await rxFor(DAY5, CURL)).toMatchObject({ mode: 'normal', currentWeight: 12 });
   });
 
   it('switching the link on adopts the group number instead of overwriting it', async () => {
@@ -715,13 +823,27 @@ describe('personal records attached to summary items (WP3)', () => {
     expect(weightRecords[1]).toMatchObject({ value: 110, previous: 105, previousSource: 'app', setIndex: 1 });
   });
 
-  it('records are computed for extra exercises too', async () => {
+  it('records are computed for extra exercises too — given real prior history (a first-ever session shows none)', async () => {
+    const s0 = await startSession(HINGE);
+    await addExtraExercise(s0.id, FACE_PULL);
+    await logSet({ sessionId: s0.id, routineExerciseId: null, exerciseId: FACE_PULL, type: 'working', weight: 40, reps: 15 });
+    await db.sessions.update(s0.id, { endedAt: '2026-09-01T19:00:00.000Z' });
+
     const session = await startSession(HINGE);
     await addExtraExercise(session.id, FACE_PULL);
     await logSet({ sessionId: session.id, routineExerciseId: null, exerciseId: FACE_PULL, type: 'working', weight: 50, reps: 15 });
     const summary = await buildSummary(session.id);
     const extra = summary.items.find((i) => i.status === 'extra')!;
     expect(extra.records.length).toBeGreaterThan(0);
+  });
+
+  it('a first-ever session for an extra exercise shows no records, even though a working set was logged', async () => {
+    const session = await startSession(HINGE);
+    await addExtraExercise(session.id, FACE_PULL);
+    await logSet({ sessionId: session.id, routineExerciseId: null, exerciseId: FACE_PULL, type: 'working', weight: 50, reps: 15 });
+    const summary = await buildSummary(session.id);
+    const extra = summary.items.find((i) => i.status === 'extra')!;
+    expect(extra.records).toEqual([]);
   });
 });
 

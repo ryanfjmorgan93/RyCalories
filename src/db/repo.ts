@@ -9,6 +9,7 @@ import { nowIso, toDateKey } from '@/domain/dates';
 import {
   decide,
   detectStall,
+  lockInBlocked,
   resolveWeight,
   roundKg,
   suggestDoubleIncrement,
@@ -473,6 +474,30 @@ export async function setSkipped(sessionId: string, routineExerciseId: string, s
   await db.sessions.update(sessionId, { skippedRoutineExerciseIds: [...cur] });
 }
 
+/**
+ * Record a pending lock-in choice for a calibrating routine-exercise, for this session only.
+ * Nothing is applied to the routine-exercise or written as a decision here — it stays
+ * `mode: 'calibrating'` until `finishSession` reads `session.lockIns` and commits it through its
+ * existing calibrating branch. That keeps a mid-session change of mind, or discarding the session
+ * outright, from ever leaving a half-applied lock-in behind (see the retired path below).
+ */
+export async function setSessionLockIn(sessionId: string, routineExerciseId: string, kg: number): Promise<void> {
+  const [session, rx] = await Promise.all([db.sessions.get(sessionId), db.routineExercises.get(routineExerciseId)]);
+  if (!session || !rx) return;
+  const exercise = await db.exercises.get(rx.exerciseId);
+  if (!exercise || lockInBlocked(kg, exercise.kind)) return;
+  await db.sessions.update(sessionId, { lockIns: { ...session.lockIns, [routineExerciseId]: roundKg(kg) } });
+}
+
+/** Clear a pending lock-in choice for this session, e.g. switching back to "Keep calibrating". */
+export async function clearSessionLockIn(sessionId: string, routineExerciseId: string): Promise<void> {
+  const session = await db.sessions.get(sessionId);
+  if (!session?.lockIns || !(routineExerciseId in session.lockIns)) return;
+  const lockIns = { ...session.lockIns };
+  delete lockIns[routineExerciseId];
+  await db.sessions.update(sessionId, { lockIns });
+}
+
 export async function addExtraExercise(sessionId: string, exerciseId: string): Promise<void> {
   const s = await db.sessions.get(sessionId);
   if (!s) return;
@@ -718,7 +743,7 @@ export async function buildSummary(sessionId: string, now = nowIso()): Promise<S
         decision.rule === 'calibrating' && suggestedLockInWeight(sets) !== null
           ? { suggested: suggestedLockInWeight(sets) as number }
           : null;
-      const records = await recordsForNewSets(exercise.id, sessionId, sets);
+      const records = await recordsForNewSets(exercise.id, sessionId, sets, { calibrating: rx.mode === 'calibrating' });
       items.push({ rx, exercise, sets, status: 'done', decision, suggestions, lockIn, records });
     }
   }
