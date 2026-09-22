@@ -3,6 +3,7 @@
  * system notification via the service worker. Permission is requested once, on the first
  * completed set, and the outcome remembered so we never nag.
  */
+import { restOver } from './haptics';
 
 const ASKED_KEY = 'iron-notify-asked';
 
@@ -91,7 +92,7 @@ export interface RestDoneOptions {
 
 /** Fire the end-of-rest cue. Safe to call from a timer tick. */
 export async function restDone(opts: RestDoneOptions): Promise<void> {
-  if (opts.vibrate) vibrate([250, 120, 250, 120, 400]);
+  if (opts.vibrate) void restOver();
   beep();
   if (!opts.notify || !notificationsSupported() || Notification.permission !== 'granted') return;
   if (document.visibilityState === 'visible') return;

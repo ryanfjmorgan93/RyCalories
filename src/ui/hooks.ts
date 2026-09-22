@@ -45,14 +45,15 @@ export function useActiveSession(): Session | null | undefined {
 /**
  * The running workout, when the floating session dock should show for it; otherwise null.
  *
- * Tab screens only — the session screens are the workout itself — and not Home, whose
- * in-progress card already offers Resume (showing both put two Resume buttons on one screen).
- * The Shell's padding and the rest timer's position both read this, so all three agree.
+ * Every tab screen, including Home — the floating bar is now the only way back into a running
+ * workout (Home's old in-progress card is gone). Only the session screens themselves (the
+ * workout, already showing everything the dock would) suppress it. The Shell's padding and the
+ * rest timer's position both read this, so all three agree.
  */
 export function useSessionDock(): Session | null {
   const active = useActiveSession();
   const { pathname } = useLocation();
-  if (!active || pathname === '/' || pathname.startsWith('/session/')) return null;
+  if (!active || pathname.startsWith('/session/')) return null;
   return active;
 }
 

@@ -28,7 +28,7 @@
   --nav-h: 4rem;
   --dock-h: 3.5rem;
   /* The rest timer card, margin included. */
-  --timer-h: 5.75rem;
+  --timer-h: 4.875rem;
 }
 
 [data-theme='light'] {

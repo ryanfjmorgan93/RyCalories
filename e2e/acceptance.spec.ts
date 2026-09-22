@@ -164,7 +164,7 @@ test.describe('Phase 1 acceptance', () => {
     await expect(page.getByTestId('rest-timer')).toBeVisible();
     await expect(card).toContainText('110 × 8');
     await page.goto('/');
-    await page.getByTestId('resume-session').click();
+    await page.getByTestId('live-banner').click();
     await expect(card).toContainText('Set 2 of 4');
   });
 });

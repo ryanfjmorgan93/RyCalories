@@ -110,7 +110,7 @@ test.describe('the session dock', () => {
     expect(timer.y + timer.height).toBeLessThanOrEqual(d.y + 1);
   });
 
-  test('is not duplicated on Home, where the in-progress card already offers Resume', async ({ page }) => {
+  test('shows on Home too, above the tab bar, with no separate in-progress card', async ({ page }) => {
     await fresh(page);
     await page.getByTestId('start-session').click();
     await expect(page).toHaveURL(/\/session\//);
@@ -118,10 +118,45 @@ test.describe('the session dock', () => {
     await page.goto('/progress');
     await expect(page.getByTestId('live-banner')).toBeVisible();
 
-    // Home has its own in-progress card with Resume; a second Resume in the dock is clutter.
+    // Home's own in-progress card (with its own Resume) is gone; the dock is the only way back
+    // into the workout everywhere, Home included.
     await page.goto('/');
-    await expect(page.getByText('Session in progress')).toBeVisible();
-    await expect(page.getByTestId('live-banner')).toHaveCount(0);
+    const dock = page.getByTestId('live-banner');
+    await expect(dock).toBeVisible();
+    await expect(dock).toContainText('Resume');
+    await expect(page.getByText('Session in progress')).toHaveCount(0);
+    await expect(page.getByTestId('resume-session')).toHaveCount(0);
+
+    const d = await box(page, 'live-banner');
+    const nav = await page.locator('nav').boundingBox();
+    expect(nav).not.toBeNull();
+    expect(d.y + d.height).toBeLessThanOrEqual(nav!.y);
+
+    await dock.click();
+    await expect(page).toHaveURL(/\/session\//);
+  });
+
+  test('on Home, clears a real status bar and gesture bar too', async ({ page }) => {
+    await fresh(page);
+    await page.getByTestId('start-session').click();
+    await expect(page).toHaveURL(/\/session\//);
+
+    await page.goto('/');
+    await simulateInsets(page);
+    await expect(page.getByTestId('live-banner')).toBeVisible();
+
+    const vh = page.viewportSize()!.height;
+    const d = await box(page, 'live-banner');
+    expect(d.y).toBeGreaterThanOrEqual(INSET_TOP);
+
+    // The tab bar's links sit above the gesture bar, and the dock sits above the tab bar — same
+    // contract as every other tab screen, now proven on Home as well.
+    const links = page.locator('nav a');
+    for (let i = 0; i < (await links.count()); i++) {
+      const l = await links.nth(i).boundingBox();
+      expect(l!.y + l!.height).toBeLessThanOrEqual(vh - INSET_BOTTOM + 0.5);
+      expect(d.y + d.height).toBeLessThanOrEqual(l!.y);
+    }
   });
 
   test('while resting, the bottom of a screen can still be scrolled clear of the timer and dock', async ({ page }) => {
