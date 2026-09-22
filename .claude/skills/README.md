@@ -2,7 +2,7 @@
 
 Vendored third-party skills, committed so they persist for every session in
 this repo (a cloud session's `~/.claude` is ephemeral; a project `.claude/`
-is not). 69 skills, all MIT-licensed.
+is not). 76 skills, all MIT-licensed.
 
 Each skill keeps its upstream directory name and its original `SKILL.md`
 frontmatter, so upstream docs and cross-references still apply.
@@ -15,6 +15,7 @@ frontmatter, so upstream docs and cross-references still apply.
 | [JuliusBrussee/caveman](https://github.com/juliusbrussee/caveman) | 20 | `2fd153c6` | MIT (`skills/` only) |
 | [affaan-m/ecc](https://github.com/affaan-m/ecc) | 47 | `bf70150e` | MIT |
 | [latent-spaces/brag](https://github.com/latent-spaces/brag) | 1 | `57ce4c9b` | MIT |
+| [nextlevelbuilder/ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | 7 | `dcc40ff5` | MIT |
 
 `fashion` was found via [awesome-claude-code#1800](https://github.com/hesreallyhim/awesome-claude-code/issues/1800).
 
@@ -42,6 +43,18 @@ repo onboarding). Deliberately excluded:
 To widen later, use upstream's installer rather than hand-copying:
 `npx ecc-universal@2.2.2 install --profile developer --target claude`.
 
+**ui-ux-pro-max-skill** — all 7 skills it ships under `.claude/skills/`:
+`ui-ux-pro-max`, `ui-styling`, `design`, `design-system`, `brand`, `slides`,
+`banner-design`. Each is self-contained: its `SKILL.md` states that script and
+reference paths resolve relative to the skill's own directory, and the bundled
+`scripts/` and `data/` directories came across with it. None use hooks.
+
+Note: `ui-ux-pro-max` is also available in some environments through the
+`anthropic-skills` plugin, where it appears namespaced as
+`anthropic-skills:ui-ux-pro-max`. The two are the same skill. This vendored
+copy is what makes it durable in the repo and gives it a `/` command; if the
+plugin is present, both will be offered.
+
 **brag** — complete, including the 16MB of bundled `.ogg` music beds and SFX
 under `brag/assets/`, which the skill needs to score a video. `/brag` also
 needs Node 22+, FFmpeg and the Hyperframes CLI at run time.
@@ -64,7 +77,7 @@ All 69 are installed, mapped to a `/` command, and invocable. But ECC's
 *are* hooks rather than instructions. Verified by scanning every `SKILL.md`
 for hook-delivered mechanisms:
 
-**57 skills — fully standalone.** Nothing further needed.
+**64 skills — fully standalone.** Nothing further needed.
 
 **6 skills — degraded but usable.** They work when invoked; only their
 automatic triggering is lost: `inherit-legacy-style` (its "soft hook" option
