@@ -184,8 +184,15 @@ function GroupCard({ group, session }: { group: SessionGroup; session: Session }
   // A finished session's PR chips reflect what stood *at the time*: records already set later
   // (by a subsequent session) don't retroactively un-PR a set logged here.
   const prRecords = useLiveQuery(
-    () => (sets.length > 0 ? recordsForNewSets(exercise.id, sets[0].sessionId, sets, { before: session.startedAt }) : []),
-    [exercise.id, sets, session.startedAt],
+    () =>
+      sets.length > 0
+        ? recordsForNewSets(exercise.id, sets[0].sessionId, sets, {
+            before: session.startedAt,
+            // The same rule the live session and Summary applied at the time: no record while calibrating.
+            calibrating: decision?.rule === 'calibrating',
+          })
+        : [],
+    [exercise.id, sets, session.startedAt, decision?.rule],
   );
   const prIndices = useMemo(() => new Set((prRecords ?? []).map((r) => r.setIndex)), [prRecords]);
 

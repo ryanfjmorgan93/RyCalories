@@ -115,9 +115,21 @@ export async function bestsForExercise(exerciseId: string): Promise<Bests> {
 export async function recentRecords(
   limit = 10,
 ): Promise<{ record: PersonalRecord; exercise: Exercise; sessionId: string; date: string }[]> {
-  const [exercises, allSets, sessions] = await Promise.all([db.exercises.toArray(), db.setLogs.toArray(), db.sessions.toArray()]);
+  const [exercises, allSets, sessions, decisions] = await Promise.all([
+    db.exercises.toArray(),
+    db.setLogs.toArray(),
+    db.sessions.toArray(),
+    db.decisions.toArray(),
+  ]);
   const sessionById = new Map(sessions.map((s) => [s.id, s]));
   const completedIds = new Set(sessions.filter((s) => s.endedAt).map((s) => s.id));
+  // A set logged while its routine-exercise was calibrating is never a record, here as in the live
+  // session and on Summary. The finished session's decision row is the lasting record of that:
+  // one per (session, routine-exercise). Extras have no routine-exercise and never calibrate.
+  const calibratingSlots = new Set(
+    decisions.filter((d) => d.rule === 'calibrating').map((d) => `${d.sessionId}:${d.routineExerciseId}`),
+  );
+  const loggedWhileCalibrating = (s: SetLog) => s.routineExerciseId !== null && calibratingSlots.has(`${s.sessionId}:${s.routineExerciseId}`);
 
   const out: { record: PersonalRecord; exercise: Exercise; sessionId: string; date: string }[] = [];
 
@@ -138,7 +150,10 @@ export async function recentRecords(
       // priorSoFar only ever holds sessions strictly earlier in this same chronological replay —
       // it starts empty, so the first completed session for an exercise never produces a record.
       const hasPriorHistory = priorSoFar.length > 0;
-      const recs = newRecords(exercise.kind, sets.map(toRecordSet), priorSoFar, { bodyweightKg, hasPriorHistory });
+      // Candidates exclude calibrating sets; the prior pool below still includes them, since they
+      // were real lifts a later record has to beat.
+      const candidates = sets.filter((s) => !loggedWhileCalibrating(s));
+      const recs = newRecords(exercise.kind, candidates.map(toRecordSet), priorSoFar, { bodyweightKg, hasPriorHistory });
       for (const r of recs) out.push({ record: r, exercise, sessionId: session.id, date: session.startedAt });
       priorSoFar.push({ sessionId: session.id, startedAt: session.startedAt, source: session.source, sets: sets.map(toRecordSet) });
     }

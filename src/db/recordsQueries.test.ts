@@ -214,6 +214,35 @@ describe('recentRecords', () => {
     const latest = records.find((r) => r.sessionId === s2.id && r.record.kind === 'weight');
     expect(latest?.record.value).toBe(110);
   });
+
+  it('a set logged while the lift was calibrating is never a record, but a later session still has to beat it', async () => {
+    const rx = await rxFor(HINGE, RDL);
+    const s1 = await startSession(HINGE);
+    await logSet({ sessionId: s1.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 100, reps: 8 });
+    await db.sessions.update(s1.id, { startedAt: '2026-09-01T18:00:00.000Z', endedAt: '2026-09-01T19:00:00.000Z' });
+
+    // The lift was put back into calibration and kept there at finish: its decision row says so.
+    const s2 = await startSession(HINGE);
+    await logSet({ sessionId: s2.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 150, reps: 8 });
+    await db.sessions.update(s2.id, { startedAt: '2026-09-05T18:00:00.000Z', endedAt: '2026-09-05T19:00:00.000Z' });
+    await db.decisions.put({ id: 'd-cal', sessionId: s2.id, routineExerciseId: rx.id, fromWeight: 0, toWeight: 0, rule: 'calibrating', accepted: true, decidedAt: '2026-09-05T19:00:00.000Z' });
+
+    // 140 kg beats the old 100 kg best but not the 150 kg calibration lift, so it is no record.
+    const s3 = await startSession(HINGE);
+    await logSet({ sessionId: s3.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 140, reps: 8 });
+    await db.sessions.update(s3.id, { startedAt: '2026-09-09T18:00:00.000Z', endedAt: '2026-09-09T19:00:00.000Z' });
+
+    const records = await recentRecords(50);
+    expect(records.filter((r) => r.sessionId === s2.id)).toEqual([]);
+    expect(records.filter((r) => r.sessionId === s3.id && r.record.kind === 'weight')).toEqual([]);
+
+    // And the positive control: a set that beats everything, logged outside calibration, is one.
+    const s4 = await startSession(HINGE);
+    await logSet({ sessionId: s4.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 155, reps: 8 });
+    await db.sessions.update(s4.id, { startedAt: '2026-09-12T18:00:00.000Z', endedAt: '2026-09-12T19:00:00.000Z' });
+    const after = await recentRecords(50);
+    expect(after.find((r) => r.sessionId === s4.id && r.record.kind === 'weight')?.record.value).toBe(155);
+  });
 });
 
 describe('e1rmSeries', () => {

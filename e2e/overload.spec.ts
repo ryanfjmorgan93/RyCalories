@@ -42,8 +42,9 @@ async function linkSuperset(page: Page, ids: [string, string], supersetId: strin
 
 async function finishToSummary(page: Page) {
   await page.getByTestId('finish-session').click();
-  const finish = page.getByRole('button', { name: 'Finish', exact: true }).last();
-  if (await page.getByText('Finish session?').isVisible().catch(() => false)) await finish.click();
+  // The unfinished-work sheet appears only when a required exercise is untouched; wait for it
+  // rather than sampling once, and scope to the dialog so the header's own Finish never matches.
+  await clickIfPresent(page.getByRole('dialog').getByRole('button', { name: 'Finish', exact: true }));
   await expect(page).toHaveURL(/\/summary$/);
 }
 
@@ -273,11 +274,11 @@ test.describe('WP4 overlays', () => {
     await card.getByTestId('reps-input').fill('9');
     await card.getByTestId('set-done').click();
 
-    // Wait on a positive signal that the second set actually landed — its own row's badge reads
-    // "2" — before asserting the chip's absence. Asserting absence straight after the click would
-    // pass just as well before the set (and its record check) had actually landed.
-    await expect(card.locator('button span.num.w-7').nth(1)).toHaveText('2');
-    await expect(card.getByTestId('pr-chip')).toHaveCount(0);
+    // The live chip comes from its own asynchronous query, so no signal on this screen proves it
+    // has finished deciding. Summary is built only after records are fully computed, so assert there.
+    await finishToSummary(page);
+    await expect(page.getByTestId('decision-Bench Press (Barbell)')).toBeVisible();
+    await expect(page.getByTestId('decision-Bench Press (Barbell)')).not.toContainText('PR');
   });
 
   test('swap: substitutes an exercise for the session, and undo restores it', async ({ page }) => {

@@ -223,6 +223,23 @@ describe('sessions and progression (acceptance §11)', () => {
       expect((await db.sessions.get(session.id))?.lockIns).toBeUndefined();
       await setSessionLockIn(session.id, rx.id, -10);
       expect((await db.sessions.get(session.id))?.lockIns).toBeUndefined();
+      // Not 0, but it would be stored as 0: judged after rounding, so refused too.
+      await setSessionLockIn(session.id, rx.id, 0.001);
+      expect((await db.sessions.get(session.id))?.lockIns).toBeUndefined();
+      // The positive control: a real weight is stored.
+      await setSessionLockIn(session.id, rx.id, 60);
+      expect((await db.sessions.get(session.id))?.lockIns).toEqual({ [rx.id]: 60 });
+    });
+
+    it('finishSession re-applies the floor: a 0 kg lock-in choice for a weighted lift keeps it calibrating', async () => {
+      const session = await startSession(SQUAT);
+      const rx = await rxFor(SQUAT, BACK_SQUAT);
+      await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: BACK_SQUAT, type: 'working', weight: 60, reps: 8 });
+      await finishSession(session.id, { choices: [{ routineExerciseId: rx.id, lockInAt: 0 }] });
+      const after = await rxFor(SQUAT, BACK_SQUAT);
+      expect(after.mode).toBe('calibrating');
+      const decisions = await db.decisions.where('sessionId').equals(session.id).toArray();
+      expect(decisions.map((d) => d.rule)).toEqual(['calibrating']);
     });
 
     it('clearSessionLockIn removes a pending choice', async () => {

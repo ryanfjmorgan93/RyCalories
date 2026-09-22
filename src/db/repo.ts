@@ -485,8 +485,10 @@ export async function setSessionLockIn(sessionId: string, routineExerciseId: str
   const [session, rx] = await Promise.all([db.sessions.get(sessionId), db.routineExercises.get(routineExerciseId)]);
   if (!session || !rx) return;
   const exercise = await db.exercises.get(rx.exerciseId);
-  if (!exercise || lockInBlocked(kg, exercise.kind)) return;
-  await db.sessions.update(sessionId, { lockIns: { ...session.lockIns, [routineExerciseId]: roundKg(kg) } });
+  // Judge the value that will actually be stored: 0.001 kg is not 0, but it rounds to 0.
+  const rounded = Number.isFinite(kg) ? roundKg(kg) : kg;
+  if (!exercise || lockInBlocked(rounded, exercise.kind)) return;
+  await db.sessions.update(sessionId, { lockIns: { ...session.lockIns, [routineExerciseId]: rounded } });
 }
 
 /** Clear a pending lock-in choice for this session, e.g. switching back to "Keep calibrating". */
@@ -823,8 +825,10 @@ export async function finishSession(sessionId: string, input: FinishInput): Prom
       const choice = byRx.get(rx.id);
       if (d.rule === 'not_applicable') continue;
       if (d.rule === 'calibrating') {
-        if (choice?.lockInAt !== undefined && Number.isFinite(choice.lockInAt)) {
-          const w = roundKg(choice.lockInAt);
+        // The commit boundary re-applies the one lock-in floor rather than trusting every caller
+        // to have filtered already; a blocked weight keeps the lift calibrating.
+        const w = choice?.lockInAt !== undefined && Number.isFinite(choice.lockInAt) ? roundKg(choice.lockInAt) : null;
+        if (w !== null && !lockInBlocked(w, item.exercise.kind)) {
           await db.routineExercises.update(rx.id, { mode: 'normal', currentWeight: w });
           await propagateLinked(rx, { mode: 'normal', currentWeight: w });
           await db.decisions.put({
