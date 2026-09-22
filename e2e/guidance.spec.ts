@@ -68,10 +68,11 @@ test.describe('Home guidance', () => {
     await expect(page.locator('body')).toContainText(/deload/i);
 
     // Discard it (never finished) and the streak line reads exactly as it did before: an
-    // active-but-abandoned session must not count towards the week.
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Discard', exact: true }).first().click();
-    await page.getByRole('button', { name: 'Discard', exact: true }).last().click();
+    // active-but-abandoned session must not count towards the week. Home no longer has its own
+    // in-progress card — Discard lives on the session screen itself.
+    await page.getByRole('button', { name: 'Discard session', exact: true }).click();
+    await page.getByRole('button', { name: 'Discard', exact: true }).click();
+    await expect(page).toHaveURL('/');
     await expect(page.getByTestId('next-up')).toBeVisible();
     await expect(page.getByTestId('streak-line')).toHaveText('This week 1 of 3');
   });

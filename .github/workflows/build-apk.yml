@@ -55,6 +55,12 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
+      # NanoPlugin (the on-device Gemini Nano assistant) is registered by hand in MainActivity, not
+      # through a Capacitor plugin package — `cap sync` rewrites the surrounding Gradle files on
+      # every run and must never touch this line. Fail loudly if it ever does.
+      - name: Verify NanoPlugin survived cap sync
+        run: grep -q "registerPlugin(NanoPlugin.class)" android/app/src/main/java/com/rycalories/iron/MainActivity.java
+
       - name: Build signed release APK
         working-directory: android
         run: ./gradlew --no-daemon assembleRelease

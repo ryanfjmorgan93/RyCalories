@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
 import { db } from '@/db/db';
-import { discardSession, logBodyweight, startSession } from '@/db/repo';
+import { logBodyweight, startSession } from '@/db/repo';
 import { dayView } from '@/db/todayQueries';
 import { acknowledgeFilePickerNotice, dismissHistoryNotice, restoreHistoryNotice } from '@/db/historySafety';
 import { isBackup, type Backup } from '@/db/backup';
@@ -12,14 +12,13 @@ import { fmtDateTime, fmtKg, fmtMinutes, fmtNum, plural } from '@/domain/format'
 import type { Prescription } from '@/domain/prescription';
 import { isConsecutiveLower, suggestNextRoutine } from '@/domain/schedule';
 import { dateKeyToDate } from '@/domain/dates';
-import { useTimer } from '@/state/timer';
 import { weeklyDelta, bandStatus } from '@/domain/bodyweight';
 import type { Routine } from '@/domain/types';
 import { Button } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row, SectionTitle, Stat } from '@/ui/components/Card';
 import { Chip } from '@/ui/components/Chip';
 import { NumberInput } from '@/ui/components/NumberField';
-import { Confirm, Sheet } from '@/ui/components/Sheet';
+import { Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { ChevronIcon, TopBar } from '@/ui/components/TopBar';
 import { RestoreSheet } from '@/ui/RestoreSheet';
@@ -50,7 +49,6 @@ export function HomeScreen() {
   const recent = useRecentSessions(3);
   const settings = useSettings();
   const [pickOpen, setPickOpen] = useState(false);
-  const [discardOpen, setDiscardOpen] = useState(false);
   const [pending, setPending] = useState<Routine | null>(null);
 
   const rxCounts = useLiveQuery(async () => {
@@ -112,22 +110,6 @@ export function HomeScreen() {
       />
       <div className="px-4">
         <HistoryNoticeCard />
-
-        {active && (
-          <Card className="mt-2 border-accent/60 p-4">
-            <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-accent">Session in progress</div>
-            <div className="mt-1 text-2xl font-extrabold">{active.title}</div>
-            <div className="text-sm text-muted">Started {fmtDateTime(active.startedAt)}</div>
-            <div className="mt-4 grid grid-cols-[1fr_auto] gap-3">
-              <Button size="xl" variant="primary" onClick={() => nav(`/session/${active.id}`)} data-testid="resume-session">
-                Resume
-              </Button>
-              <Button size="xl" variant="danger" onClick={() => setDiscardOpen(true)}>
-                Discard
-              </Button>
-            </div>
-          </Card>
-        )}
 
         {!active && (
           <Card className="mt-2 p-4" data-testid="next-up">
@@ -308,21 +290,6 @@ export function HomeScreen() {
           </Button>
         </div>
       </Sheet>
-
-      <Confirm
-        open={discardOpen}
-        title="Discard this session?"
-        body="Its sets will be deleted. Weights stay as they are."
-        confirmLabel="Discard"
-        danger
-        onCancel={() => setDiscardOpen(false)}
-        onConfirm={async () => {
-          if (active) await discardSession(active.id);
-          useTimer.getState().skip();
-          setDiscardOpen(false);
-          toast('Session discarded');
-        }}
-      />
     </div>
   );
 }
