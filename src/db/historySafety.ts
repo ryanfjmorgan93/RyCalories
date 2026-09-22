@@ -31,7 +31,41 @@ import { DEFAULT_SETTINGS } from '@/domain/types';
 import { isNative } from '@/state/native';
 
 export { maybeAutoBackupAtBoot, requestPersistentStorage };
-export const backupAfterSessionFinish = scheduleAutoBackupAfterFinish;
+
+/**
+ * After a finished workout: an automatic backup, and the baseline raised to include it. Without the
+ * raise, the baseline only moves at boot and on deletes, so a loss that took the counts back down
+ * to where they were at the last start would go unnoticed. Neither step is awaited by the caller.
+ */
+export function backupAfterSessionFinish(): void {
+  scheduleAutoBackupAfterFinish();
+  void raiseBaseline();
+}
+
+/**
+ * Raise, never lower, the baseline to the current counts. Lowering is the deletion path's job
+ * (lossGuard.ts), which knows a deletion was the app's own. Skipped while a notice is waiting or a
+ * deletion is in flight, and the baseline is re-read after counting so a deletion that landed in
+ * between is not overwritten with a higher figure.
+ */
+export async function raiseBaseline(): Promise<void> {
+  try {
+    if (!getBaseline() || getStoredNotice() || isPendingDeletion()) return;
+    const { sessions, sets } = await currentSessionSetCounts();
+    const prev = getBaseline();
+    if (!prev || isPendingDeletion()) return;
+    if (sessions <= prev.sessions && sets <= prev.sets) return;
+    writeBaseline({
+      sessions: Math.max(prev.sessions, sessions),
+      sets: Math.max(prev.sets, sets),
+      build: BUILD_LABEL,
+      dbVersion: Math.round(db.verno),
+      at: nowIso(),
+    });
+  } catch {
+    /* best effort */
+  }
+}
 
 const NOTICE_KEY = 'iron.historyNotice.v1';
 
@@ -108,6 +142,32 @@ export async function backupBeforeMigrationIfNeeded(): Promise<void> {
   }
 }
 
+/**
+ * The on-disk schema version (Dexie stores its version ×10) and the stored seed version, read raw
+ * without an upgrade. Only called once `indexedDB.databases()` has shown the database exists — see
+ * the note on `dumpRaw` about opening one that does not.
+ */
+async function probeRaw(): Promise<{ version: number; seedVersion: number }> {
+  const idb = await new Promise<IDBDatabase>((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error ?? new Error('Could not open the database'));
+    req.onblocked = () => reject(new Error('Database is blocked by another tab'));
+  });
+  try {
+    const version = idb.version;
+    if (!idb.objectStoreNames.contains('settings')) return { version, seedVersion: 1 };
+    const row = await new Promise<{ seedVersion?: number } | undefined>((resolve, reject) => {
+      const req = idb.transaction('settings', 'readonly').objectStore('settings').get('settings');
+      req.onsuccess = () => resolve(req.result as { seedVersion?: number } | undefined);
+      req.onerror = () => reject(req.error ?? new Error('Could not read settings'));
+    });
+    return { version, seedVersion: row?.seedVersion ?? 1 };
+  } finally {
+    idb.close();
+  }
+}
+
 async function doBackupBeforeMigration(): Promise<void> {
   // `indexedDB.open(name)` with no version CREATES an empty database at version 1 if none already
   // exists — exactly the corruption a fresh install must not risk. `databases()` answers "does it
@@ -117,16 +177,16 @@ async function doBackupBeforeMigration(): Promise<void> {
   const existing = (await indexedDB.databases()).find((d) => d.name === DB_NAME);
   if (!existing) return;
 
-  const json = await dumpRaw();
-  const dumped = JSON.parse(json) as { tables: Record<string, unknown[]>; dbVersion?: number };
-  const rawVersion = dumped.dbVersion ?? existing.version ?? 0;
-  const settingsRow = (dumped.tables.settings?.[0] ?? null) as { seedVersion?: number } | null;
-  const seedVersion = settingsRow?.seedVersion ?? 1;
-
-  const migrationComing = rawVersion < DB_VERSION * 10;
-  const seedComing = seedVersion < DEFAULT_SETTINGS.seedVersion;
+  // This runs before first paint on every start, so decide from the version and the one settings
+  // row, and only read the whole database when a migration is actually about to run.
+  const probe = await probeRaw();
+  const migrationComing = probe.version < DB_VERSION * 10;
+  const seedComing = probe.seedVersion < DEFAULT_SETTINGS.seedVersion;
   if (!migrationComing && !seedComing) return;
 
+  const json = await dumpRaw();
+  const dumped = JSON.parse(json) as { tables: Record<string, unknown[]>; dbVersion?: number };
+  const rawVersion = dumped.dbVersion ?? probe.version;
   const counts = {
     sessions: dumped.tables.sessions?.length ?? 0,
     sets: dumped.tables.setLogs?.length ?? 0,
@@ -194,9 +254,9 @@ export async function restoreHistoryNotice(filename: string): Promise<{ ok: bool
 }
 
 /**
- * The file-picker fallback offered on native when no backup could be listed (point 3's second
- * bullet). Whatever the outcome, treat the prompt as acted on — the underlying data is either now
- * restored, or the user chose not to use a file — so it is not shown again.
+ * The file-picker fallback offered on native when no backup could be listed. Called only once a
+ * picked file has actually been restored; cancelling the picker or the restore sheet leaves the
+ * notice in place, since nothing has been recovered.
  */
 export async function acknowledgeFilePickerNotice(): Promise<void> {
   clearStoredNotice();

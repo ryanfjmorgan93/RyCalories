@@ -204,13 +204,23 @@ function backupsOfKind(files: { path: string; content: string }[], kind: 'auto' 
   return files.filter((f) => f.path.split('/').pop()?.startsWith(`iron-${kind}-`));
 }
 
-/** Every history-safety boot check ends by writing EITHER the baseline OR a notice — waiting for either is a positive signal the check has actually finished, not a guess at how long it takes. */
+/**
+ * Waits for THIS page load's history check to have decided. The baseline and the notice both
+ * outlive a reload, so waiting on either can be satisfied by the previous load before this one's
+ * check has run — which made "no notice after reload" pass vacuously. main.tsx marks <html> once
+ * per load, after the decision is stored.
+ */
 async function waitForHistoryCheckSettled(page: Page): Promise<void> {
-  await page.waitForFunction(
-    () => localStorage.getItem('iron.lossBaseline.v1') !== null || localStorage.getItem('iron.historyNotice.v1') !== null,
-    undefined,
-    { timeout: 15_000 },
-  );
+  await expect(page.locator('html')).toHaveAttribute('data-history-check', 'done', { timeout: 15_000 });
+}
+
+/** The stored notice is the source of truth (Home renders from it), and is written before the check is marked done. */
+async function storedNotice(page: Page): Promise<unknown> {
+  return page.evaluate(() => JSON.parse(localStorage.getItem('iron.historyNotice.v1') ?? 'null'));
+}
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? '' : 's'}`;
 }
 
 function buildFixture(seedVersion: number) {
@@ -320,10 +330,10 @@ async function trainAndFinish(page: Page): Promise<void> {
     await clickIfPresent(page.getByTestId('rest-timer').getByRole('button', { name: 'Skip' }), 800);
   }
 
+  // Only two sets of the routine are logged, so the unfinished-work confirm always opens here.
   await page.getByTestId('finish-session').click();
-  if (await page.getByText('Finish session?').isVisible().catch(() => false)) {
-    await page.getByRole('button', { name: 'Finish', exact: true }).last().click();
-  }
+  await expect(page.getByText('Finish session?')).toBeVisible();
+  await page.getByRole('button', { name: 'Finish', exact: true }).last().click();
   await expect(page).toHaveURL(/\/summary$/);
   await page.getByTestId('save-session').click();
   await expect(page).toHaveURL(/\/$/);
@@ -342,6 +352,7 @@ test.describe('upgrade safety', () => {
     await waitForHistoryCheckSettled(page);
 
     // No loss notice on an ordinary boot at the current shape.
+    expect(await storedNotice(page)).toBeNull();
     await expect(page.getByTestId('history-notice')).toHaveCount(0);
 
     // Every fixture session, through the real History screen.
@@ -427,9 +438,7 @@ test.describe('backup, loss and restore', () => {
     const notice = page.getByTestId('history-notice');
     await expect(notice).toBeVisible();
     const text = page.getByTestId('history-notice-text');
-    await expect(text).toContainText(`${sessionsBefore} sessions`);
-    await expect(text).toContainText(`${setsBefore} sets`);
-    await expect(text).toContainText('0 sessions');
+    await expect(text).toContainText(`${plural(sessionsBefore, 'session')} · ${plural(setsBefore, 'set')} to 0 sessions · 0 sets`);
 
     await page.getByTestId('history-notice-restore').click();
     await expect(notice).toHaveCount(0);
@@ -441,7 +450,16 @@ test.describe('backup, loss and restore', () => {
     await page.goto('/');
     await expect(page.getByTestId('next-up')).toBeVisible();
     await waitForHistoryCheckSettled(page);
+    expect(await storedNotice(page)).toBeNull();
     await expect(page.getByTestId('history-notice')).toHaveCount(0);
+  });
+
+  test('finishing a workout raises the baseline straight away, not only at the next start', async ({ page }) => {
+    await fresh(page);
+    await trainAndFinish(page); // ends on Home by in-app navigation: no reload has re-run the boot check
+    await expect
+      .poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('iron.lossBaseline.v1') ?? 'null')?.sessions ?? null), { timeout: 15_000 })
+      .toBe(1);
   });
 
   test('an in-app delete never raises the loss notice', async ({ page }) => {
@@ -466,6 +484,7 @@ test.describe('backup, loss and restore', () => {
     await page.goto('/');
     await expect(page.getByTestId('next-up')).toBeVisible();
     await waitForHistoryCheckSettled(page);
+    expect(await storedNotice(page)).toBeNull();
     await expect(page.getByTestId('history-notice')).toHaveCount(0);
   });
 
@@ -498,7 +517,7 @@ test.describe('backup, loss and restore', () => {
 
     const notice = page.getByTestId('history-notice');
     await expect(notice).toBeVisible();
-    await expect(page.getByTestId('history-notice-text')).toContainText(`${sessionsBefore} sessions`);
+    await expect(page.getByTestId('history-notice-text')).toContainText(`${plural(sessionsBefore, 'session')} · `);
 
     await page.getByTestId('history-notice-restore').click();
     await expect(notice).toHaveCount(0);

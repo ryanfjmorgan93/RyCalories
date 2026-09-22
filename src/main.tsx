@@ -42,6 +42,10 @@ async function runHistorySafetyBoot(wasFreshInstall: boolean): Promise<void> {
     if (notice) useHistoryNoticeStore.getState().setNotice(notice);
   } catch (err: unknown) {
     console.error('[iron] history-safety boot check failed', err);
+  } finally {
+    // Set once per page load, after the check has decided: the one signal a test can wait on that
+    // an earlier load cannot already have satisfied (the baseline and notice outlive a reload).
+    document.documentElement.dataset.historyCheck = 'done';
   }
 }
 

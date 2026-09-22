@@ -34,7 +34,18 @@ const TABLE_LABELS: Record<TableName, string> = {
  * Restore a parsed JSON backup. Merge upserts by id; Replace wipes first (confirmed) and
  * reloads the page so every live query starts from the fresh database.
  */
-export function RestoreSheet({ backup, open, onClose }: { backup: Backup | null; open: boolean; onClose: () => void }) {
+export function RestoreSheet({
+  backup,
+  open,
+  onClose,
+  onRestored,
+}: {
+  backup: Backup | null;
+  open: boolean;
+  onClose: () => void;
+  /** Called only after a restore has completed, before any reload; `onClose` also fires on cancel. */
+  onRestored?: () => void;
+}) {
   const [busy, setBusy] = useState(false);
   const [replaceOpen, setReplaceOpen] = useState(false);
 
@@ -50,6 +61,7 @@ export function RestoreSheet({ backup, open, onClose }: { backup: Backup | null;
         ...(counts.meals !== undefined ? [`${counts.meals} meals`] : []),
       ];
       toast(`Restored ${parts.join(', ')}`, 'ok');
+      onRestored?.();
       onClose();
       if (mode === 'replace') window.location.reload();
     } catch {

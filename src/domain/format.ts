@@ -3,6 +3,11 @@ import type { ExerciseKind, RoutineExercise } from './types';
 
 const nf = new Intl.NumberFormat('en-GB', { maximumFractionDigits: 2 });
 
+/** "1 session" / "4 sessions": pluralises the final word only, which is right for every count this app shows. */
+export function plural(n: number, singular: string): string {
+  return `${n} ${singular}${n === 1 ? '' : 's'}`;
+}
+
 export function fmtNum(n: number): string {
   return nf.format(Math.round(n * 100) / 100);
 }

@@ -97,5 +97,24 @@ function newestFirst(a: BackupFileInfo, b: BackupFileInfo): number {
 export function selectPruneTargets(files: BackupFileInfo[]): string[] {
   const auto = files.filter((f) => f.kind === 'auto').sort(newestFirst);
   const special = files.filter((f) => f.kind !== 'auto').sort(newestFirst);
-  return [...auto.slice(KEEP_AUTO), ...special.slice(KEEP_SPECIAL)].map((f) => f.filename);
+  const keep = highWaterMarks(files);
+  return [...auto.slice(KEEP_AUTO), ...special.slice(KEEP_SPECIAL)].map((f) => f.filename).filter((name) => !keep.has(name));
+}
+
+/**
+ * The backup holding the most sessions and the one holding the most sets (newest on a tie),
+ * whatever their age. Pruning by age alone would let the copies taken after a loss — one a day,
+ * one per finished workout — push the last complete copy out of the newest 14 within two weeks,
+ * which is exactly when it is needed.
+ */
+export function highWaterMarks(files: BackupFileInfo[]): Set<string> {
+  const keep = new Set<string>();
+  const byNewest = [...files].sort(newestFirst);
+  const most = (pick: (f: BackupFileInfo) => number) =>
+    byNewest.reduce<BackupFileInfo | null>((best, f) => (!best || pick(f) > pick(best) ? f : best), null);
+  const sessions = most((f) => f.counts.sessions);
+  const sets = most((f) => f.counts.sets);
+  if (sessions) keep.add(sessions.filename);
+  if (sets) keep.add(sets.filename);
+  return keep;
 }

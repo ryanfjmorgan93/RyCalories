@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { backupNow, getBackupStatus, isStoragePersisted, listBackups, type BackupStatus } from '@/db/autoBackup';
 import { restoreHistoryNotice } from '@/db/historySafety';
 import { KEEP_AUTO, KEEP_SPECIAL, type BackupFileInfo } from '@/domain/backupPolicy';
-import { fmtDateTime } from '@/domain/format';
+import { fmtDateTime, plural } from '@/domain/format';
 import { isNative } from '@/state/native';
 import { Button } from '@/ui/components/Button';
 import { Card, Divider, Row } from '@/ui/components/Card';
@@ -66,7 +66,7 @@ export function BackupsCard() {
       <div className="mt-2 text-sm">
         {newest ? (
           <>
-            Newest {fmtDateTime(newest.at)} · {newest.counts.sessions} sessions · {newest.counts.sets} sets
+            Newest {fmtDateTime(newest.at)} · {plural(newest.counts.sessions, 'session')} · {plural(newest.counts.sets, 'set')}
           </>
         ) : files === null ? (
           'Loading…'
@@ -97,9 +97,9 @@ export function BackupsCard() {
               {i > 0 && <Divider />}
               <Row
                 title={fmtDateTime(f.at)}
-                subtitle={`${KIND_LABEL[f.kind]} · ${f.counts.sessions} sessions · ${f.counts.sets} sets`}
+                subtitle={`${KIND_LABEL[f.kind]} · ${plural(f.counts.sessions, 'session')} · ${plural(f.counts.sets, 'set')}`}
                 right={
-                  <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void restore(f.filename)} data-testid="backup-restore">
+                  <Button variant="outline" disabled={busy !== null} onClick={() => void restore(f.filename)} data-testid="backup-restore">
                     Restore
                   </Button>
                 }

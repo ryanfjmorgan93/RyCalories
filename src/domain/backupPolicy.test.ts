@@ -100,6 +100,30 @@ describe('selectPruneTargets', () => {
     expect(pruned).toEqual(expect.arrayContaining([specialFiles[0].filename, specialFiles[1].filename]));
   });
 
+  it('never prunes the last complete copy, however many smaller backups were taken after a loss', () => {
+    const before = { ...file('auto', '2026-01-01T00:00:00.000Z', 0), counts: { ...COUNTS, sessions: 20, sets: 310 } };
+    const after = Array.from({ length: KEEP_AUTO + 5 }, (_, i) => ({
+      ...file('auto', `2026-02-${String(i + 1).padStart(2, '0')}T00:00:00.000Z`, i + 1),
+      counts: { ...COUNTS, sessions: 4, sets: 66 },
+    }));
+    const pruned = selectPruneTargets([before, ...after]);
+    expect(pruned).not.toContain(before.filename);
+    // Everything else still follows the age rule: the newest KEEP_AUTO small ones stay.
+    expect(pruned).toHaveLength(5);
+  });
+
+  it('keeps the most-sets copy too, when it is not the most-sessions one', () => {
+    const mostSessions = { ...file('premig', '2026-01-01T00:00:00.000Z', 0), counts: { ...COUNTS, sessions: 30, sets: 100 } };
+    const mostSets = { ...file('premig', '2026-01-02T00:00:00.000Z', 1), counts: { ...COUNTS, sessions: 10, sets: 500 } };
+    const newer = Array.from({ length: KEEP_SPECIAL }, (_, i) => ({
+      ...file('predestr', `2026-02-${String(i + 1).padStart(2, '0')}T00:00:00.000Z`, i + 2),
+      counts: { ...COUNTS, sessions: 1, sets: 1 },
+    }));
+    const pruned = selectPruneTargets([mostSessions, mostSets, ...newer]);
+    expect(pruned).not.toContain(mostSessions.filename);
+    expect(pruned).not.toContain(mostSets.filename);
+  });
+
   it('never touches a file it does not recognise as its own (caller filters those out first)', () => {
     // selectPruneTargets only ever sees BackupFileInfo, which parseBackupFilename only produces
     // for this app's own filenames — nothing to assert here beyond the type itself, but keep a

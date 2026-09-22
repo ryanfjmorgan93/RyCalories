@@ -8,7 +8,7 @@ import { acknowledgeFilePickerNotice, dismissHistoryNotice, restoreHistoryNotice
 import { isBackup, type Backup } from '@/db/backup';
 import { useHistoryNoticeStore } from '@/state/historyNotice';
 import { ZERO } from '@/domain/food';
-import { fmtDateTime, fmtKg, fmtMinutes, fmtNum } from '@/domain/format';
+import { fmtDateTime, fmtKg, fmtMinutes, fmtNum, plural } from '@/domain/format';
 import type { Prescription } from '@/domain/prescription';
 import { isConsecutiveLower, suggestNextRoutine } from '@/domain/schedule';
 import { dateKeyToDate } from '@/domain/dates';
@@ -384,11 +384,12 @@ function HistoryNoticeCard() {
     setPickedBackup(data);
   };
 
+  const counted = (sessions = 0, sets = 0) => `${plural(sessions, 'session')} · ${plural(sets, 'set')}`;
   const fact =
     notice.kind === 'loss'
-      ? `Workout history dropped from ${notice.fromSessions} sessions · ${notice.fromSets} sets to ${notice.toSessions} sessions · ${notice.toSets} sets since the last start.`
+      ? `Workout history dropped from ${counted(notice.fromSessions, notice.fromSets)} to ${counted(notice.toSessions, notice.toSets)} since the last start.`
       : notice.kind === 'fresh_install'
-        ? `A backup from before this install exists: ${notice.restoreCandidate?.sessions} sessions · ${notice.restoreCandidate?.sets} sets.`
+        ? `A backup from before this install exists: ${counted(notice.restoreCandidate?.sessions, notice.restoreCandidate?.sets)}.`
         : 'Backups on this device could not be listed.';
 
   return (
@@ -399,7 +400,7 @@ function HistoryNoticeCard() {
       <div className="mt-3 grid grid-cols-2 gap-3">
         {notice.restoreCandidate ? (
           <Button size="lg" variant="primary" disabled={busy} onClick={() => void restore()} data-testid="history-notice-restore">
-            Restore {fmtDateTime(notice.restoreCandidate.at)} · {notice.restoreCandidate.sessions} sessions
+            Restore {fmtDateTime(notice.restoreCandidate.at)} · {plural(notice.restoreCandidate.sessions, 'session')}
           </Button>
         ) : (
           <Button size="lg" variant="primary" disabled={busy} onClick={() => fileInput.current?.click()} data-testid="history-notice-file">
@@ -425,8 +426,8 @@ function HistoryNoticeCard() {
       <RestoreSheet
         backup={pickedBackup}
         open={pickedBackup !== null}
-        onClose={() => {
-          setPickedBackup(null);
+        onClose={() => setPickedBackup(null)}
+        onRestored={() => {
           void acknowledgeFilePickerNotice();
           setNotice(null);
         }}
