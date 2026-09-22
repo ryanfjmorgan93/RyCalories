@@ -82,3 +82,51 @@ export function effortOptions(scale: EffortScale): EffortOption[] {
 export function formatEffort(rir: number, scale: EffortScale): string {
   return scale === 'rpe' ? `RPE ${rpeFromRir(rir)}` : `RIR ${rir}`;
 }
+
+// ---------------------------------------------------------------------------
+// Feel — the plain-language replacement for RIR/RPE jargon everywhere but the live session screen
+// (rebuilt in a later phase) and Settings' effort-scale control (removed in that same phase).
+
+export type Feel = 'Easy' | 'Good' | 'Hard' | 'Maxed';
+
+export interface FeelOption {
+  /** Stored value: reps in reserve. */
+  rir: number;
+  label: Feel;
+}
+
+/** The four feel chips, RIR 3 down to 0. */
+export const FEEL_OPTIONS: FeelOption[] = [
+  { rir: 3, label: 'Easy' },
+  { rir: 2, label: 'Good' },
+  { rir: 1, label: 'Hard' },
+  { rir: 0, label: 'Maxed' },
+];
+
+/**
+ * The plain word for a logged RIR: Easy at 3 or above (a Hevy import can carry 4–5), Good at 2,
+ * Hard at 1, Maxed at 0 or below. `undefined` (no RIR logged) is null, not a guess.
+ */
+export function feelLabel(rir: number | undefined): Feel | null {
+  if (typeof rir !== 'number' || !Number.isFinite(rir)) return null;
+  if (rir >= 3) return 'Easy';
+  if (rir >= 2) return 'Good';
+  if (rir >= 1) return 'Hard';
+  return 'Maxed';
+}
+
+/**
+ * The RIR that every counted, non-failure set of a slot shares — what the completion chip shows
+ * as selected, and what a set added later into an already-answered slot inherits. Null when there
+ * are no such sets, when they disagree, or when none of them carry an RIR at all. A failure set is
+ * excluded: it always implicitly reads as RIR 0 (`effortRir`) regardless of what the slot's feel
+ * answer was, so it is never part of "does the slot agree".
+ */
+export function feelOf(sets: { type: SetType; rir?: number }[]): number | null {
+  const counted = sets.filter((s) => countsForProgression(s.type) && s.type !== 'failure');
+  if (counted.length === 0) return null;
+  const rirs = counted.map((s) => effortRir(s));
+  const first = rirs[0];
+  if (first === undefined) return null;
+  return rirs.every((r) => r === first) ? first : null;
+}

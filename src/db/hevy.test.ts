@@ -11,7 +11,7 @@ import {
   reconcileWeights,
   runHevyImport,
 } from './hevy';
-import { lastCompletedSession, previousSets, resetToSeed, updateSet } from './repo';
+import { lastCompletedSession, previousSets, resetToSeed, setSlotFeel, updateSet } from './repo';
 import { SEED_EXERCISE_IDS, SEED_ROUTINE_IDS } from './seed';
 import { suggestNextRoutine } from '@/domain/schedule';
 import type { Session, SetLog } from '@/domain/types';
@@ -368,6 +368,34 @@ describe('re-import does not silently discard edits made in Iron', () => {
 
     const setsAfter = await db.setLogs.where('sessionId').equals(session.id).sortBy('index');
     expect(setsAfter.map((s) => s.weight)).toEqual([110, 100]); // the edit survives
+  });
+
+  it('answering the feel question on an imported session survives a re-import too — rir is part of the fingerprint', async () => {
+    const parsed = parseHevyCsv(csv(100));
+    await runHevyImport(parsed, await planHevyImport(parsed));
+    const session = await importedSession();
+    const sets = await db.setLogs.where('sessionId').equals(session.id).sortBy('index');
+    expect(sets.every((s) => s.rir === undefined)).toBe(true);
+
+    // Answer "Easy" on the imported slot in Iron — no weight/reps/type change, only rir.
+    await setSlotFeel(session.id, sets[0].routineExerciseId, sets[0].exerciseId, 3);
+    const answered = await db.setLogs.where('sessionId').equals(session.id).sortBy('index');
+    expect(answered.every((s) => s.rir === 3)).toBe(true);
+
+    // Re-import the exact same (unchanged) CSV: the fingerprint no longer matches, so the
+    // session is classed as edited and Iron's version (with the feel answer) is kept.
+    const parsed2 = parseHevyCsv(csv(100));
+    const plan2 = await planHevyImport(parsed2);
+    expect(plan2.counts.sessionsEditedKept).toBe(1);
+    expect(plan2.counts.sessionsUpdated).toBe(0);
+    expect(plan2.counts.sessionsUnchanged).toBe(0);
+
+    const result2 = await runHevyImport(parsed2, plan2);
+    expect(result2.sessionsEditedKept).toBe(1);
+    expect(result2.setsWritten).toBe(0);
+
+    const setsAfter = await db.setLogs.where('sessionId').equals(session.id).sortBy('index');
+    expect(setsAfter.every((s) => s.rir === 3)).toBe(true); // the feel answer survives
   });
 
   it('the overwrite opt-in replaces an edited session with the current Hevy version', async () => {

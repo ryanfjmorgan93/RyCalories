@@ -5,7 +5,7 @@ import { recordsForNewSets } from '@/db/recordsQueries';
 import { createRoutineFromSession, deleteSession, sessionDetail, type SessionGroup } from '@/db/repo';
 import { sessionSeconds } from '@/db/historyQueries';
 import { fmtDateLong, fmtDuration, fmtKg, fmtNum, fmtWeight, targetLine } from '@/domain/format';
-import { countsForVolume, setBadges } from '@/domain/sets';
+import { countsForVolume, feelLabel, setBadges } from '@/domain/sets';
 import type { ExerciseKind, ProgressionDecision, Session, SetLog } from '@/domain/types';
 import { Button, IconButton } from '@/ui/components/Button';
 import { Card, Divider, Stat } from '@/ui/components/Card';
@@ -214,7 +214,7 @@ function GroupCard({ group, session }: { group: SessionGroup; session: Session }
                 <Chip size="sm" tone="ok">PR</Chip>
               </span>
             )}
-            {s.rir !== undefined && <Chip size="sm">RIR {s.rir}</Chip>}
+            {s.rir !== undefined && <Chip size="sm">{feelLabel(s.rir)}</Chip>}
           </div>
         ))}
       </div>

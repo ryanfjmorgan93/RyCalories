@@ -181,7 +181,7 @@ export function HomeScreen() {
                     {it.lastTime && (
                       <div className="text-xs text-muted">
                         Last time {it.lastTime.line}
-                        {it.lastTime.rir ? ` · ${it.lastTime.rir}` : ''}
+                        {it.lastTime.feel ? ` · ${it.lastTime.feel}` : ''}
                       </div>
                     )}
                   </div>
