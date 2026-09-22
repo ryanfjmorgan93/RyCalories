@@ -4,6 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import { db } from '@/db/db';
 import { discardSession, logBodyweight, startSession } from '@/db/repo';
 import { dayView } from '@/db/todayQueries';
+import { acknowledgeFilePickerNotice, dismissHistoryNotice, restoreHistoryNotice } from '@/db/historySafety';
+import { isBackup, type Backup } from '@/db/backup';
+import { useHistoryNoticeStore } from '@/state/historyNotice';
 import { ZERO } from '@/domain/food';
 import { fmtDateTime, fmtKg, fmtMinutes, fmtNum } from '@/domain/format';
 import type { Prescription } from '@/domain/prescription';
@@ -19,6 +22,7 @@ import { NumberInput } from '@/ui/components/NumberField';
 import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { ChevronIcon, TopBar } from '@/ui/components/TopBar';
+import { RestoreSheet } from '@/ui/RestoreSheet';
 import {
   useActiveSession,
   useCalendar,
@@ -107,6 +111,8 @@ export function HomeScreen() {
         subtitle={new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }).format(dateKeyToDate(todayKey))}
       />
       <div className="px-4">
+        <HistoryNoticeCard />
+
         {active && (
           <Card className="mt-2 border-accent/60 p-4">
             <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-accent">Session in progress</div>
@@ -318,6 +324,114 @@ export function HomeScreen() {
         }}
       />
     </div>
+  );
+}
+
+/**
+ * "History that cannot be lost silently" (Phase 1). A fact and actions only — no explanation of
+ * why it might have happened, per the no-lecturing rule. Reads src/state/historyNotice.ts, which
+ * is seeded from localStorage at import time (src/db/historySafety.ts) and updated by the boot
+ * check or by this card's own actions.
+ */
+function HistoryNoticeCard() {
+  const notice = useHistoryNoticeStore((s) => s.notice);
+  const setNotice = useHistoryNoticeStore((s) => s.setNotice);
+  const [busy, setBusy] = useState(false);
+  const [pickedBackup, setPickedBackup] = useState<Backup | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  if (!notice) return null;
+
+  const dismiss = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await dismissHistoryNotice();
+      setNotice(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const restore = async () => {
+    if (busy || !notice.restoreCandidate) return;
+    setBusy(true);
+    try {
+      const res = await restoreHistoryNotice(notice.restoreCandidate.filename);
+      if (res.ok) {
+        setNotice(null);
+        toast('Restored', 'ok');
+      } else {
+        toast(res.error ?? 'Restore failed', 'danger');
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onFilePicked = async (file: File | undefined) => {
+    if (!file) return;
+    let data: unknown;
+    try {
+      data = JSON.parse((await file.text()).replace(/^﻿/, ''));
+    } catch {
+      data = null;
+    }
+    if (!isBackup(data)) {
+      toast('Not an Iron backup', 'danger');
+      return;
+    }
+    setPickedBackup(data);
+  };
+
+  const fact =
+    notice.kind === 'loss'
+      ? `Workout history dropped from ${notice.fromSessions} sessions · ${notice.fromSets} sets to ${notice.toSessions} sessions · ${notice.toSets} sets since the last start.`
+      : notice.kind === 'fresh_install'
+        ? `A backup from before this install exists: ${notice.restoreCandidate?.sessions} sessions · ${notice.restoreCandidate?.sets} sets.`
+        : 'Backups on this device could not be listed.';
+
+  return (
+    <Card className="mt-2 border-danger/50 p-4" data-testid="history-notice">
+      <div className="text-sm font-semibold" data-testid="history-notice-text">
+        {fact}
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        {notice.restoreCandidate ? (
+          <Button size="lg" variant="primary" disabled={busy} onClick={() => void restore()} data-testid="history-notice-restore">
+            Restore {fmtDateTime(notice.restoreCandidate.at)} · {notice.restoreCandidate.sessions} sessions
+          </Button>
+        ) : (
+          <Button size="lg" variant="primary" disabled={busy} onClick={() => fileInput.current?.click()} data-testid="history-notice-file">
+            Restore from a file
+          </Button>
+        )}
+        <Button size="lg" variant="outline" disabled={busy} onClick={() => void dismiss()} data-testid="history-notice-dismiss">
+          Dismiss
+        </Button>
+      </div>
+
+      <input
+        ref={fileInput}
+        type="file"
+        accept="application/json,.json"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = '';
+          void onFilePicked(f);
+        }}
+      />
+      <RestoreSheet
+        backup={pickedBackup}
+        open={pickedBackup !== null}
+        onClose={() => {
+          setPickedBackup(null);
+          void acknowledgeFilePickerNotice();
+          setNotice(null);
+        }}
+      />
+    </Card>
   );
 }
 

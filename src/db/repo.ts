@@ -2,6 +2,7 @@
  * Data access layer. All writes go through here; screens read with dexie-react-hooks'
  * useLiveQuery directly against `db` and call these functions to mutate.
  */
+import { backupBeforeDestructiveOp } from './autoBackup';
 import { db } from './db';
 import { SEED_BODYWEIGHT_KG, SEED_EXERCISES, SEED_ROUTINES, SEED_ROUTINE_EXERCISES } from './seed';
 import { nowIso, toDateKey } from '@/domain/dates';
@@ -62,6 +63,7 @@ export async function ensureSeeded(): Promise<void> {
 
 /** Wipe everything and reseed (Settings → dev). */
 export async function resetToSeed(): Promise<void> {
+  await backupBeforeDestructiveOp();
   await db.transaction('rw', db.tables, async () => {
     for (const t of db.tables) await t.clear();
   });
@@ -70,6 +72,7 @@ export async function resetToSeed(): Promise<void> {
 
 /** Wipe everything, leaving an empty (but seeded-settings) database. */
 export async function wipeAll(): Promise<void> {
+  await backupBeforeDestructiveOp();
   await db.transaction('rw', db.tables, async () => {
     for (const t of db.tables) await t.clear();
   });

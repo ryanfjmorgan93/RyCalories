@@ -1,4 +1,5 @@
 import Papa from 'papaparse';
+import { backupBeforeDestructiveOp } from './autoBackup';
 import { db, TABLE_NAMES, type TableName } from './db';
 import { migrateSeed } from './repo';
 import { nowIso } from '@/domain/dates';
@@ -108,6 +109,9 @@ export type RestoreMode = 'merge' | 'replace';
  * changes nothing); `replace` wipes every table first.
  */
 export async function importBackup(backup: Backup, mode: RestoreMode): Promise<Record<TableName, number>> {
+  // Replace wipes tables before repopulating them — back up what is about to be overwritten first,
+  // in case the file being restored turns out to be the wrong one, or older/smaller than expected.
+  if (mode === 'replace') await backupBeforeDestructiveOp();
   const counts = {} as Record<TableName, number>;
   const present = tablesInBackup(backup);
   await db.transaction('rw', db.tables, async () => {

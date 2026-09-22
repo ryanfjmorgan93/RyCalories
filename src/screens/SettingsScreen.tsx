@@ -15,6 +15,7 @@ import { MUSCLE_GROUPS, type MuscleGroup, type Settings } from '@/domain/types';
 import { notificationPermission, requestNotifications } from '@/state/notify';
 import { AboutCard } from '@/ui/AboutCard';
 import { AssistantSettingsCard } from '@/ui/AssistantSettingsCard';
+import { BackupsCard } from '@/ui/BackupsCard';
 import { Button } from '@/ui/components/Button';
 import { Card, Divider, Row, SectionTitle, Stat } from '@/ui/components/Card';
 import { Chip, Segmented, Toggle } from '@/ui/components/Chip';
@@ -91,6 +92,9 @@ export function SettingsScreen() {
       <div className="px-4">
         <SectionTitle>Data</SectionTitle>
         <DataCard />
+
+        <SectionTitle>Backups</SectionTitle>
+        <BackupsCard />
 
         {!settings && <div className="py-8 text-muted">Loading…</div>}
         {settings && (
