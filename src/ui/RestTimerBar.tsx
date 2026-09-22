@@ -15,9 +15,8 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * RING_R;
  * with a draining ring, ±15 s and Skip, per the approved mockup. Remaining time is derived from
  * the stored deadline, so it survives reloads and backgrounding.
  *
- * Colours, blur and radii come from the token layer (`src/index.css`) via `var(--token, fallback)`
- * — the fallback is what renders until that layer's tokens land from the other Phase 3 slice, at
- * which point this file needs no change to pick them up.
+ * Colours, blur and radii come from the token layer (`src/index.css`): the shared `.glass-fixed`
+ * surface, `rounded-card`, and the --c-rest / --c-done state colours.
  */
 export function RestTimerBar() {
   const { endsAt, totalSec, label, firedFor, add, skip, markFired } = useTimer();
@@ -51,25 +50,20 @@ export function RestTimerBar() {
   const done = remaining <= 0;
   const frac = totalSec > 0 ? Math.max(0, Math.min(1, remaining / totalSec)) : 0;
   const ringOffset = RING_CIRCUMFERENCE * (1 - frac);
-  const tint = done ? 'var(--c-ok)' : 'var(--c-rest, var(--c-info))';
+  const tint = done ? 'var(--c-done)' : 'var(--c-rest)';
 
   return (
     <div
-      className={`fixed inset-x-0 z-40 mx-auto px-3 ${inSession ? 'bottom-0 pb-safe' : dockShowing ? 'bottom-above-dock' : 'bottom-nav'}`}
-      style={{ maxWidth: 'var(--content-max, 36rem)' }}
+      className={`content-max fixed inset-x-0 z-40 mx-auto px-3 ${inSession ? 'bottom-0 pb-safe' : dockShowing ? 'bottom-above-dock' : 'bottom-nav'}`}
       data-testid="rest-timer"
     >
+      {/* The shared real-glass layer (src/index.css .glass-fixed), so a Claude Design pass on the
+          tokens reaches the pill too; only its border takes the rest/done tint. */}
       <div
         role="timer"
         aria-label={done ? 'Rest over' : `Rest, ${fmtDuration(remaining)} left`}
-        className="mb-3 flex items-center gap-2 p-2 shadow-2xl"
-        style={{
-          borderRadius: 'var(--r-card, 26px)',
-          backdropFilter: 'blur(var(--blur-glass, 16px)) saturate(160%)',
-          WebkitBackdropFilter: 'blur(var(--blur-glass, 16px)) saturate(160%)',
-          background: 'color-mix(in srgb, var(--c-surface) 62%, transparent)',
-          border: `1px solid color-mix(in srgb, ${tint} 30%, var(--c-line))`,
-        }}
+        className="glass-fixed mb-3 flex items-center gap-2 rounded-card border p-2"
+        style={{ borderColor: `color-mix(in srgb, ${tint} 35%, transparent)` }}
       >
         {!done && (
           <>
