@@ -56,3 +56,37 @@ These are vendored copies, not submodules — re-copy from upstream to update.
 `/` picker (including in the mobile and web apps, whose autocomplete lists
 slash commands rather than skills). Each shim just invokes the matching skill
 and forwards `$ARGUMENTS`. Regenerate them after adding or removing a skill.
+
+## Which skills work standalone
+
+All 69 are installed, mapped to a `/` command, and invocable. But ECC's
+`hooks-runtime` is deliberately not installed (see above), and a few skills
+*are* hooks rather than instructions. Verified by scanning every `SKILL.md`
+for hook-delivered mechanisms:
+
+**57 skills — fully standalone.** Nothing further needed.
+
+**6 skills — degraded but usable.** They work when invoked; only their
+automatic triggering is lost: `inherit-legacy-style` (its "soft hook" option
+needs no wiring), `agent-self-evaluation` (hook is optional by design),
+`verification-loop`, `growth-log`, `ecc-guide` (reports hooks as absent),
+`configure-ecc` (its `CLAUDE_PLUGIN_ROOT` assumptions don't hold for a
+vendored copy).
+
+**6 skills — inert until hooks are wired.** The hook *is* the mechanism:
+
+| Skill | Ships its script? | To enable |
+|---|---|---|
+| `ck` | yes (`hooks/session-start.mjs`) | register SessionStart in settings.json |
+| `continuous-learning-v2` | yes (9 scripts) | register PreToolUse/PostToolUse |
+| `delivery-gate` | yes | register Stop hook |
+| `strategic-compact` | no | needs ECC `scripts/suggest-compact.js` |
+| `caveman-stats` | no | needs caveman `src/hooks/*.js` |
+| `plankton-code-quality` | no | needs the external Plankton tool |
+
+Wiring these means executable code running on tool events, so it is left off
+by default. `continuous-learning` is upstream-deprecated in favour of v2.
+
+Note: scanning also flagged references to skills like `dead-skill`,
+`skill-name` and `search-first`. Those are placeholder paths in documentation,
+not missing dependencies.
