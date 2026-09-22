@@ -3,13 +3,18 @@ import { createRoot } from 'react-dom/client';
 import { registerSW } from 'virtual:pwa-register';
 import './index.css';
 import { App } from './App';
-import { ensureSeeded, getSettings, migrateSeed } from './db/repo';
+import { ensureSeeded, getSettings, isSeeded, migrateSeed } from './db/repo';
+import { backupBeforeMigrationIfNeeded, checkForHistoryLoss, maybeAutoBackupAtBoot, requestPersistentStorage } from './db/historySafety';
+import { useHistoryNoticeStore } from './state/historyNotice';
 import { applyTheme } from './ui/theme';
 import { isNative } from './state/native';
 import { DB_VERSION } from './db/db';
 import { renderRecovery } from './boot/recovery';
 
 async function boot() {
+  // Must run before Dexie ever opens the database — see historySafety.ts.
+  await backupBeforeMigrationIfNeeded();
+  const wasFreshInstall = !(await isSeeded());
   await ensureSeeded();
   await migrateSeed();
   const settings = await getSettings();
@@ -23,6 +28,20 @@ async function boot() {
   // assets are already on disk, so skip it there.
   if (import.meta.env.PROD && !isNative()) {
     registerSW({ immediate: true });
+  }
+  // After render, so none of this can slow down or block first paint. Each step guards its own
+  // failures — nothing here may throw into the UI.
+  void runHistorySafetyBoot(wasFreshInstall);
+}
+
+async function runHistorySafetyBoot(wasFreshInstall: boolean): Promise<void> {
+  try {
+    await requestPersistentStorage();
+    void maybeAutoBackupAtBoot();
+    const notice = await checkForHistoryLoss(wasFreshInstall);
+    if (notice) useHistoryNoticeStore.getState().setNotice(notice);
+  } catch (err: unknown) {
+    console.error('[iron] history-safety boot check failed', err);
   }
 }
 

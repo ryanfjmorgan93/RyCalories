@@ -13,8 +13,20 @@
 
 const DB_NAME = 'iron';
 
-/** Read every object store at whatever version is actually on disk, bypassing Dexie entirely. */
-async function dumpRaw(): Promise<string> {
+/**
+ * Read every object store at whatever version is actually on disk, bypassing Dexie entirely.
+ * Exported so src/db/historySafety.ts can reuse it for the pre-migration backup (Phase 1) rather
+ * than duplicating this raw-IndexedDB dance — this file stays free of imports from the rest of
+ * the app either way, so a broken schema still cannot break the thing meant to rescue it.
+ *
+ * Callers that invoke this on a database that may not exist yet must check first (e.g. via
+ * `indexedDB.databases()`): opening without a version number CREATES an empty database at version
+ * 1 if none existed, which would corrupt Dexie's own version bookkeeping (it stores its version
+ * ×10). This function itself does not guard that — it is only safe to call once the database is
+ * already known to exist, which is true both at the point it was already called from (recovery,
+ * after Dexie's own open already failed) and from the new pre-migration call site.
+ */
+export async function dumpRaw(): Promise<string> {
   const db = await new Promise<IDBDatabase>((resolve, reject) => {
     // No version argument: opens at the existing version without triggering an upgrade.
     const req = indexedDB.open(DB_NAME);
@@ -23,6 +35,7 @@ async function dumpRaw(): Promise<string> {
     req.onblocked = () => reject(new Error('Database is blocked by another tab'));
   });
 
+  const dbVersion = db.version;
   const names = Array.from(db.objectStoreNames);
   const tables: Record<string, unknown[]> = {};
   for (const name of names) {
@@ -35,7 +48,7 @@ async function dumpRaw(): Promise<string> {
   db.close();
 
   return JSON.stringify(
-    { app: 'iron', version: 1, recovered: true, exportedAt: new Date().toISOString(), tables },
+    { app: 'iron', version: 1, recovered: true, exportedAt: new Date().toISOString(), dbVersion, tables },
     null,
     2,
   );

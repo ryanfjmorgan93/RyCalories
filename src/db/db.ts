@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie';
+import { installLossGuardMiddleware } from './lossGuard';
 import type {
   Bodyweight,
   Exercise,
@@ -22,6 +23,11 @@ import type {
 /** Current Dexie schema version. Exported so the recovery screen can report what it attempted. */
 export const DB_VERSION = 2;
 
+/** The IndexedDB database name, exported so callers that must talk to it raw (recovery, the
+ * pre-migration backup) do not each hardcode it. src/boot/recovery.ts keeps its own copy
+ * deliberately — see the note on its `dumpRaw`. */
+export const DB_NAME = 'iron';
+
 export class IronDB extends Dexie {
   exercises!: EntityTable<Exercise, 'id'>;
   routines!: EntityTable<Routine, 'id'>;
@@ -37,7 +43,7 @@ export class IronDB extends Dexie {
   productCache!: EntityTable<ProductCacheEntry, 'key'>;
   phases!: EntityTable<Phase, 'id'>;
 
-  constructor(name = 'iron') {
+  constructor(name = DB_NAME) {
     super(name);
     this.version(1).stores({
       exercises: 'id, name, kind, muscleGroup, createdAt',
@@ -71,6 +77,9 @@ export class IronDB extends Dexie {
 }
 
 export const db = new IronDB();
+// Must be registered before the database is opened (Dexie opens lazily on first operation, so
+// this runs in time as long as nothing above this line touches `db`). See lossGuard.ts.
+installLossGuardMiddleware(db);
 
 /**
  * Every table a backup covers. Adding a table here without adding it to `Backup['tables']` in

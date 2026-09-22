@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { backupAfterSessionFinish } from '@/db/historySafety';
 import { buildSummary, discardSession, finishSession, type SessionSummary, type SummaryItem } from '@/db/repo';
 import { decisionLine, fmtDuration, fmtKg, fmtNum, fmtWeight } from '@/domain/format';
 import type { Suggestion } from '@/domain/engine';
@@ -106,6 +107,8 @@ export function SummaryScreen() {
         notes,
         checklist: summary.routine?.isLowerBody ? checklist : undefined,
       });
+      // Fire-and-forget: must not slow down or block the finish flow.
+      backupAfterSessionFinish();
       toast('Session saved', 'ok');
       nav('/', { replace: true });
     } catch {
