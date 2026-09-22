@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { backupAfterSessionFinish } from '@/db/historySafety';
 import { buildSummary, discardSession, finishSession, type SessionSummary, type SummaryItem } from '@/db/repo';
-import { decisionLine, fmtDuration, fmtKg, fmtNum, fmtWeight } from '@/domain/format';
+import { decisionLine, fmtDate, fmtDuration, fmtKg, fmtNum, fmtWeight } from '@/domain/format';
 import { lockInBlocked, type Suggestion } from '@/domain/engine';
 import type { PersonalRecord } from '@/domain/records';
 import { NIGGLE_TAGS, type Niggle, type NiggleTag } from '@/domain/types';
+import { sessionVolume } from '@/domain/volume';
 import { useTimer } from '@/state/timer';
 import { Button } from '@/ui/components/Button';
-import { Card, SectionTitle, Stat } from '@/ui/components/Card';
+import { Card, SectionTitle } from '@/ui/components/Card';
 import { Chip } from '@/ui/components/Chip';
 import { NumberField, TextInput } from '@/ui/components/NumberField';
 import { Confirm } from '@/ui/components/Sheet';
@@ -20,6 +21,72 @@ interface Choice {
   overrideTo: number | null;
   lockIn: boolean;
   lockInAt: number | null;
+}
+
+function prefersReducedMotion(): boolean {
+  try {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return false;
+  }
+}
+
+/** True once, for the life of this render, so a rebuild mid-session never replays the animation. */
+function usePrefersReducedMotion(): boolean {
+  const [reduced] = useState(prefersReducedMotion);
+  return reduced;
+}
+
+/**
+ * 0 → 1 once, cubic-out, over `durationMs` — the count-up progress for the hero figures. Starts
+ * already at 1 under reduced motion (the lazy initial state), so the final values show
+ * immediately with no visible count and no wasted animation frame.
+ */
+function useCountProgress(active: boolean, durationMs = 900): number {
+  const [t, setT] = useState(() => (prefersReducedMotion() ? 1 : 0));
+  useEffect(() => {
+    if (!active || prefersReducedMotion()) {
+      setT(1);
+      return;
+    }
+    let raf = 0;
+    const start = performance.now();
+    const step = (now: number) => {
+      const linear = Math.min(1, (now - start) / durationMs);
+      setT(1 - Math.pow(1 - linear, 3));
+      if (linear < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [active, durationMs]);
+  return t;
+}
+
+const CONFETTI_COLORS = ['var(--c-accent)', 'var(--c-ok)', 'var(--c-record)', 'var(--c-fg)', 'var(--c-info)'];
+
+interface ConfettiPiece {
+  leftPct: number;
+  widthPx: number;
+  heightPx: number;
+  color: string;
+  rotateDeg: number;
+  driftPx: number;
+  durMs: number;
+  delayMs: number;
+}
+
+/** Deterministic, index-derived layout — no `Math.random()`, so a screenshot or a replay is stable. */
+function buildConfetti(count = 24): ConfettiPiece[] {
+  return Array.from({ length: count }, (_, i) => ({
+    leftPct: (i * 37 + 11) % 100,
+    widthPx: 6 + (i % 3) * 2,
+    heightPx: 10 + (i % 4) * 3,
+    color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+    rotateDeg: (i * 53) % 360,
+    driftPx: ((i * 29) % 80) - 40,
+    durMs: 1700 + ((i * 131) % 1200),
+    delayMs: (i * 97) % 700,
+  }));
 }
 
 export function SummaryScreen() {
@@ -88,6 +155,29 @@ export function SummaryScreen() {
   });
   const others = useMemo(() => (summary?.items ?? []).filter((i) => !(i.status === 'done' && i.decision)), [summary]);
 
+  // The finish moment's three honest figures. kg lifted is computed here from the sets exactly as
+  // logged — the same countsForVolume universe `summary.workingSetsDone` already counts sets over
+  // — never from a decision or a prescription, so it can never flatter a session that under-shot.
+  const allSets = useMemo(() => (summary?.items ?? []).flatMap((i) => i.sets), [summary]);
+  const volumeKg = useMemo(() => sessionVolume(allSets), [allSets]);
+  // Grouped by exercise: a single heavy set can beat weight, e1RM and set-volume all at once, and
+  // repeating the exercise name for each would just make three truncated, near-identical rows.
+  const heroRecords = useMemo(
+    () => (summary?.items ?? []).filter((item) => item.records.length > 0).map((item) => ({ key: item.exercise.id, name: item.exercise.name, records: item.records })),
+    [summary],
+  );
+  const reducedMotion = usePrefersReducedMotion();
+  const revealT = useCountProgress(!!summary);
+  const confettiPieces = useMemo(() => buildConfetti(), []);
+  const [confettiDone, setConfettiDone] = useState(false);
+  const summaryReady = !!summary;
+  useEffect(() => {
+    if (!summaryReady || reducedMotion) return;
+    const maxMs = confettiPieces.reduce((m, p) => Math.max(m, p.delayMs + p.durMs), 0);
+    const t = setTimeout(() => setConfettiDone(true), maxMs + 50);
+    return () => clearTimeout(t);
+  }, [summaryReady, reducedMotion, confettiPieces]);
+
   if (!summary) {
     return (
       <div>
@@ -124,14 +214,68 @@ export function SummaryScreen() {
 
   return (
     <div className="pb-safe">
+      {!reducedMotion && !confettiDone && (
+        <div aria-hidden="true" data-testid="summary-confetti" className="pointer-events-none fixed inset-0 z-40 overflow-hidden">
+          {confettiPieces.map((p, i) => (
+            <span
+              key={i}
+              className="confetti-piece"
+              style={
+                {
+                  left: `${p.leftPct}%`,
+                  width: `${p.widthPx}px`,
+                  height: `${p.heightPx}px`,
+                  background: p.color,
+                  '--confetti-rot': `${p.rotateDeg}deg`,
+                  '--confetti-drift': `${p.driftPx}px`,
+                  animationDuration: `${p.durMs}ms`,
+                  animationDelay: `${p.delayMs}ms`,
+                } as CSSProperties
+              }
+            />
+          ))}
+        </div>
+      )}
       <TopBar title="Summary" subtitle={summary.session.title} back={`/session/${summary.session.id}`} />
       <div className="px-4">
-        <Card className="flex items-center gap-6 px-4 py-3">
-          <Stat label="Time" value={fmtDuration(summary.durationSec)} />
-          <Stat label="Sets" value={summary.workingSetsDone} sub={summary.setsDone !== summary.workingSetsDone ? `+${summary.setsDone - summary.workingSetsDone} warm-up` : undefined} />
-          <Stat label="Exercises" value={summary.items.filter((i) => i.sets.length > 0).length} />
-          {summary.session.deload && <Stat label="Deload" value="Yes" />}
-        </Card>
+        <div className="pt-1">
+          <h1 className="truncate text-4xl font-extrabold leading-[0.95] tracking-tight">{summary.session.title}</h1>
+          <div className="mt-1.5 flex items-center gap-2">
+            <span className="text-sm text-muted">{fmtDate(summary.session.startedAt, { weekday: 'short', day: 'numeric', month: 'short' })}</span>
+            {summary.session.deload && (
+              <Chip tone="info" size="sm">
+                Deload
+              </Chip>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-3 border-y border-line">
+          <HeroStat testId="summary-time" value={fmtDuration(summary.durationSec * revealT)} label="Time" />
+          <HeroStat testId="summary-sets" value={String(Math.round(summary.workingSetsDone * revealT))} label="Sets" bordered />
+          <HeroStat testId="summary-kg" value={fmtNum(Math.round(volumeKg * revealT))} label="kg lifted" bordered />
+        </div>
+
+        {heroRecords.length > 0 && (
+          <div className="mt-5 flex flex-col gap-2">
+            <h2 className="px-1 text-lg font-bold">Records</h2>
+            {heroRecords.map(({ key, name, records }) => (
+              <div key={key} data-testid="summary-record" className="flex items-start gap-3 rounded-xl border border-record/35 bg-record/10 px-3.5 py-3">
+                <RecordIcon />
+                <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                  <span className="truncate font-semibold">{name}</span>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1">
+                    {records.map((r, i) => (
+                      <span key={i} className="num shrink-0 text-sm font-bold text-record">
+                        {recordChipLabel(r)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {decided.length > 0 && <SectionTitle>Next time</SectionTitle>}
         <div className="grid gap-3">
@@ -140,6 +284,7 @@ export function SummaryScreen() {
               key={item.rx!.id}
               item={item}
               choice={choices[item.rx!.id]}
+              seededLockIn={summary.session.lockIns?.[item.rx!.id]}
               onChange={(c) => setChoices((prev) => ({ ...prev, [item.rx!.id]: c }))}
             />
           ))}
@@ -236,7 +381,40 @@ export function SummaryScreen() {
   );
 }
 
-function DecisionCard({ item, choice, onChange }: { item: SummaryItem; choice: Choice | undefined; onChange: (c: Choice) => void }) {
+function HeroStat({ value, label, bordered, testId }: { value: string; label: string; bordered?: boolean; testId?: string }) {
+  return (
+    <div className={`flex flex-col gap-0.5 py-4 ${bordered ? 'border-l border-line pl-3.5' : ''}`}>
+      <span className="num text-4xl font-extrabold leading-none" data-testid={testId}>
+        {value}
+      </span>
+      <span className="text-sm text-muted">{label}</span>
+    </div>
+  );
+}
+
+function RecordIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" className="mt-0.5 shrink-0 text-record">
+      <circle cx="12" cy="14.5" r="5.5" fill="none" stroke="currentColor" strokeWidth="2" />
+      <path d="M8.6 9.6 6 3.5h4l2 4 2-4h4l-2.6 6.1" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function DecisionCard({
+  item,
+  choice,
+  seededLockIn,
+  onChange,
+}: {
+  item: SummaryItem;
+  choice: Choice | undefined;
+  /** The weight the user locked this calibrating slot to during the live session (`session.lockIns`),
+   * if any — distinct from `item.lockIn`, which is only ever a suggestion. Seeds the read-out
+   * "N kg locked in" instead of the plain Keep-calibrating/Lock-in choice. */
+  seededLockIn: number | undefined;
+  onChange: (c: Choice) => void;
+}) {
   const rx = item.rx!;
   const d = item.decision!;
   const kind = item.exercise.kind;
@@ -322,14 +500,26 @@ function DecisionCard({ item, choice, onChange }: { item: SummaryItem; choice: C
 
       {d.rule === 'calibrating' && item.lockIn && (
         <div className="mt-3">
-          <div className="grid grid-cols-2 gap-2">
-            <Button size="lg" variant={!c.lockIn ? 'primary' : 'secondary'} onClick={() => onChange({ ...c, lockIn: false })}>
-              Keep calibrating
-            </Button>
-            <Button size="lg" variant={c.lockIn ? 'primary' : 'secondary'} onClick={() => onChange({ ...c, lockIn: true })} data-testid="lock-in">
-              Lock in
-            </Button>
-          </div>
+          {seededLockIn !== undefined && c.lockIn ? (
+            // Already chosen during the live session — read it back rather than re-asking.
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-ok/40 bg-ok/10 px-3.5 py-3">
+              <span className="num text-base font-bold text-ok" data-testid="lock-in">
+                {fmtWeight(kind, c.lockInAt ?? seededLockIn)} locked in
+              </span>
+              <Button size="sm" variant="secondary" onClick={() => onChange({ ...c, lockIn: false })}>
+                Keep calibrating
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              <Button size="lg" variant={!c.lockIn ? 'primary' : 'secondary'} onClick={() => onChange({ ...c, lockIn: false })}>
+                Keep calibrating
+              </Button>
+              <Button size="lg" variant={c.lockIn ? 'primary' : 'secondary'} onClick={() => onChange({ ...c, lockIn: true })} data-testid="lock-in">
+                Lock in
+              </Button>
+            </div>
+          )}
           {c.lockIn && (
             <div className="mt-2">
               <NumberField label="Working weight (kg)" value={c.lockInAt} onChange={(v) => onChange({ ...c, lockInAt: v })} step={rx.increment} testId="lock-in-input" />

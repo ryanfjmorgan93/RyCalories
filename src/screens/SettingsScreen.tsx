@@ -103,22 +103,6 @@ export function SettingsScreen() {
             <SectionTitle>Targets</SectionTitle>
             <TargetsCard settings={settings} />
 
-            <SectionTitle>Logging</SectionTitle>
-            <Card className="p-4">
-              <div className="mb-1 px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Effort scale</div>
-              <Segmented
-                value={settings.effortScale ?? 'rir'}
-                options={[
-                  { value: 'rir', label: 'RIR' },
-                  { value: 'rpe', label: 'RPE' },
-                ]}
-                onChange={async (effortScale) => {
-                  await saveSettings({ effortScale });
-                }}
-              />
-              <div className="mt-2 text-sm text-muted">RPE is 10 minus RIR. Stored as RIR either way.</div>
-            </Card>
-
             <SectionTitle>Rest timer</SectionTitle>
             <RestCard settings={settings} />
 
