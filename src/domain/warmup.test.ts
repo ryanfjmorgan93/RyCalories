@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_PLATES } from './plates';
-import { warmupRamp, type WarmupSet } from './warmup';
+import { genericWarmupRamp, warmupRamp, type WarmupSet } from './warmup';
 
 describe('warmupRamp', () => {
   it('100 kg with defaults -> 20x10, 50x5, 70x3, 90x1', () => {
@@ -50,5 +50,57 @@ describe('warmupRamp', () => {
       { weight: 50, reps: 5 },
       { weight: 90, reps: 1 },
     ]);
+  });
+});
+
+describe('genericWarmupRamp', () => {
+  it('100 kg, 2.5 kg increment -> 50x5, 70x3, 90x1, with no empty-bar first step', () => {
+    expect(genericWarmupRamp(100, 2.5)).toEqual<WarmupSet[]>([
+      { weight: 50, reps: 5 },
+      { weight: 70, reps: 3 },
+      { weight: 90, reps: 1 },
+    ]);
+  });
+
+  it('60 kg, 2.5 kg increment -> 30x5, 42.5x3 (0.7x60=42, 16.8 rounds up to 17 steps of 2.5), 55x1', () => {
+    expect(genericWarmupRamp(60, 2.5)).toEqual<WarmupSet[]>([
+      { weight: 30, reps: 5 },
+      { weight: 42.5, reps: 3 },
+      { weight: 55, reps: 1 },
+    ]);
+  });
+
+  it('rounds every step to the exercise increment, not a plate set', () => {
+    expect(genericWarmupRamp(20, 5)).toEqual<WarmupSet[]>([
+      { weight: 10, reps: 5 },
+      { weight: 15, reps: 3 },
+      { weight: 20, reps: 1 },
+    ]);
+  });
+
+  it('drops a step that rounds to 0 or does not clear the previous one', () => {
+    // 0.5x3=1.5 and 0.7x3=2.1 both round to 0 and are dropped; 0.9x3=2.7 rounds to 1x5=5.
+    expect(genericWarmupRamp(3, 5)).toEqual<WarmupSet[]>([{ weight: 5, reps: 1 }]);
+    // 0.7x100=70 rounds to 50 (a 50 kg increment), which does not clear the 50 kg first step.
+    expect(genericWarmupRamp(100, 50)).toEqual<WarmupSet[]>([
+      { weight: 50, reps: 5 },
+      { weight: 100, reps: 1 },
+    ]);
+  });
+
+  it('a non-finite or non-positive increment falls back to 2.5 kg', () => {
+    expect(genericWarmupRamp(50, 0)).toEqual<WarmupSet[]>([
+      { weight: 25, reps: 5 },
+      { weight: 35, reps: 3 },
+      { weight: 45, reps: 1 },
+    ]);
+    expect(genericWarmupRamp(50, NaN)).toEqual(genericWarmupRamp(50, 0));
+  });
+
+  it('0, negative or non-finite working weight -> []', () => {
+    expect(genericWarmupRamp(0, 2.5)).toEqual([]);
+    expect(genericWarmupRamp(-10, 2.5)).toEqual([]);
+    expect(genericWarmupRamp(NaN, 2.5)).toEqual([]);
+    expect(genericWarmupRamp(Infinity, 2.5)).toEqual([]);
   });
 });
