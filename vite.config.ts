@@ -7,8 +7,18 @@ import { fileURLToPath, URL } from 'node:url';
 
 const version = (JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string }).version;
 
+// Which CI run and commit this build came from. Every build used to report "Iron 0.1.0", so when a
+// fix did not show up on the phone there was no way to tell whether the phone had the build with
+// the fix. Empty outside CI.
+const buildRun = process.env.GITHUB_RUN_NUMBER ?? '';
+const buildSha = (process.env.GITHUB_SHA ?? '').slice(0, 7);
+
 export default defineConfig({
-  define: { __APP_VERSION__: JSON.stringify(version) },
+  define: {
+    __APP_VERSION__: JSON.stringify(version),
+    __BUILD_RUN__: JSON.stringify(buildRun),
+    __BUILD_SHA__: JSON.stringify(buildSha),
+  },
   plugins: [
     react(),
     tailwindcss(),

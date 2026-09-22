@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react';
+import { BUILD_LABEL } from '@/buildInfo';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
 import { backupFilename, csvFilename, deliverFile, exportBackup, exportBodyweightCsv, exportCsv, isBackup, type Backup } from '@/db/backup';
@@ -708,7 +709,7 @@ function DeveloperCard() {
           Wipe all data
         </Button>
       </div>
-      <div className="mt-3 text-xs text-dim">Iron {__APP_VERSION__}</div>
+      <div className="num mt-3 text-xs text-dim" data-testid="build-id">{BUILD_LABEL}</div>
 
       <Confirm
         open={resetOpen}

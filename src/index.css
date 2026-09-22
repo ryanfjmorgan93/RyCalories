@@ -17,6 +17,18 @@
   --c-danger: #f87171;
   --c-info: #7dd3fc;
   color-scheme: dark;
+
+  /* Safe-area insets, read once. Everything that pads for the status bar or the gesture bar goes
+     through these rather than env() directly, so a test can set them and prove the layout clears a
+     real inset. env() is 0 in a desktop browser, which is how the live-session bar shipped under
+     the Android status bar twice while every test passed. */
+  --inset-top: env(safe-area-inset-top, 0px);
+  --inset-bottom: env(safe-area-inset-bottom, 0px);
+  /* The tab bar's own row, and the floating session dock that sits above it while a workout runs. */
+  --nav-h: 4rem;
+  --dock-h: 3.5rem;
+  /* The rest timer card, margin included. */
+  --timer-h: 5.75rem;
 }
 
 [data-theme='light'] {
@@ -104,18 +116,44 @@
 }
 
 @layer utilities {
-  /* Safe-area helpers */
+  /* Safe-area helpers — all via the --inset-* variables above, never env() directly. */
   .pt-safe {
-    padding-top: env(safe-area-inset-top, 0px);
+    padding-top: var(--inset-top);
   }
   .pb-safe {
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-bottom: var(--inset-bottom);
   }
   .pb-safe-nav {
-    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 4.5rem);
+    padding-bottom: calc(var(--inset-bottom) + var(--nav-h) + 0.5rem);
+  }
+  /* Tab screens while a workout is live: clear the tab bar AND the session dock above it. */
+  .pb-safe-nav-dock {
+    padding-bottom: calc(var(--inset-bottom) + var(--nav-h) + var(--dock-h) + 1.25rem);
+  }
+  /* …and while a rest timer is also floating over the page. */
+  .pb-safe-nav-timer {
+    padding-bottom: calc(var(--inset-bottom) + var(--nav-h) + var(--timer-h) + 1rem);
+  }
+  .pb-safe-nav-dock-timer {
+    padding-bottom: calc(var(--inset-bottom) + var(--nav-h) + var(--dock-h) + var(--timer-h) + 1.75rem);
   }
   .pb-safe-timer {
-    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 7.5rem);
+    padding-bottom: calc(var(--inset-bottom) + 7.5rem);
+  }
+
+  /* The bottom stack on tab screens, bottom to top: tab bar, session dock, rest timer. Offsets are
+     computed from the same variables, so the three can never overlap each other or the gesture bar. */
+  .bottom-nav {
+    bottom: calc(var(--inset-bottom) + var(--nav-h));
+  }
+  .bottom-dock {
+    bottom: calc(var(--inset-bottom) + var(--nav-h) + 0.5rem);
+  }
+  .bottom-above-dock {
+    bottom: calc(var(--inset-bottom) + var(--nav-h) + var(--dock-h) + 0.75rem);
+  }
+  .bottom-toast {
+    bottom: calc(var(--inset-bottom) + 9rem);
   }
 
   .no-scrollbar {

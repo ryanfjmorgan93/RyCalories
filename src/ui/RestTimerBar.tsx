@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { restDone } from '@/state/notify';
 import { remainingSec, useTimer } from '@/state/timer';
 import { fmtDuration } from '@/domain/format';
-import { useNow, useSettings } from './hooks';
+import { useNow, useSessionDock, useSettings } from './hooks';
 
 /**
  * Rest timer pinned to the bottom of every screen while a rest is running.
@@ -14,6 +14,8 @@ export function RestTimerBar() {
   const settings = useSettings();
   const { pathname } = useLocation();
   const inSession = pathname.startsWith('/session/');
+  // Where the session dock shows, the timer stacks above it rather than covering it.
+  const dockShowing = useSessionDock() !== null;
   const active = endsAt !== null;
   const now = useNow(250, active);
 
@@ -40,7 +42,10 @@ export function RestTimerBar() {
   const pct = totalSec > 0 ? Math.max(0, Math.min(1, remaining / totalSec)) : 0;
 
   return (
-    <div className={`fixed inset-x-0 z-40 mx-auto max-w-xl px-3 ${inSession ? 'bottom-0 pb-safe' : 'bottom-16 pb-safe'}`} data-testid="rest-timer">
+    <div
+      className={`fixed inset-x-0 z-40 mx-auto max-w-xl px-3 ${inSession ? 'bottom-0 pb-safe' : dockShowing ? 'bottom-above-dock' : 'bottom-nav'}`}
+      data-testid="rest-timer"
+    >
       <div className={`mb-3 overflow-hidden rounded-2xl border shadow-2xl ${done ? 'border-ok bg-ok text-ok-fg' : 'border-line bg-surface-2'}`}>
         {!done && (
           <div className="h-1.5 w-full bg-line">

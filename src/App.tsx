@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { fmtDuration } from './domain/format';
-import { useActiveSession, useNow } from './ui/hooks';
+import { useNow, useSessionDock } from './ui/hooks';
+import { useTimer } from './state/timer';
 import { BottomNav } from './ui/components/BottomNav';
 import { ToastHost } from './ui/components/Toast';
 import { RestTimerBar } from './ui/RestTimerBar';
@@ -23,36 +24,51 @@ import { MealEditScreen } from './screens/MealEditScreen';
 import { ProgressScreen } from './screens/ProgressScreen';
 
 function Shell() {
+  const dock = useSessionDock();
+  // A running rest timer floats over the bottom of the page too; pad for it so the last row of a
+  // screen is never stuck underneath it.
+  const resting = useTimer((s) => s.endsAt !== null);
+  const pad = dock ? (resting ? 'pb-safe-nav-dock-timer' : 'pb-safe-nav-dock') : resting ? 'pb-safe-nav-timer' : 'pb-safe-nav';
   return (
-    <div className="mx-auto min-h-dvh max-w-xl pb-safe-nav">
-      <LiveBanner />
+    <div className={`mx-auto min-h-dvh max-w-xl ${pad}`}>
       <Outlet />
+      {dock && <SessionDock session={dock} />}
       <BottomNav />
     </div>
   );
 }
 
-/** Slim strip shown on every tab screen while a session is live: the clock stays visible (§5). */
-function LiveBanner() {
-  const active = useActiveSession();
+/**
+ * The way back into a running workout from any tab screen, docked just above the tab bar.
+ *
+ * It used to be a strip across the top of the screen, and on the owner's Galaxy Z Fold 8 it drew
+ * under the Android status bar: its text collided with the clock and battery, and a tap there pulls
+ * down the notification shade instead of reaching the app. Padding it for the inset was tried and
+ * did not reach the phone. At the bottom it cannot collide with the status bar whatever the inset,
+ * and it sits where the thumb already is — which is also where Hevy puts its in-progress bar.
+ */
+function SessionDock({ session }: { session: { id: string; title: string; startedAt: string } }) {
   const nav = useNavigate();
-  const now = useNow(1000, !!active);
-  if (!active) return null;
-  const elapsed = Math.max(0, Math.floor((now - Date.parse(active.startedAt)) / 1000));
+  const now = useNow(1000, true);
+  const elapsed = Math.max(0, Math.floor((now - Date.parse(session.startedAt)) / 1000));
   return (
-    // pt-safe, the same utility TopBar uses. Without it this bar renders UNDER the system status
-    // bar on a device with a top inset: its text collides with the clock and battery, and the tap
-    // target for Resume sits beneath them where it cannot be pressed. h-11 was the bar's height
-    // INCLUDING nothing for the inset, so it becomes min-h-11 plus padding rather than a fixed h.
-    <button
-      type="button"
-      onClick={() => nav(`/session/${active.id}`)}
-      className="pt-safe sticky top-0 z-40 flex min-h-11 w-full items-center justify-between bg-accent px-4 py-2.5 text-accent-fg"
-      data-testid="live-banner"
-    >
-      <span className="truncate text-sm font-bold">Live · {active.title}</span>
-      <span className="num text-sm font-extrabold">{fmtDuration(elapsed)} · Resume</span>
-    </button>
+    <div className="bottom-dock fixed inset-x-0 z-30 mx-auto max-w-xl px-3">
+      <button
+        type="button"
+        onClick={() => nav(`/session/${session.id}`)}
+        className="flex h-[var(--dock-h)] w-full items-center justify-between gap-3 rounded-2xl bg-accent px-4 text-left text-accent-fg shadow-[0_10px_30px_rgb(0_0_0/0.45)] active:brightness-95"
+        data-testid="live-banner"
+      >
+        <span className="min-w-0">
+          <span className="block text-[11px] font-bold uppercase tracking-[0.12em] opacity-75">Live</span>
+          <span className="block truncate text-base font-extrabold leading-tight">{session.title}</span>
+        </span>
+        <span className="flex shrink-0 items-center gap-2">
+          <span className="num text-base font-extrabold">{fmtDuration(elapsed)}</span>
+          <span className="rounded-xl bg-accent-fg/15 px-3 py-1.5 text-sm font-bold">Resume</span>
+        </span>
+      </button>
+    </div>
   );
 }
 

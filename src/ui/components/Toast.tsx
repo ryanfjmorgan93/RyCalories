@@ -29,7 +29,7 @@ export function ToastHost() {
   if (!message) return null;
   const color = tone === 'ok' ? 'bg-ok text-ok-fg' : tone === 'danger' ? 'bg-danger text-bg' : 'bg-fg text-bg';
   return (
-    <div key={id} className="toast-in pointer-events-none fixed inset-x-0 bottom-24 z-[60] flex justify-center px-4 pb-safe">
+    <div key={id} className="toast-in bottom-toast pointer-events-none fixed inset-x-0 z-[60] flex justify-center px-4">
       <div className={`rounded-full px-4 py-2 text-sm font-bold shadow-lg ${color}`}>{message}</div>
     </div>
   );

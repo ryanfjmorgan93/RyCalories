@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { db } from '@/db/db';
 import { calendarData, type CalendarData } from '@/db/calendarQueries';
 import { getMeal, loggedDays, mealsOnDay, recentMeals, suggestFoods, type MealWithItems } from '@/db/foodRepo';
@@ -39,6 +40,20 @@ export function useExercise(id: string | undefined): Exercise | undefined {
 /** The in-progress session, or null when there is none (undefined while loading). */
 export function useActiveSession(): Session | null | undefined {
   return useLiveQuery(async () => (await getActiveSession()) ?? null, []);
+}
+
+/**
+ * The running workout, when the floating session dock should show for it; otherwise null.
+ *
+ * Tab screens only — the session screens are the workout itself — and not Home, whose
+ * in-progress card already offers Resume (showing both put two Resume buttons on one screen).
+ * The Shell's padding and the rest timer's position both read this, so all three agree.
+ */
+export function useSessionDock(): Session | null {
+  const active = useActiveSession();
+  const { pathname } = useLocation();
+  if (!active || pathname === '/' || pathname.startsWith('/session/')) return null;
+  return active;
 }
 
 export function useSession(id: string | undefined): Session | undefined {
