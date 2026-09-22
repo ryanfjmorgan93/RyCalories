@@ -271,9 +271,14 @@ describe('classifySessionImport / importFingerprint (pure)', () => {
     expect(classifySessionImport(undefined, [], importFingerprint([row()]))).toBe('new');
   });
 
-  it('a session with no importHash (imported before fingerprints existed) is treated as edited and kept', () => {
+  it('a session with no importHash (imported before fingerprints existed) that differs from the CSV is kept, as unknown', () => {
     const stored = [row()];
-    expect(classifySessionImport(existingSession(undefined), stored, importFingerprint(stored))).toBe('editedKept');
+    expect(classifySessionImport(existingSession(undefined), stored, importFingerprint([row({ weight: 105 })]))).toBe('editedKept');
+  });
+
+  it('a session with no importHash that already matches the CSV exactly is unchanged, not counted as an edit', () => {
+    const stored = [row()];
+    expect(classifySessionImport(existingSession(undefined), stored, importFingerprint(stored))).toBe('unchanged');
   });
 
   it('a session whose stored sets still match the recorded fingerprint, and the CSV has not changed, is unchanged', () => {
@@ -422,5 +427,28 @@ describe('re-import does not silently discard edits made in Iron', () => {
     const after = (await db.setLogs.get(before[0].id)) as unknown as Record<string, unknown>;
     expect(after.__untouched).toBe(true);
     expect(after.completedAt).toBe(before[0].completedAt);
+  });
+
+  it('a session imported before fingerprints existed is unchanged on an identical re-import, then protected from then on', async () => {
+    // The owner's phone holds sessions imported by an earlier build: same rows, no importHash.
+    const parsed = parseHevyCsv(csv(100));
+    await runHevyImport(parsed, await planHevyImport(parsed));
+    const session = await importedSession();
+    await db.sessions.update(session.id, { importHash: undefined });
+    expect((await db.sessions.get(session.id))!.importHash).toBeUndefined();
+
+    const plan2 = await planHevyImport(parseHevyCsv(csv(100)));
+    expect(plan2.counts).toMatchObject({ sessionsUnchanged: 1, sessionsEditedKept: 0 });
+    const result2 = await runHevyImport(parseHevyCsv(csv(100)), plan2);
+    expect(result2).toMatchObject({ sessionsUnchanged: 1, sessionsEditedKept: 0, setsWritten: 0 });
+    // It adopted the fingerprint, so an edit made in Iron from now on is recognised as one.
+    expect((await db.sessions.get(session.id))!.importHash).toBeDefined();
+
+    const sets = await db.setLogs.where('sessionId').equals(session.id).sortBy('index');
+    await updateSet(sets[0].id, { weight: 110 });
+    const result3 = await runHevyImport(parseHevyCsv(csv(105)), await planHevyImport(parseHevyCsv(csv(105))));
+    expect(result3).toMatchObject({ sessionsEditedKept: 1, sessionsUpdated: 0, setsWritten: 0 });
+    const setsAfter = await db.setLogs.where('sessionId').equals(session.id).sortBy('index');
+    expect(setsAfter.map((s) => s.weight)).toEqual([110, 100]);
   });
 });

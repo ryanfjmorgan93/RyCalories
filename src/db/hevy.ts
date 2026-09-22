@@ -436,9 +436,12 @@ export type SessionImportStatus = 'new' | 'updated' | 'unchanged' | 'editedKept'
 export function classifySessionImport(existing: Session | undefined, existingSets: ImportControlledSet[], newFingerprint: string): SessionImportStatus {
   if (!existing) return 'new';
   const storedFingerprint = importFingerprint(existingSets);
+  // Identical to what the import would write: nothing to keep or replace, whatever its history.
+  // Without this, every session imported before fingerprints existed would be reported as
+  // "edited in Iron" on the first re-import — a count of edits nobody made.
+  if (newFingerprint === storedFingerprint) return 'unchanged';
   const edited = existing.importHash === undefined || existing.importHash !== storedFingerprint;
-  if (edited) return 'editedKept';
-  return newFingerprint === storedFingerprint ? 'unchanged' : 'updated';
+  return edited ? 'editedKept' : 'updated';
 }
 
 function groupBySessionId(sets: SetLog[]): Map<string, SetLog[]> {
@@ -609,6 +612,7 @@ export async function runHevyImport(parsed: HevyParsed, plan: HevyImportPlan, op
   const sessionsToPut: Session[] = [];
   const setsToPut: SetLog[] = [];
   const sessionIdsToClearSets: string[] = [];
+  const fingerprintsToAdopt: { id: string; importHash: string }[] = [];
   for (let i = 0; i < sessions.length; i++) {
     const session = sessions[i];
     const newSets = setsBySession.get(session.id) ?? [];
@@ -632,7 +636,10 @@ export async function runHevyImport(parsed: HevyParsed, plan: HevyImportPlan, op
       replace();
     } else if (status === 'unchanged') {
       result.sessionsUnchanged++;
-      // Nothing written: the rows already in the store match exactly what this import would write.
+      // No set is written: the rows already in the store match exactly what this import would
+      // write. A session imported before fingerprints existed adopts one now, so an edit made in
+      // Iron after today is recognised as an edit by the next re-import.
+      if (existing && existing.importHash !== newFingerprint) fingerprintsToAdopt.push({ id: session.id, importHash: newFingerprint });
     } else if (overwriteEdited) {
       result.sessionsEditedOverwritten++;
       replace();
@@ -644,6 +651,7 @@ export async function runHevyImport(parsed: HevyParsed, plan: HevyImportPlan, op
 
   await db.transaction('rw', [db.sessions, db.setLogs], async () => {
     for (const id of sessionIdsToClearSets) await db.setLogs.where('sessionId').equals(id).delete();
+    for (const f of fingerprintsToAdopt) await db.sessions.update(f.id, { importHash: f.importHash });
     if (sessionsToPut.length > 0) await db.sessions.bulkPut(sessionsToPut);
     if (setsToPut.length > 0) await db.setLogs.bulkPut(setsToPut);
   });

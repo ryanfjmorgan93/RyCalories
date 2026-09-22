@@ -34,8 +34,8 @@ function CountsLines({ counts, extra }: { counts: HevyImportCounts; extra?: Reac
       <div>{plural(counts.sessionsNew, 'new session')}</div>
       <div>{plural(counts.sessionsUpdated, 'session')} updated from Hevy</div>
       <div>{plural(counts.sessionsUnchanged, 'session')} unchanged</div>
-      {counts.sessionsEditedKept > 0 && <div>{plural(counts.sessionsEditedKept, 'session')} edited in Iron — kept</div>}
-      {counts.sessionsEditedOverwritten > 0 && <div>{plural(counts.sessionsEditedOverwritten, 'session')} edited in Iron — overwritten</div>}
+      {counts.sessionsEditedKept > 0 && <div>{plural(counts.sessionsEditedKept, 'session')} differ from Hevy — Iron's kept</div>}
+      {counts.sessionsEditedOverwritten > 0 && <div>{plural(counts.sessionsEditedOverwritten, 'session')} replaced with Hevy's</div>}
       {extra}
     </div>
   );
@@ -262,8 +262,7 @@ export function HevyImportSheet({
                 <Toggle
                   checked={overwriteEdited}
                   onChange={setOverwriteEdited}
-                  label={`Overwrite the ${plural(plan.counts.sessionsEditedKept, 'session')} edited in Iron`}
-                  sub="Off keeps what was edited in Iron. On replaces it with Hevy's version."
+                  label={`Replace ${plan.counts.sessionsEditedKept === 1 ? 'it' : 'them'} with Hevy's version`}
                 />
               )}
             </div>

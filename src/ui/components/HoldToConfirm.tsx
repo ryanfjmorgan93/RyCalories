@@ -64,7 +64,10 @@ export function HoldToConfirm({
       type="button"
       data-testid={testId}
       disabled={disabled}
-      className={`relative isolate flex h-14 w-full select-none items-center justify-center overflow-hidden rounded-2xl border border-danger/50 text-lg font-bold text-danger disabled:opacity-40 ${holding ? 'holding' : 'idle'}`}
+      // touch-none: without it a finger that drifts a few pixels lets the browser claim the gesture
+      // as a scroll and fire pointercancel, so a real hold on the phone keeps resetting.
+      className={`relative isolate flex h-14 w-full touch-none select-none items-center justify-center overflow-hidden rounded-2xl border border-danger/50 text-lg font-bold text-danger disabled:opacity-40 ${holding ? 'holding' : 'idle'}`}
+      onContextMenu={(e) => e.preventDefault()}
       onPointerDown={(e) => {
         e.preventDefault();
         start();
