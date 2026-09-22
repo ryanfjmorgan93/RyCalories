@@ -221,7 +221,44 @@ test.describe('WP4 overlays', () => {
     // session UI, so there is no real user path here to drive an e2e assertion through.
   });
 
-  test('personal record: a beaten reps-at-weight gets a PR chip and the summary lists it', async ({ page }) => {
+  test('personal record: a beaten reps-at-weight gets a PR chip and the summary lists it, given a completed prior session', async ({ page }) => {
+    await fresh(page);
+
+    // A first-ever session never shows a record at all (see the test below) — establish real
+    // prior history first: one completed session with a lighter Bench Press set.
+    await page.getByTestId('start-Upper (Push)').click();
+    const priorCard = page.getByTestId('exercise-card-Bench Press (Barbell)');
+    await expect(priorCard).toBeVisible();
+    await priorCard.getByTestId('weight-input').fill('50');
+    await priorCard.getByTestId('reps-input').fill('5');
+    await priorCard.getByTestId('set-done').click();
+    await clickIfPresent(page.getByTestId('rest-timer').getByRole('button', { name: 'Skip' }));
+    await finishToSummary(page);
+    await page.getByTestId('save-session').click();
+    await expect(page).toHaveURL(/\/$/);
+
+    await page.getByTestId('start-Upper (Push)').click();
+    const card = page.getByTestId('exercise-card-Bench Press (Barbell)');
+    await expect(card).toBeVisible();
+
+    await card.getByTestId('weight-input').fill('60');
+    await card.getByTestId('reps-input').fill('8');
+    await card.getByTestId('set-done').click();
+    await clickIfPresent(page.getByTestId('rest-timer').getByRole('button', { name: 'Skip' }));
+
+    await card.getByTestId('weight-input').fill('60');
+    await card.getByTestId('reps-input').fill('9');
+    await card.getByTestId('set-done').click();
+
+    // Both rows beat the prior 50 kg × 5 history — weight/e1RM/volume on the first, e1RM/volume/
+    // reps-at-weight on the second — the second, in DOM order, is the one the spec calls out.
+    await expect(card.getByTestId('pr-chip').nth(1)).toBeVisible();
+
+    await finishToSummary(page);
+    await expect(page.getByTestId('decision-Bench Press (Barbell)')).toContainText('PR reps');
+  });
+
+  test('personal record: a first-ever session shows no PR chip, even when a later set beats an earlier one', async ({ page }) => {
     await fresh(page);
     await page.getByTestId('start-Upper (Push)').click();
     const card = page.getByTestId('exercise-card-Bench Press (Barbell)');
@@ -236,12 +273,11 @@ test.describe('WP4 overlays', () => {
     await card.getByTestId('reps-input').fill('9');
     await card.getByTestId('set-done').click();
 
-    // Both rows are first-ever sets, so both are PRs (weight/e1RM/volume on the first, reps-at-weight
-    // on the second) — the second, in DOM order, is the one the spec calls out.
-    await expect(card.getByTestId('pr-chip').nth(1)).toBeVisible();
-
-    await finishToSummary(page);
-    await expect(page.getByTestId('decision-Bench Press (Barbell)')).toContainText('PR reps');
+    // Wait on a positive signal that the second set actually landed — its own row's badge reads
+    // "2" — before asserting the chip's absence. Asserting absence straight after the click would
+    // pass just as well before the set (and its record check) had actually landed.
+    await expect(card.locator('button span.num.w-7').nth(1)).toHaveText('2');
+    await expect(card.getByTestId('pr-chip')).toHaveCount(0);
   });
 
   test('swap: substitutes an exercise for the session, and undo restores it', async ({ page }) => {

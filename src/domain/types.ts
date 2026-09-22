@@ -171,6 +171,14 @@ export interface Session {
    * tells "untouched since import" (safe to replace) from "edited in Iron" (kept by default).
    */
   importHash?: string;
+  /**
+   * Routine-exercise id → a lock-in weight the user chose during this session, not yet committed.
+   * The routine-exercise stays `mode: 'calibrating'` until `finishSession` reads this and commits
+   * it (or the user switches to "Keep calibrating" on Summary) — so a mid-session change of mind,
+   * or discarding the session outright, never leaves a half-applied lock-in behind. Not indexed;
+   * rides on the session row as-is, including through backups.
+   */
+  lockIns?: Record<string, number>;
 }
 
 export interface SetLog {

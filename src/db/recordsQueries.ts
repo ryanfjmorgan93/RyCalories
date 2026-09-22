@@ -63,18 +63,24 @@ async function priorRecordSessions(exerciseId: string, excludeSessionId: string,
  * Records set by `newSets` for an exercise in `sessionId`, against every other completed
  * session's counted sets (Hevy imports included, attributed) PLUS the earlier sets of this same
  * session (so a second heavier set is compared with the first, not only with history).
+ *
+ * `opts.calibrating` suppresses records for a slot whose working weight isn't established yet.
  */
 export async function recordsForNewSets(
   exerciseId: string,
   sessionId: string,
   newSets: SetLog[],
-  opts?: { before?: string },
+  opts?: { before?: string; calibrating?: boolean },
 ): Promise<PersonalRecord[]> {
   if (newSets.length === 0) return [];
   const [exercise, session] = await Promise.all([db.exercises.get(exerciseId), db.sessions.get(sessionId)]);
   if (!exercise || !session) return [];
   const bodyweightKg = exercise.kind === 'bodyweight_plus' ? await bodyweightKgFor(session) : undefined;
   const priorSessions = await priorRecordSessions(exerciseId, sessionId, opts?.before);
+  // Computed ONCE, here, from the real completed prior sessions only — before the same-session
+  // "so far" entry is spliced in below. Inferring it from the spliced array would let a set
+  // logged three minutes ago in this same session count as history for a first-ever session.
+  const hasPriorHistory = priorSessions.length > 0;
 
   const newIds = new Set(newSets.map((s) => s.id));
   const earlier = (await db.setLogs.where('[sessionId+exerciseId]').equals([sessionId, exerciseId]).toArray())
@@ -86,7 +92,8 @@ export async function recordsForNewSets(
   newSets.forEach((s, i) => {
     const prior: RecordSession[] =
       soFar.length > 0 ? [...priorSessions, { sessionId, startedAt: session.startedAt, sets: [...soFar] }] : priorSessions;
-    for (const r of newRecords(exercise.kind, [s], prior, { bodyweightKg })) records.push({ ...r, setIndex: i });
+    for (const r of newRecords(exercise.kind, [s], prior, { bodyweightKg, hasPriorHistory, calibrating: opts?.calibrating }))
+      records.push({ ...r, setIndex: i });
     soFar.push(toRecordSet(s));
   });
   return records;
@@ -128,7 +135,10 @@ export async function recentRecords(
     for (const session of ordered) {
       const sets = (bySession.get(session.id) ?? []).sort(byIndex);
       const bodyweightKg = exercise.kind === 'bodyweight_plus' ? await bodyweightKgFor(session) : undefined;
-      const recs = newRecords(exercise.kind, sets.map(toRecordSet), priorSoFar, { bodyweightKg });
+      // priorSoFar only ever holds sessions strictly earlier in this same chronological replay —
+      // it starts empty, so the first completed session for an exercise never produces a record.
+      const hasPriorHistory = priorSoFar.length > 0;
+      const recs = newRecords(exercise.kind, sets.map(toRecordSet), priorSoFar, { bodyweightKg, hasPriorHistory });
       for (const r of recs) out.push({ record: r, exercise, sessionId: session.id, date: session.startedAt });
       priorSoFar.push({ sessionId: session.id, startedAt: session.startedAt, source: session.source, sets: sets.map(toRecordSet) });
     }

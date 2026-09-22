@@ -72,12 +72,115 @@ describe('recordsForNewSets', () => {
     await logBodyweight('2026-09-01', 80);
     const items = await db.routineExercises.where('exerciseId').equals(BACK_EXTENSION).toArray();
     const rx = items[0];
+    // A prior completed session, so this isn't a first-ever session for the exercise.
+    const s0 = await startSession(rx.routineId);
+    await logSet({ sessionId: s0.id, routineExerciseId: rx.id, exerciseId: BACK_EXTENSION, type: 'working', weight: 5, reps: 8 });
+    await db.sessions.update(s0.id, { endedAt: '2026-09-01T19:00:00.000Z' });
+
     const session = await startSession(rx.routineId);
     await db.sessions.update(session.id, { startedAt: '2026-09-05T18:00:00.000Z' });
     const set = await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: BACK_EXTENSION, type: 'working', weight: 10, reps: 8 });
     const records = await recordsForNewSets(BACK_EXTENSION, session.id, [set]);
     const e1rmRecord = records.find((r) => r.kind === 'e1rm')!;
     expect(e1rmRecord.value).toBe(e1rm(90, 8)); // 80 kg bodyweight + 10 kg added
+  });
+});
+
+describe('recordsForNewSets: gating', () => {
+  it('a first-ever session shows no record at all, even when a later set beats an earlier one', async () => {
+    const rx = await rxFor(HINGE, RDL);
+    const session = await startSession(HINGE);
+    const set1 = await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 60, reps: 8 });
+    const set2 = await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 80, reps: 8 });
+    const records = await recordsForNewSets(RDL, session.id, [set1, set2]);
+    expect(records).toEqual([]);
+  });
+
+  it('a real prior completed session unlocks records as before', async () => {
+    const rx = await rxFor(HINGE, RDL);
+    const s1 = await startSession(HINGE);
+    await logSet({ sessionId: s1.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 100, reps: 8 });
+    await db.sessions.update(s1.id, { endedAt: '2026-09-01T19:00:00.000Z' });
+
+    const s2 = await startSession(HINGE);
+    const set = await logSet({ sessionId: s2.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 105, reps: 8 });
+    const records = await recordsForNewSets(RDL, s2.id, [set]);
+    expect(records.find((r) => r.kind === 'weight')).toMatchObject({ value: 105, previous: 100 });
+  });
+
+  it('prior history from a Hevy import alone is still history', async () => {
+    const rx = await rxFor(HINGE, RDL);
+    await db.sessions.put({
+      id: 'hevy-session-gate',
+      routineId: '',
+      title: 'Imported',
+      startedAt: '2026-08-01T18:00:00.000Z',
+      endedAt: '2026-08-01T19:00:00.000Z',
+      source: 'hevy',
+    });
+    await db.setLogs.put({
+      id: 'hevy-set-gate',
+      sessionId: 'hevy-session-gate',
+      routineExerciseId: null,
+      exerciseId: RDL,
+      index: 0,
+      type: 'working',
+      weight: 100,
+      reps: 8,
+      completedAt: '2026-08-01T18:05:00.000Z',
+    });
+
+    const session = await startSession(HINGE);
+    const set = await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 105, reps: 8 });
+    const records = await recordsForNewSets(RDL, session.id, [set]);
+    expect(records.find((r) => r.kind === 'weight')).toMatchObject({ value: 105, previous: 100, previousSource: 'hevy' });
+  });
+
+  it('a calibrating slot never shows a record, even against real prior history', async () => {
+    const rx = await rxFor(HINGE, RDL);
+    const s1 = await startSession(HINGE);
+    await logSet({ sessionId: s1.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 100, reps: 8 });
+    await db.sessions.update(s1.id, { endedAt: '2026-09-01T19:00:00.000Z' });
+
+    const s2 = await startSession(HINGE);
+    const set = await logSet({ sessionId: s2.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 150, reps: 8 });
+    const records = await recordsForNewSets(RDL, s2.id, [set], { calibrating: true });
+    expect(records).toEqual([]);
+  });
+
+  it('an in-progress session for the same exercise never counts as prior history', async () => {
+    // Only one session can be "active" through startSession at a time, so build both sessions
+    // directly — this mirrors how a Hevy import or a second device could leave an unfinished
+    // session in the table regardless.
+    const rx = await rxFor(HINGE, RDL);
+    await db.sessions.put({ id: 'in-progress-other', routineId: HINGE, title: 'Other', startedAt: '2026-09-01T18:00:00.000Z' });
+    await db.setLogs.put({
+      id: 'in-progress-set',
+      sessionId: 'in-progress-other',
+      routineExerciseId: rx.id,
+      exerciseId: RDL,
+      index: 0,
+      type: 'working',
+      weight: 100,
+      reps: 8,
+      completedAt: '2026-09-01T18:05:00.000Z',
+    });
+
+    await db.sessions.put({ id: 'current-session', routineId: HINGE, title: 'Current', startedAt: '2026-09-05T18:00:00.000Z' });
+    const set = {
+      id: 'current-set',
+      sessionId: 'current-session',
+      routineExerciseId: rx.id,
+      exerciseId: RDL,
+      index: 0,
+      type: 'working' as const,
+      weight: 105,
+      reps: 8,
+      completedAt: '2026-09-05T18:05:00.000Z',
+    };
+    await db.setLogs.put(set);
+    const records = await recordsForNewSets(RDL, 'current-session', [set]);
+    expect(records).toEqual([]);
   });
 });
 

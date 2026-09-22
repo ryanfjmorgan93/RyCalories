@@ -36,7 +36,18 @@ test.describe('Progress', () => {
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     });
 
-    await page.getByTestId('start-session').click();
+    // Real prior history for Romanian Deadlift first — a first-ever session never shows a PR, so
+    // the "recent-prs" assertion below needs a completed session already on the books. Picked
+    // explicitly by name, not via the suggested-session button: the suggestion deliberately avoids
+    // two lower-body days in a row, so it would not offer Lower (Hinge) again for the session below.
+    await page.getByTestId('start-Lower (Hinge)').click();
+    await clickIfPresent(page.getByRole('button', { name: 'Start anyway' }));
+    await expect(page).toHaveURL(/\/session\//);
+    await logSets(page, 'Romanian Deadlift (Barbell)', 90, [8, 8, 8, 8]);
+    await finishAndSave(page);
+
+    await page.getByTestId('start-Lower (Hinge)').click();
+    await clickIfPresent(page.getByRole('button', { name: 'Start anyway' }));
     await expect(page).toHaveURL(/\/session\//);
     await logSets(page, 'Romanian Deadlift (Barbell)', 110, [8, 8, 8, 8]);
     await finishAndSave(page);

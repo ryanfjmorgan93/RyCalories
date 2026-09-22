@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { backupAfterSessionFinish } from '@/db/historySafety';
 import { buildSummary, discardSession, finishSession, type SessionSummary, type SummaryItem } from '@/db/repo';
 import { decisionLine, fmtDuration, fmtKg, fmtNum, fmtWeight } from '@/domain/format';
-import type { Suggestion } from '@/domain/engine';
+import { lockInBlocked, type Suggestion } from '@/domain/engine';
 import type { PersonalRecord } from '@/domain/records';
 import { NIGGLE_TAGS, type Niggle, type NiggleTag } from '@/domain/types';
 import { useTimer } from '@/state/timer';
@@ -54,9 +54,16 @@ export function SummaryScreen() {
       const init: Record<string, Choice> = {};
       for (const item of s.items) {
         if (!item.rx || !item.decision) continue;
-        // A suggested lock-in weight seeds `lockIn: true` — locking a calibrating lift in is the
-        // path of least resistance, not "Keep calibrating" (§5: the calibrating trap).
-        init[item.rx.id] = { mode: 'accept', overrideTo: item.decision.toWeight, lockIn: item.lockIn !== null, lockInAt: item.lockIn?.suggested ?? null };
+        // A lock-in chosen mid-session (§2: the pending lock-in) takes precedence over
+        // buildSummary's own suggestion — the user already decided; this only redisplays it. It
+        // can still be switched off in favour of "Keep calibrating" below.
+        const pending = s.session.lockIns?.[item.rx.id];
+        init[item.rx.id] =
+          pending !== undefined
+            ? { mode: 'accept', overrideTo: item.decision.toWeight, lockIn: true, lockInAt: pending }
+            : // A suggested lock-in weight seeds `lockIn: true` — locking a calibrating lift in is
+              // the path of least resistance, not "Keep calibrating" (§5: the calibrating trap).
+              { mode: 'accept', overrideTo: item.decision.toWeight, lockIn: item.lockIn !== null, lockInAt: item.lockIn?.suggested ?? null };
       }
       setChoices(init);
       setNiggles(s.session.niggles ?? []);
@@ -69,18 +76,15 @@ export function SummaryScreen() {
 
   const decided = useMemo(() => (summary?.items ?? []).filter((i) => i.status === 'done' && i.decision), [summary]);
   // Every Override / Lock in needs a number before the session can be saved — and for a weighted
-  // lift that number cannot be 0. Nothing below this screen has a floor: neither engine.ts's
-  // lockIn() nor repo.ts's lockInRoutineExercise() rejects it, so a lift locked in at 0 kg
-  // prescribes nothing for ever. 0 is only meaningful for bodyweight_plus, where it means
-  // bodyweight alone. ExerciseDetailScreen's own lock-in sheet guards this; this is the path taken
-  // at the end of every session, so it needs the same guard.
+  // lift that number cannot be 0. 0 is only meaningful for bodyweight_plus, where it means
+  // bodyweight alone. `lockInBlocked` in engine.ts is the one floor, shared with
+  // ExerciseDetailScreen's own lock-in sheet — this is the path taken at the end of every session.
   const invalid = decided.some((item) => {
     const c = choices[item.rx!.id];
     if (!c) return false;
     if (c.mode === 'override' && c.overrideTo === null) return true;
     if (!c.lockIn) return false;
-    if (c.lockInAt === null) return true;
-    return c.lockInAt <= 0 && item.exercise.kind !== 'bodyweight_plus';
+    return lockInBlocked(c.lockInAt, item.exercise.kind);
   });
   const others = useMemo(() => (summary?.items ?? []).filter((i) => !(i.status === 'done' && i.decision)), [summary]);
 
