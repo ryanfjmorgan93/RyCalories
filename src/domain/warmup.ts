@@ -39,3 +39,29 @@ export function warmupRamp(workingKg: number, opts: WarmupOptions): WarmupSet[] 
 
   return result;
 }
+
+/**
+ * A warm-up ramp for equipment with no bar to reason about (dumbbell/machine/cable/bodyweight):
+ * the same step fractions the barbell ramp above uses, rounded to the exercise's own increment
+ * instead of a plate set, and with no empty-bar first step — there is no bar. Empty array when
+ * workingKg ≤ 0 or not finite.
+ */
+export function genericWarmupRamp(workingKg: number, increment: number): WarmupSet[] {
+  if (!Number.isFinite(workingKg) || workingKg <= 0) return [];
+
+  const steps: [fraction: number, reps: number][] = [
+    [0.5, 5],
+    [0.7, 3],
+    [0.9, 1],
+  ];
+  const step = Number.isFinite(increment) && increment > 0 ? increment : 2.5;
+  const result: WarmupSet[] = [];
+  let previous = 0;
+  for (const [fraction, reps] of steps) {
+    const weight = roundKg(Math.round((fraction * workingKg) / step) * step);
+    if (weight <= previous || weight <= 0) continue;
+    result.push({ weight, reps });
+    previous = weight;
+  }
+  return result;
+}

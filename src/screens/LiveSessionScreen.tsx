@@ -22,7 +22,7 @@ import {
 } from '@/db/repo';
 import type { AssistantContext } from '@/domain/assistant';
 import { toDateKey } from '@/domain/dates';
-import { roundKg, suggestedLockInWeight } from '@/domain/engine';
+import { suggestedLockInWeight } from '@/domain/engine';
 import { fmtDate, fmtDuration, fmtKg, fmtNum, fmtWeight, targetLine } from '@/domain/format';
 import { DEFAULT_PLATES, plateLabel, platesPerSide } from '@/domain/plates';
 import { prescribe } from '@/domain/prescription';
@@ -30,7 +30,7 @@ import type { PersonalRecord } from '@/domain/records';
 import { countsForProgression, effortOptions, type EffortScale, formatEffort, setBadges } from '@/domain/sets';
 import { DEFAULT_SETTINGS, type Exercise, type RoutineExercise, type Session, type SetLog, type SetType, type Settings } from '@/domain/types';
 import { liveVerdict } from '@/domain/verdict';
-import { warmupRamp } from '@/domain/warmup';
+import { genericWarmupRamp, warmupRamp } from '@/domain/warmup';
 import { useAssistant } from '@/state/assistant';
 import { primeAudio, requestNotificationsOnce, vibrate } from '@/state/notify';
 import { useTimer } from '@/state/timer';
@@ -459,29 +459,6 @@ function restSecondsFor(rx: RoutineExercise | null, exercise: Exercise, settings
   if (exercise.defaultRestSec) return exercise.defaultRestSec;
   if (exercise.kind === 'carry') return settings.restCarrySec;
   return exercise.isCompound ? settings.restCompoundSec : settings.restIsolationSec;
-}
-
-/**
- * A warm-up ramp for equipment with no bar to reason about (dumbbell/machine/cable/bodyweight):
- * the same step fractions `domain/warmup.ts`'s barbell ramp uses, rounded to the exercise's own
- * increment instead of a plate set, and with no empty-bar first step — there is no bar.
- */
-function genericWarmupRamp(workingKg: number, increment: number): { weight: number; reps: number }[] {
-  const steps: [fraction: number, reps: number][] = [
-    [0.5, 5],
-    [0.7, 3],
-    [0.9, 1],
-  ];
-  const step = Number.isFinite(increment) && increment > 0 ? increment : 2.5;
-  const result: { weight: number; reps: number }[] = [];
-  let previous = 0;
-  for (const [fraction, reps] of steps) {
-    const weight = roundKg(Math.round((fraction * workingKg) / step) * step);
-    if (weight <= previous || weight <= 0) continue;
-    result.push({ weight, reps });
-    previous = weight;
-  }
-  return result;
 }
 
 function ChevronIcon({ expanded }: { expanded?: boolean }) {
