@@ -498,6 +498,26 @@ counts drop below a baseline without an in-app delete, and a Backups card in Set
   and whether a reinstall can still list them. Restore after a reinstall is designed for the worst
   case: a file picker.
 
+### 6.5 The glass workout screen — traps paid for in Phase 3
+
+- **Lightning CSS drops `backdrop-filter` written before `-webkit-backdrop-filter`.** Tailwind v4's
+  CSS backend silently removed the standard property, so every glass layer would have shipped with
+  no blur. Write the prefixed one first. Check computed style, not source.
+- **A timer that one effect arms and a later run of the same effect cancels leaves stale state.**
+  The completion hold kept `currentKey` on a finished exercise for good whenever anything else moved
+  it inside the 1.8 s window. The decision is now a pure function (`domain/completionHold.ts`), and
+  every transition clears the hold before deciding.
+- **`animations: 'disabled'` freezes CSS, not script.** Summary's figures count up in
+  `requestAnimationFrame`, and a design shot caught "1 set · 813 kg" beside "3 sets". The hero
+  marks `data-settled` and shots wait for it.
+- **One-shot `isVisible()` was in eleven specs.** Every finish-sheet and rest-timer check now waits
+  through `clickIfPresent`, scoped to the dialog.
+- **A retyped set keeps its RIR.** Changing a set to Failure in the edit sheet left an inherited
+  "Easy" RIR 3 on it, which could qualify a failed lift for a double increment. A non-working type
+  now clears it.
+- **Only the phone can prove** blur smoothness while scrolling on the Fold, how the haptics feel, the
+  fold/unfold reflow mid-workout, and the Archivo rendering.
+
 ---
 
 ## 7. Repo and release
