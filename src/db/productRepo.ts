@@ -126,8 +126,13 @@ async function remember(key: string, label: LabelNutrition | null): Promise<void
   }
 }
 
-/** GET JSON with a timeout. Returns null on any failure at all, deliberately. */
-async function getJson(url: string): Promise<unknown | null> {
+/**
+ * GET JSON with a timeout. Returns null on any failure at all, deliberately.
+ *
+ * `notFoundIsAnswer` reads a 404's body instead of discarding it, for the one endpoint whose 404 is
+ * an answer rather than a failure — see lookupBarcode.
+ */
+async function getJson(url: string, opts?: { notFoundIsAnswer?: boolean }): Promise<unknown | null> {
   if (typeof fetch !== 'function') return null;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -136,7 +141,7 @@ async function getJson(url: string): Promise<unknown | null> {
       signal: controller.signal,
       headers: { Accept: 'application/json' },
     });
-    if (!res.ok) return null;
+    if (!res.ok && !(opts?.notFoundIsAnswer && res.status === 404)) return null;
     return (await res.json()) as unknown;
   } catch {
     return null;
@@ -160,10 +165,19 @@ export async function lookupBarcode(code: string): Promise<Lookup> {
   // Never asked rather than asked and refused: the caller shows these differently.
   if (offline()) return { label: null, from: 'offline' };
 
-  const json = await getJson(`${BARCODE_URL}/${encodeURIComponent(digits)}.json?fields=${OFF_FIELDS}`);
-  if (json === null) return { label: null, from: 'unavailable' };
+  // A well-formed barcode the database has never heard of comes back as HTTP 404 with an ordinary
+  // `{"status":0,"status_verbose":"product not found"}` body — checked against the live API, not
+  // assumed. Discarding every 404 reported each genuine miss as "Lookup unavailable", never cached
+  // it, and left the sheet exactly as it was, so a second scan looked as if it had not happened.
+  const json = await getJson(`${BARCODE_URL}/${encodeURIComponent(digits)}.json?fields=${OFF_FIELDS}`, {
+    notFoundIsAnswer: true,
+  });
+  if (json === null || typeof json !== 'object') return { label: null, from: 'unavailable' };
 
   const body = json as { status?: number; product?: unknown };
+  // Only the database's own "not found" counts as a miss. A 404 from anything else on the way — a
+  // proxy, a captive portal, an outage page that happens to be JSON — says nothing about the food.
+  if (body.status !== 1 && body.status !== 0) return { label: null, from: 'unavailable' };
   const label = body.status === 1 ? parseProduct(body.product) : null;
   await remember(key, label);
   return { label, from: 'network' };

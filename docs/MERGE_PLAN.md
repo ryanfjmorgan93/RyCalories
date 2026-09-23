@@ -518,6 +518,22 @@ counts drop below a baseline without an in-app delete, and a Backups card in Set
 - **Only the phone can prove** blur smoothness while scrolling on the Fold, how the haptics feel, the
   fold/unfold reflow mid-workout, and the Archivo rendering.
 
+### 6.6 Barcode lookup — the second scan
+
+- **Open Food Facts answers an unknown barcode with HTTP 404**, and a JSON `{"status":0}` body.
+  It does not use a 200 for this. The live API was checked with curl. Every test had modelled a miss
+  as a 200, so the app threw real misses away as failures. The owner saw "Lookup unavailable.", the
+  miss was never cached, and the sheet did not change. A route or mock for an external service
+  copies the service's real status codes, not the ones the code expects.
+- **A failed scan must not leave the previous product on screen.** The sheet kept the last label
+  under a small "Not found" line, and Save logged the old food. A draft whose figures came from a
+  label (`fromLabel`, which survives a weight change) is cleared when a scan finds nothing.
+- **A scan replaces the brand; it does not fall back to it.** `l.brand || p.brand` put the last
+  product's brand onto a brandless one.
+- **One decoded frame is not a read.** The camera loop now needs the same code on two consecutive
+  frames (`src/domain/barcodeRead.ts`). A misread frame cannot be produced from the static fake
+  camera, so only the pure rule is tested for it.
+
 ---
 
 ## 7. Repo and release

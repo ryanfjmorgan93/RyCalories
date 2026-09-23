@@ -33,6 +33,12 @@ interface Draft {
   product?: string;
   /** Where these numbers came from. Carried through so the trust hierarchy still applies. */
   source?: FoodSource;
+  /**
+   * The name and figures on screen are a label's — a product's, not the user's. Not the same as
+   * `source === 'label'`: changing only the weight marks the draft as the user's (the portion is
+   * theirs), but the name and the per-100 g figures are still that one product's.
+   */
+  fromLabel?: boolean;
   grams: number | null;
   /** Per 100 g when weighed; for the whole serving when not. */
   kcal: number | null;
@@ -54,6 +60,7 @@ function draftFrom(item?: NewMealItem): Draft {
     ...(item.brand ? { brand: item.brand } : {}),
     ...(item.product ? { product: item.product } : {}),
     ...(item.source ? { source: item.source } : {}),
+    ...(item.source === 'label' ? { fromLabel: true } : {}),
     grams: n.basis === 'weighed' ? n.grams : null,
     kcal: m.kcal,
     protein: m.protein,
@@ -95,9 +102,14 @@ export function FoodItemSheet({
   // the number the user typed while the draft behind it has reverted, so Save writes a different
   // value than the one on screen. The sheet is instead remounted per edit target with a `key`.
   const [d, setD] = useState<Draft>(() => draftFrom(item));
+  // 'searching' is a name lookup and 'scanning' a barcode one: each says "Looking up…" on its own
+  // button. Scanning used to share 'searching', whose only visible sign was on the name-lookup
+  // button — hidden until three letters are typed and again once a label is applied, which is
+  // exactly the state a second scan starts from — so a scan in flight showed nothing at all.
   const [lookup, setLookup] = useState<
-    'idle' | 'searching' | 'none' | 'offline' | 'unavailable' | 'notfound' | 'invalid'
+    'idle' | 'searching' | 'scanning' | 'none' | 'offline' | 'unavailable' | 'notfound' | 'invalid'
   >('idle');
+  const busy = lookup === 'searching' || lookup === 'scanning';
   const [scannerOpen, setScannerOpen] = useState(false);
   // Bumped by anything that changes what a lookup would be for. A response whose ticket is stale
   // is discarded rather than applied to a food nobody asked about.
@@ -115,13 +127,14 @@ export function FoodItemSheet({
    * designed, then let the next label lookup overwrite the correction with the figures the user
    * had gone back and fixed.
    */
-  const setOwn = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v, source: 'user' }));
+  const setOwn = <K extends keyof Draft>(k: K, v: Draft[K]) =>
+    setD((p) => ({ ...p, [k]: v, source: 'user', fromLabel: k === 'grams' ? p.fromLabel : false }));
 
   /** Changing what is being searched for invalidates whatever the last search said about it. */
   const setSearchable = <K extends 'name' | 'brand'>(k: K, v: string) => {
     requestRef.current += 1;
     setLookup('idle');
-    setD((p) => ({ ...p, [k]: v }));
+    setD((p) => ({ ...p, [k]: v, ...(k === 'name' ? { fromLabel: false } : {}) }));
   };
 
   // Suggestions only while adding a new food. When editing a saved one the numbers on screen are
@@ -133,14 +146,21 @@ export function FoodItemSheet({
   // without a flag to get out of step with what is on screen.
   const suggestions = all.filter((m) => normalise(m.name) !== normalise(d.name)).slice(0, 5);
 
-  const applyLabel = (l: LabelNutrition) => {
+  /**
+   * Put a label's figures on the sheet.
+   *
+   * `fromScan`: a barcode names one product, so its identity replaces whatever was there. Falling
+   * back to the previous brand meant scanning a brandless product after a Trek flapjack saved it
+   * as Trek. A name lookup keeps the fallback: there the brand is the one the user typed.
+   */
+  const applyLabel = (l: LabelNutrition, opts?: { fromScan?: boolean }) => {
     const grams = portionGrams(l, d.grams ?? undefined);
     setLookup('idle');
     setD((p) => ({
       ...p,
       name: displayName(l) || p.name,
-      brand: l.brand || p.brand,
-      product: l.name || p.product,
+      brand: opts?.fromScan ? l.brand || undefined : l.brand || p.brand,
+      product: opts?.fromScan ? l.name || undefined : l.name || p.product,
       basis: 'weighed',
       grams,
       portion: portionLabel(l, grams),
@@ -149,11 +169,12 @@ export function FoodItemSheet({
       carbs: l.per100.carbs,
       fat: l.per100.fat,
       source: 'label',
+      fromLabel: true,
     }));
   };
 
   const runLookup = async () => {
-    if (lookup === 'searching') return;
+    if (busy) return;
     const asked = { text: d.name.trim(), brand: d.brand?.trim() ?? '' };
     // Which search this is. A lookup can take up to the repository's timeout, and nothing stops
     // the user editing meanwhile — so a slow answer for "Protein Flapjack" could land on a sheet
@@ -174,21 +195,32 @@ export function FoodItemSheet({
     }
   };
 
+  /**
+   * A scan that found nothing. If the sheet is showing a label, that label belongs to some other
+   * product — the one scanned or looked up before — and leaving it there under a "Not in the
+   * database" line is how the previous food gets logged in place of this one. So it goes, and the
+   * sheet starts again blank. Anything the user typed themselves is theirs and stays.
+   */
+  const scanMissed = (outcome: 'offline' | 'invalid' | 'notfound' | 'unavailable') => {
+    setLookup(outcome);
+    setD((p) => (p.fromLabel ? draftFrom() : p));
+  };
+
   /** A code from the camera or typed by hand. Scanning is a lookup, so it shares the same ticket. */
   const onScanCode = async (code: string) => {
     setScannerOpen(false);
     const ticket = (requestRef.current += 1);
-    setLookup('searching');
+    setLookup('scanning');
     try {
       const result = await lookupBarcode(code);
       if (ticket !== requestRef.current) return;
-      if (result.label) applyLabel(result.label);
-      else if (result.from === 'offline') setLookup('offline');
-      else if (result.from === 'invalid') setLookup('invalid');
-      else if (result.from === 'network' || result.from === 'cache') setLookup('notfound');
-      else setLookup('unavailable');
+      if (result.label) applyLabel(result.label, { fromScan: true });
+      else if (result.from === 'offline') scanMissed('offline');
+      else if (result.from === 'invalid') scanMissed('invalid');
+      else if (result.from === 'network' || result.from === 'cache') scanMissed('notfound');
+      else scanMissed('unavailable');
     } catch {
-      if (ticket === requestRef.current) setLookup('unavailable');
+      if (ticket === requestRef.current) scanMissed('unavailable');
     }
   };
 
@@ -207,6 +239,7 @@ export function FoodItemSheet({
       // Carried across, so a remembered label keeps its standing and a remembered guess does not
       // acquire one it never had.
       source: m.source,
+      fromLabel: m.source === 'label',
     });
   };
   const eaten = macrosOf(nutritionFrom(d));
@@ -266,14 +299,14 @@ export function FoodItemSheet({
                   size="md"
                   variant="outline"
                   full
-                  disabled={lookup === 'searching'}
+                  disabled={busy}
                   onClick={() => setScannerOpen(true)}
                   data-testid="scan-barcode"
                 >
-                  Scan barcode
+                  {lookup === 'scanning' ? 'Looking up…' : 'Scan barcode'}
                 </Button>
                 {canLookUp && (
-                  <Button size="md" variant="outline" full disabled={lookup === 'searching'} onClick={() => void runLookup()} data-testid="lookup-food">
+                  <Button size="md" variant="outline" full disabled={busy} onClick={() => void runLookup()} data-testid="lookup-food">
                     {lookup === 'searching' ? 'Looking up…' : 'Look up the label'}
                   </Button>
                 )}

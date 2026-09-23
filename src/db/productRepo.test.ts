@@ -11,8 +11,12 @@ const TREK = {
   nutriments: { 'energy-kcal_100g': 452.5, proteins_100g: 18.5, carbohydrates_100g: 44, fat_100g: 22 },
 };
 
-/** Stand in for the network. Returns whatever the queue holds, and records what was asked. */
-function mockFetch(responses: Array<{ ok?: boolean; body?: unknown } | Error>) {
+/**
+ * Stand in for the network. Returns whatever the queue holds, and records what was asked.
+ * `status` defaults to 200 (or 500 when `ok: false`); `ok` follows it the way a real Response's does.
+ * `text` stands for a body that is not JSON at all, so `json()` rejects exactly as a real one would.
+ */
+function mockFetch(responses: Array<{ ok?: boolean; status?: number; body?: unknown; text?: string } | Error>) {
   const calls: string[] = [];
   const queue = [...responses];
   vi.stubGlobal(
@@ -22,11 +26,27 @@ function mockFetch(responses: Array<{ ok?: boolean; body?: unknown } | Error>) {
       const next = queue.shift();
       if (next === undefined) throw new Error('unexpected request');
       if (next instanceof Error) throw next;
-      return { ok: next.ok ?? true, json: async () => next.body };
+      const status = next.status ?? (next.ok === false ? 500 : 200);
+      return {
+        ok: status >= 200 && status < 300,
+        status,
+        json: async () => {
+          if (next.text !== undefined) throw new SyntaxError(`Unexpected token in JSON: ${next.text.slice(0, 20)}`);
+          return next.body;
+        },
+      };
     }),
   );
   return calls;
 }
+
+/**
+ * What Open Food Facts' v2 product endpoint really sends for a well-formed barcode it does not
+ * know: HTTP 404, JSON body, status 0. Taken from the live API (5099999999994, September 2026),
+ * not assumed — the earlier tests modelled a miss as a 200, which is what let every real miss be
+ * reported as "Lookup unavailable" while they passed.
+ */
+const OFF_NOT_FOUND = { status: 404, body: { code: '5099999999994', status: 0, status_verbose: 'product not found' } };
 
 beforeEach(async () => {
   await wipeAll();
@@ -86,6 +106,41 @@ describe('barcode lookup', () => {
   it('treats a bad HTTP status the same way', async () => {
     mockFetch([{ ok: false }]);
     expect((await lookupBarcode('5060088709054')).from).toBe('unavailable');
+    expect(await db.productCache.count()).toBe(0);
+  });
+
+  it("reads the database's 404 for an unknown barcode as a miss, and remembers it", async () => {
+    const calls = mockFetch([OFF_NOT_FOUND]);
+    // 'network' with no label is what the sheet shows as "Not in the database." — not
+    // 'unavailable', which it shows as "Lookup unavailable." and which is not what happened.
+    expect(await lookupBarcode('5099999999994')).toEqual({ label: null, from: 'network' });
+    expect(await lookupBarcode('5099999999994')).toEqual({ label: null, from: 'cache' });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('keeps reading a 200 with status 0 as a miss too, which is how the database answers a malformed code', async () => {
+    mockFetch([{ body: { code: '0000000000017', status: 0, status_verbose: 'no code or invalid code' } }]);
+    expect(await lookupBarcode('0000000000017')).toEqual({ label: null, from: 'network' });
+    expect(await db.productCache.count()).toBe(1);
+  });
+
+  it('does not take a 404 that is not the database saying "not found" as a miss', async () => {
+    // A proxy or captive portal's error page: not JSON at all.
+    mockFetch([{ status: 404, text: '<html>Not Found</html>' }]);
+    expect((await lookupBarcode('5099999999994')).from).toBe('unavailable');
+    // JSON, but not the database's shape.
+    mockFetch([{ status: 404, body: { error: 'not found' } }]);
+    expect((await lookupBarcode('5099999999994')).from).toBe('unavailable');
+    expect(await db.productCache.count()).toBe(0);
+  });
+
+  it('does not read the body of any other failing status, even one carrying status 0', async () => {
+    mockFetch([
+      { status: 429, body: { status: 0 } },
+      { status: 503, body: { status: 0 } },
+    ]);
+    expect((await lookupBarcode('5099999999994')).from).toBe('unavailable');
+    expect((await lookupBarcode('5099999999994')).from).toBe('unavailable');
     expect(await db.productCache.count()).toBe(0);
   });
 

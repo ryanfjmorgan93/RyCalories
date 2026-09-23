@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { BarcodeDetector, prepareZXingModule } from 'barcode-detector/ponyfill';
 import zxingWasmUrl from 'zxing-wasm/reader/zxing_reader.wasm?url';
+import { confirmRead, NO_READ, type ReadState } from '@/domain/barcodeRead';
 import { Button } from './components/Button';
 import { Chip } from './components/Chip';
 import { Sheet } from './components/Sheet';
@@ -88,6 +89,8 @@ export function BarcodeScanner({
     }
 
     let cancelled = false;
+    // Per opening of the sheet, so a code half-read the last time it was open never counts.
+    let read: ReadState = NO_READ;
 
     const runDetectLoop = () => {
       const tick = async () => {
@@ -98,14 +101,18 @@ export function BarcodeScanner({
         if (video && video.readyState >= 2) {
           try {
             const codes = await detector.detect(video);
-            if (codes.length > 0 && !cancelled && !stoppedRef.current) {
-              const code = codes[0]!.rawValue;
+            if (cancelled || stoppedRef.current) return;
+            // Two consecutive frames must agree: one blurred frame can decode to another product.
+            const r = confirmRead(read, codes.map((c) => c.rawValue));
+            read = r.next;
+            if (r.confirmed !== undefined) {
               stopAll();
-              onCode(code);
+              onCode(r.confirmed);
               return;
             }
           } catch {
             // A frame that fails to decode is the normal case on every tick but the last one.
+            read = NO_READ;
           }
         }
         if (!cancelled && !stoppedRef.current) {
