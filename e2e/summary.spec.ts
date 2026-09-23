@@ -171,6 +171,6 @@ test.describe('a lock-in seeded from session.lockIns', () => {
     // The thing the pending lock-in exists to fix: the next session actually prescribes it.
     await page.getByTestId('start-Lower (Squat)').click();
     await clickIfPresent(page.getByRole('button', { name: 'Start anyway' }));
-    await expect(page.getByTestId('exercise-card-Barbell Back Squat')).toContainText('4 × 6–8 @ 60 kg');
+    await expect(page.getByTestId('exercise-card-Barbell Back Squat')).toContainText('4 sets of 6–8 · 60 kg');
   });
 });
