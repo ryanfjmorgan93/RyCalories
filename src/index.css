@@ -358,6 +358,32 @@
   animation: pulse-ring 1.1s ease-out infinite;
 }
 
+/* Summary's finish-moment confetti — pure CSS, no library. Colours are `var(--c-*)` tokens (the
+   same set the approved mockup used), never a raw hex, so a retune of the palette carries here
+   too. The reduced-motion block below still applies if a piece is ever rendered under it, but
+   SummaryScreen doesn't mount any in that case — belt and braces, not the only guard. */
+@keyframes confetti-fall {
+  0% {
+    transform: translate3d(0, -12vh, 0) rotate(var(--confetti-rot));
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(var(--confetti-drift), 108vh, 0) rotate(calc(var(--confetti-rot) + 540deg));
+    opacity: 0;
+  }
+}
+.confetti-piece {
+  position: absolute;
+  top: 0;
+  border-radius: 2px;
+  animation-name: confetti-fall;
+  animation-timing-function: cubic-bezier(0.3, 0.6, 0.4, 1);
+  animation-fill-mode: both;
+}
+
 /* Exercise diagrams are white line art on a transparent ground, drawn for the dark theme. */
 [data-theme='light'] .demo-frame {
   filter: invert(1);
