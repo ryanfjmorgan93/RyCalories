@@ -66,6 +66,20 @@ describe('planRows: no history', () => {
     expect(pending.map((r) => r.position)).toEqual([0, 1, 2]);
   });
 
+  it('with no history, reps just logged in this session carry down to the rows below', () => {
+    const logged = [mkSet({ type: 'working', weight: 100, reps: 8, index: 0 })];
+    const rows = planRows(baseInput({ previousSets: [], loggedSets: logged }));
+    const pending = pendingRows(rows);
+    expect(pending.map((r) => r.ghostReps)).toEqual([8, 8]);
+  });
+
+  it('last time still wins over the set just done, when there is a last time', () => {
+    const logged = [mkSet({ type: 'working', weight: 100, reps: 8, index: 0 })];
+    const previous = [mkSet({ type: 'working', weight: 100, reps: 7, index: 0 }), mkSet({ type: 'working', weight: 100, reps: 6, index: 1 })];
+    const rows = planRows(baseInput({ previousSets: previous, loggedSets: logged }));
+    expect(pendingRows(rows)[0].ghostReps).toBe(6);
+  });
+
   it('a calibrating slot with no history at all has a null ghost weight', () => {
     const rows = planRows(
       baseInput({ rx: { ...baseRx, mode: 'calibrating' }, prescribedWeight: null, previousSets: [], loggedSets: [] }),

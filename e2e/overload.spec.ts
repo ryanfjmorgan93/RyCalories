@@ -315,7 +315,7 @@ test.describe('WP4 overlays', () => {
     await expect(page).toHaveURL(/\/session\//);
 
     // Add Incline DB Curl (biceps) as an extra, alongside the routine's own DB Curl (biceps).
-    await page.getByRole('button', { name: 'Add exercise (this session only)' }).click();
+    await page.getByRole('button', { name: 'Add exercise', exact: true }).click();
     await page.getByRole('dialog').getByText('Incline DB Curl', { exact: true }).click();
     await expect(page.getByTestId('exercise-card-Incline DB Curl')).toBeVisible();
 

@@ -261,7 +261,7 @@ export function LiveSessionScreen() {
 
           <div className="mt-4 grid gap-3">
             <Button size="lg" variant="outline" full onClick={() => setPickerOpen(true)}>
-              Add exercise (this session only)
+              Add exercise
             </Button>
             <Button size="lg" variant="ghost" full onClick={() => setDiscardOpen(true)}>
               Discard session

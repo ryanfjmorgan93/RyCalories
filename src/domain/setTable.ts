@@ -110,8 +110,11 @@ export function planRows(input: PlanRowsInput): PlanRow[] {
   }
 
   const prevCounted = previousSets.filter((s) => countsForProgression(s.type));
-  // The weight actually logged on the last counted set this session, else null.
-  const lastCountedWeight = [...loggedSets].reverse().find((s) => countsForProgression(s.type))?.weight ?? null;
+  // The last counted set logged this session, if any: its weight and reps carry down to the rows
+  // below it when there is no prescription or history to show instead.
+  const lastCounted = [...loggedSets].reverse().find((s) => countsForProgression(s.type));
+  const lastCountedWeight = lastCounted?.weight ?? null;
+  const lastCountedReps = lastCounted?.reps ?? null;
 
   const pendingTargetCount = Math.max(0, rx.targetSets - countedDone);
   let position = countedDone;
@@ -123,7 +126,9 @@ export function planRows(input: PlanRowsInput): PlanRow[] {
     firstPending = false;
 
     const ghostWeight = prescribedWeight ?? lastCountedWeight ?? previous?.weight ?? null;
-    const ghostReps = isWeighted ? (previous?.reps ?? rx.repMin) : null;
+    // Last time's reps (the owner's choice), else what was just done in this session, else the
+    // bottom of the range — never the top, so an untouched tick cannot earn an increase it did not.
+    const ghostReps = isWeighted ? (previous?.reps ?? lastCountedReps ?? rx.repMin) : null;
     const ghostDistanceM = kind === 'carry' ? (previous?.distanceM ?? rx.distanceMinM ?? null) : null;
     const ghostSeconds = kind === 'timed' ? (previous?.seconds ?? rx.repMin) : kind === 'carry' ? (previous?.seconds ?? null) : null;
     const previousText = previous ? fmtSetsLine([previous], kind) : '';
