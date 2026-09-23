@@ -538,3 +538,28 @@ test.describe('set table', () => {
     await expect(card.getByTestId('weight-input')).toHaveCount(0);
   });
 });
+
+test.describe('keyboard focus through the completion moment', () => {
+  test('logging the last set from the keyboard keeps focus: on the completion, then on the next exercise', async ({ page }) => {
+    await fresh(page);
+    await page.getByTestId('start-Upper (Push)').click();
+    const bench = page.getByTestId('exercise-card-Bench Press (Barbell)');
+    for (let i = 0; i < 3; i++) {
+      await bench.getByTestId('weight-input').fill('65');
+      await bench.getByTestId('reps-input').fill('8');
+      await bench.getByTestId('set-done').click();
+      await skipRest(page);
+    }
+    // The fourth set from the keyboard: focus on the tick, Enter.
+    await bench.getByTestId('weight-input').fill('65');
+    await bench.getByTestId('reps-input').fill('8');
+    await bench.getByTestId('set-done').focus();
+    await page.keyboard.press('Enter');
+
+    // Focus follows the card into its completion moment instead of falling to <body>...
+    await expect(page.getByTestId('exercise-complete')).toBeFocused();
+    // ...and, once the next exercise opens, lands on its first live input.
+    const incline = page.getByTestId('exercise-card-Incline DB Press');
+    await expect(incline.getByTestId('weight-input')).toBeFocused();
+  });
+});
