@@ -18,8 +18,7 @@ import { clickIfPresent, fresh } from './fresh';
 
 async function finishToSummary(page: import('@playwright/test').Page) {
   await page.getByTestId('finish-session').click();
-  const finish = page.getByRole('button', { name: 'Finish', exact: true }).last();
-  if (await page.getByText('Finish session?').isVisible().catch(() => false)) await finish.click();
+  await clickIfPresent(page.getByRole('dialog').getByRole('button', { name: 'Finish', exact: true }));
   await expect(page).toHaveURL(/\/summary$/);
 }
 

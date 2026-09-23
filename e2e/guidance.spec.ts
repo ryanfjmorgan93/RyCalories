@@ -28,8 +28,7 @@ async function logSets(page: Page, exercise: string, weight: number, reps: numbe
 
 async function finishToSummary(page: Page) {
   await page.getByTestId('finish-session').click();
-  const finish = page.getByRole('button', { name: 'Finish', exact: true }).last();
-  if (await page.getByText('Finish session?').isVisible().catch(() => false)) await finish.click();
+  await clickIfPresent(page.getByRole('dialog').getByRole('button', { name: 'Finish', exact: true }));
   await expect(page).toHaveURL(/\/summary$/);
 }
 

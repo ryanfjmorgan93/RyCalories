@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { fresh } from './fresh';
+import { clickIfPresent, fresh } from './fresh';
 
 /**
  * The owner's report was "the AI assistant isn't working. Says model unavailable." with no more
@@ -224,11 +224,10 @@ test.describe('Exercise Detail — lock-in floor (lockInBlocked, shared with Sum
     await card.getByTestId('reps-input').fill('8');
     await card.getByTestId('set-done').click();
     const skip = page.getByTestId('rest-timer').getByRole('button', { name: 'Skip' });
-    if (await skip.isVisible().catch(() => false)) await skip.click();
+    await clickIfPresent(skip);
 
     await page.getByTestId('finish-session').click();
-    const finishConfirm = page.getByRole('button', { name: 'Finish', exact: true }).last();
-    if (await page.getByText('Finish session?').isVisible().catch(() => false)) await finishConfirm.click();
+    await clickIfPresent(page.getByRole('dialog').getByRole('button', { name: 'Finish', exact: true }));
     await expect(page).toHaveURL(/\/summary$/);
     await page.getByTestId('save-session').click();
     await expect(page).toHaveURL(/\/$/);

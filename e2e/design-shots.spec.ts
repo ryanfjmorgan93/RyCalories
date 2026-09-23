@@ -106,9 +106,7 @@ async function logSets(page: Page, exercise: string, weight: number, reps: numbe
 
 async function finishToSummary(page: Page) {
   await page.getByTestId('finish-session').click();
-  if (await page.getByText('Finish session?').isVisible().catch(() => false)) {
-    await page.getByRole('button', { name: 'Finish', exact: true }).last().click();
-  }
+  await clickIfPresent(page.getByRole('dialog').getByRole('button', { name: 'Finish', exact: true }));
   await expect(page).toHaveURL(/\/summary$/);
 }
 
@@ -240,11 +238,11 @@ test('capture every screen for a design session', async ({ page, browser, contex
     await clickIfPresent(page.getByTestId('rest-timer').getByRole('button', { name: 'Skip' }), 1500);
   }
   await page.getByTestId('finish-session').click();
-  if (await page.getByText('Finish session?').isVisible().catch(() => false)) {
-    await page.getByRole('button', { name: 'Finish', exact: true }).last().click();
-  }
+  await clickIfPresent(page.getByRole('dialog').getByRole('button', { name: 'Finish', exact: true }));
   await expect(page).toHaveURL(/\/summary$/);
   await expect(page.getByTestId('decision-line').first()).toBeVisible();
+  // The hero figures count up in script, which animations: 'disabled' does not freeze.
+  await expect(page.getByTestId('summary-hero')).toHaveAttribute('data-settled', 'true');
   await shot(page, 'session-summary', { full: true });
   await page.getByTestId('save-session').click();
   await expect(page).toHaveURL(/\/$/);
@@ -368,11 +366,10 @@ test('capture every screen for a design session', async ({ page, browser, contex
 
   // 25 Summary with a PR chip
   await page.getByTestId('finish-session').click();
-  if (await page.getByText('Finish session?').isVisible().catch(() => false)) {
-    await page.getByRole('button', { name: 'Finish', exact: true }).last().click();
-  }
+  await clickIfPresent(page.getByRole('dialog').getByRole('button', { name: 'Finish', exact: true }));
   await expect(page).toHaveURL(/\/summary$/);
   await expect(page.getByTestId('decision-Bench Press (Barbell)')).toContainText('PR');
+  await expect(page.getByTestId('summary-hero')).toHaveAttribute('data-settled', 'true');
   await shot(page, 'session-summary-pr', { full: true });
   await page.getByTestId('save-session').click();
   await expect(page).toHaveURL(/\/$/);

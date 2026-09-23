@@ -29,7 +29,7 @@ async function logSets(page: Page, exercise: string, weight: number, reps: numbe
     await card.getByTestId('reps-input').fill(String(r));
     await card.getByTestId('set-done').click();
     const skip = page.getByTestId('rest-timer').getByRole('button', { name: 'Skip' });
-    if (await skip.isVisible().catch(() => false)) await skip.click();
+    await clickIfPresent(skip);
   }
 }
 

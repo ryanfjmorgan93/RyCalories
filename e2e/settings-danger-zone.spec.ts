@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { expectClass, fresh } from './fresh';
+import { clickIfPresent, expectClass, fresh } from './fresh';
 
 /**
  * Settings → Developer → reset/wipe (Phase 1 — history that cannot be lost silently).
@@ -27,11 +27,10 @@ async function logOneRdlSession(page: Page, reps: number[]) {
     await card.getByTestId('set-done').click();
     // Skip the rest timer so it doesn't cover the next input.
     const skip = page.getByTestId('rest-timer').getByRole('button', { name: 'Skip' });
-    if (await skip.isVisible().catch(() => false)) await skip.click();
+    await clickIfPresent(skip);
   }
   await page.getByTestId('finish-session').click();
-  const finish = page.getByRole('button', { name: 'Finish', exact: true }).last();
-  if (await page.getByText('Finish session?').isVisible().catch(() => false)) await finish.click();
+  await clickIfPresent(page.getByRole('dialog').getByRole('button', { name: 'Finish', exact: true }));
   await expect(page).toHaveURL(/\/summary$/);
   await page.getByTestId('save-session').click();
   await expect(page).toHaveURL(/\/$/);

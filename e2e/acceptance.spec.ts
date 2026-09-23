@@ -30,7 +30,7 @@ async function logSets(page: Page, exercise: string, weight: number, reps: numbe
     await card.getByTestId('set-done').click();
     // Skip the rest timer so it doesn't cover the next button.
     const skip = page.getByTestId('rest-timer').getByRole('button', { name: 'Skip' });
-    if (await skip.isVisible().catch(() => false)) await skip.click();
+    await clickIfPresent(skip);
   }
 }
 
@@ -44,8 +44,7 @@ async function waitForCompletionCollapse(page: Page) {
 async function finishToSummary(page: Page) {
   await page.getByTestId('finish-session').click();
   // Some exercises weren't done → confirm sheet.
-  const finish = page.getByRole('button', { name: 'Finish', exact: true }).last();
-  if (await page.getByText('Finish session?').isVisible().catch(() => false)) await finish.click();
+  await clickIfPresent(page.getByRole('dialog').getByRole('button', { name: 'Finish', exact: true }));
   await expect(page).toHaveURL(/\/summary$/);
 }
 

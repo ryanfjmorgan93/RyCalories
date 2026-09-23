@@ -250,7 +250,8 @@ export function SummaryScreen() {
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-3 border-y border-line">
+        {/* data-settled marks the end of the count-up, so a screenshot or test can wait for the final figures. */}
+        <div className="mt-5 grid grid-cols-3 border-y border-line" data-testid="summary-hero" data-settled={revealT >= 1 ? 'true' : 'false'}>
           <HeroStat testId="summary-time" value={fmtDuration(summary.durationSec * revealT)} label="Time" />
           <HeroStat testId="summary-sets" value={String(Math.round(summary.workingSetsDone * revealT))} label="Sets" bordered />
           <HeroStat testId="summary-kg" value={fmtNum(Math.round(volumeKg * revealT))} label="kg lifted" bordered />

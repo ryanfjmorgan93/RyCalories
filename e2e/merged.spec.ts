@@ -23,9 +23,7 @@ async function trainLowerBody(page: Page) {
   }
 
   await page.getByTestId('finish-session').click();
-  if (await page.getByText('Finish session?').isVisible().catch(() => false)) {
-    await page.getByRole('button', { name: 'Finish', exact: true }).last().click();
-  }
+  await clickIfPresent(page.getByRole('dialog').getByRole('button', { name: 'Finish', exact: true }));
   await expect(page).toHaveURL(/\/summary$/);
 
   // The summary is where the progression decisions are accepted; the session is not finished —

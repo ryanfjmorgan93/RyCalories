@@ -41,8 +41,7 @@ async function logSets(page: Page, exercise: string, weight: number, reps: numbe
 
 async function finishAndSave(page: Page): Promise<void> {
   await page.getByTestId('finish-session').click();
-  const finish = page.getByRole('button', { name: 'Finish', exact: true }).last();
-  if (await page.getByText('Finish session?').isVisible().catch(() => false)) await finish.click();
+  await clickIfPresent(page.getByRole('dialog').getByRole('button', { name: 'Finish', exact: true }));
   await expect(page).toHaveURL(/\/summary$/);
   await page.getByTestId('save-session').click();
   await expect(page).toHaveURL(/\/$/);
