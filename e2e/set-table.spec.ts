@@ -145,6 +145,34 @@ test.describe('set table', () => {
     await expect(hipThrust.getByTestId('weight-input')).toBeVisible();
   });
 
+  test('a skip during the completion hold does not strand currentKey on the finished card', async ({ page }) => {
+    await fresh(page);
+    await page.getByTestId('start-session').click();
+    const rdl = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
+    const hipThrust = page.getByTestId('exercise-card-Hip Thrust (Barbell)');
+    const legCurl = page.getByTestId('exercise-card-Lying Leg Curl (Machine)');
+
+    for (let i = 0; i < 4; i++) {
+      await rdl.getByTestId('weight-input').fill('110');
+      await rdl.getByTestId('reps-input').fill('8');
+      await rdl.getByTestId('set-done').click();
+      if (i < 3) await skipRest(page);
+    }
+    // The 4th log starts RDL's ~1.8s completion hold (LiveSessionScreen's `useCompletionHold`): a
+    // second, non-completing transition inside that window — here, skipping Hip Thrust — must clear
+    // the hold outright rather than leave `currentKey` stuck on the now-finished RDL card. Done
+    // through the real skip UI (not a raw DB write) so it goes through the same Dexie write the
+    // live query actually reacts to.
+    await hipThrust.click(); // collapsed row — expands it
+    await hipThrust.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('button', { name: 'Skip this exercise' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Skip', exact: true }).click();
+
+    // Well past the hold window: the real next undone slot (Lying Leg Curl — Hip Thrust is now
+    // skipped) must actually receive focus, not RDL forever.
+    await expect(legCurl).toHaveAttribute('data-current', 'true', { timeout: 5000 });
+  });
+
   test('an extra set is reachable only through the exercise menu', async ({ page }) => {
     await fresh(page);
     await page.getByTestId('start-session').click();
@@ -195,6 +223,91 @@ test.describe('set table', () => {
     const sets = await readAllSetLogs(page);
     expect(sets.filter((s) => s.type === 'working').map((s) => s.rir)).toEqual([3, 3, 3]);
     expect(sets.filter((s) => s.type === 'failure').map((s) => s.rir)).toEqual([undefined]);
+  });
+
+  test('retyping a logged set away from Working clears its inherited RIR, not just its type', async ({ page }) => {
+    await fresh(page);
+    await page.getByTestId('start-session').click();
+    const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
+    await logFour(page, card, 110, 8);
+    await waitForCompletionCollapse(page);
+
+    // Answer "Easy" — every counted working set now carries rir: 3 (the slot's feel).
+    const easy = card.getByTestId('feel-Easy');
+    await easy.click();
+    await expect(easy).toHaveAttribute('aria-pressed', 'true');
+    expect((await readAllSetLogs(page)).map((s) => s.rir)).toEqual([3, 3, 3, 3]);
+
+    // Reopen the card and retype the 3rd and 4th logged sets: one to Failure, one to Drop. Neither
+    // still counts as an "Easy" set once retyped, so neither may still carry the RIR 3 it inherited
+    // before the retype — a stale RIR 3 on the Failure set would feed a double-increment suggestion
+    // it never earned (§3), and a Drop set never has an effort answer of its own. The done card's
+    // whole tile is taller than its own toggle button (verdict/lock-in/feel sit below), so click
+    // the heading itself — nested inside that button — rather than the tile's own centre point.
+    await card.getByRole('heading', { name: 'Romanian Deadlift (Barbell)' }).click();
+    const rows = card.locator('button:has(span.num.w-7)');
+
+    await rows.nth(2).click();
+    await expect(page.getByText('Edit set', { exact: true })).toBeVisible();
+    await page.getByRole('dialog').getByRole('button', { name: 'Failure', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByText('Edit set', { exact: true })).toHaveCount(0);
+
+    await rows.nth(3).click();
+    await expect(page.getByText('Edit set', { exact: true })).toBeVisible();
+    await page.getByRole('dialog').getByRole('button', { name: 'Drop', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByText('Edit set', { exact: true })).toHaveCount(0);
+
+    const after = await readAllSetLogs(page);
+    const failureSet = after.find((s) => s.type === 'failure');
+    const dropSet = after.find((s) => s.type === 'drop');
+    expect(failureSet).toBeDefined();
+    expect(dropSet).toBeDefined();
+    expect(failureSet!.rir).toBeUndefined();
+    expect(dropSet!.rir).toBeUndefined();
+    // The two untouched working sets keep their real answer.
+    expect(after.filter((s) => s.type === 'working').map((s) => s.rir)).toEqual([3, 3]);
+  });
+
+  test('a lift whose sets all hit the top of the range surfaces the double-increment suggestion on Summary when answered Easy, and none when answered Good', async ({ page }) => {
+    // Positive case first, so the negative case (no such line) is actually meaningful.
+    await fresh(page);
+    await page.getByTestId('start-Upper (Push)').click();
+    const bench = page.getByTestId('exercise-card-Bench Press (Barbell)'); // 65 kg, 4 × 6–8
+    await logFour(page, bench, 65, 8); // every set at repMax
+    await waitForCompletionCollapse(page);
+    const easy = bench.getByTestId('feel-Easy');
+    await easy.click();
+    await expect(easy).toHaveAttribute('aria-pressed', 'true');
+
+    await page.getByTestId('finish-session').click();
+    await clickIfPresent(page.getByRole('dialog').getByRole('button', { name: 'Finish', exact: true }));
+    await expect(page).toHaveURL(/\/summary$/);
+    const decision = page.getByTestId('decision-Bench Press (Barbell)');
+    // Wait for Summary's own decision card before asserting anything about it — it's built only
+    // once records/decisions are fully computed.
+    await expect(decision).toBeVisible();
+    await expect(decision).toContainText('Every set felt easy');
+    await expect(decision).toContainText('70 kg'); // 65 + 2.5 increment × 2
+
+    // A second, clean session where the same lift is instead answered Good (RIR 2) — no set was
+    // "easy", so no double-increment suggestion should appear at all.
+    await fresh(page);
+    await page.getByTestId('start-Upper (Push)').click();
+    const bench2 = page.getByTestId('exercise-card-Bench Press (Barbell)');
+    await logFour(page, bench2, 65, 8);
+    await waitForCompletionCollapse(page);
+    const good = bench2.getByTestId('feel-Good');
+    await good.click();
+    await expect(good).toHaveAttribute('aria-pressed', 'true');
+
+    await page.getByTestId('finish-session').click();
+    await clickIfPresent(page.getByRole('dialog').getByRole('button', { name: 'Finish', exact: true }));
+    await expect(page).toHaveURL(/\/summary$/);
+    const decision2 = page.getByTestId('decision-Bench Press (Barbell)');
+    await expect(decision2).toBeVisible();
+    await expect(decision2).not.toContainText('Every set felt easy');
   });
 
   test('an extra set added after the feel answer inherits it', async ({ page }) => {
@@ -340,6 +453,76 @@ test.describe('set table', () => {
     // The list pane sits to the left of the focused card, not stacked above it.
     expect(listBox!.x + listBox!.width).toBeLessThanOrEqual(focusBox!.x + 1);
     expect(listBox!.y).toBeLessThan(focusBox!.y + focusBox!.height);
+  });
+
+  test('at 884×1104, finishing every target set shows the all-done card in the right pane and its Finish workout reaches Summary', async ({ page }) => {
+    await page.setViewportSize({ width: 884, height: 1104 });
+    await fresh(page);
+    await page.getByTestId('start-Upper (Push)').click();
+
+    const list = page.getByTestId('fold-list');
+    const allDone = page.getByTestId('all-done');
+    const bench = page.getByTestId('exercise-card-Bench Press (Barbell)'); // targetSets 4
+    const incline = page.getByTestId('exercise-card-Incline DB Press'); // targetSets 3
+    const shoulder = page.getByTestId('exercise-card-DB Shoulder Press'); // targetSets 3
+    const triceps = page.getByTestId('exercise-card-Triceps Pushdown'); // targetSets 3
+    await expect(bench).toBeVisible();
+    await expect(allDone).toHaveCount(0); // nothing done yet — no all-done card at all
+
+    const logN = async (card: import('@playwright/test').Locator, n: number, weight: number, reps: number) => {
+      for (let i = 0; i < n; i++) {
+        await card.getByTestId('weight-input').fill(String(weight));
+        await card.getByTestId('reps-input').fill(String(reps));
+        await card.getByTestId('set-done').click();
+        await skipRest(page);
+      }
+      // Only the focused card is visible in the Fold's right pane (≥840px) — the next exercise's
+      // own completion hold doesn't clear, and its card doesn't become visible there, until this
+      // one's celebration has actually finished.
+      await waitForCompletionCollapse(page);
+    };
+
+    await logN(bench, 4, 65, 8);
+    await logN(incline, 3, 20, 8);
+    await logN(shoulder, 3, 20, 8);
+    await logN(triceps, 3, 20, 12);
+
+    await expect(allDone).toBeVisible();
+    await expect(allDone).toContainText('All 13 sets done'); // 4 + 3 + 3 + 3
+    // In the right pane, not stacked under the left one.
+    const listBox = await list.boundingBox();
+    const doneBox = await allDone.boundingBox();
+    expect(listBox).not.toBeNull();
+    expect(doneBox).not.toBeNull();
+    expect(listBox!.x + listBox!.width).toBeLessThanOrEqual(doneBox!.x + 1);
+
+    await page.getByTestId('all-done-finish').click();
+    await expect(page).toHaveURL(/\/summary$/);
+  });
+
+  test('at 884×1104, removing a focused extra leaves a visible card in the right pane, not a blank one', async ({ page }) => {
+    await page.setViewportSize({ width: 884, height: 1104 });
+    await fresh(page);
+    await page.getByTestId('start-Upper (Push)').click();
+
+    await page.getByRole('button', { name: 'Add exercise', exact: true }).click();
+    await page.getByRole('dialog').getByText('Overhead Triceps Extension', { exact: true }).click();
+    const extraCard = page.getByTestId('exercise-card-Overhead Triceps Extension');
+    await expect(extraCard).toHaveCount(1);
+
+    // Pin it as the Fold's right-pane focus via its row in the left pane.
+    await page.getByTestId('fold-list').getByText('Overhead Triceps Extension', { exact: true }).click();
+    await expect(extraCard).toBeVisible();
+
+    // Remove it from the session while it is still the pinned focus.
+    await extraCard.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('button', { name: 'Remove from session' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Remove', exact: true }).click();
+    await expect(extraCard).toHaveCount(0);
+
+    // The pinned focus named a group that no longer exists — the right pane must fall back to the
+    // real current exercise rather than sit blank.
+    await expect(page.getByTestId('exercise-card-Bench Press (Barbell)')).toBeVisible();
   });
 
   test('under reduced motion, the completion still reaches its real end state', async ({ page }) => {

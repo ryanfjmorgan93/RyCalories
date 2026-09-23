@@ -23,7 +23,7 @@ export function EditSetSheet({
   increment: number;
   onClose: () => void;
   onDelete: () => void;
-  onSave: (patch: Partial<Pick<SetLog, 'weight' | 'reps' | 'type' | 'distanceM' | 'seconds'>>) => void;
+  onSave: (patch: Partial<Pick<SetLog, 'weight' | 'reps' | 'type' | 'distanceM' | 'seconds' | 'rir'>>) => void;
 }) {
   const [weight, setWeight] = useState<number | null>(set.weight);
   const [reps, setReps] = useState<number | null>(set.reps ?? null);
@@ -68,6 +68,13 @@ export function EditSetSheet({
               distanceM: distanceM ?? undefined,
               seconds: seconds ?? undefined,
               type,
+              // A set that isn't `working` never has an effort answer of its own — a warm-up and a
+              // drop are never counted, and a failure always reads as RIR 0 regardless (`effortRir`).
+              // Without this, retyping a working set that inherited a feel-chip RIR leaves that RIR
+              // sitting on the row after the type change, and `effortRir` honours a logged RIR over
+              // the type's own implicit one — so a set just retyped to Failure could still read as
+              // RIR 3 and feed a double-increment suggestion it never earned (§3).
+              ...(type !== 'working' ? { rir: undefined } : {}),
             })
           }
         >

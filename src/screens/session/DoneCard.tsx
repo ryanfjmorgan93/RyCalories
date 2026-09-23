@@ -73,7 +73,7 @@ export function DoneCard({
             </svg>
           </span>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-base font-bold leading-tight">{exerciseName}</div>
+            <h2 className="truncate text-base font-bold leading-tight">{exerciseName}</h2>
             <div className="num mt-0.5 truncate text-sm text-muted">{doneLine}</div>
           </div>
           <span className="shrink-0 text-dim">

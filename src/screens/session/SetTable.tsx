@@ -166,7 +166,6 @@ function WarmupRowView({ row, index, cols, onLog }: { row: WarmupGhostRow; index
         type="button"
         data-testid={`warmup-done-${index}`}
         aria-label={`Log warm-up ${index + 1}`}
-        aria-pressed="false"
         onClick={onLog}
         className="h-11 w-11 shrink-0 justify-self-end rounded-xl border border-line bg-surface-2 text-muted active:bg-line"
       >
@@ -278,7 +277,6 @@ function LiveRowView({
           onClick={onLog}
           disabled={busy}
           data-testid="set-done"
-          aria-pressed="false"
           aria-label={`Log set ${n}`}
           className="h-11 w-11 shrink-0 justify-self-end rounded-xl bg-ok text-ok-fg active:brightness-90 disabled:opacity-40"
         >
