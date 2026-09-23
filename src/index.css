@@ -363,6 +363,127 @@
   filter: invert(1);
 }
 
+/* --- Phase 3C: the completion moment, the collapse, and the Fold layout ------------------- */
+
+/* The completion ring and its check mark, traced in on an exercise's last counted set (the
+   mockup's `ring-draw` / `check-draw`). Circumference matches a 38-radius circle on an 88×88
+   viewBox; the check path's length is measured from its own `d`. */
+@keyframes ring-draw {
+  from {
+    stroke-dashoffset: 239;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes check-draw {
+  from {
+    stroke-dashoffset: 44;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.ring-draw {
+  stroke-dasharray: 239;
+  stroke-dashoffset: 239;
+  animation: ring-draw 640ms var(--ease-out-expo) 80ms forwards;
+}
+.check-draw {
+  stroke-dasharray: 44;
+  stroke-dashoffset: 44;
+  animation: check-draw 320ms var(--ease-out-expo) 540ms forwards;
+}
+
+/* A blocked tick (a calibrating row with no weight and nothing to carry forward). */
+@keyframes row-shake {
+  0%,
+  100% {
+    transform: none;
+  }
+  20% {
+    transform: translateX(-5px);
+  }
+  40% {
+    transform: translateX(5px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+}
+.row-shake {
+  animation: row-shake 360ms ease;
+}
+
+/* A just-logged tick settling into place. */
+@keyframes tick-pop {
+  0% {
+    transform: scale(0.8);
+  }
+  55% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.tick-pop {
+  animation: tick-pop 320ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+/* The done card's verdict/feel block arriving after the ring finishes. */
+@keyframes rise-late {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise-late {
+  animation: rise-late 460ms var(--ease-out-expo) 760ms both;
+}
+
+/* The Fold — an exercise list beside the focused card at wide viewports (a tablet, a folding
+   phone unfolded). Pure media query: nothing here depends on JS reading the viewport, so folding
+   or unfolding mid-workout just reflows the same mounted cards, with no remount and no lost
+   input focus. `.fold-list` (the compact left pane) exists only ≥840px; below that the single
+   stacked list already showing every card IS the page, so no second copy of it renders. */
+.fold-list {
+  display: none;
+}
+/* The live session's own shell: ordinary phone width below the Fold breakpoint, wide enough for
+   the two-pane layout at and above it. Summary and every tab screen keep `.content-max` (36rem). */
+.session-shell {
+  max-width: var(--content-max);
+}
+@media (min-width: 840px) {
+  .session-shell {
+    max-width: 64rem;
+  }
+  .fold-shell {
+    display: grid;
+    grid-template-columns: 17rem 1fr;
+    align-items: start;
+    gap: 0.75rem;
+  }
+  .fold-list {
+    display: flex;
+    position: sticky;
+    top: 4.5rem;
+  }
+  /* Only the focused group's card renders in the right-hand pane; every other one — already
+     represented by its row in `.fold-list` — steps out of the way rather than stacking under it. */
+  .fold-focus [data-fold-entry]:not([data-focused='true']) {
+    display: none;
+  }
+}
+
 /* Every animation and transition, current or future, collapses to its end state: near-zero
    duration and delay so a `forwards`-filled keyframe (a completion ring, a sheet sliding in)
    still lands where it was going rather than sitting on its `from` frame, and a single iteration

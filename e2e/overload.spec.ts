@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { clickIfPresent, expectClass, fresh } from './fresh';
+import { clickIfPresent, fresh } from './fresh';
 
 /**
  * WP4 — the live-session overlays (deload, supersets, warm-ups, plate maths, personal records,
@@ -8,6 +8,10 @@ import { clickIfPresent, expectClass, fresh } from './fresh';
  * There is no UI yet to link a superset (that is the routine editor's job, owned by a different
  * work package), so the "superset" test links the pair directly in IndexedDB — the same shape
  * `toggleSupersetWithNext` would write — rather than driving a control that does not exist.
+ *
+ * Phase 3C: the current member of a superset now carries `data-current="true"` (in addition to
+ * its visual highlight), which is what the tests below assert on instead of a CSS class. Warm-up
+ * ghost rows log themselves directly — there is no more "pill preloads the live row" step.
  */
 
 /**
@@ -107,7 +111,7 @@ test.describe('WP4 overlays', () => {
     await expect(inclineCard).toBeVisible();
 
     // A (Bench) is current first — both start at 0 done, ties go to order.
-    await expectClass(benchCard, 'border-accent');
+    await expect(benchCard).toHaveAttribute('data-current', 'true');
 
     await benchCard.getByTestId('weight-input').fill('65');
     await benchCard.getByTestId('reps-input').fill('6');
@@ -115,8 +119,8 @@ test.describe('WP4 overlays', () => {
     // A isn't the last member of the group, so the current-card highlight moves to B and no rest
     // timer starts. Wait for the highlight to actually move first: the rest-timer count is 0 before
     // the click too, so asserting it first would wait for nothing and race the check that matters.
-    await expectClass(inclineCard, 'border-accent');
-    await expectClass(benchCard, 'border-accent', false);
+    await expect(inclineCard).toHaveAttribute('data-current', 'true');
+    await expect(benchCard).not.toHaveAttribute('data-current', 'true');
     await expect(page.getByTestId('rest-timer')).toHaveCount(0);
 
     await inclineCard.getByTestId('weight-input').fill('20');
@@ -143,7 +147,8 @@ test.describe('WP4 overlays', () => {
     await expect(benchCard).toBeVisible();
     await expect(inclineCard).toBeVisible();
 
-    // Skip the later-ordered member (Incline, order 1) via its More sheet.
+    // Skip the later-ordered member (Incline, order 1) via its More sheet. Both members of a
+    // current superset render open, so Incline's ⋯ is already reachable with no tap to expand.
     await inclineCard.getByRole('button', { name: 'More' }).click();
     await page.getByRole('button', { name: 'Skip this exercise' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Skip', exact: true }).click();
@@ -158,7 +163,7 @@ test.describe('WP4 overlays', () => {
     await expect(page.getByTestId('rest-timer')).toBeVisible();
   });
 
-  test('warm-up pills and plates on a known barbell weight', async ({ page }) => {
+  test('warm-up rows and plates on a known barbell weight', async ({ page }) => {
     await fresh(page);
 
     // Lock Bench Press in at 60 kg via the ordinary override flow (acceptance.spec.ts style).
@@ -186,16 +191,17 @@ test.describe('WP4 overlays', () => {
     await expect(sheet.getByTestId('plate-block')).toHaveCount(1);
     await page.keyboard.press('Escape');
 
-    // Warm-up pills, shown only before a counted set exists. The session no longer has a set-type
-    // chip row to check for the "active" state; the pill's own tap sets the draft type, provable
-    // by the log button now reading "Warm-up done".
-    await expect(card.getByTestId('warmup-pill-0')).toHaveText('20 × 10');
-    await card.getByTestId('warmup-pill-0').click();
-    await expect(card.getByTestId('set-done')).toHaveText(/Warm-up done/);
-    await expect(card.getByTestId('weight-input')).toHaveValue('20');
+    // Warm-up ghost rows, shown only before a counted set exists, log themselves directly — one
+    // tap on the row's own tick, no separate confirm. Logging one doesn't touch the live row's
+    // own draft: the plate line still reflects the 60 kg working weight, unchanged.
+    await expect(card.getByTestId('warmup-row-0')).toContainText('20 × 10');
+    await card.getByTestId('warmup-done-0').click();
+    await expect(card.getByTestId('weight-input')).toHaveValue('60');
+    await expect(card.getByTestId('plate-line')).toHaveText('20 per side');
 
-    // That pill set the draft weight to the bar itself (20 kg) — the "bar only" state: a plate
-    // line with no plates, and a diagram with no plate blocks (just the bar).
+    // Typing the bar's own weight into the live row — the "bar only" state: a plate line with no
+    // plates, and a diagram with no plate blocks (just the bar).
+    await card.getByTestId('weight-input').fill('20');
     await expect(card.getByTestId('plate-line')).toHaveText('bar only');
     await card.getByTestId('plate-line').click();
     await expect(sheet.getByTestId('plate-diagram')).toBeVisible();
@@ -216,10 +222,9 @@ test.describe('WP4 overlays', () => {
 
     // "Below the bar" is not exercised here: the plate line (and so the sheet itself) only ever
     // mounts when the draft weight is at or above barKg — see the `plateLoad` guard in
-    // LiveSessionScreen.tsx — so a weight below the bar makes the plate line disappear rather
-    // than open the sheet in that state. That branch in PlateSheet.tsx is real (it's what runs if
-    // a future caller ever passes a sub-bar weight) but is not reachable through today's live-
-    // session UI, so there is no real user path here to drive an e2e assertion through.
+    // ExerciseCard.tsx — so a weight below the bar makes the plate line disappear rather than
+    // open the sheet in that state. That branch in PlateSheet.tsx is real but not reachable
+    // through today's live-session UI, so there is no real user path here to drive it through.
   });
 
   test('personal record: a beaten reps-at-weight gets a PR chip and the summary lists it, given a completed prior session', async ({ page }) => {

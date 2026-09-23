@@ -20,6 +20,10 @@ export interface NumberFieldProps {
   className?: string;
   /** Extra id for tests. */
   testId?: string;
+  /** Accessible name for the text input itself, e.g. "Set 2 weight, kilograms". Falls back to
+   * `label` (the visual caption above the field carries no `<label for>`, so without this the
+   * input is unnamed). */
+  ariaLabel?: string;
 }
 
 /**
@@ -41,6 +45,7 @@ export function NumberField({
   disabled,
   className = '',
   testId,
+  ariaLabel,
 }: NumberFieldProps) {
   const [text, setText] = useState(value === null ? '' : fieldText(value));
   const focused = useRef(false);
@@ -91,6 +96,7 @@ export function NumberField({
             disabled={disabled}
             value={text}
             placeholder={placeholder}
+            aria-label={ariaLabel ?? label}
             onFocus={(e) => {
               focused.current = true;
               e.currentTarget.select();

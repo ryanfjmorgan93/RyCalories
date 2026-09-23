@@ -75,8 +75,14 @@ function SessionDock({ session }: { session: { id: string; title: string; starte
 }
 
 function SessionShell() {
+  const { pathname } = useLocation();
+  // The live session (not Summary) widens at the Fold breakpoint (src/index.css `.fold-shell`,
+  // `min-width: 840px`) so its two panes have room; every other session route keeps the ordinary
+  // phone-width column. A plain CSS class, so folding or unfolding mid-workout just reflows —
+  // no JS breakpoint check, no remount.
+  const isLiveSession = /^\/session\/[^/]+$/.test(pathname);
   return (
-    <div className="content-max mx-auto min-h-dvh">
+    <div className={`mx-auto min-h-dvh ${isLiveSession ? 'session-shell' : 'content-max'}`}>
       <Outlet />
     </div>
   );
