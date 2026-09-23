@@ -75,6 +75,9 @@ export function ExerciseCard({
   isSkipped,
   isGroupExpanded,
   onToggleGroupExpand,
+  claimFocus,
+  onFocusClaimed,
+  onCompletionFocusHandoff,
 }: {
   session: Session;
   slot: Slot;
@@ -90,11 +93,26 @@ export function ExerciseCard({
   isSkipped: boolean;
   isGroupExpanded: boolean;
   onToggleGroupExpand: () => void;
+  /** True for exactly one render, on the slot the session screen wants to hand keyboard focus to
+   * (the card that just became current after a completion whose own card had focus — §2). The
+   * card must consume it via `onFocusClaimed` once it has actually moved focus, so the intent
+   * doesn't linger and re-fire on the card's own later re-renders. */
+  claimFocus: boolean;
+  onFocusClaimed: () => void;
+  /** Called once, at the moment this slot's own log crosses its target, but only when focus was
+   * inside this card just before that log — the session screen uses it to know the NEXT card
+   * should claim focus once it opens, rather than silently dropping to `<body>` (§2). */
+  onCompletionFocusHandoff: () => void;
 }) {
   const nav = useNavigate();
   const { rx, exercise } = slot;
   const kind = exercise.kind;
   const ref = useRef<HTMLDivElement>(null);
+  const completionRef = useRef<HTMLDivElement>(null);
+  // Captured synchronously, at the top of a log handler / a toggle click — never read stale, since
+  // the effect that consumes it always fires off the very next render.
+  const focusWasInsideRef = useRef(false);
+  const toggleFocusPendingRef = useRef(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [skipConfirm, setSkipConfirm] = useState(false);
   const [removeConfirm, setRemoveConfirm] = useState(false);
@@ -198,6 +216,46 @@ export function ExerciseCard({
     return () => window.clearTimeout(t);
   }, [celebrating]);
 
+  // Keyboard/screen-reader focus follows the card's own state change instead of dropping to
+  // `<body>` (§2): focus was inside this card at the moment it finished → move focus onto the
+  // completion moment's own `role="status"` root, right after it mounts, so the announcement is
+  // heard and the user keeps their place.
+  useEffect(() => {
+    if (celebrating && focusWasInsideRef.current) completionRef.current?.focus();
+  }, [celebrating]);
+
+  // The session screen asks this specific card to claim focus (it became current right after a
+  // completion whose own card had focus) — move it onto the first live input, once, then tell the
+  // screen the handoff has been used.
+  useEffect(() => {
+    if (!claimFocus) return;
+    const firstInput = ref.current?.querySelector<HTMLElement>(
+      '[data-testid="weight-input"], [data-testid="seconds-input"]',
+    );
+    firstInput?.focus();
+    onFocusClaimed();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [claimFocus]);
+
+  // A collapse/expand toggle swaps in a differently-shaped subtree at the same spot — different
+  // element, so React mounts a new one and focus would otherwise drop to `<body>`. Every toggle
+  // handler below marks `toggleFocusPendingRef` first when focus was on it; once the branch
+  // actually changes, move focus onto whichever control replaced it (every toggle in this card
+  // carries `aria-expanded`, so it's always the first match).
+  useEffect(() => {
+    if (!toggleFocusPendingRef.current) return;
+    toggleFocusPendingRef.current = false;
+    ref.current?.querySelector<HTMLElement>('[aria-expanded]')?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isGroupExpanded, reopened]);
+
+  /** Wrap a toggle's own click handler: capture whether focus was on it first, so the effect above
+   * knows to hand focus to whatever replaces it. */
+  const withToggleFocus = (fn: () => void) => () => {
+    toggleFocusPendingRef.current = !!ref.current && ref.current.contains(document.activeElement);
+    fn();
+  };
+
   const update = (patch: Partial<Draft>) => {
     touched.current = true;
     setDraft((d) => ({ ...d, ...patch }));
@@ -297,6 +355,10 @@ export function ExerciseCard({
       setReopened(false);
       void success();
       flashAmbient('done');
+      // Focus was captured, before the log, by whichever handler called this — hand off to the
+      // session screen only when it mattered, so a log fired from outside the card (there isn't
+      // one today, but nothing here should assume it) never steals focus (§2).
+      if (focusWasInsideRef.current) onCompletionFocusHandoff();
     }
   };
 
@@ -307,6 +369,9 @@ export function ExerciseCard({
       void warning();
       return;
     }
+    // Captured before anything async runs — this is the moment that matters, not whatever has
+    // focus once the write and its re-renders have settled.
+    focusWasInsideRef.current = !!ref.current && ref.current.contains(document.activeElement);
     busy.current = true;
     setBusyUi(true);
     primeAudio();
@@ -332,6 +397,7 @@ export function ExerciseCard({
 
   const logWarmup = async (row: WarmupGhostRow) => {
     if (busy.current) return;
+    focusWasInsideRef.current = !!ref.current && ref.current.contains(document.activeElement);
     busy.current = true;
     primeAudio();
     void requestNotificationsOnce();
@@ -384,7 +450,7 @@ export function ExerciseCard({
       <div ref={ref} className="pt-3" data-current={isCurrent ? 'true' : undefined}>
         <Card className={`overflow-hidden ${isCurrent ? 'border-accent shadow-[0_0_0_1px_var(--c-accent)]' : ''} opacity-60`} data-testid={testId} data-current={isCurrent ? 'true' : undefined}>
           <div className="flex items-center gap-1 pr-1">
-            <button type="button" onClick={onToggleGroupExpand} aria-expanded={isGroupExpanded} className="flex min-h-14 min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left active:bg-surface-2">
+            <button type="button" onClick={withToggleFocus(onToggleGroupExpand)} aria-expanded={isGroupExpanded} className="flex min-h-14 min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left active:bg-surface-2">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <h2 className="truncate text-base font-bold leading-tight">{exercise.name}</h2>
@@ -422,7 +488,7 @@ export function ExerciseCard({
     return (
       <div ref={ref} className="pt-3" data-current={isCurrent ? 'true' : undefined}>
         <Card className="overflow-hidden border-ok/40" data-testid={testId} data-current={isCurrent ? 'true' : undefined}>
-          <CompletionMoment doneLine={doneLine} verdictLine={verdict?.line ?? null} verdictTone={verdict?.tone ?? null} />
+          <CompletionMoment ref={completionRef} doneLine={doneLine} verdictLine={verdict?.line ?? null} verdictTone={verdict?.tone ?? null} />
         </Card>
       </div>
     );
@@ -447,7 +513,7 @@ export function ExerciseCard({
           onUndoLockIn={() => void handleUndoLockIn()}
           lockingBusy={lockingIn}
           reopened={reopened}
-          onToggle={() => setReopened(true)}
+          onToggle={withToggleFocus(() => setReopened(true))}
           onMenu={openMenu}
           isCurrent={isCurrent}
           dimmed={dimmed}
@@ -482,7 +548,7 @@ export function ExerciseCard({
     return (
       <div ref={ref} className="pt-3" data-current={isCurrent ? 'true' : undefined}>
         <Card className={`overflow-hidden ${isCurrent ? 'border-accent shadow-[0_0_0_1px_var(--c-accent)]' : ''} ${dimmed ? 'opacity-60' : ''}`} data-testid={testId} data-current={isCurrent ? 'true' : undefined}>
-          <button type="button" onClick={onToggleGroupExpand} aria-expanded={false} className="flex w-full items-center gap-3 px-4 py-3 text-left active:bg-surface-2">
+          <button type="button" onClick={withToggleFocus(onToggleGroupExpand)} aria-expanded={false} className="flex w-full items-center gap-3 px-4 py-3 text-left active:bg-surface-2">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <h2 className="truncate text-base font-bold leading-tight">{exercise.name}</h2>
@@ -510,7 +576,7 @@ export function ExerciseCard({
             </div>
             <div className="mt-0.5 text-sm text-muted">{subtitle}</div>
           </button>
-          <IconButton label="Collapse" aria-expanded="true" onClick={() => (reopened ? setReopened(false) : onToggleGroupExpand())}>
+          <IconButton label="Collapse" aria-expanded="true" onClick={withToggleFocus(() => (reopened ? setReopened(false) : onToggleGroupExpand()))}>
             <ChevronIcon expanded />
           </IconButton>
           <IconButton label="More" onClick={openMenu}>

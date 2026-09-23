@@ -1,14 +1,28 @@
+import { forwardRef } from 'react';
+
 /**
  * The moment an exercise's target is met: a check ring draws in, "Done", the done line, and (for
  * a normal weight exercise) the verdict — exactly the facts `liveVerdict` already decided, never a
- * fresh computation of its own. `role="status"` so a screen reader announces it once, unprompted.
+ * fresh computation of its own. `role="status"` so a screen reader announces it once, unprompted;
+ * `tabIndex={-1}` and the forwarded ref let the caller move keyboard/screen-reader focus here
+ * itself when focus was already inside the card that just finished, so the announcement is heard
+ * and the user's place in the page is kept rather than silently dropped to `<body>` (§2).
  *
  * Purely presentational: the parent decides *when* to show this (once, on the log that crosses
  * the target — see `justCompleted` in `src/domain/setTable.ts`) and for how long.
  */
-export function CompletionMoment({ doneLine, verdictLine, verdictTone }: { doneLine: string; verdictLine: string | null; verdictTone: 'ok' | 'accent' | 'muted' | null }) {
+export const CompletionMoment = forwardRef<
+  HTMLDivElement,
+  { doneLine: string; verdictLine: string | null; verdictTone: 'ok' | 'accent' | 'muted' | null }
+>(function CompletionMoment({ doneLine, verdictLine, verdictTone }, ref) {
   return (
-    <div role="status" data-testid="exercise-complete" className="flex flex-col items-center gap-2 px-4 pb-6 pt-1 text-center">
+    <div
+      ref={ref}
+      tabIndex={-1}
+      role="status"
+      data-testid="exercise-complete"
+      className="flex flex-col items-center gap-2 px-4 pb-6 pt-1 text-center outline-none"
+    >
       <svg width="76" height="76" viewBox="0 0 88 88" aria-hidden="true">
         <circle cx="44" cy="44" r="38" fill="none" stroke="color-mix(in srgb, var(--c-done) 16%, transparent)" strokeWidth="5" />
         <circle
@@ -36,4 +50,4 @@ export function CompletionMoment({ doneLine, verdictLine, verdictTone }: { doneL
       )}
     </div>
   );
-}
+});
