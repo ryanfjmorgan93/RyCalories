@@ -28,7 +28,7 @@ test.describe('Routines', () => {
 
     await page.getByTestId('start-routine').click();
     await expect(page).toHaveURL(/\/session\//);
-    await expect(page.getByTestId('exercise-card-Face Pull')).toContainText('3 × 12–15 @ 50 kg');
+    await expect(page.getByTestId('exercise-card-Face Pull')).toContainText('3 sets of 12–15 · 50 kg');
     await expect(page.getByTestId('exercise-card-Face Pull').getByTestId('weight-input')).toHaveValue('50');
   });
 
@@ -149,8 +149,12 @@ test.describe('Data', () => {
     await page.getByTestId('start-Lower (Hinge)').click();
     await clickIfPresent(page.getByRole('button', { name: 'Start anyway' }));
     const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
-    await expect(card).toContainText('31 Aug');
-    await expect(card.getByRole('button', { name: '90 × 8' }).first()).toBeVisible();
+    const previousCell = card.getByRole('button', { name: '90 × 8' }).first();
+    await expect(previousCell).toBeVisible();
+    // Tapping it copies the Hevy-imported previous set straight into the live row.
+    await previousCell.click();
+    await expect(card.getByTestId('weight-input')).toHaveValue('90');
+    await expect(card.getByTestId('reps-input')).toHaveValue('8');
 
     // Measurements file adds one bodyweight reading.
     await page.goto('/settings');

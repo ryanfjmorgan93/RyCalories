@@ -4,6 +4,13 @@ import { clickIfPresent, fresh } from './fresh';
 /**
  * Acceptance criteria §11, driven through the real UI in Chromium (mobile viewport).
  * Each test starts from a fresh IndexedDB (seed data only).
+ *
+ * Phase 3C rebuilt the live session around a set table: once a slot's target is met, the
+ * completion moment plays and the card collapses into a compact "done" summary — no more open
+ * entry row past the target. A bonus set is reachable only through the exercise's ⋯ menu
+ * ("Add a set", `data-testid="add-set"`), which reopens the card. The header meta line now reads
+ * "N sets of R · W kg" (was "N × R @ W kg"); after that, plain "W kg" substring checks below are
+ * deliberately lenient about the separator, since the exact phrasing is asserted once, in #2.
  */
 
 async function startRoutine(page: Page, name: string) {
@@ -27,6 +34,13 @@ async function logSets(page: Page, exercise: string, weight: number, reps: numbe
   }
 }
 
+/** Waits for the completion moment to actually play, then to collapse into the done card — a
+ * positive signal for both halves, never a bare "did it disappear" sampled once. */
+async function waitForCompletionCollapse(page: Page) {
+  await expect(page.getByTestId('exercise-complete')).toBeVisible();
+  await expect(page.getByTestId('exercise-complete')).toHaveCount(0);
+}
+
 async function finishToSummary(page: Page) {
   await page.getByTestId('finish-session').click();
   // Some exercises weren't done → confirm sheet.
@@ -42,25 +56,35 @@ test.describe('Phase 1 acceptance', () => {
     await page.getByTestId('start-session').click();
     await expect(page).toHaveURL(/\/session\//);
     const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
-    await expect(card).toContainText('4 × 6–8 @ 110 kg');
+    await expect(card).toContainText('4 sets of 6–8 · 110 kg');
     await expect(card).toContainText('Straps. 3-sec lower. Depth over load.');
     await logSets(page, 'Romanian Deadlift (Barbell)', 110, [8, 8, 8, 8]);
-    // Target met — Romanian Deadlift is no longer the current exercise, so the card collapses
-    // (§4). It can still be reopened, and the entry block still offers a bonus 5th set.
-    await expect(card).toContainText('4/4 sets');
-    await card.click();
-    await expect(card).toContainText('Set 5 (target 4)');
+
+    // Target met — the completion moment plays, then the card collapses into the done summary.
+    await waitForCompletionCollapse(page);
+    await expect(card).toContainText('110 × 8, 8, 8, 8');
+
+    // A 5th set is reachable only via the ⋯ menu now (§4).
+    await card.getByRole('button', { name: 'More' }).click();
+    await page.getByTestId('add-set').click();
+    await expect(card.getByTestId('weight-input')).toBeVisible();
+    await card.getByTestId('weight-input').fill('110');
+    await card.getByTestId('reps-input').fill('8');
+    await card.getByTestId('set-done').click();
+    await expect(card.locator('button:has(span.num.w-7)')).toHaveCount(5);
+
     await finishToSummary(page);
 
+    // The decision counts every working set, including the bonus 5th one just added.
     const decision = page.getByTestId('decision-Romanian Deadlift (Barbell)');
-    await expect(decision.getByTestId('decision-line')).toHaveText('8/8/8/8 at 110 kg → 115 kg next time');
+    await expect(decision.getByTestId('decision-line')).toHaveText('8/8/8/8/8 at 110 kg → 115 kg next time');
     await expect(decision.getByTestId('accept')).toContainText('115 kg');
     await page.getByTestId('save-session').click();
     await expect(page).toHaveURL(/\/$/);
 
     // Next session prescribes 115.
     await startRoutine(page, 'Lower (Hinge)');
-    await expect(page.getByTestId('exercise-card-Romanian Deadlift (Barbell)')).toContainText('4 × 6–8 @ 115 kg');
+    await expect(page.getByTestId('exercise-card-Romanian Deadlift (Barbell)')).toContainText('115 kg');
   });
 
   test('#3 RDL 110 × 8,8,7,6 → hold 110', async ({ page }) => {
@@ -72,7 +96,7 @@ test.describe('Phase 1 acceptance', () => {
     await expect(decision.getByTestId('decision-line')).toHaveText('8/8/7/6 at 110 kg → hold 110 kg');
     await page.getByTestId('save-session').click();
     await startRoutine(page, 'Lower (Hinge)');
-    await expect(page.getByTestId('exercise-card-Romanian Deadlift (Barbell)')).toContainText('@ 110 kg');
+    await expect(page.getByTestId('exercise-card-Romanian Deadlift (Barbell)')).toContainText('110 kg');
   });
 
   test('#4 override 115 → 112.5 is prescribed and logged as an override', async ({ page }) => {
@@ -86,7 +110,7 @@ test.describe('Phase 1 acceptance', () => {
     await page.getByTestId('save-session').click();
     await expect(page).toHaveURL(/\/$/);
     await startRoutine(page, 'Lower (Hinge)');
-    await expect(page.getByTestId('exercise-card-Romanian Deadlift (Barbell)')).toContainText('@ 112.5 kg');
+    await expect(page.getByTestId('exercise-card-Romanian Deadlift (Barbell)')).toContainText('112.5 kg');
 
     // The decision log shows the override.
     const log = await page.evaluate(async () => {
@@ -130,21 +154,17 @@ test.describe('Phase 1 acceptance', () => {
     await expect(page).toHaveURL(/\/$/);
 
     await startRoutine(page, 'Lower (Squat)');
-    await expect(page.getByTestId('exercise-card-Barbell Back Squat')).toContainText('4 × 6–8 @ 80 kg');
+    await expect(page.getByTestId('exercise-card-Barbell Back Squat')).toContainText('80 kg');
   });
 
   test('warm-ups are ignored and a missing set holds', async ({ page }) => {
     await fresh(page);
     await page.getByTestId('start-session').click();
     const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
-    // The session no longer has a set-type chip to pick "Warm-up" before logging: tap the pill
-    // (it sets the draft to type: 'warmup' in one go), then overwrite its preset weight/reps.
-    await expect(card.getByTestId('warmup-pill-0')).toBeVisible();
-    await card.getByTestId('warmup-pill-0').click();
-    await card.getByTestId('weight-input').fill('60');
-    await card.getByTestId('reps-input').fill('5');
-    await expect(card.getByTestId('set-done')).toHaveText(/Warm-up done/);
-    await card.getByTestId('set-done').click();
+    // Warm-up ghost rows log themselves directly, at their own suggested weight/reps — there is
+    // no separate confirm step (§1).
+    await expect(card.getByTestId('warmup-done-0')).toBeVisible();
+    await card.getByTestId('warmup-done-0').click();
     await page.getByTestId('rest-timer').getByRole('button', { name: 'Skip' }).click();
     await logSets(page, 'Romanian Deadlift (Barbell)', 110, [8, 8, 8]);
     await finishToSummary(page);
@@ -165,6 +185,8 @@ test.describe('Phase 1 acceptance', () => {
     await expect(card).toContainText('110 × 8');
     await page.goto('/');
     await page.getByTestId('live-banner').click();
-    await expect(card).toContainText('Set 2 of 4');
+    // The next live row is set 2 — a positive signal that the logged first set actually survived
+    // the reload, not just that the card is present.
+    await expect(card.getByTestId('set-row-2')).toBeVisible();
   });
 });

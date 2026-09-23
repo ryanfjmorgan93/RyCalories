@@ -335,7 +335,7 @@ test('capture every screen for a design session', async ({ page, browser, contex
   await expect(page.getByText('Superset', { exact: true })).toBeVisible();
   const benchCard = page.getByTestId('exercise-card-Bench Press (Barbell)');
   await expect(benchCard).toBeVisible();
-  await expect(benchCard.getByTestId('warmup-pill-0')).toBeVisible();
+  await expect(benchCard.getByTestId('warmup-row-0')).toBeVisible();
   await expect(benchCard.getByTestId('plate-line')).toBeVisible();
   await shot(page, 'session-live-superset', { full: true });
 

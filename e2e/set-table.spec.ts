@@ -1,0 +1,357 @@
+import { expect, test, type Page } from '@playwright/test';
+import { clickIfPresent, fresh } from './fresh';
+
+/**
+ * The set table (Phase 3C): ghosts, the completion moment and its collapse, extras only via the
+ * ⋯ menu, feel → RIR, records gating, the lock-in pending state, the superset rest-timer fix, and
+ * the Fold layout. Every wait here rests on a positive signal — the thing actually having
+ * happened, not a sample taken once or a signal a previous occurrence could already satisfy.
+ *
+ * Fixtures: "Romanian Deadlift (Barbell)" (Lower (Hinge), targetSets 4, repMin 6, repMax 8,
+ * currentWeight 110, increment 5) and "Hip Thrust (Barbell)" (same routine, order 1, next after
+ * it). "Barbell Back Squat" (Lower (Squat), calibrating, targetSets 4). "Bench Press (Barbell)"
+ * (Upper (Push), targetSets 4) and "Incline DB Press" (same routine, targetSets 3) — the routine's
+ * own unequal pair, used for the superset rest-timer fix.
+ */
+
+const BENCH_ID = '06e6d774-dded-5317-a459-3c24a575f9a5';
+const INCLINE_ID = '23809c40-32bd-5fe4-8f71-eb2efdb47cc6';
+
+async function linkSuperset(page: Page, ids: [string, string], supersetId: string): Promise<void> {
+  await page.evaluate(
+    async ({ ids, supersetId }) => {
+      const req = indexedDB.open('iron');
+      const idb = await new Promise<IDBDatabase>((res, rej) => {
+        req.onsuccess = () => res(req.result);
+        req.onerror = () => rej(req.error);
+      });
+      const tx = idb.transaction('routineExercises', 'readwrite');
+      const store = tx.objectStore('routineExercises');
+      for (const id of ids) {
+        const row = await new Promise<{ supersetId?: string }>((res) => {
+          const r = store.get(id);
+          r.onsuccess = () => res(r.result);
+        });
+        store.put({ ...row, id, supersetId });
+      }
+      await new Promise((res) => {
+        tx.oncomplete = () => res(undefined);
+      });
+    },
+    { ids, supersetId },
+  );
+}
+
+async function skipRest(page: Page) {
+  await clickIfPresent(page.getByTestId('rest-timer').getByRole('button', { name: 'Skip' }));
+}
+
+/** Waits for the completion moment to actually appear, then for it to actually collapse away —
+ * two positive signals, never a bare "and now assume it's done". */
+async function waitForCompletionCollapse(page: Page) {
+  await expect(page.getByTestId('exercise-complete')).toBeVisible();
+  await expect(page.getByTestId('exercise-complete')).toHaveCount(0);
+}
+
+async function logFour(page: Page, card: import('@playwright/test').Locator, weight: number, reps: number) {
+  for (let i = 0; i < 4; i++) {
+    await card.getByTestId('weight-input').fill(String(weight));
+    await card.getByTestId('reps-input').fill(String(reps));
+    await card.getByTestId('set-done').click();
+    await skipRest(page);
+  }
+}
+
+async function finishAndSave(page: Page) {
+  await page.getByTestId('finish-session').click();
+  await clickIfPresent(page.getByRole('dialog').getByRole('button', { name: 'Finish', exact: true }));
+  await expect(page).toHaveURL(/\/summary$/);
+  await page.getByTestId('save-session').click();
+  await expect(page).toHaveURL(/\/$/);
+}
+
+interface RawSetLog {
+  type: string;
+  rir?: number;
+  weight: number;
+  reps?: number;
+  index: number;
+}
+
+/** Every set log row in IndexedDB, sorted the way the app itself orders a slot's sets. */
+async function readAllSetLogs(page: Page): Promise<RawSetLog[]> {
+  const rows = await page.evaluate(async () => {
+    const req = indexedDB.open('iron');
+    const db = await new Promise<IDBDatabase>((res, rej) => {
+      req.onsuccess = () => res(req.result);
+      req.onerror = () => rej(req.error);
+    });
+    const tx = db.transaction('setLogs', 'readonly');
+    return new Promise<RawSetLog[]>((res) => {
+      const r = tx.objectStore('setLogs').getAll();
+      r.onsuccess = () => res(r.result as RawSetLog[]);
+    });
+  });
+  return rows.sort((a, b) => a.index - b.index);
+}
+
+async function readAllDecisions(page: Page): Promise<{ rule: string; toWeight: number; routineExerciseId: string }[]> {
+  return page.evaluate(async () => {
+    const req = indexedDB.open('iron');
+    const db = await new Promise<IDBDatabase>((res, rej) => {
+      req.onsuccess = () => res(req.result);
+      req.onerror = () => rej(req.error);
+    });
+    const tx = db.transaction('decisions', 'readonly');
+    return new Promise<{ rule: string; toWeight: number; routineExerciseId: string }[]>((res) => {
+      const r = tx.objectStore('decisions').getAll();
+      r.onsuccess = () => res(r.result);
+    });
+  });
+}
+
+test.describe('set table', () => {
+  test('ghost reps come from last time, not the target minimum', async ({ page }) => {
+    await fresh(page);
+    // Named explicitly, both times: the suggested routine rotates on to the next one once this
+    // session is saved, so `start-session` would land on a different routine the second time.
+    await page.getByTestId('start-Lower (Hinge)').click();
+    await clickIfPresent(page.getByRole('button', { name: 'Start anyway' }));
+    const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
+    // repMin is 6 — logging 7 (a different number) proves a later ghost isn't just falling back to it.
+    await logFour(page, card, 110, 7);
+    await finishAndSave(page);
+
+    await page.getByTestId('start-Lower (Hinge)').click();
+    await clickIfPresent(page.getByRole('button', { name: 'Start anyway' }));
+    const next = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
+    await expect(next.getByTestId('reps-input')).toHaveValue('7');
+  });
+
+  test('ticking the last target row plays the completion moment, then the next card is expanded', async ({ page }) => {
+    await fresh(page);
+    await page.getByTestId('start-session').click();
+    const rdl = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
+    const hipThrust = page.getByTestId('exercise-card-Hip Thrust (Barbell)');
+    await expect(rdl.getByTestId('weight-input')).toBeVisible();
+    await expect(hipThrust.getByTestId('weight-input')).toHaveCount(0);
+
+    await logFour(page, rdl, 110, 8);
+    await waitForCompletionCollapse(page);
+
+    // No live input left in the finished card…
+    await expect(rdl.getByTestId('weight-input')).toHaveCount(0);
+    // …and the next slot is the one now showing a live row.
+    await expect(hipThrust.getByTestId('weight-input')).toBeVisible();
+  });
+
+  test('an extra set is reachable only through the exercise menu', async ({ page }) => {
+    await fresh(page);
+    await page.getByTestId('start-session').click();
+    const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
+    await logFour(page, card, 110, 8);
+    await waitForCompletionCollapse(page);
+    await expect(card.getByTestId('weight-input')).toHaveCount(0);
+
+    // Reopening the done card by itself only reveals the logged rows.
+    await card.click();
+    await expect(card.getByTestId('weight-input')).toHaveCount(0);
+
+    // "Add a set" is the only door back to a live row.
+    await card.getByRole('button', { name: 'More' }).click();
+    await page.getByTestId('add-set').click();
+    await expect(card.getByTestId('weight-input')).toBeVisible();
+  });
+
+  test('Easy writes RIR 3 to every counted non-failure set; a failure set keeps none', async ({ page }) => {
+    await fresh(page);
+    await page.getByTestId('start-session').click();
+    const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
+
+    for (const _ of [0, 1, 2]) {
+      await card.getByTestId('weight-input').fill('110');
+      await card.getByTestId('reps-input').fill('8');
+      await card.getByTestId('set-done').click();
+      await skipRest(page);
+    }
+    // Retype the 3rd logged set to Failure before finishing the exercise.
+    const rows = card.locator('button:has(span.num.w-7)');
+    await rows.nth(2).click();
+    await expect(page.getByText('Edit set', { exact: true })).toBeVisible();
+    await page.getByRole('dialog').getByRole('button', { name: 'Failure', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByText('Edit set', { exact: true })).toHaveCount(0);
+
+    await card.getByTestId('weight-input').fill('110');
+    await card.getByTestId('reps-input').fill('8');
+    await card.getByTestId('set-done').click();
+    await waitForCompletionCollapse(page);
+
+    const easy = card.getByTestId('feel-Easy');
+    await expect(easy).toHaveAttribute('aria-pressed', 'false');
+    await easy.click();
+    await expect(easy).toHaveAttribute('aria-pressed', 'true');
+
+    const sets = await readAllSetLogs(page);
+    expect(sets.filter((s) => s.type === 'working').map((s) => s.rir)).toEqual([3, 3, 3]);
+    expect(sets.filter((s) => s.type === 'failure').map((s) => s.rir)).toEqual([undefined]);
+  });
+
+  test('an extra set added after the feel answer inherits it', async ({ page }) => {
+    await fresh(page);
+    await page.getByTestId('start-session').click();
+    const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
+    await logFour(page, card, 110, 8);
+    await waitForCompletionCollapse(page);
+
+    const good = card.getByTestId('feel-Good');
+    await good.click();
+    await expect(good).toHaveAttribute('aria-pressed', 'true');
+
+    await card.getByRole('button', { name: 'More' }).click();
+    await page.getByTestId('add-set').click();
+    await card.getByTestId('weight-input').fill('110');
+    await card.getByTestId('reps-input').fill('8');
+    await card.getByTestId('set-done').click();
+
+    // The click resolves once the DOM event dispatches, not once the async handler chain (log the
+    // set, then a second transaction inheriting the slot's feel into it) has settled — poll for
+    // the real end state rather than sampling straight after the click.
+    await expect
+      .poll(async () => (await readAllSetLogs(page)).map((s) => s.rir))
+      .toEqual([2, 2, 2, 2, 2]); // Good = RIR 2, the new set included
+
+    const sets = await readAllSetLogs(page);
+    expect(sets).toHaveLength(5);
+  });
+
+  test('no PR on a first-ever session, even mid-exercise; a medal appears once there is real history', async ({ page }) => {
+    await fresh(page);
+    // Named explicitly both times: the suggested routine rotates on once this session is saved.
+    await page.getByTestId('start-Lower (Hinge)').click();
+    await clickIfPresent(page.getByRole('button', { name: 'Start anyway' }));
+    const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
+    await card.getByTestId('weight-input').fill('110');
+    await card.getByTestId('reps-input').fill('8');
+    await card.getByTestId('set-done').click();
+
+    await page.getByTestId('finish-session').click();
+    await clickIfPresent(page.getByRole('dialog').getByRole('button', { name: 'Finish', exact: true }));
+    await expect(page).toHaveURL(/\/summary$/);
+    // Summary is built only once records are fully computed — a positive signal the query settled.
+    const decision = page.getByTestId('decision-Romanian Deadlift (Barbell)');
+    await expect(decision).toBeVisible();
+    await expect(decision).not.toContainText('PR');
+    await page.getByTestId('save-session').click();
+    await expect(page).toHaveURL(/\/$/);
+
+    // A second, heavier session now has real history to beat.
+    await page.getByTestId('start-Lower (Hinge)').click();
+    await clickIfPresent(page.getByRole('button', { name: 'Start anyway' }));
+    const card2 = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
+    await card2.getByTestId('weight-input').fill('120');
+    await card2.getByTestId('reps-input').fill('8');
+    await card2.getByTestId('set-done').click();
+    await expect(card2.getByTestId('pr-chip')).toBeVisible();
+  });
+
+  test('a lock-in at completion survives Save as a lock_in decision, with no surprise increase', async ({ page }) => {
+    await fresh(page);
+    await page.getByTestId('start-Lower (Squat)').click();
+    await clickIfPresent(page.getByRole('button', { name: 'Start anyway' }));
+    const card = page.getByTestId('exercise-card-Barbell Back Squat');
+    await expect(card).toContainText('calibrating');
+
+    // Every set at/above repMax — the exact shape that used to trigger a surprise re-increase on
+    // top of the lock-in once `finishSession` re-decided from scratch.
+    await logFour(page, card, 60, 8);
+    await waitForCompletionCollapse(page);
+
+    await expect(card.getByTestId('session-lock-in')).toHaveText('Lock in 60 kg');
+    await card.getByTestId('session-lock-in').click();
+    await expect(card.getByTestId('session-lock-in-pending')).toHaveText('60 kg locked in');
+
+    await finishAndSave(page);
+
+    const decisions = await readAllDecisions(page);
+    const lockIn = decisions.find((d) => d.rule === 'lock_in');
+    expect(lockIn).toBeDefined();
+    expect(lockIn!.toWeight).toBe(60);
+    expect(decisions.some((d) => d.rule === 'increase')).toBe(false);
+  });
+
+  test('an unequal-target superset starts the rest timer on the longer member\'s final solo sets', async ({ page }) => {
+    await fresh(page);
+    await linkSuperset(page, [BENCH_ID, INCLINE_ID], 'set-table-unequal');
+    await page.getByTestId('start-Upper (Push)').click();
+    await expect(page).toHaveURL(/\/session\//);
+
+    const bench = page.getByTestId('exercise-card-Bench Press (Barbell)'); // targetSets 4
+    const incline = page.getByTestId('exercise-card-Incline DB Press'); // targetSets 3
+    await expect(bench).toBeVisible();
+    await expect(incline).toBeVisible();
+
+    const log = async (card: import('@playwright/test').Locator, weight: number, reps: number) => {
+      await card.getByTestId('weight-input').fill(String(weight));
+      await card.getByTestId('reps-input').fill(String(reps));
+      await card.getByTestId('set-done').click();
+      await skipRest(page);
+    };
+
+    // Bench (order 0) and Incline (order 1) alternate, ties going to order.
+    await log(bench, 65, 6); // Bench 1, Incline 0
+    await log(incline, 20, 8); // Bench 1, Incline 1
+    await log(bench, 65, 6); // Bench 2, Incline 1
+    await log(incline, 20, 8); // Bench 2, Incline 2
+    await log(bench, 65, 6); // Bench 3, Incline 2
+
+    // Incline's 3rd set meets its own (smaller) target — its own completion moment plays and it
+    // collapses into its own done card, independent of Bench, which still owes one set.
+    await incline.getByTestId('weight-input').fill('20');
+    await incline.getByTestId('reps-input').fill('8');
+    await incline.getByTestId('set-done').click();
+    await waitForCompletionCollapse(page);
+    await skipRest(page);
+    await expect(page.getByTestId('rest-timer')).toHaveCount(0);
+
+    // Bench's own 4th and final set, now logged alone — Incline is done and out of the rotation.
+    // The old array-position rule looked for whichever member is LAST in the group (Incline) and
+    // would never have started rest here; the real rule asks whether anyone is still owed a turn.
+    await bench.getByTestId('weight-input').fill('65');
+    await bench.getByTestId('reps-input').fill('6');
+    await bench.getByTestId('set-done').click();
+    await expect(page.getByTestId('rest-timer')).toBeVisible();
+  });
+
+  test('at 884×1104 the Fold shows two panes side by side', async ({ page }) => {
+    await page.setViewportSize({ width: 884, height: 1104 });
+    await fresh(page);
+    await page.getByTestId('start-session').click();
+
+    const list = page.getByTestId('fold-list');
+    const focus = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
+    await expect(list).toBeVisible();
+    await expect(focus).toBeVisible();
+
+    const listBox = await list.boundingBox();
+    const focusBox = await focus.boundingBox();
+    expect(listBox).not.toBeNull();
+    expect(focusBox).not.toBeNull();
+    // The list pane sits to the left of the focused card, not stacked above it.
+    expect(listBox!.x + listBox!.width).toBeLessThanOrEqual(focusBox!.x + 1);
+    expect(listBox!.y).toBeLessThan(focusBox!.y + focusBox!.height);
+  });
+
+  test('under reduced motion, the completion still reaches its real end state', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await fresh(page);
+    await page.getByTestId('start-session').click();
+    const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
+    await logFour(page, card, 110, 8);
+
+    // No motion to wait out, but the collapse is still a real state transition to wait for, not
+    // an assumption: the done card's own verdict text is the positive signal.
+    await expect(card.getByTestId('verdict-line')).toHaveText('→ 115 kg next time');
+    await expect(card.getByTestId('weight-input')).toHaveCount(0);
+  });
+});
