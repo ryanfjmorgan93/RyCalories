@@ -392,6 +392,10 @@ export interface FoodMemory {
   /** Grams per one unit (e.g. one egg, one rasher), when a count-based amount was logged. A
    * remembered suggestion only, same standing as `typicalGrams` — the merge rule mirrors it. */
   unitGrams?: number;
+  /** What one unit is called ("egg"/"eggs", "rasher"/"rashers"), learned with `unitGrams`, so a
+   * remembered count reads "3 rashers" rather than borrowing the food's own name. */
+  unitLabel?: string;
+  unitPlural?: string;
   source: import('./food').FoodSource;
   timesUsed: number;
   lastUsedAt: string;

@@ -54,7 +54,7 @@ export function memoryKey(item: Pick<MealItem, 'name' | 'brand' | 'product'>): s
  */
 export function memoryFrom(
   item: Pick<MealItem, 'name' | 'brand' | 'product' | 'source' | 'nutrition'>,
-  unit?: { count: number; unitGrams: number },
+  unit?: { count: number; unitGrams: number; label?: string; plural?: string },
 ): Omit<FoodMemory, 'id' | 'timesUsed' | 'lastUsedAt'> | null {
   const grams = gramsOf(item.nutrition);
   if (grams === null || grams <= 0) return null;
@@ -69,6 +69,7 @@ export function memoryFrom(
     per100,
     typicalGrams: grams,
     ...(validUnit ? { unitGrams: unit.unitGrams } : {}),
+    ...(validUnit && unit.label ? { unitLabel: unit.label, unitPlural: unit.plural || unit.label } : {}),
     source: item.source,
   };
 }
@@ -107,6 +108,9 @@ export function mergeMemory(
     // what happened, so it follows the same trust rule as per100: a user-corrected unit weight
     // must not be quietly overwritten by a lower-trust one.
     ...(incoming.unitGrams !== undefined && takeNumbers ? { unitGrams: incoming.unitGrams } : {}),
+    ...(incoming.unitGrams !== undefined && takeNumbers && incoming.unitLabel
+      ? { unitLabel: incoming.unitLabel, unitPlural: incoming.unitPlural ?? incoming.unitLabel }
+      : {}),
     timesUsed: existing.timesUsed + 1,
     lastUsedAt: at,
   };

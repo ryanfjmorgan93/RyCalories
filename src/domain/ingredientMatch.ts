@@ -12,7 +12,7 @@
 
 import { normalise } from './foodMemory';
 import { MATCH_THRESHOLD, tokenScore, tokens } from './products';
-import type { FoodSource, Macros } from './food';
+import { trustOf, type FoodSource, type Macros } from './food';
 import type { FoodMemory } from './types';
 
 /** One row of the bundled UK CoFID food table. */
@@ -65,30 +65,35 @@ const MAX_ALTERNATIVES = 5;
 /**
  * Match one recognised or typed name to a food. Tried in order, first hit wins:
  *
- *   1. a curated alias, whose words include the name (singular/plural-insensitive) — the app's
- *      own judgement that this word means this exact CoFID row, and the only step that can
- *      supply a count-style `unit`;
- *   2. a `FoodMemory` whose name matches exactly the same way — what the owner has actually
- *      logged before;
- *   3. a token search across the whole table, reusing `tokens`/`tokenScore` from `products.ts`
+ *   1. a `FoodMemory` whose name matches (singular/plural-insensitive) and whose figures are at
+ *      least as trustworthy as the table's — what the owner has actually logged before, including
+ *      a pack they scanned and any unit weight they corrected ("one egg is 55 g, not 50");
+ *   2. a curated alias, whose words include the name — the app's own judgement that this word
+ *      means this exact CoFID row. If a lower-trust memory of the same food exists, its learned
+ *      unit weight still rides along;
+ *   3. any other exactly-named memory (lower trust than the table — nothing writes one today);
+ *   4. a token search across the whole table, reusing `tokens`/`tokenScore` from `products.ts`
  *      (not `bestMatch`, which is brand-gated for Open Food Facts and has nothing to gate here).
  *
- * This is the plan's stated order. Worth recording the alternative that was considered and
- * rejected: a remembered food is "what the owner actually eats", which could argue for ranking
- * FoodMemory above even a curated alias. The plan is explicit about the order, though, so alias
- * stays first — an alias is a deliberate, one-time editorial decision ("this word always means
- * this CoFID row"), whereas a memory is inferred from usage and could drift from what a fresh
- * photo recognition actually meant. A memory still outranks the table's own token search: see
- * `matchMemory`.
+ * Memory comes before the alias because the alias is a default and the memory is the owner's
+ * answer to it. With the alias first, a corrected egg weight or a scanned bacon pack would be
+ * remembered and then never used again, since the alias would always answer first.
  */
 export function matchIngredient(name: string, sources: MatchSources): MatchResult {
   const key = singularKey(name);
   if (!key) return { best: null, alternatives: [] };
 
-  const alias = matchAlias(key, sources.aliases, sources.foods);
-  if (alias) return { best: alias, alternatives: [] };
+  const memory = matchMemory(key, sources.memories, sources.aliases);
+  if (memory && trustOf(memory.source) >= trustOf('table')) return { best: memory, alternatives: [] };
 
-  const memory = matchMemory(key, sources.memories);
+  const alias = matchAlias(key, sources.aliases, sources.foods);
+  if (alias) {
+    // A memory too weak to win outright can still know this food's unit weight better than the
+    // alias's estimate does.
+    const unit = memory?.unit ?? alias.unit;
+    return { best: { ...alias, ...(unit ? { unit } : {}) }, alternatives: [] };
+  }
+
   if (memory) return { best: memory, alternatives: [] };
 
   return matchTokens(name, sources.foods);
@@ -124,7 +129,7 @@ function matchAlias(key: string, aliases: FoodAlias[], foods: TableFood[]): Ingr
  * the normalised name (unusual, but two brands can share a plain name), the more established one
  * wins: most-used, then most recently used, then its key, so the choice is deterministic.
  */
-function matchMemory(key: string, memories: FoodMemory[]): IngredientCandidate | null {
+function matchMemory(key: string, memories: FoodMemory[], aliases: FoodAlias[]): IngredientCandidate | null {
   const matches = memories.filter((m) => singularKey(m.name) === key);
   if (matches.length === 0) return null;
   matches.sort((a, b) => b.timesUsed - a.timesUsed || b.lastUsedAt.localeCompare(a.lastUsedAt) || a.key.localeCompare(b.key));
@@ -136,8 +141,20 @@ function matchMemory(key: string, memories: FoodMemory[]): IngredientCandidate |
     source: memory.source,
     ...(memory.brand ? { brand: memory.brand } : {}),
     ...(memory.product ? { product: memory.product } : {}),
-    ...(memory.unitGrams !== undefined ? { unit: { label: memory.name, plural: memory.name, grams: memory.unitGrams } } : {}),
+    ...(memory.unitGrams !== undefined ? { unit: memoryUnit(memory, key, aliases) } : {}),
   };
+}
+
+/**
+ * A remembered unit weight, named the way it was learned ("rasher"), else the way this food's
+ * alias names it, else by the food's own name as a last resort.
+ */
+function memoryUnit(memory: FoodMemory, key: string, aliases: FoodAlias[]): FoodUnit {
+  const grams = memory.unitGrams!;
+  if (memory.unitLabel) return { label: memory.unitLabel, plural: memory.unitPlural ?? memory.unitLabel, grams };
+  const aliasUnit = aliases.find((a) => a.unit && a.words.some((w) => singularKey(w) === key))?.unit;
+  if (aliasUnit) return { label: aliasUnit.label, plural: aliasUnit.plural, grams };
+  return { label: memory.name, plural: memory.name, grams };
 }
 
 /**

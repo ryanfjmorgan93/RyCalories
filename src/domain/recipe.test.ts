@@ -3,6 +3,8 @@ import {
   amountsNeeded,
   combinedSource,
   countToGrams,
+  gapsCount,
+  ingredientGap,
   ingredientMacros,
   recipeDisplayTotals,
   recipeIsComplete,
@@ -210,3 +212,29 @@ describe('combinedSource', () => {
     expect(combinedSource([])).toBe('user');
   });
 });
+
+describe('ingredientGap', () => {
+  const UNKNOWN: Macros = { kcal: Number.NaN, protein: Number.NaN, carbs: Number.NaN, fat: Number.NaN };
+
+  it('is null for an ingredient with an amount and figures', () => {
+    expect(ingredientGap(ing())).toBeNull();
+  });
+
+  it('asks for an amount when there is none', () => {
+    expect(ingredientGap(ing({ grams: 0 }))).toBe('amount');
+  });
+
+  it('asks for figures first when nothing matched, even with an amount', () => {
+    expect(ingredientGap(ing({ per100: UNKNOWN, grams: 100 }))).toBe('figures');
+    expect(ingredientGap(ing({ per100: UNKNOWN, grams: 0 }))).toBe('figures');
+  });
+
+  it('gapsCount counts every ingredient that is not ready, and agrees with recipeIsComplete', () => {
+    const ings = [ing(), ing({ id: 'i2', grams: 0 }), ing({ id: 'i3', per100: UNKNOWN })];
+    expect(gapsCount(ings)).toBe(2);
+    expect(recipeIsComplete(ings)).toBe(false);
+    expect(gapsCount([ing()])).toBe(0);
+    expect(recipeIsComplete([ing()])).toBe(true);
+  });
+});
+

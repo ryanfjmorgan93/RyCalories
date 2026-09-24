@@ -3,9 +3,8 @@
  * no clock, no database, and this file never calls the model itself (that is `NanoPlugin` /
  * `src/state/nano.ts`).
  *
- * The model only ever names ingredients — never amounts, never nutrition (see `AGENTS`/plan: "the
- * numbers come from a scanned pack, a food logged before, or the bundled UK food table, never the
- * AI"). This file's whole job is turning whatever text the model produced into a small, bounded
+ * The model only ever names ingredients — never amounts, never nutrition: the numbers come from a
+ * scanned pack, a food logged before, or the bundled UK food table, never the AI. This file's whole job is turning whatever text the model produced into a small, bounded
  * list of plain names, in the same defensive style as `products.ts`'s `parseProduct`: a small
  * on-device model can wrap its JSON in commentary or a code fence, or return something that isn't
  * JSON at all, and none of that may ever throw into the caller.

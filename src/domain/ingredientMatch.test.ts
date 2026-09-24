@@ -80,11 +80,40 @@ describe('matching against food memory', () => {
     expect(best!.source).toBe('user');
   });
 
-  it('is beaten by a curated alias for the same word, per the plan\'s stated order', () => {
-    const eggMemory = memory({ id: 'm3', key: 'n:egg', name: 'Egg' });
-    const { best } = matchIngredient('egg', { aliases: ALIASES, foods: FOODS, memories: [eggMemory] });
-    expect(best!.source).toBe('table');
+  it('beats a curated alias for the same word when it is at least as trusted as the table', () => {
+    // The owner scanned their own bacon: that pack's label is what they cook with, not the table's
+    // back-bacon average the alias points at.
+    const scanned = memory({ id: 'm3', key: 'p:tesco back bacon', name: 'Bacon', brand: 'Tesco', product: 'Back Bacon', source: 'label', per100: { kcal: 230, protein: 17, carbs: 0.5, fat: 18 } });
+    const { best } = matchIngredient('bacon', { aliases: ALIASES, foods: FOODS, memories: [scanned] });
+    expect(best!.key).toBe('memory:p:tesco back bacon');
+    expect(best!.source).toBe('label');
+    expect(best!.per100.kcal).toBe(230);
+  });
+
+  it('keeps a corrected unit weight: a table-trust memory of eggs at 55 g beats the alias estimate of 50 g', () => {
+    const eggs = memory({ id: 'm7', key: 'n:egg', name: 'Egg', source: 'table', per100: EGG, unitGrams: 55, unitLabel: 'egg', unitPlural: 'eggs' });
+    const { best } = matchIngredient('eggs', { aliases: ALIASES, foods: FOODS, memories: [eggs] });
+    expect(best!.unit).toEqual({ label: 'egg', plural: 'eggs', grams: 55 });
+  });
+
+  it('loses to the alias when it is less trusted than the table, but its learned unit weight still rides along', () => {
+    const guessed = memory({ id: 'm8', key: 'n:egg', name: 'Egg', source: 'model', per100: { kcal: 999, protein: 1, carbs: 1, fat: 1 }, unitGrams: 60, unitLabel: 'egg', unitPlural: 'eggs' });
+    const { best } = matchIngredient('egg', { aliases: ALIASES, foods: FOODS, memories: [guessed] });
     expect(best!.key).toBe('table:17-001');
+    expect(best!.per100.kcal).toBe(131); // the table's figures, not the weaker memory's
+    expect(best!.unit).toEqual({ label: 'egg', plural: 'eggs', grams: 60 });
+  });
+
+  it('names a remembered unit the way it was learned', () => {
+    const bacon = memory({ id: 'm9', key: 'n:bacon', name: 'Bacon', source: 'table', per100: BACON, unitGrams: 28, unitLabel: 'rasher', unitPlural: 'rashers' });
+    const { best } = matchIngredient('bacon', { aliases: [], foods: FOODS, memories: [bacon] });
+    expect(best!.unit).toEqual({ label: 'rasher', plural: 'rashers', grams: 28 });
+  });
+
+  it('borrows the alias unit name for a remembered weight learned without one', () => {
+    const eggs = memory({ id: 'm10', key: 'n:egg', name: 'Egg', source: 'user', per100: EGG, unitGrams: 52 });
+    const { best } = matchIngredient('egg', { aliases: ALIASES, foods: FOODS, memories: [eggs] });
+    expect(best!.unit).toEqual({ label: 'egg', plural: 'eggs', grams: 52 });
   });
 
   it('builds a unit from unitGrams, labelled with the food\'s own name', () => {

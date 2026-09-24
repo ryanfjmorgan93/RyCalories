@@ -151,15 +151,20 @@ public class NanoPlugin extends Plugin {
     /**
      * Names an ingredient photo, on-device: decodes the file at {@code path}, downsamples it to
      * {@link #MEAL_MAX_EDGE} and sends it to Nano alongside {@code prompt}/{@code system}, the same
-     * way {@link #generate} does for text. Decoding is blocking IO+CPU, so unlike {@code generate}
-     * (which only hands the future's completion to {@link #executor}) this method's entire body —
-     * reading the call's arguments, decoding the bitmap, building the request and waiting on the
-     * future — runs on {@link #executor}, never on the Capacitor bridge thread.
+     * way {@link #generate} does for text. Decoding is blocking IO+CPU, so it runs on
+     * {@link #executor}, never on the Capacitor bridge thread. Inference itself is NOT waited on
+     * there: {@link #executor} is single-threaded and every other method's completion runs on it,
+     * so blocking it on {@code get()} for the length of an inference — or for ever, if one never
+     * returns — would stall status checks and every assistant answer behind it. The result is
+     * handed back through a listener instead, exactly as {@link #generate} does.
      */
     @PluginMethod
     public void analyzeMeal(PluginCall call) {
         executor.execute(() -> {
             Bitmap bitmap = null;
+            // Set once the bitmap has been handed to the inference future; from then on the
+            // listener owns it and recycles it, and the finally below must not.
+            boolean handedOff = false;
             try {
                 String path = call.getString("path");
                 if (path == null || path.isEmpty()) {
@@ -204,26 +209,34 @@ public class NanoPlugin extends Plugin {
                 if (maxOutputTokens != null) builder.setMaxOutputTokens(maxOutputTokens);
                 if (temperature != null) builder.setTemperature(temperature);
 
-                // Same generateContent() future path generate() uses; blocking get() is safe here
-                // because this whole runnable already executes off the bridge thread.
-                GenerateContentResponse response = ensureModel().generateContent(builder.build()).get();
-                List<Candidate> candidates = response.getCandidates();
-                String text = candidates.isEmpty() ? null : candidates.get(0).getText();
-                if (text == null || text.isEmpty()) {
-                    call.reject("empty: no candidate text returned");
-                    return;
-                }
-                JSObject result = new JSObject();
-                result.put("text", text);
-                call.resolve(result);
+                ListenableFuture<GenerateContentResponse> future = ensureModel().generateContent(builder.build());
+                final Bitmap sent = bitmap;
+                handedOff = true;
+                future.addListener(() -> {
+                    try {
+                        GenerateContentResponse response = future.get();
+                        List<Candidate> candidates = response.getCandidates();
+                        String text = candidates.isEmpty() ? null : candidates.get(0).getText();
+                        if (text == null || text.isEmpty()) {
+                            call.reject("empty: no candidate text returned");
+                            return;
+                        }
+                        JSObject result = new JSObject();
+                        result.put("text", text);
+                        call.resolve(result);
+                    } catch (Throwable t) {
+                        rejectWith(call, "analyze_failed", t);
+                    } finally {
+                        // Recycled only once inference has finished with it, success or failure.
+                        sent.recycle();
+                    }
+                }, executor);
             } catch (Throwable t) {
                 // Throwable, not Exception: an OutOfMemoryError decoding a large photo must still
                 // reject the call rather than leaving the JS promise hanging forever.
                 rejectWith(call, "analyze_failed", t);
             } finally {
-                // Recycled only after the future above has completed (or the whole attempt has
-                // failed) — never before, since inference above still needs to read the bitmap.
-                if (bitmap != null) bitmap.recycle();
+                if (bitmap != null && !handedOff) bitmap.recycle();
             }
         });
     }

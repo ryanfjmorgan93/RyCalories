@@ -233,3 +233,30 @@ describe('ranking for the search box', () => {
     expect(rankMemories('oat', [])).toEqual([]);
   });
 });
+
+describe('unit names travel with a learned unit weight', () => {
+  const eggs = {
+    name: 'Egg',
+    source: 'table' as const,
+    nutrition: { basis: 'weighed' as const, grams: 150, per100: { kcal: 131, protein: 12.6, carbs: 0.8, fat: 9.5 } },
+  };
+
+  it('memoryFrom stores the unit label and plural with unitGrams', () => {
+    const m = memoryFrom(eggs, { count: 3, unitGrams: 50, label: 'egg', plural: 'eggs' });
+    expect(m).toMatchObject({ unitGrams: 50, unitLabel: 'egg', unitPlural: 'eggs' });
+  });
+
+  it('memoryFrom stores no label when the unit is invalid', () => {
+    const m = memoryFrom(eggs, { count: 0, unitGrams: 50, label: 'egg', plural: 'eggs' });
+    expect(m?.unitGrams).toBeUndefined();
+    expect(m?.unitLabel).toBeUndefined();
+  });
+
+  it('mergeMemory carries the label forward with the weight, under the same trust rule', () => {
+    const existing = { id: 'x', ...memoryFrom(eggs, { count: 3, unitGrams: 50, label: 'egg', plural: 'eggs' })!, timesUsed: 1, lastUsedAt: '2026-01-01T00:00:00.000Z' };
+    const corrected = memoryFrom(eggs, { count: 2, unitGrams: 55, label: 'egg', plural: 'eggs' })!;
+    const merged = mergeMemory(existing, corrected, '2026-02-01T00:00:00.000Z');
+    expect(merged).toMatchObject({ unitGrams: 55, unitLabel: 'egg', unitPlural: 'eggs' });
+  });
+});
+

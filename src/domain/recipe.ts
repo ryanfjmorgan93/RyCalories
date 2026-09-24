@@ -60,6 +60,24 @@ export function amountsNeeded(ings: RecipeIngredient[]): number {
   return ings.filter((i) => i.grams <= 0).length;
 }
 
+/**
+ * What an ingredient still lacks before it can count: an amount, or figures (an ingredient nothing
+ * matched has no per-100 g numbers until the user picks a food, scans a pack or types them — the
+ * builder holds those as NaN, never as zeros that would read as a real "0 kcal"). Figures are
+ * reported first: an amount of something unknown is not yet worth anything.
+ */
+export function ingredientGap(i: RecipeIngredient): 'figures' | 'amount' | null {
+  if (!isFiniteMacros(i.per100)) return 'figures';
+  if (!(i.grams > 0)) return 'amount';
+  return null;
+}
+
+/** How many ingredients are not ready yet, for any reason. `recipeIsComplete` is this being 0 with
+ * at least one ingredient. */
+export function gapsCount(ings: RecipeIngredient[]): number {
+  return ings.filter((i) => ingredientGap(i) !== null).length;
+}
+
 export type ShareInput = { mode: 'portions'; made: number; eaten: number } | { mode: 'weigh'; dishGrams: number; plateGrams: number };
 
 /**
