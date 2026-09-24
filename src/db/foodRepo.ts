@@ -26,6 +26,15 @@ export interface NewMealItem {
   source?: FoodSource;
   brand?: string;
   product?: string;
+  /** The recipe this item's share was logged from, when it was — see `MealItem.recipeId`. */
+  recipeId?: string;
+  /**
+   * The count-style amount that produced this item's weight, when there was one — "3 eggs" at
+   * 50 g each. NOT persisted on the row (`MealItem` carries no `unit` field): it exists only so
+   * `rememberFood` can pass it through to `memoryFrom`, so FoodMemory learns `unitGrams`/
+   * `unitLabel`/`unitPlural` and a later recipe or quick-add can offer "how many?" next time.
+   */
+  unit?: { count: number; unitGrams: number; label: string; plural: string };
 }
 
 export interface NewMeal {
@@ -144,8 +153,10 @@ export async function addMeal(meal: NewMeal, items: NewMealItem[]): Promise<stri
     if (itemRows.length) await db.mealItems.bulkPut(itemRows);
   });
   // After the meal is safely committed, never inside its transaction: remembering is a
-  // convenience and must not be able to fail the write the user actually asked for.
-  for (const it of itemRows) await rememberFood(it);
+  // convenience and must not be able to fail the write the user actually asked for. Remembers
+  // from the ORIGINAL `items`, not `itemRows` — `toItemRow` deliberately drops `unit` (it is not a
+  // column on MealItem), and rememberFood needs it to teach FoodMemory unitGrams/unitLabel.
+  for (const it of items) await rememberFood(it);
   return id;
 }
 
@@ -161,7 +172,10 @@ export async function addMeal(meal: NewMeal, items: NewMealItem[]): Promise<stri
 export async function rememberFood(item: NewMealItem | MealItem): Promise<void> {
   // NewMealItem's source is optional and defaults the same way toItemRow does, so a food added
   // without one is remembered as the user's own rather than falling through to the least trusted.
-  const next = memoryFrom({ ...item, source: item.source ?? 'user' });
+  // `unit` only ever exists on a NewMealItem (never persisted on the MealItem row — see the field's
+  // doc comment), so a remembered row and a freshly logged one both flow through the same call.
+  const unit = 'unit' in item ? item.unit : undefined;
+  const next = memoryFrom({ ...item, source: item.source ?? 'user' }, unit);
   if (!next) return;
   const at = nowIso();
   try {
@@ -201,6 +215,7 @@ function toItemRow(id: string, mealId: string, index: number, it: NewMealItem): 
     nutrition: it.nutrition,
     ...(it.brand ? { brand: it.brand } : {}),
     ...(it.product ? { product: it.product } : {}),
+    ...(it.recipeId ? { recipeId: it.recipeId } : {}),
   };
 }
 

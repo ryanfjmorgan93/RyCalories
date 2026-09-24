@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from './db';
 import { addMeal } from './foodRepo';
+import { getRecipe, logShare, saveRecipe } from './recipeRepo';
 import { getSettings, logBodyweight, resetToSeed, saveSettings } from './repo';
 import { trendWindow } from './trendQueries';
 import { SEED_ROUTINE_IDS } from './seed';
@@ -56,6 +57,28 @@ describe('the trend window', () => {
     const { trend } = await trendWindow(TODAY, 3, await getSettings());
     expect(trend.kcal.value).toBe(2500);
     expect(trend.protein.value).toBe(130);
+  });
+
+  it('sums a logged recipe share exactly like any other item', async () => {
+    // trendWindow reads via dayTotals, the same query todayQueries.test.ts checks against a
+    // recipe share — this proves the window built from it inherits that unchanged, not that it
+    // re-derives the total a second, differently-rounded way.
+    const recipeId = await saveRecipe({
+      name: 'Omelette',
+      ingredients: [
+        { id: 'ri1', name: 'Eggs', source: 'table', grams: 150, per100: { kcal: 143, protein: 12.6, carbs: 0.7, fat: 9.9 } },
+        { id: 'ri2', name: 'Cheddar', source: 'table', grams: 100, per100: { kcal: 416, protein: 25.4, carbs: 0.1, fat: 34.4 } },
+      ],
+      portionsMade: 2,
+    });
+    const recipe = (await getRecipe(recipeId))!;
+    await logShare({ recipe, share: { mode: 'portions', made: 2, eaten: 1 }, into: { newMeal: { date: TODAY } } });
+    await meal(TODAY, 100, 10); // an ordinary item alongside it, to prove the two sum together
+
+    const { trend } = await trendWindow(TODAY, 3, await getSettings());
+    // 214.5 + 416 = 630.5 kcal total; half is 315.25, shown at display precision as 315; plus the
+    // ordinary 100 kcal item.
+    expect(trend.kcal.value).toBe(415);
   });
 
   it('counts a finished session and ignores one still in progress', async () => {

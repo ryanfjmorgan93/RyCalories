@@ -28,6 +28,7 @@ const TABLE_LABELS: Record<TableName, string> = {
   foods: 'Remembered foods',
   productCache: 'Cached products',
   phases: 'Phases',
+  recipes: 'Recipes',
 };
 
 /**
