@@ -46,12 +46,21 @@ export function memoryKey(item: Pick<MealItem, 'name' | 'brand' | 'product'>): s
  * Only weighed portions can be remembered, because only they yield per-100g figures. An unweighed
  * "1 bowl" records how much was in that particular bowl and nothing generalisable — storing it
  * per 100 g would be inventing a number.
+ *
+ * `unit` is the count-style amount that produced this item's weight, when there was one — "3
+ * eggs" at 50 g each — so a later recipe or the quick-add flow can offer "how many?" instead of
+ * "how many grams?" next time. `unit.count` only guards against a nonsensical (zero or negative)
+ * input; the number actually stored is `unit.unitGrams`, grams per one unit.
  */
-export function memoryFrom(item: Pick<MealItem, 'name' | 'brand' | 'product' | 'source' | 'nutrition'>): Omit<FoodMemory, 'id' | 'timesUsed' | 'lastUsedAt'> | null {
+export function memoryFrom(
+  item: Pick<MealItem, 'name' | 'brand' | 'product' | 'source' | 'nutrition'>,
+  unit?: { count: number; unitGrams: number },
+): Omit<FoodMemory, 'id' | 'timesUsed' | 'lastUsedAt'> | null {
   const grams = gramsOf(item.nutrition);
   if (grams === null || grams <= 0) return null;
   const per100 = perHundred(item.nutrition);
   if (!per100) return null;
+  const validUnit = unit && Number.isFinite(unit.count) && unit.count > 0 && Number.isFinite(unit.unitGrams) && unit.unitGrams > 0;
   return {
     key: memoryKey(item),
     name: item.name.trim(),
@@ -59,6 +68,7 @@ export function memoryFrom(item: Pick<MealItem, 'name' | 'brand' | 'product' | '
     ...(item.product ? { product: item.product } : {}),
     per100,
     typicalGrams: grams,
+    ...(validUnit ? { unitGrams: unit.unitGrams } : {}),
     source: item.source,
   };
 }
@@ -93,6 +103,10 @@ export function mergeMemory(
     source: takeNumbers ? incoming.source : existing.source,
     // The most recent portion is the better suggestion: it is what you actually ate last time.
     ...(incoming.typicalGrams !== undefined ? { typicalGrams: incoming.typicalGrams } : {}),
+    // Unlike typicalGrams, this is a figure — grams per egg, per rasher — not just a fact about
+    // what happened, so it follows the same trust rule as per100: a user-corrected unit weight
+    // must not be quietly overwritten by a lower-trust one.
+    ...(incoming.unitGrams !== undefined && takeNumbers ? { unitGrams: incoming.unitGrams } : {}),
     timesUsed: existing.timesUsed + 1,
     lastUsedAt: at,
   };
