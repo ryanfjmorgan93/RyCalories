@@ -345,6 +345,28 @@ unlogged days are excluded from every average, the count of days each average st
 beside it, and below half coverage the screen says outright that the averages describe the logged
 days rather than the window.
 
+### P5b — Cooked meals · **M** · ✅ shipped
+
+Photo or type a home-cooked meal, answer "how many eggs?", save it as a recipe, log your share.
+
+- **Numbers never come from the AI.** Gemini Nano (on the phone, `NanoPlugin.analyzeMeal`, an
+  `ImagePart` through the same `genai-prompt` 1.0.0-beta4) only names ingredients. Amounts are the
+  user's; per-100 g figures come from a scanned pack, FoodMemory, or the bundled UK table (CoFID
+  2021, OGL v3.0, 2,854 foods plus ~94 curated aliases).
+- **Manual entry is the floor.** "Type it" parses "3 eggs, 30g cheddar, 2 rashers bacon" with no
+  AI; "Add ingredients" searches memory and the table. Take a photo is only enabled when the
+  assistant reports ready.
+- **One ingredient at a time**, as the owner described: "Eggs — how many?", with Scan pack,
+  Change food and Not in it on every card. New cards start with no amount; Save stays off until
+  every ingredient has an amount and figures.
+- **A share is one portion-basis meal item**, scaled from the totals the review shows, so eating
+  the whole dish logs the total on screen. Portions by default; weigh the dish and the plate for
+  batch cooking.
+- **The photo is never kept.** It is downscaled in JS, written to `Directory.Cache/meal-photos`,
+  handed to Nano by path, and deleted in `finally`; the folder is swept whenever the builder opens.
+  This answers §8 Q1 for this feature: no meal photos are stored.
+- Schema v3 adds `recipes` (ingredients embedded in the row, so one `put` is atomic).
+
 ### P6 — Explicitly deferred to v1.1
 
 Adaptive TDEE and the strength-versus-cut "Loop" chart — the cross-domain tier not chosen for
@@ -534,6 +556,26 @@ counts drop below a baseline without an in-app delete, and a Backups card in Set
   frames (`src/domain/barcodeRead.ts`). A misread frame cannot be produced from the static fake
   camera, so only the pure rule is tested for it.
 
+
+### 6.7 Cooked meals — traps paid for
+
+- **`DB_VERSION` is hand-maintained and gates the pre-migration backup.** Adding `version(3)`
+  without bumping it would have made `probe.version < DB_VERSION * 10` false for exactly the
+  upgrade being shipped, so no backup. `src/db/db.test.ts` now fails if it drifts from `db.verno`,
+  and `migration-v3.spec.ts` was shown to fail with it wound back to 2.
+- **Round then sum, everywhere a total sits beside its rows** — and a share must scale that same
+  shown total. Scaling the unrounded sum logged 429 kcal for a whole omelette the review called
+  430.
+- **The curated alias must not outrank what the owner taught the app.** With the alias first, a
+  corrected egg weight or a scanned bacon pack was remembered and never used again.
+- **Never block the Nano plugin's single worker thread on inference.** Every method's completion
+  runs on it; `analyzeMeal` decodes there and hands inference back through a listener.
+- **On Android 11+, `<input type=file capture>` needs a `<queries>` entry for IMAGE_CAPTURE**, or
+  Capacitor's chooser can silently fall back to a file picker.
+- **A tight loop of set-done clicks logs the wrong sets.** The table only moves on when the live
+  query answers; filling the next row first types into the row still live. `logOneSet` in
+  `e2e/fresh.ts` waits for the set's own logged row.
+
 ---
 
 ## 7. Repo and release
@@ -552,7 +594,8 @@ of what the app is eventually called on the launcher.
 
 ## 8. Open questions for the owner
 
-1. **Photos: Dexie blobs or Capacitor Filesystem?** Note `@capacitor/camera` returns a path
+1. **Photos: Dexie blobs or Capacitor Filesystem?** *Answered for cooked meals (P5b): meal
+   photos are not stored at all.* Still open if a feature ever needs to keep one. Note `@capacitor/camera` returns a path
    into `cacheDir`, so a photo must be explicitly copied to `Directory.Data` before its path
    is durable. Note also that the PWA build has no camera, no filesystem and no Nano — so
    browser meal entry needs a defined story either way.
