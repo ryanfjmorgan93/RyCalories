@@ -172,16 +172,27 @@ describe('shareLabel', () => {
 });
 
 describe('shareNutrition', () => {
-  it('is the exact unrounded totals scaled by the fraction, at portion basis', () => {
+  it('is the totals as shown, scaled by the fraction, at portion basis', () => {
     const ings = [ing({ grams: 300 }), ing({ id: 'i2', name: 'Bacon', per100: BACON, grams: 100 })];
     const n = shareNutrition(ings, 0.5);
     expect(n.basis).toBe('portion');
-    // Egg 300g: 393 kcal exact; bacon 100g: 215 kcal exact. Total 608, half = 304.
+    // Egg 300g: 393 kcal; bacon 100g: 215 kcal. Total shown 608, half = 304.
     expect(n.basis === 'portion' && n.macros.kcal).toBeCloseTo(304, 6);
   });
 
+  it('eating the whole recipe logs exactly the total the review shows, not the unrounded sum', () => {
+    // The screenshot case: 3 eggs (150 g), 30 g cheddar, 2 rashers (50 g). Rows show 197 + 125 +
+    // 108 = 430; the unrounded sum is 428.8. One of one portion must be 430.
+    const CHEDDAR: Macros = { kcal: 416, protein: 25.4, carbs: 0.1, fat: 34.9 };
+    const ings = [ing({ grams: 150 }), ing({ id: 'c', name: 'Cheddar', per100: CHEDDAR, grams: 30 }), ing({ id: 'b', name: 'Bacon', per100: BACON, grams: 50 })];
+    const shown = recipeDisplayTotals(ings);
+    expect(shown.kcal).toBe(430);
+    const n = shareNutrition(ings, 1);
+    expect(n.basis === 'portion' && n.macros).toEqual(shown);
+  });
+
   it('is not clamped above the recipe total either', () => {
-    const ings = [ing({ grams: 200 })]; // 262 kcal exact
+    const ings = [ing({ grams: 200 })]; // 262 kcal
     const n = shareNutrition(ings, 1.5);
     expect(n.basis === 'portion' && n.macros.kcal).toBeCloseTo(393, 6);
   });

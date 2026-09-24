@@ -4,6 +4,7 @@ import { db } from './db';
 import { deleteRecipe, getRecipe, listRecipes, logShare, saveRecipe, shareItem } from './recipeRepo';
 import { wipeAll } from './repo';
 import { macrosOf } from '@/domain/food';
+import { recipeDisplayTotals } from '@/domain/recipe';
 import { toDateKey } from '@/domain/dates';
 import type { Recipe, RecipeIngredient } from '@/domain/types';
 
@@ -62,8 +63,9 @@ describe('shareItem', () => {
     expect(item.portion).toBe('1 of 2 portions');
     expect(item.recipeId).toBe('r1');
     expect(item.source).toBe('table'); // both ingredients are source 'table'
-    // Eggs 150g @ 143 kcal/100g = 214.5; cheddar 100g @ 416 kcal/100g = 416. Half of 630.5.
-    expect(macrosOf(item.nutrition).kcal).toBeCloseTo(315.25, 6);
+    // Eggs 150g @ 143 kcal/100g = 214.5, shown 215; cheddar 100g @ 416 kcal/100g = 416. Half of
+    // the 631 the review shows — not of the unrounded 630.5.
+    expect(macrosOf(item.nutrition).kcal).toBeCloseTo(315.5, 6);
   });
 
   it('needs no database at all — usable on MealEditScreen\'s unsaved NewMeal', () => {
@@ -167,29 +169,28 @@ describe('deleting a recipe', () => {
 });
 
 describe('logging a share', () => {
-  it('portions 1 of 2 gives exactly half the unrounded total, not half of a rounded one', async () => {
-    // 214.5 + 50 = 264.5 kcal total — deliberately not a round number, so a share taken from
-    // ROUNDED per-ingredient figures (132 or 133, say) would disagree with the true half (132.25).
-    const ingredients = [eggs({ grams: 150 }), cheddar({ grams: 12 })]; // 214.5 + 49.92 = 264.42
+  it('portions 1 of 2 gives exactly half the total the review shows', async () => {
+    // 214.5 + 49.92 = 264.42 kcal unrounded; the rows show 215 + 50 = 265. Half of what is shown.
+    const ingredients = [eggs({ grams: 150 }), cheddar({ grams: 12 })];
     const recipe = await getRecipe(await saveRecipe({ name: 'Omelette', ingredients, portionsMade: 2 }));
-    const totalKcal = ingredients.reduce((sum, i) => sum + (i.per100.kcal * i.grams) / 100, 0);
+    const shownKcal = recipeDisplayTotals(ingredients).kcal;
 
     const mealId = await logShare({ recipe: recipe!, share: { mode: 'portions', made: 2, eaten: 1 }, into: { newMeal: { date: TODAY } } });
     const item = (await itemsForMeal(mealId))[0]!;
 
-    expect(macrosOf(item.nutrition).kcal).toBeCloseTo(totalKcal / 2, 9);
+    expect(macrosOf(item.nutrition).kcal).toBeCloseTo(shownKcal / 2, 9);
     expect(item.portion).toBe('1 of 2 portions');
   });
 
-  it('weighing 300 g of a 900 g dish gives exactly a third', async () => {
+  it('weighing 300 g of a 900 g dish gives exactly a third of the total shown', async () => {
     const ingredients = [eggs({ grams: 300 }), cheddar({ grams: 600 })]; // dish totals 900 g
     const recipe = (await getRecipe(await saveRecipe({ name: 'Bake', ingredients, portionsMade: 1 })))!;
-    const totalKcal = ingredients.reduce((sum, i) => sum + (i.per100.kcal * i.grams) / 100, 0);
+    const shownKcal = recipeDisplayTotals(ingredients).kcal;
 
     const mealId = await logShare({ recipe, share: { mode: 'weigh', dishGrams: 900, plateGrams: 300 }, into: { newMeal: { date: TODAY } } });
     const item = (await itemsForMeal(mealId))[0]!;
 
-    expect(macrosOf(item.nutrition).kcal).toBeCloseTo(totalKcal / 3, 9);
+    expect(macrosOf(item.nutrition).kcal).toBeCloseTo(shownKcal / 3, 9);
     expect(item.portion).toBe('300 g of 900 g');
   });
 

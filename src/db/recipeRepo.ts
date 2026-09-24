@@ -105,7 +105,7 @@ export interface LogShareInput {
 
 /**
  * The single meal item a share of `recipe` represents, at portion basis — see domain/recipe.ts's
- * `shareNutrition` for why a cooked dish's share is scaled from its exact totals rather than from
+ * `shareNutrition` for why a cooked dish's share is scaled from the totals the review shows rather than from
  * any single ingredient's weighed figure. This is the one thing `logShare` writes; split out so
  * the recipe builder's unsaved `NewMeal` (held in local state until Save, same as `MealEditScreen`)
  * can append a share to its in-memory item list with no database write at all.

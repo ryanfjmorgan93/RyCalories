@@ -147,8 +147,8 @@ describe('the day view', () => {
     await logShare({ recipe, share: { mode: 'portions', made: 2, eaten: 1 }, into: { newMeal: { date: TODAY } } });
 
     const view = await dayView(TODAY, await getSettings());
-    // 214.5 + 416 = 630.5 kcal total; half of that (315.25) is what dayTotals shows at DISPLAY
-    // precision (see foodRepo.sumItems) — 315, the same rounding any other logged item gets.
-    expect(view.eaten.kcal).toBe(315);
+    // The review shows 215 + 416 = 631 kcal (rounded rows); half of that is 315.5, which the day
+    // shows at display precision (see foodRepo.sumItems) as 316 — the same rounding any item gets.
+    expect(view.eaten.kcal).toBe(316);
   });
 });

@@ -162,9 +162,9 @@ test.describe('recipe builder', () => {
 
     await page.getByTestId('recipe-save-log').click();
     await page.waitForURL(/\/food\/[0-9a-f-]+$/);
-    // The logged item is the exact share of the recipe (196.5 + 124.8 + 107.5 = 428.8 kcal
-    // exact), rounded once as a single item — 429, deliberately not the review's own 430.
-    await expect(page.getByTestId('meal-total')).toContainText('429 kcal');
+    // Eating the whole recipe logs the total the review showed — 430, not the unrounded 428.8
+    // (which would read 429 beside a review that said 430).
+    await expect(page.getByTestId('meal-total')).toContainText('430 kcal');
 
     await expect.poll(async () => (await readMealPhotoFiles(page)).length, { timeout: 10_000 }).toBe(0);
   });
@@ -350,8 +350,8 @@ test.describe('recipe builder', () => {
     await page.getByTestId('share-dish').fill('900');
     await page.getByTestId('share-plate').fill('300');
 
-    // 3 eggs = 150 g @ 131 kcal/100g = 196.5 kcal exact; a third of the dish is a third of that —
-    // 65.5, which rounds to 66.
+    // 3 eggs = 150 g @ 131 kcal/100g = 196.5, shown as 197; a third of the dish is a third of what
+    // the review shows — 65.67, which rounds to 66.
     await expect(page.getByTestId('share-kcal')).toContainText('66 kcal');
   });
 

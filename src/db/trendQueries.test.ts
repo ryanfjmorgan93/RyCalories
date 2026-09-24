@@ -76,9 +76,9 @@ describe('the trend window', () => {
     await meal(TODAY, 100, 10); // an ordinary item alongside it, to prove the two sum together
 
     const { trend } = await trendWindow(TODAY, 3, await getSettings());
-    // 214.5 + 416 = 630.5 kcal total; half is 315.25, shown at display precision as 315; plus the
-    // ordinary 100 kcal item.
-    expect(trend.kcal.value).toBe(415);
+    // The review shows 215 + 416 = 631 kcal; half is 315.5, shown at display precision as 316;
+    // plus the ordinary 100 kcal item.
+    expect(trend.kcal.value).toBe(416);
   });
 
   it('counts a finished session and ignores one still in progress', async () => {

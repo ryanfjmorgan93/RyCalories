@@ -107,13 +107,20 @@ export function shareLabel(s: ShareInput): string {
 }
 
 /**
- * The nutrition for a share of the recipe, at portion basis. The exact (unrounded) totals across
- * every ingredient are scaled by `fraction` — never the weighed basis, because a cooked dish's
- * ingredient weights do not correspond to what is on the plate once it is mixed and served.
+ * The nutrition for a share of the recipe, at portion basis: the recipe's totals AS SHOWN
+ * (`recipeDisplayTotals`, round-then-sum) scaled by `fraction`.
+ *
+ * Scaling the unrounded totals instead looked more exact and was wrong where it mattered: the
+ * review showed a total of 430 kcal (197 + 125 + 108, the rows on screen) while "Your share" for 1
+ * of 1 portions read 429 kcal (the unrounded 428.8), and the same 429 was logged. Eating the whole
+ * dish must log the total the screen shows, and a half must log half of it. The rounding this
+ * inherits is at most half a unit per ingredient row, which is the precision the rows are shown at.
+ *
+ * Portion basis, never weighed: a cooked dish's ingredient weights do not correspond to what is on
+ * the plate once it is mixed and served.
  */
 export function shareNutrition(ings: RecipeIngredient[], fraction: number): Nutrition {
-  const totals = ings.reduce((acc, i) => addMacros(acc, ingredientMacros(i)), ZERO);
-  return fromPortion(scaleMacros(totals, fraction));
+  return fromPortion(scaleMacros(recipeDisplayTotals(ings), fraction));
 }
 
 /**
