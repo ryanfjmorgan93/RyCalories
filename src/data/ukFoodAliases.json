@@ -1,0 +1,790 @@
+[
+  {
+    "words": [
+      "egg",
+      "eggs"
+    ],
+    "code": "12-937",
+    "unit": {
+      "label": "egg",
+      "plural": "eggs",
+      "grams": 50,
+      "unitSource": "estimate"
+    }
+  },
+  {
+    "words": [
+      "bacon",
+      "bacon rasher",
+      "bacon rashers"
+    ],
+    "code": "19-497",
+    "unit": {
+      "label": "rasher",
+      "plural": "rashers",
+      "grams": 25,
+      "unitSource": "estimate"
+    }
+  },
+  {
+    "words": [
+      "streaky bacon"
+    ],
+    "code": "19-016",
+    "unit": {
+      "label": "rasher",
+      "plural": "rashers",
+      "grams": 20,
+      "unitSource": "estimate"
+    }
+  },
+  {
+    "words": [
+      "sausage",
+      "sausages",
+      "pork sausage",
+      "pork sausages"
+    ],
+    "code": "19-510",
+    "unit": {
+      "label": "sausage",
+      "plural": "sausages",
+      "grams": 50,
+      "unitSource": "estimate"
+    }
+  },
+  {
+    "words": [
+      "cheddar",
+      "cheddar cheese"
+    ],
+    "code": "12-346"
+  },
+  {
+    "words": [
+      "mozzarella"
+    ],
+    "code": "12-360"
+  },
+  {
+    "words": [
+      "parmesan",
+      "parmesan cheese"
+    ],
+    "code": "12-526"
+  },
+  {
+    "words": [
+      "feta",
+      "feta cheese"
+    ],
+    "code": "12-525"
+  },
+  {
+    "words": [
+      "cottage cheese"
+    ],
+    "code": "12-539"
+  },
+  {
+    "words": [
+      "butter"
+    ],
+    "code": "17-685"
+  },
+  {
+    "words": [
+      "olive oil"
+    ],
+    "code": "17-038",
+    "unit": {
+      "label": "tbsp",
+      "plural": "tbsp",
+      "grams": 14,
+      "unitSource": "estimate"
+    }
+  },
+  {
+    "words": [
+      "milk",
+      "whole milk"
+    ],
+    "code": "12-596"
+  },
+  {
+    "words": [
+      "semi-skimmed milk",
+      "semi skimmed milk"
+    ],
+    "code": "12-313"
+  },
+  {
+    "words": [
+      "skimmed milk"
+    ],
+    "code": "12-307"
+  },
+  {
+    "words": [
+      "onion",
+      "onions"
+    ],
+    "code": "13-499",
+    "unit": {
+      "label": "onion",
+      "plural": "onions",
+      "grams": 150,
+      "unitSource": "estimate"
+    }
+  },
+  {
+    "words": [
+      "spring onion",
+      "spring onions"
+    ],
+    "code": "13-352",
+    "unit": {
+      "label": "spring onion",
+      "plural": "spring onions",
+      "grams": 15,
+      "unitSource": "estimate"
+    }
+  },
+  {
+    "words": [
+      "garlic",
+      "garlic clove",
+      "garlic cloves"
+    ],
+    "code": "13-244",
+    "unit": {
+      "label": "clove",
+      "plural": "cloves",
+      "grams": 3,
+      "unitSource": "estimate"
+    }
+  },
+  {
+    "words": [
+      "tomato",
+      "tomatoes"
+    ],
+    "code": "13-517",
+    "unit": {
+      "label": "tomato",
+      "plural": "tomatoes",
+      "grams": 100,
+      "unitSource": "estimate"
+    }
+  },
+  {
+    "words": [
+      "cherry tomato",
+      "cherry tomatoes"
+    ],
+    "code": "13-519",
+    "unit": {
+      "label": "cherry tomato",
+      "plural": "cherry tomatoes",
+      "grams": 15,
+      "unitSource": "estimate"
+    }
+  },
+  {
+    "words": [
+      "tinned tomatoes",
+      "chopped tomatoes",
+      "canned tomatoes"
+    ],
+    "code": "13-530"
+  },
+  {
+    "words": [
+      "pepper",
+      "peppers",
+      "bell pepper",
+      "bell peppers"
+    ],
+    "code": "13-524",
+    "unit": {
+      "label": "pepper",
+      "plural": "peppers",
+      "grams": 120,
+      "unitSource": "estimate"
+    }
+  },
+  {
+    "words": [
+      "mushroom",
+      "mushrooms"
+    ],
+    "code": "13-505",
+    "unit": {
+      "label": "mushroom",
+      "plural": "mushrooms",
+      "grams": 15,
+      "unitSource": "estimate"
+    }
+  },
+  {
+    "words": [
+      "spinach"
+    ],
+    "code": "13-521"
+  },
+  {
+    "words": [
+      "potato",
+      "potatoes"
+    ],
+    "code": "13-489",
+    "unit": {
+      "label": "potato",
+      "plural": "potatoes",
+      "grams": 180,
+      "unitSource": "estimate"
+    }
+  },
+  {
+    "words": [
+      "sweet potato",
+      "sweet potatoes"
+    ],
+    "code": "13-463",
+    "unit": {
+      "label": "sweet potato",
+      "plural": "sweet potatoes",
+      "grams": 130,
+      "unitSource": "estimate"
+    }
+  },
+  {
+    "words": [
+      "rice",
+      "white rice"
+    ],
+    "code": "11-861"
+  },
+  {
+    "words": [
+      "basmati rice",
+      "basmati"
+    ],
+    "code": "11-857"
+  },
+  {
+    "words": [
+      "brown rice"
+    ],
+    "code": "11-868"
+  },
+  {
+    "words": [
+      "pasta"
+    ],
+    "code": "11-716"
+  },
+  {
+    "words": [
+      "wholewheat pasta",
+      "wholemeal pasta"
+    ],
+    "code": "11-718"
+  },
+  {
+    "words": [
+      "bread",
+      "white bread"
+    ],
+    "code": "11-980",
+    "unit": {
+      "label": "slice",
+      "plural": "slices",
+      "grams": 36,
+      "unitSource": "estimate"
+    }
+  },
+  {
+    "words": [
+      "wholemeal bread"
+    ],
+    "code": "11-981",
+    "unit": {
+      "label": "slice",
+      "plural": "slices",
+      "grams": 38,
+      "unitSource": "estimate"
+    }
+  },
+  {
+    "words": [
+      "chicken breast",
+      "chicken breasts",
+      "chicken"
+    ],
+    "code": "18-290"
+  },
+  {
+    "words": [
+      "chicken thigh",
+      "chicken thighs"
+    ],
+    "code": "18-289"
+  },
+  {
+    "words": [
+      "beef mince",
+      "minced beef",
+      "mince"
+    ],
+    "code": "18-469"
+  },
+  {
+    "words": [
+      "lean beef mince",
+      "extra lean beef mince"
+    ],
+    "code": "18-508"
+  },
+  {
+    "words": [
+      "salmon",
+      "salmon fillet"
+    ],
+    "code": "16-356"
+  },
+  {
+    "words": [
+      "tuna",
+      "tinned tuna",
+      "tuna tin"
+    ],
+    "code": "16-416"
+  },
+  {
+    "words": [
+      "cod",
+      "cod fillet"
+    ],
+    "code": "16-372"
+  },
+  {
+    "words": [
+      "prawn",
+      "prawns"
+    ],
+    "code": "16-387"
+  },
+  {
+    "words": [
+      "ham",
+      "sliced ham"
+    ],
+    "code": "19-496"
+  },
+  {
+    "words": [
+      "turkey",
+      "turkey breast"
+    ],
+    "code": "18-349"
+  },
+  {
+    "words": [
+      "baked beans"
+    ],
+    "code": "13-532"
+  },
+  {
+    "words": [
+      "kidney bean",
+      "kidney beans",
+      "red kidney beans"
+    ],
+    "code": "13-660"
+  },
+  {
+    "words": [
+      "chickpea",
+      "chickpeas",
+      "chick pea",
+      "chick peas"
+    ],
+    "code": "13-670"
+  },
+  {
+    "words": [
+      "haricot bean",
+      "haricot beans"
+    ],
+    "code": "13-665"
+  },
+  {
+    "words": [
+      "lentil",
+      "lentils",
+      "red lentils"
+    ],
+    "code": "13-657"
+  },
+  {
+    "words": [
+      "flour",
+      "plain flour"
+    ],
+    "code": "11-886"
+  },
+  {
+    "words": [
+      "wholemeal flour"
+    ],
+    "code": "11-889"
+  },
+  {
+    "words": [
+      "sugar",
+      "white sugar"
+    ],
+    "code": "17-063"
+  },
+  {
+    "words": [
+      "oats",
+      "porridge oats",
+      "rolled oats"
+    ],
+    "code": "11-788"
+  },
+  {
+    "words": [
+      "natural yoghurt",
+      "plain yoghurt",
+      "yoghurt",
+      "yogurt"
+    ],
+    "code": "12-184"
+  },
+  {
+    "words": [
+      "low fat yoghurt",
+      "low fat yogurt"
+    ],
+    "code": "12-379"
+  },
+  {
+    "words": [
+      "greek yoghurt",
+      "greek yogurt"
+    ],
+    "code": "12-555"
+  },
+  {
+    "words": [
+      "avocado",
+      "avocados"
+    ],
+    "code": "14-386",
+    "unit": {
+      "label": "avocado",
+      "plural": "avocados",
+      "grams": 150,
+      "unitSource": "estimate"
+    }
+  },
+  {
+    "words": [
+      "banana",
+      "bananas"
+    ],
+    "code": "14-318",
+    "unit": {
+      "label": "banana",
+      "plural": "bananas",
+      "grams": 100,
+      "unitSource": "estimate"
+    }
+  },
+  {
+    "words": [
+      "apple",
+      "apples"
+    ],
+    "code": "14-319",
+    "unit": {
+      "label": "apple",
+      "plural": "apples",
+      "grams": 130,
+      "unitSource": "estimate"
+    }
+  },
+  {
+    "words": [
+      "carrot",
+      "carrots"
+    ],
+    "code": "13-496",
+    "unit": {
+      "label": "carrot",
+      "plural": "carrots",
+      "grams": 80,
+      "unitSource": "estimate"
+    }
+  },
+  {
+    "words": [
+      "broccoli"
+    ],
+    "code": "13-502"
+  },
+  {
+    "words": [
+      "single cream",
+      "cream"
+    ],
+    "code": "12-332"
+  },
+  {
+    "words": [
+      "double cream"
+    ],
+    "code": "12-334"
+  },
+  {
+    "words": [
+      "honey"
+    ],
+    "code": "17-050"
+  },
+  {
+    "words": [
+      "peanut butter"
+    ],
+    "code": "14-892"
+  },
+  {
+    "words": [
+      "almond",
+      "almonds"
+    ],
+    "code": "14-896"
+  },
+  {
+    "words": [
+      "cashew",
+      "cashews",
+      "cashew nuts"
+    ],
+    "code": "14-811"
+  },
+  {
+    "words": [
+      "walnut",
+      "walnuts"
+    ],
+    "code": "14-879"
+  },
+  {
+    "words": [
+      "cucumber"
+    ],
+    "code": "13-523"
+  },
+  {
+    "words": [
+      "lettuce"
+    ],
+    "code": "13-520"
+  },
+  {
+    "words": [
+      "sweetcorn",
+      "tinned sweetcorn"
+    ],
+    "code": "13-529"
+  },
+  {
+    "words": [
+      "courgette",
+      "courgettes"
+    ],
+    "code": "13-627"
+  },
+  {
+    "words": [
+      "aubergine",
+      "aubergines"
+    ],
+    "code": "13-161"
+  },
+  {
+    "words": [
+      "leek",
+      "leeks"
+    ],
+    "code": "13-624"
+  },
+  {
+    "words": [
+      "celery"
+    ],
+    "code": "13-636"
+  },
+  {
+    "words": [
+      "ginger"
+    ],
+    "code": "13-890"
+  },
+  {
+    "words": [
+      "chilli",
+      "chillies",
+      "chilli pepper"
+    ],
+    "code": "13-317"
+  },
+  {
+    "words": [
+      "lemon",
+      "lemons"
+    ],
+    "code": "14-128",
+    "unit": {
+      "label": "lemon",
+      "plural": "lemons",
+      "grams": 60,
+      "unitSource": "estimate"
+    }
+  },
+  {
+    "words": [
+      "lime",
+      "limes"
+    ],
+    "code": "14-132",
+    "unit": {
+      "label": "lime",
+      "plural": "limes",
+      "grams": 70,
+      "unitSource": "estimate"
+    }
+  },
+  {
+    "words": [
+      "orange",
+      "oranges"
+    ],
+    "code": "14-327",
+    "unit": {
+      "label": "orange",
+      "plural": "oranges",
+      "grams": 130,
+      "unitSource": "estimate"
+    }
+  },
+  {
+    "words": [
+      "strawberry",
+      "strawberries"
+    ],
+    "code": "14-324"
+  },
+  {
+    "words": [
+      "blueberry",
+      "blueberries"
+    ],
+    "code": "14-325"
+  },
+  {
+    "words": [
+      "grape",
+      "grapes"
+    ],
+    "code": "14-350"
+  },
+  {
+    "words": [
+      "mayonnaise",
+      "mayo"
+    ],
+    "code": "17-654"
+  },
+  {
+    "words": [
+      "ketchup",
+      "tomato ketchup"
+    ],
+    "code": "17-709"
+  },
+  {
+    "words": [
+      "vinegar"
+    ],
+    "code": "17-339"
+  },
+  {
+    "words": [
+      "soy sauce",
+      "soya sauce"
+    ],
+    "code": "17-721"
+  },
+  {
+    "words": [
+      "quinoa"
+    ],
+    "code": "14-843"
+  },
+  {
+    "words": [
+      "couscous"
+    ],
+    "code": "11-901"
+  },
+  {
+    "words": [
+      "tofu"
+    ],
+    "code": "13-570"
+  },
+  {
+    "words": [
+      "basil"
+    ],
+    "code": "13-804"
+  },
+  {
+    "words": [
+      "coriander"
+    ],
+    "code": "13-888"
+  },
+  {
+    "words": [
+      "pea",
+      "peas"
+    ],
+    "code": "13-527"
+  },
+  {
+    "words": [
+      "green bean",
+      "green beans"
+    ],
+    "code": "13-514"
+  },
+  {
+    "words": [
+      "coconut milk"
+    ],
+    "code": "14-889"
+  },
+  {
+    "words": [
+      "soya milk",
+      "soy milk"
+    ],
+    "code": "12-524"
+  }
+]
