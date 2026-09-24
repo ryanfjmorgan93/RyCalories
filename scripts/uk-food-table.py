@@ -401,11 +401,26 @@ def main() -> None:
     if duplicate_codes:
         # A genuine data-quality issue in the 2021 CoFID edition, not a parsing bug: two distinct
         # foods share Food Code 13-669 ("Aubergine, flesh and skin, roasted in rapeseed oil" and
-        # "Watercress, raw"). Both rows are kept faithfully — this script must not silently alter
-        # published source data — but no alias below points at a duplicated code, since `code` is
-        # meant to identify one food.
-        print(f"NOTE: {len(duplicate_codes)} Food Code(s) are shared by more than one row, kept "
-              f"as-is: {duplicate_codes}", file=sys.stderr)
+        # "Watercress, raw"). `code` is meant to identify exactly one food — every lookup in the
+        # app (matchAlias, the review screen's source line) resolves a code back to a row with a
+        # first-match `find`, so leaving two rows on the same code makes that lookup pick whichever
+        # row happens to sort first, silently mislabelling the other. `foods.sort()` above is a
+        # STABLE sort, so `rows` here is still in the source sheet's own original order — the first
+        # row keeps its real CoFID code; every later row sharing it is suffixed ("13-669#2", …) so
+        # each committed row is unique. No alias below points at a duplicated code (checked below),
+        # so this can never change which food an alias resolves to.
+        for code, rows in sorted(duplicate_codes.items()):
+            for i, food in enumerate(rows[1:], start=2):
+                new_code = f"{code}#{i}"
+                print(f"NOTE: Food Code {code!r} is shared by {len(rows)} rows in the source "
+                      f"sheet ({', '.join(r['name'] for r in rows)!r}); kept on {rows[0]['name']!r}, "
+                      f"{food['name']!r} given the unique code {new_code!r}.", file=sys.stderr)
+                food["code"] = new_code
+
+    all_codes = [food["code"] for food in foods]
+    if len(all_codes) != len(set(all_codes)):
+        raise SystemExit("Food Codes are still not unique after de-duplication — a suffixed code "
+                          "must have collided with a real one")
 
     for alias in ALIASES:
         rows = foods_by_code.get(alias["code"])

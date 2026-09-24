@@ -110,6 +110,20 @@ describe('what is worth remembering', () => {
   it('has no unitGrams when the amount was not a count', () => {
     expect(memoryFrom(item())!.unitGrams).toBeUndefined();
   });
+
+  it('omits typicalGrams when told the weight is not a portion (a recipe ingredient\'s batch quantity)', () => {
+    // 900 g of mince for a whole batch — not anyone's single serving.
+    const m = memoryFrom(item({ name: 'Beef mince', nutrition: fromPer100({ kcal: 250, protein: 26, carbs: 0, fat: 17 }, 900) }), undefined, { portion: false })!;
+    expect(m).not.toBeNull();
+    expect(m.typicalGrams).toBeUndefined();
+    expect(m.per100.kcal).toBe(250); // the per-100g fact is still remembered
+  });
+
+  it('still remembers unitGrams when portion is withheld — a unit weight is a fact about the food, not a portion', () => {
+    const m = memoryFrom(item({ name: 'Eggs', nutrition: fromPer100({ kcal: 131, protein: 12.6, carbs: 0.8, fat: 9.5 }, 900) }), { count: 18, unitGrams: 50 }, { portion: false })!;
+    expect(m.typicalGrams).toBeUndefined();
+    expect(m.unitGrams).toBe(50);
+  });
 });
 
 describe('folding a new logging into what is remembered', () => {
@@ -171,6 +185,17 @@ describe('folding a new logging into what is remembered', () => {
     const incoming = memoryFrom(item({ source: 'user' }))!; // no unit this time — typed in grams
     const merged = mergeMemory(existing, incoming, at);
     expect(merged.unitGrams).toBe(55);
+  });
+
+  it('keeps an existing typicalGrams untouched when the incoming memory carries none (a recipe batch save)', () => {
+    // A real single-serving log of 150 g beef mince, already remembered — then a "Family chilli"
+    // recipe is saved with 900 g of the same mince, told not to teach a portion (see memoryFrom's
+    // `{ portion: false }`). The batch total must never overwrite the real portion.
+    const existing = memory({ key: 'n:beef mince', name: 'Beef mince', typicalGrams: 150 });
+    const incoming = memoryFrom(item({ name: 'Beef mince', nutrition: fromPer100({ kcal: 250, protein: 26, carbs: 0, fat: 17 }, 900) }), undefined, { portion: false })!;
+    expect(incoming.typicalGrams).toBeUndefined(); // sanity: nothing to overwrite with
+    const merged = mergeMemory(existing, incoming, at);
+    expect(merged.typicalGrams).toBe(150);
   });
 });
 

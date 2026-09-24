@@ -43,8 +43,19 @@ export function RecipePickerSheet({
     setSelected(null);
   };
 
+  // `selected` picks which step this sheet is on — it does not itself depend on `open`. Add
+  // doesn't call `close()` (the caller decides what happens next: an existing meal logs
+  // straight away, an unsaved one just appends to local state), so it has to clear `selected`
+  // itself; without this, the share step for the just-added recipe stayed mounted — and its own
+  // Sheet is unconditionally open — forever after, blocking the rest of the screen with its
+  // backdrop even once the caller had already set `open` back to false.
+  const handleAdd = (recipe: Recipe, share: ShareInput) => {
+    setSelected(null);
+    onAdd(recipe, share);
+  };
+
   if (selected) {
-    return <ShareStep recipe={selected} onBack={() => setSelected(null)} onClose={close} onAdd={onAdd} />;
+    return <ShareStep recipe={selected} onBack={() => setSelected(null)} onClose={close} onAdd={handleAdd} />;
   }
 
   const q = normalise(query);

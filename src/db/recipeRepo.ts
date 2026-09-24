@@ -74,21 +74,30 @@ export async function deleteRecipe(id: string): Promise<void> {
  * Teach FoodMemory every ingredient's per-100g figures and, for a count-style amount, its unit
  * weight — saving a recipe with "3 eggs" at 50 g each creates or updates a FoodMemory row carrying
  * `unitGrams: 50` and `unitLabel: 'egg'`, via the same `rememberFood` a logged meal item uses.
- * Best-effort per ingredient: one bad row must not lose the memory of the others, and none of this
- * can undo the recipe save that already committed.
+ *
+ * NEVER the portion weight: `i.grams` is the resolved total for the WHOLE recipe (a batch of 900 g
+ * mince for six portions, never a single serving — see `RecipeIngredient`'s doc comment), so it is
+ * remembered with `{ portion: false }`. That is not "divide by portionsMade" either — a per-portion
+ * share of an ingredient (150 g of mince in one-sixth of the chilli) still is not a portion of that
+ * food eaten on its own; only a real logged serving is. Best-effort per ingredient: one bad row
+ * must not lose the memory of the others, and none of this can undo the recipe save that already
+ * committed.
  */
 async function rememberIngredients(ings: RecipeIngredient[]): Promise<void> {
   for (const i of ings) {
     try {
-      await rememberFood({
-        name: i.name,
-        portion: `${i.grams} g`,
-        ...(i.brand ? { brand: i.brand } : {}),
-        ...(i.product ? { product: i.product } : {}),
-        source: i.source,
-        nutrition: fromPer100(i.per100, i.grams),
-        ...(i.unit ? { unit: i.unit } : {}),
-      });
+      await rememberFood(
+        {
+          name: i.name,
+          portion: `${i.grams} g`,
+          ...(i.brand ? { brand: i.brand } : {}),
+          ...(i.product ? { product: i.product } : {}),
+          source: i.source,
+          nutrition: fromPer100(i.per100, i.grams),
+          ...(i.unit ? { unit: i.unit } : {}),
+        },
+        { portion: false },
+      );
     } catch {
       /* best-effort, per ingredient — see doc comment above */
     }

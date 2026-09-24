@@ -17,7 +17,7 @@ import type { Recipe, RecipeIngredient } from '@/domain/types';
 import { describeAnalyzeMealError, Nano } from '@/state/nano';
 import { useAssistant } from '@/state/assistant';
 import { deleteMealPhoto, preparePhoto, sweepMealPhotos } from '@/state/mealPhoto';
-import { useRecipe } from '@/ui/hooks';
+import { useRecipe, useSettings } from '@/ui/hooks';
 import { BarcodeScanner } from '@/ui/BarcodeScanner';
 import { Button } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row } from '@/ui/components/Card';
@@ -149,11 +149,15 @@ function QuestionCardBody({
   const [editingUnitGrams, setEditingUnitGrams] = useState(false);
   const [typingFigures, setTypingFigures] = useState(false);
   const ticketRef = useRef(0);
+  // "Off means off: no request is made at all, not merely hidden" — the same rule FoodItemSheet
+  // applies to its own Scan barcode / Look up the label buttons.
+  const lookupEnabled = useSettings()?.productLookup !== false;
 
   const gap = ingredientGap(ingredient);
 
   const onScanCode = async (code: string) => {
     setScannerOpen(false);
+    if (!lookupEnabled) return;
     const ticket = (ticketRef.current += 1);
     const result = await lookupBarcode(code);
     if (ticket !== ticketRef.current) return;
@@ -185,15 +189,20 @@ function QuestionCardBody({
 
         {gap === 'figures' ? (
           <>
-            <div className="grid grid-cols-3 gap-2">
+            <div className={lookupEnabled ? 'grid grid-cols-2 gap-2' : 'grid grid-cols-3 gap-2'}>
               <Button size="md" variant="outline" onClick={onPick} data-testid="question-pick">
                 Pick a food
               </Button>
-              <Button size="md" variant="outline" onClick={() => setScannerOpen(true)} data-testid="question-scan">
-                Scan pack
-              </Button>
+              {lookupEnabled && (
+                <Button size="md" variant="outline" onClick={() => setScannerOpen(true)} data-testid="question-scan">
+                  Scan pack
+                </Button>
+              )}
               <Button size="md" variant={typingFigures ? 'secondary' : 'outline'} onClick={() => setTypingFigures((v) => !v)} data-testid="question-type-figures">
                 Type figures
+              </Button>
+              <Button size="md" variant="outline" onClick={onRemove} data-testid="question-remove">
+                Not in it
               </Button>
             </div>
             {typingFigures && (
@@ -254,10 +263,12 @@ function QuestionCardBody({
               </Field>
             )}
 
-            <div className="grid grid-cols-3 gap-2">
-              <Button size="md" variant="outline" onClick={() => setScannerOpen(true)} data-testid="question-scan">
-                Scan pack
-              </Button>
+            <div className={lookupEnabled ? 'grid grid-cols-3 gap-2' : 'grid grid-cols-2 gap-2'}>
+              {lookupEnabled && (
+                <Button size="md" variant="outline" onClick={() => setScannerOpen(true)} data-testid="question-scan">
+                  Scan pack
+                </Button>
+              )}
               <Button size="md" variant="outline" onClick={onPick} data-testid="question-change">
                 Change food
               </Button>
@@ -296,6 +307,8 @@ function IngredientPickerSheet({
   const [typingFigures, setTypingFigures] = useState(false);
   const [manualName, setManualName] = useState('');
   const [manualPer100, setManualPer100] = useState<Macros>({ kcal: NaN, protein: NaN, carbs: NaN, fat: NaN });
+  // "Off means off: no request is made at all, not merely hidden" — see QuestionCardBody's own.
+  const lookupEnabled = useSettings()?.productLookup !== false;
 
   useEffect(() => {
     if (open) return;
@@ -315,6 +328,7 @@ function IngredientPickerSheet({
 
   const onScanCode = async (code: string) => {
     setScannerOpen(false);
+    if (!lookupEnabled) return;
     const result = await lookupBarcode(code);
     if (!result.label) return;
     const candidate: IngredientCandidate = {
@@ -352,10 +366,12 @@ function IngredientPickerSheet({
         )}
         {query.trim() && results.length === 0 && <div className="px-1 text-sm text-muted">No matches.</div>}
 
-        <div className="grid grid-cols-2 gap-3">
-          <Button size="md" variant="outline" full onClick={() => setScannerOpen(true)} data-testid="picker-scan">
-            Scan a pack
-          </Button>
+        <div className={lookupEnabled ? 'grid grid-cols-2 gap-3' : 'grid gap-3'}>
+          {lookupEnabled && (
+            <Button size="md" variant="outline" full onClick={() => setScannerOpen(true)} data-testid="picker-scan">
+              Scan a pack
+            </Button>
+          )}
           <Button size="md" variant={typingFigures ? 'secondary' : 'outline'} full onClick={() => setTypingFigures((v) => !v)} data-testid="picker-type-figures">
             Type figures
           </Button>
@@ -450,7 +466,10 @@ export function RecipeBuilderScreen() {
       const prepared = await preparePhoto(file);
       path = prepared.path;
       if (ticket !== ticketRef.current) return;
-      const { text } = await Nano.analyzeMeal({ path: prepared.path, system: MEAL_PHOTO_SYSTEM, prompt: MEAL_PHOTO_PROMPT, temperature: 0.2, maxOutputTokens: 256 });
+      // The native plugin needs the absolute file:// URI (`prepared.uri`), not the Directory.Cache-
+      // relative `path` — that one is only meaningful to further Capacitor Filesystem calls (see
+      // `deleteMealPhoto` below, which correctly keeps using it).
+      const { text } = await Nano.analyzeMeal({ path: prepared.uri, system: MEAL_PHOTO_SYSTEM, prompt: MEAL_PHOTO_PROMPT, temperature: 0.2, maxOutputTokens: 256 });
       if (ticket !== ticketRef.current) return;
       const analysis = parseMealAnalysis(text);
       if (analysis.ingredients.length === 0) {
@@ -656,12 +675,14 @@ export function RecipeBuilderScreen() {
               <TextInput value={name} onChange={setName} placeholder="Recipe name" testId="recipe-name" />
               <div className="h-4" />
 
-              {recogniseNote?.kind === 'none' && (
+              {/* Describes the recognition attempt, not the recipe — once the user has added an
+                  ingredient by hand, the recipe is no longer "nothing recognised". */}
+              {recogniseNote?.kind === 'none' && ingredients.length === 0 && (
                 <div className="pb-3 text-sm text-muted" data-testid="recognise-none">
                   Nothing recognised.
                 </div>
               )}
-              {recogniseNote?.kind === 'error' && (
+              {recogniseNote?.kind === 'error' && ingredients.length === 0 && (
                 <div className="pb-3 text-sm text-muted" data-testid="recognise-error">
                   {recogniseNote.detail}
                 </div>
