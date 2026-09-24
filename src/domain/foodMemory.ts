@@ -51,15 +51,23 @@ export function memoryKey(item: Pick<MealItem, 'name' | 'brand' | 'product'>): s
  * eggs" at 50 g each — so a later recipe or the quick-add flow can offer "how many?" instead of
  * "how many grams?" next time. `unit.count` only guards against a nonsensical (zero or negative)
  * input; the number actually stored is `unit.unitGrams`, grams per one unit.
+ *
+ * `opts.portion` defaults to true. Pass `{ portion: false }` when `item`'s weight is not a portion
+ * anyone ate — a recipe ingredient's `grams` is the WHOLE recipe's quantity (900 g of mince for a
+ * batch chilli, never a single serving), so a recipe save must not teach `typicalGrams` from it: a
+ * later plain log of "Beef mince" would then pre-fill the whole batch. The per-100g figures and
+ * unit weight are still genuine facts about the food either way, so they are always remembered.
  */
 export function memoryFrom(
   item: Pick<MealItem, 'name' | 'brand' | 'product' | 'source' | 'nutrition'>,
   unit?: { count: number; unitGrams: number; label?: string; plural?: string },
+  opts?: { portion?: boolean },
 ): Omit<FoodMemory, 'id' | 'timesUsed' | 'lastUsedAt'> | null {
   const grams = gramsOf(item.nutrition);
   if (grams === null || grams <= 0) return null;
   const per100 = perHundred(item.nutrition);
   if (!per100) return null;
+  const rememberPortion = opts?.portion !== false;
   const validUnit = unit && Number.isFinite(unit.count) && unit.count > 0 && Number.isFinite(unit.unitGrams) && unit.unitGrams > 0;
   return {
     key: memoryKey(item),
@@ -67,7 +75,7 @@ export function memoryFrom(
     ...(item.brand ? { brand: item.brand } : {}),
     ...(item.product ? { product: item.product } : {}),
     per100,
-    typicalGrams: grams,
+    ...(rememberPortion ? { typicalGrams: grams } : {}),
     ...(validUnit ? { unitGrams: unit.unitGrams } : {}),
     ...(validUnit && unit.label ? { unitLabel: unit.label, unitPlural: unit.plural || unit.label } : {}),
     source: item.source,

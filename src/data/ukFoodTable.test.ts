@@ -41,6 +41,19 @@ describe('ukFoodTable', () => {
     expect(codes).toEqual([...codes].sort());
   });
 
+  it('has a unique code for every food in the whole table', () => {
+    // Two source-sheet rows can share a raw CoFID code (13-669: an aubergine and a watercress row
+    // in the 2021 edition) — the generator script disambiguates every later duplicate with a
+    // "#2"/"#3" suffix so a code-based lookup (matchAlias, the review screen's source line) always
+    // resolves to exactly one food. This is a whole-table check, unlike the alias-only ambiguity
+    // test above, so a food that is never aliased is still covered.
+    const seen = new Map<string, string>();
+    for (const food of foods) {
+      expect(seen.has(food.code), `code ${food.code} is used by both "${seen.get(food.code)}" and "${food.name}"`).toBe(false);
+      seen.set(food.code, food.name);
+    }
+  });
+
   it('has between 80 and 120 curated aliases', () => {
     expect(aliases.length).toBeGreaterThanOrEqual(80);
     expect(aliases.length).toBeLessThanOrEqual(120);

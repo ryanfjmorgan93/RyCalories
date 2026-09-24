@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { clickIfPresent, fresh } from './fresh';
+import { clickIfPresent, fresh, logOneSet } from './fresh';
 
 /**
  * The set table (Phase 3C): ghosts, the completion moment and its collapse, extras only via the
@@ -53,12 +53,16 @@ async function waitForCompletionCollapse(page: Page) {
   await expect(page.getByTestId('exercise-complete')).toHaveCount(0);
 }
 
+/**
+ * Log four sets, waiting for each one to actually be recorded before typing the next — via
+ * `logOneSet` (e2e/fresh.ts), the same fix already applied to design-shots.spec.ts's identical
+ * helper (see its history): filling the next set's inputs before the live-query re-render lands
+ * types into the row that is still live, so the next click logs whatever faint values the new row
+ * starts with. That is how a loop of four 90 × 8 sets came out as 90 × 8 followed by 65 × 8, 8, 6.
+ */
 async function logFour(page: Page, card: import('@playwright/test').Locator, weight: number, reps: number) {
   for (let i = 0; i < 4; i++) {
-    await card.getByTestId('weight-input').fill(String(weight));
-    await card.getByTestId('reps-input').fill(String(reps));
-    await card.getByTestId('set-done').click();
-    await skipRest(page);
+    await logOneSet(page, card, weight, reps);
   }
 }
 

@@ -146,6 +146,40 @@ describe('saving a recipe', () => {
     await saveRecipe({ name: 'Omelette', ingredients: [eggs(), cheddar()], portionsMade: 1 });
     expect((await suggestFoods('')).map((f) => f.name).sort()).toEqual(['Cheddar', 'Eggs']);
   });
+
+  it('never teaches typicalGrams from an ingredient\'s batch weight — a memory first created by a recipe save has none', async () => {
+    // 900 g of mince for the whole "Family chilli", not a portion anyone ate.
+    const mince: RecipeIngredient = {
+      id: 'ri-mince',
+      name: 'Beef mince',
+      source: 'table',
+      grams: 900,
+      per100: { kcal: 250, protein: 26, carbs: 0, fat: 17 },
+    };
+    await saveRecipe({ name: 'Family chilli', ingredients: [mince], portionsMade: 6 });
+    const remembered = (await suggestFoods('beef mince'))[0]!;
+    expect(remembered.per100).toEqual(mince.per100); // the per-100g figures are still learned
+    expect(remembered.typicalGrams).toBeUndefined();
+  });
+
+  it('does not overwrite an existing typicalGrams (from a real logged portion) with a recipe\'s batch weight', async () => {
+    // A single 150 g serving of beef mince, logged plainly before this recipe ever existed.
+    await addMeal({ name: 'Fry-up', date: TODAY }, [
+      { name: 'Beef mince', portion: '150 g', source: 'user', nutrition: { basis: 'weighed', grams: 150, per100: { kcal: 250, protein: 26, carbs: 0, fat: 17 } } },
+    ]);
+    expect((await suggestFoods('beef mince'))[0]!.typicalGrams).toBe(150);
+
+    const mince: RecipeIngredient = {
+      id: 'ri-mince',
+      name: 'Beef mince',
+      source: 'table',
+      grams: 900,
+      per100: { kcal: 250, protein: 26, carbs: 0, fat: 17 },
+    };
+    await saveRecipe({ name: 'Family chilli', ingredients: [mince], portionsMade: 6 });
+
+    expect((await suggestFoods('beef mince'))[0]!.typicalGrams).toBe(150); // untouched by the 900 g batch
+  });
 });
 
 describe('deleting a recipe', () => {

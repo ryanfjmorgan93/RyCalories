@@ -168,14 +168,17 @@ export async function addMeal(meal: NewMeal, items: NewMealItem[]): Promise<stri
  *
  * Best-effort by design: a failure here must never take a meal down with it. Logging the food is
  * the user's intent; remembering it is a convenience the app adds on top.
+ *
+ * `opts.portion` defaults to true; pass `{ portion: false }` when `item.nutrition`'s weight is not
+ * a portion anyone ate (a recipe's batch quantity) — see `memoryFrom`'s doc comment.
  */
-export async function rememberFood(item: NewMealItem | MealItem): Promise<void> {
+export async function rememberFood(item: NewMealItem | MealItem, opts?: { portion?: boolean }): Promise<void> {
   // NewMealItem's source is optional and defaults the same way toItemRow does, so a food added
   // without one is remembered as the user's own rather than falling through to the least trusted.
   // `unit` only ever exists on a NewMealItem (never persisted on the MealItem row — see the field's
   // doc comment), so a remembered row and a freshly logged one both flow through the same call.
   const unit = 'unit' in item ? item.unit : undefined;
-  const next = memoryFrom({ ...item, source: item.source ?? 'user' }, unit);
+  const next = memoryFrom({ ...item, source: item.source ?? 'user' }, unit, opts);
   if (!next) return;
   const at = nowIso();
   try {
