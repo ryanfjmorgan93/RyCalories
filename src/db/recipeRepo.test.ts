@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { addMeal, itemsForMeal, mealsOnDay, suggestFoods } from './foodRepo';
 import { db } from './db';
-import { deleteRecipe, getRecipe, listRecipes, logShare, saveRecipe } from './recipeRepo';
+import { deleteRecipe, getRecipe, listRecipes, logShare, saveRecipe, shareItem } from './recipeRepo';
 import { wipeAll } from './repo';
 import { macrosOf } from '@/domain/food';
 import { toDateKey } from '@/domain/dates';
-import type { RecipeIngredient } from '@/domain/types';
+import type { Recipe, RecipeIngredient } from '@/domain/types';
 
 const TODAY = toDateKey();
 
@@ -37,8 +37,47 @@ function unfinished(): RecipeIngredient {
   return { id: 'ri-unfinished', name: 'Bacon', source: 'user', grams: 0, per100: { kcal: NaN, protein: NaN, carbs: NaN, fat: NaN } };
 }
 
+/** A plain in-memory Recipe — no database involved, for shareItem's pure tests. */
+function recipe(overrides: Partial<Recipe> = {}): Recipe {
+  return {
+    id: 'r1',
+    name: 'Omelette',
+    ingredients: [eggs(), cheddar()],
+    portionsMade: 2,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
 beforeEach(async () => {
   await wipeAll();
+});
+
+describe('shareItem', () => {
+  it('is the exact item logShare writes — same name, portion, macros, source and recipeId', () => {
+    const r = recipe();
+    const item = shareItem(r, { mode: 'portions', made: 2, eaten: 1 });
+    expect(item.name).toBe('Omelette');
+    expect(item.portion).toBe('1 of 2 portions');
+    expect(item.recipeId).toBe('r1');
+    expect(item.source).toBe('table'); // both ingredients are source 'table'
+    // Eggs 150g @ 143 kcal/100g = 214.5; cheddar 100g @ 416 kcal/100g = 416. Half of 630.5.
+    expect(macrosOf(item.nutrition).kcal).toBeCloseTo(315.25, 6);
+  });
+
+  it('needs no database at all — usable on MealEditScreen\'s unsaved NewMeal', () => {
+    const r = recipe({ id: 'unsaved-recipe' });
+    const item = shareItem(r, { mode: 'weigh', dishGrams: 900, plateGrams: 300 });
+    expect(item.portion).toBe('300 g of 900 g');
+    expect(item.recipeId).toBe('unsaved-recipe');
+  });
+
+  it('throws for a zero or invalid share, the same as logShare does', () => {
+    const r = recipe();
+    expect(() => shareItem(r, { mode: 'portions', made: 2, eaten: 0 })).toThrow();
+    expect(() => shareItem(r, { mode: 'portions', made: 0, eaten: 1 })).toThrow();
+  });
 });
 
 describe('saving a recipe', () => {

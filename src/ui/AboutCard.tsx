@@ -1,11 +1,16 @@
 import { ATTRIBUTIONS } from '@/data/exerciseDemos';
+import { UK_FOOD_TABLE_ATTRIBUTION } from '@/data/ukFoodTable';
 import { Card, Divider } from './components/Card';
+
+/** The generated exercise-media attributions, plus the bundled UK food table's — appended, never
+ * hand-edited into `exerciseDemos.ts` itself (see `src/data/ukFoodTable.ts`'s doc comment). */
+const ALL_ATTRIBUTIONS = [...ATTRIBUTIONS, UK_FOOD_TABLE_ATTRIBUTION];
 
 /** Third-party attribution and the one fact about what this app sends off the device. */
 export function AboutCard() {
   return (
     <Card className="px-4" data-testid="about-card">
-      {ATTRIBUTIONS.map((a, i) => (
+      {ALL_ATTRIBUTIONS.map((a, i) => (
         <div key={a.name}>
           {i > 0 && <Divider />}
           <div className="py-3">

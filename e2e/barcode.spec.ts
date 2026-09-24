@@ -1,5 +1,5 @@
-import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
-import { fresh } from './fresh';
+import { expect, test, type Page } from '@playwright/test';
+import { denyCamera, fresh } from './fresh';
 import { FIXTURE_CODE } from './fixtures/ean13';
 
 /**
@@ -130,28 +130,6 @@ async function openNewFoodSheet(page: Page): Promise<void> {
   await page.goto('/food/new');
   await page.getByTestId('meal-name').fill('Snack');
   await page.getByTestId('empty-add-food').click();
-}
-
-/**
- * Actually deny the camera, rather than merely un-granting it: `context.clearPermissions()`
- * leaves a site's camera permission in the "ask" state, which under browser automation (nothing
- * can answer a real prompt) leaves getUserMedia's promise pending forever rather than rejecting
- * it — so the fake camera would still end up live, racing the manual path exactly as before.
- * `Browser.setPermission` with `denied`, scoped to this test's own browser context, is the one
- * thing that makes getUserMedia reject outright, the same as it would for a user who has actually
- * blocked the camera for this site.
- */
-async function denyCamera(browser: Browser, context: BrowserContext, page: Page): Promise<void> {
-  const pageSession = await context.newCDPSession(page);
-  const { targetInfo } = await pageSession.send('Target.getTargetInfo');
-
-  const browserSession = await browser.newBrowserCDPSession();
-  await browserSession.send('Browser.setPermission', {
-    permission: { name: 'camera' },
-    setting: 'denied',
-    origin: new URL(page.url()).origin,
-    browserContextId: targetInfo.browserContextId,
-  });
 }
 
 test.describe('barcode scanning', () => {

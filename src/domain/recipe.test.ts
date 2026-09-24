@@ -12,8 +12,10 @@ import {
   shareFraction,
   shareLabel,
   shareNutrition,
+  toIngredient,
 } from './recipe';
 import { ZERO, type Macros } from './food';
+import type { IngredientCandidate } from './ingredientMatch';
 import type { RecipeIngredient } from './types';
 
 const EGG: Macros = { kcal: 131, protein: 12.6, carbs: 0.8, fat: 9.5 };
@@ -235,6 +237,58 @@ describe('ingredientGap', () => {
     expect(recipeIsComplete(ings)).toBe(false);
     expect(gapsCount([ing()])).toBe(0);
     expect(recipeIsComplete([ing()])).toBe(true);
+  });
+});
+
+describe('toIngredient', () => {
+  it('starts at grams 0 and all-NaN figures for a name nothing matched', () => {
+    const i = toIngredient(null, 'bacon', 'id-1');
+    expect(i).toEqual({ id: 'id-1', name: 'Bacon', source: 'user', grams: 0, per100: { kcal: NaN, protein: NaN, carbs: NaN, fat: NaN } });
+  });
+
+  it('capitalises only the first letter of the typed or recognised name', () => {
+    expect(toIngredient(null, 'bacon rashers', 'id-1').name).toBe('Bacon rashers');
+    expect(toIngredient(null, '  egg', 'id-1').name).toBe('Egg');
+  });
+
+  it('takes a table candidate\'s figures and foodKey, but keeps the typed name, not the table row\'s', () => {
+    const candidate: IngredientCandidate = { key: 'table:17-001', name: 'Eggs, chicken, whole, raw', per100: EGG, source: 'table' };
+    const i = toIngredient(candidate, 'egg', 'id-1');
+    expect(i.name).toBe('Egg');
+    expect(i.foodKey).toBe('table:17-001');
+    expect(i.per100).toEqual(EGG);
+    expect(i.source).toBe('table');
+    expect(i.grams).toBe(0);
+    expect(i.brand).toBeUndefined();
+    expect(i.product).toBeUndefined();
+  });
+
+  it('builds a count-style unit from the candidate\'s, at count 0', () => {
+    const candidate: IngredientCandidate = { key: 'table:17-001', name: 'Eggs, chicken, whole, raw', per100: EGG, source: 'table', unit: { label: 'egg', plural: 'eggs', grams: 50 } };
+    const i = toIngredient(candidate, 'eggs', 'id-1');
+    expect(i.unit).toEqual({ count: 0, unitGrams: 50, label: 'egg', plural: 'eggs' });
+  });
+
+  it('has no unit when the candidate has none', () => {
+    const candidate: IngredientCandidate = { key: 'table:12-001', name: 'Cheese, Cheddar, English', per100: { kcal: 416, protein: 25.4, carbs: 0.1, fat: 34.4 }, source: 'table' };
+    expect(toIngredient(candidate, 'cheddar', 'id-1').unit).toBeUndefined();
+  });
+
+  it('keeps a memory candidate\'s own name, brand and product, instead of the typed name', () => {
+    const candidate: IngredientCandidate = {
+      key: 'memory:p:tesco back bacon',
+      name: 'Bacon',
+      per100: { kcal: 230, protein: 17, carbs: 0.5, fat: 18 },
+      source: 'label',
+      brand: 'Tesco',
+      product: 'Back Bacon',
+    };
+    const i = toIngredient(candidate, 'streaky bacon rashers', 'id-1');
+    expect(i.name).toBe('Bacon'); // the memory's own name, not "Streaky bacon rashers"
+    expect(i.brand).toBe('Tesco');
+    expect(i.product).toBe('Back Bacon');
+    expect(i.source).toBe('label'); // the memory's own source rides along too
+    expect(i.foodKey).toBe('memory:p:tesco back bacon');
   });
 });
 

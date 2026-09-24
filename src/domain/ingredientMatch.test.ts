@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeByFood, matchIngredient, type FoodAlias, type IngredientCandidate, type TableFood } from './ingredientMatch';
+import { mergeByFood, matchIngredient, searchFoods, type FoodAlias, type IngredientCandidate, type TableFood } from './ingredientMatch';
 import type { Macros } from './food';
 import type { FoodMemory } from './types';
 
@@ -174,6 +174,62 @@ describe('token search over the table', () => {
     const a = matchIngredient('bacon rashers raw', { aliases: [], foods: FOODS, memories: [] });
     const b = matchIngredient('bacon rashers raw', { aliases: [], foods: reversed, memories: [] });
     expect(a.best?.key).toBe(b.best?.key);
+  });
+});
+
+describe('searchFoods', () => {
+  it('ranks a matching memory ahead of table matches for the same query', () => {
+    const mem = memory({ id: 'm1', key: 'n:bacon rashers', name: 'Bacon rashers', per100: BACON });
+    const results = searchFoods('bacon rashers', { foods: FOODS, memories: [mem] });
+    expect(results[0]!.key).toBe('memory:n:bacon rashers');
+    // Both table "Bacon rashers" rows still show up, after the memory.
+    expect(results.filter((r) => r.key.startsWith('table:')).length).toBeGreaterThan(0);
+  });
+
+  it('falls back to the table when no memory matches', () => {
+    const results = searchFoods('cheddar cheese', { foods: FOODS, memories: [] });
+    expect(results[0]!.key).toBe('table:12-001');
+  });
+
+  it('returns nothing for a query that matches neither memory nor table', () => {
+    expect(searchFoods('kryptonite', { foods: FOODS, memories: [] })).toEqual([]);
+  });
+
+  it('an empty query is the memory ranking\'s own "most eaten, most recently" default, not the whole table', () => {
+    const mem = memory({ id: 'm1', key: 'n:home chilli' });
+    const results = searchFoods('', { foods: FOODS, memories: [mem] });
+    expect(results).toEqual([expect.objectContaining({ key: 'memory:n:home chilli' })]);
+  });
+
+  it('never lists the same candidate twice', () => {
+    const mem = memory({ id: 'm1', key: 'n:bacon rashers', name: 'Bacon rashers' });
+    const results = searchFoods('bacon rashers', { foods: FOODS, memories: [mem] });
+    const keys = results.map((r) => r.key);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('honours the limit across memories and table results combined', () => {
+    const mem = memory({ id: 'm1', key: 'n:bacon rashers', name: 'Bacon rashers' });
+    const results = searchFoods('bacon rashers', { foods: FOODS, memories: [mem] }, 2);
+    expect(results).toHaveLength(2);
+  });
+
+  it('finds a food by its curated alias even when the bare word scores below the token threshold', () => {
+    // "egg" alone scores only 0.4 against "Eggs, chicken, whole, raw" (see the token-search
+    // describe block above) — well below the 0.5 threshold — so without the alias step a search
+    // box typing the single most common word for the most common ingredient would find nothing.
+    const results = searchFoods('egg', { foods: FOODS, memories: [], aliases: ALIASES });
+    expect(results.some((r) => r.key === 'table:17-001')).toBe(true);
+  });
+
+  it('omits the alias step when no aliases are given, rather than throwing', () => {
+    expect(() => searchFoods('egg', { foods: FOODS, memories: [] })).not.toThrow();
+  });
+
+  it('carries a remembered unit weight through on a memory result', () => {
+    const eggs = memory({ id: 'm1', key: 'n:egg', name: 'Egg', unitGrams: 55, unitLabel: 'egg', unitPlural: 'eggs' });
+    const results = searchFoods('egg', { foods: FOODS, memories: [eggs] });
+    expect(results[0]!.unit).toEqual({ label: 'egg', plural: 'eggs', grams: 55 });
   });
 });
 

@@ -81,7 +81,7 @@ export function FoodScreen() {
         <DayBody key={date} date={date} today={today} isToday={isToday} onMenu={setMenuFor} />
 
         <div className="h-4" />
-        <div className="grid grid-cols-[1fr_auto] gap-3">
+        <div className="grid grid-cols-[1fr_auto_auto] gap-3">
           <Button size="lg" variant="primary" full onClick={() => nav(`/food/new?date=${date}`)} data-testid="add-meal-button">
             Add meal
           </Button>
@@ -89,6 +89,9 @@ export function FoodScreen() {
               taps; this is two. */}
           <Button size="lg" variant="secondary" onClick={() => setRepeatOpen(true)} data-testid="repeat-meal">
             Repeat
+          </Button>
+          <Button size="lg" variant="secondary" onClick={() => nav(`/food/recipes?date=${date}`)} data-testid="recipes-button">
+            Recipes
           </Button>
         </div>
         <div className="h-8" />
