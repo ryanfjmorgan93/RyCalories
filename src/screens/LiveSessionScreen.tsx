@@ -190,14 +190,29 @@ export function LiveSessionScreen() {
   const pendingFocusHandoffRef = useRef(false);
   const [focusClaimKey, setFocusClaimKey] = useState<string | null>(null);
   const prevCurrentKeyRef = useRef<string | null>(null);
+  // The latest committed `currentKey`, for the hand-off callback below, which runs from inside a
+  // card's async log handler rather than from a render.
+  const currentKeyRef = useRef<string | null>(currentKey);
   useEffect(() => {
+    currentKeyRef.current = currentKey;
     const prev = prevCurrentKeyRef.current;
     prevCurrentKeyRef.current = currentKey;
     if (prev === currentKey) return;
     if (pendingFocusHandoffRef.current && currentKey !== null) setFocusClaimKey(currentKey);
     pendingFocusHandoffRef.current = false;
   }, [currentKey]);
-  const handleCompletionFocusHandoff = useCallback(() => {
+  // `fromKey` is the slot whose card just finished. Normally `currentKey` is still held on it (the
+  // completion hold) and the hand-off waits for it to move on. But the card reports the hand-off
+  // only after its own write has returned, and with no hold to wait out (reduced motion) the live
+  // query can move `currentKey` on first; waiting for another change then waits for ever. So if it
+  // has already moved to another slot, that slot claims focus now.
+  const handleCompletionFocusHandoff = useCallback((fromKey: string) => {
+    const now = currentKeyRef.current;
+    if (now !== null && now !== fromKey) {
+      pendingFocusHandoffRef.current = false;
+      setFocusClaimKey(now);
+      return;
+    }
     pendingFocusHandoffRef.current = true;
   }, []);
   const handleFocusClaimed = useCallback(() => setFocusClaimKey(null), []);
@@ -278,7 +293,7 @@ export function LiveSessionScreen() {
                         onToggleGroupExpand={onToggleExpand}
                         claimFocus={slot.key === focusClaimKey}
                         onFocusClaimed={handleFocusClaimed}
-                        onCompletionFocusHandoff={handleCompletionFocusHandoff}
+                        onCompletionFocusHandoff={() => handleCompletionFocusHandoff(slot.key)}
                       />
                     ))}
                   </div>
@@ -298,7 +313,7 @@ export function LiveSessionScreen() {
                     onToggleGroupExpand={onToggleExpand}
                     claimFocus={firstSlot.key === focusClaimKey}
                     onFocusClaimed={handleFocusClaimed}
-                    onCompletionFocusHandoff={handleCompletionFocusHandoff}
+                    onCompletionFocusHandoff={() => handleCompletionFocusHandoff(firstSlot.key)}
                   />
                 )}
               </div>

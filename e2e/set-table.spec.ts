@@ -566,4 +566,21 @@ test.describe('keyboard focus through the completion moment', () => {
     const incline = page.getByTestId('exercise-card-Incline DB Press');
     await expect(incline.getByTestId('weight-input')).toBeFocused();
   });
+
+  // With no celebration to wait out, the next exercise can become current before the finished
+  // card has reported its hand-off (the report follows its own write). Focus must still arrive.
+  test('under reduced motion, focus still reaches the next exercise', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await fresh(page);
+    await page.getByTestId('start-Upper (Push)').click();
+    const bench = page.getByTestId('exercise-card-Bench Press (Barbell)');
+    for (let i = 0; i < 3; i++) await logOneSet(page, bench, 65, 8);
+    await bench.getByTestId('weight-input').fill('65');
+    await bench.getByTestId('reps-input').fill('8');
+    await bench.getByTestId('set-done').focus();
+    await page.keyboard.press('Enter');
+
+    const incline = page.getByTestId('exercise-card-Incline DB Press');
+    await expect(incline.getByTestId('weight-input')).toBeFocused();
+  });
 });
