@@ -1,6 +1,6 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
-import { clickIfPresent, fresh } from './fresh';
+import { clickIfPresent, fresh, logOneSet } from './fresh';
 import { FIXTURE_CODE } from './fixtures/ean13';
 
 /**
@@ -96,12 +96,7 @@ const DINNER = [
 async function logSets(page: Page, exercise: string, weight: number, reps: number[]) {
   const card = page.getByTestId(`exercise-card-${exercise}`);
   await expect(card).toBeVisible();
-  for (const r of reps) {
-    await card.getByTestId('weight-input').fill(String(weight));
-    await card.getByTestId('reps-input').fill(String(r));
-    await card.getByTestId('set-done').click();
-    await clickIfPresent(page.getByTestId('rest-timer').getByRole('button', { name: 'Skip' }));
-  }
+  for (const r of reps) await logOneSet(page, card, weight, r);
 }
 
 async function finishToSummary(page: Page) {
@@ -358,11 +353,7 @@ test('capture every screen for a design session', async ({ page, browser, contex
   // Log a clear PR on Bench Press (its all-time best in the seeded history is 75 kg) — Bench is
   // the first member of the superset group, so logging on it alone never starts the rest timer
   // (that only happens once the last member, Incline DB Press, gets a set).
-  for (let i = 0; i < 4; i++) {
-    await benchCard.getByTestId('weight-input').fill('90');
-    await benchCard.getByTestId('reps-input').fill('8');
-    await benchCard.getByTestId('set-done').click();
-  }
+  for (let i = 0; i < 4; i++) await logOneSet(page, benchCard, 90, 8);
 
   // 25 Summary with a PR chip
   await page.getByTestId('finish-session').click();

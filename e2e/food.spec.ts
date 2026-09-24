@@ -189,7 +189,7 @@ test.describe('nutrition', () => {
     // Singular: this line used to render "1 meals" regardless of count. Meals is the final
     // segment, so anchor to the end to tell "1 meal" apart from "1 meals".
     await expect(page.getByTestId('data-counts')).toHaveText(/· 1 meal$/);
-    await expect(page.getByTestId('db-version')).toHaveText('Database v2');
+    await expect(page.getByTestId('db-version')).toHaveText('Database v3');
   });
 
   test('a back-filled day reads in meal order, without a misleading time', async ({ page }) => {

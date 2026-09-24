@@ -132,6 +132,7 @@ function LoggedRowView({
     <button
       type="button"
       onClick={onClick}
+      data-testid="logged-row"
       className={`grid min-h-[46px] items-center gap-1.5 rounded-xl px-1 text-left active:bg-surface-2 ${
         isRecord ? 'bg-record/10' : 'bg-ok/10'
       }`}

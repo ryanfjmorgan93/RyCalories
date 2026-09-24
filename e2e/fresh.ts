@@ -49,6 +49,26 @@ export async function fresh(page: Page, ready = 'next-up'): Promise<void> {
  * is skipped and the test carries on past a step that never happened. That is how a modal sheet
  * came to be left open mid-test while the suite reported green.
  */
+/**
+ * Log one set on an exercise card and wait until it has actually been recorded.
+ *
+ * Clicking set-done starts an IndexedDB write; the table only moves on to the next row once the
+ * live query answers. Filling the next set's inputs before then types into the row that is still
+ * live, so the next click logs whatever faint values the new row starts with (this is how a loop of
+ * four 90 × 8 sets came out as 90 × 8 followed by 65 × 8, 8, 6). The positive signal is this set's
+ * own logged row appearing, or the card completing when this was its last target set. The baseline
+ * count is read before the click, so the wait cannot be satisfied by a row that already existed.
+ */
+export async function logOneSet(page: Page, card: Locator, weight: number, reps: number): Promise<void> {
+  const logged = card.getByTestId('logged-row');
+  const before = await logged.count();
+  await card.getByTestId('weight-input').fill(String(weight));
+  await card.getByTestId('reps-input').fill(String(reps));
+  await card.getByTestId('set-done').click();
+  await expect(logged.nth(before).or(card.getByTestId('exercise-complete')).or(card.getByTestId('verdict-line')).first()).toBeVisible();
+  await clickIfPresent(page.getByTestId('rest-timer').getByRole('button', { name: 'Skip' }), 300);
+}
+
 export async function clickIfPresent(locator: Locator, timeout = 1500): Promise<boolean> {
   try {
     await locator.waitFor({ state: 'visible', timeout });
