@@ -487,4 +487,28 @@ test('capture every screen for a design session', async ({ page, browser, contex
   await hamstrings.click({ position: { x: hsBox.width * 0.2, y: hsBox.height * 0.5 } });
   await expect(page.getByTestId('body-map-readout')).toContainText('hamstrings');
   await shot(page, 'progress-body-map-recency', { full: true });
+
+  // ---- Cooked meals: a recipe built from typed text, one ingredient at a time -----------------
+
+  // 35 Recipe builder — the question card
+  await page.goto('/food/recipes/new');
+  await page.getByTestId('recipe-type-it').click();
+  await page.getByTestId('recipe-typed-text').fill('3 eggs, 30g cheddar, 2 rashers bacon');
+  await page.getByTestId('recipe-use-typed').click();
+  await expect(page.getByTestId('question-name')).toHaveText('Eggs');
+  await shot(page, 'recipe-question-card');
+
+  // 36 Recipe builder — review + share, once every ingredient has an amount
+  await page.getByTestId('question-next').click(); // Eggs → Cheddar
+  await page.getByTestId('question-next').click(); // Cheddar → Bacon
+  await page.getByTestId('question-next').click(); // Bacon (last) → review
+  await page.getByTestId('recipe-name').fill('Omelette');
+  await expect(page.getByTestId('review-total-kcal')).toBeVisible();
+  await shot(page, 'recipe-review-share', { full: true });
+
+  // 37 Recipes list
+  await page.getByTestId('recipe-save').click();
+  await page.waitForURL(/\/food\/recipes$/);
+  await expect(page.getByTestId('recipe-row-Omelette')).toBeVisible();
+  await shot(page, 'recipes-list');
 });

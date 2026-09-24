@@ -6,10 +6,11 @@ import { calendarData, type CalendarData } from '@/db/calendarQueries';
 import { getMeal, loggedDays, mealsOnDay, recentMeals, suggestFoods, type MealWithItems } from '@/db/foodRepo';
 import { nextSessionPlan, type SessionPlan } from '@/db/planQueries';
 import { e1rmSeries, recentRecords, volumeSeries } from '@/db/recordsQueries';
+import { getRecipe, listRecipes } from '@/db/recipeRepo';
 import { exerciseHistory, getActiveSession, lastCompletedSession, recentSessions, routineItems, type RoutineItem } from '@/db/repo';
 import { muscleRecency, weeklySetsTable, type WeeklySetsRow } from '@/db/volumeQueries';
 import { toDateKey } from '@/domain/dates';
-import type { Exercise, FoodMemory, MuscleGroup, Routine, Session, Settings } from '@/domain/types';
+import type { Exercise, FoodMemory, MuscleGroup, Recipe, Routine, Session, Settings } from '@/domain/types';
 
 /** Live settings row (undefined while loading). */
 export function useSettings(): Settings | undefined {
@@ -145,6 +146,15 @@ export function useFoodSuggestions(query: string | null, limit = 6): FoodMemory[
 /** Distinct meals eaten recently, for repeating one onto `date`. */
 export function useRecentMeals(date: string, limit = 8): MealWithItems[] | undefined {
   return useLiveQuery(() => recentMeals(date, limit), [date, limit]);
+}
+
+/** Every saved recipe, newest-updated first. */
+export function useRecipes(): Recipe[] | undefined {
+  return useLiveQuery(() => listRecipes(), []);
+}
+
+export function useRecipe(id: string | undefined): Recipe | null | undefined {
+  return useLiveQuery(async () => (id ? ((await getRecipe(id)) ?? null) : null), [id]);
 }
 
 // ---------------------------------------------------------------------------

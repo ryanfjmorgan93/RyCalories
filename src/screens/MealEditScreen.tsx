@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { addItem, addMeal, deleteItem, deleteMeal, updateItem, updateMeal, sumItems, type NewMealItem } from '@/db/foodRepo';
+import { logShare, shareItem } from '@/db/recipeRepo';
 import { toDateKey } from '@/domain/dates';
 import { displayMacros, type Macros } from '@/domain/food';
 import { fmtDayKey, fmtGrams, fmtKcal } from '@/domain/format';
@@ -14,7 +15,18 @@ import { Confirm } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { PlusIcon, TopBar, TrashIcon } from '@/ui/components/TopBar';
 import { FoodItemSheet } from '@/ui/FoodItemSheet';
+import { RecipePickerSheet } from '@/ui/RecipePickerSheet';
 import { useMeal, useToday } from '@/ui/hooks';
+
+/** A plain book icon for "From a recipe" — distinct from the plus used for "Add food". */
+function RecipeBookIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 19.5V5.5C4 4.67 4.67 4 5.5 4H19v15H6.5A2.5 2.5 0 0 0 4 21.5" />
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H19" />
+    </svg>
+  );
+}
 
 export function MealEditScreen() {
   const { id } = useParams();
@@ -35,6 +47,7 @@ function NewMeal() {
   const [slot, setSlot] = useState<MealSlot | undefined>(defaultSlot());
   const [items, setItems] = useState<NewMealItem[]>([]);
   const [editing, setEditing] = useState<number | 'new' | null>(null);
+  const [recipePickerOpen, setRecipePickerOpen] = useState(false);
 
   const macros = items.reduce<Macros>(
     (acc, i) => {
@@ -68,9 +81,16 @@ function NewMeal() {
         subtitle={fmtDayKey(date, today, '')}
         back="/food"
         right={
-          <IconButton label="Add food" onClick={() => setEditing('new')} data-testid="add-food">
-            <PlusIcon />
-          </IconButton>
+          <div className="flex items-center">
+            {items.length === 0 && (
+              <IconButton label="From a recipe" onClick={() => setRecipePickerOpen(true)} data-testid="from-recipe">
+                <RecipeBookIcon />
+              </IconButton>
+            )}
+            <IconButton label="Add food" onClick={() => setEditing('new')} data-testid="add-food">
+              <PlusIcon />
+            </IconButton>
+          </div>
         }
       />
       <div className="px-4">
@@ -107,6 +127,16 @@ function NewMeal() {
           setEditing(null);
         }}
       />
+
+      <RecipePickerSheet
+        open={recipePickerOpen}
+        onClose={() => setRecipePickerOpen(false)}
+        onAdd={(recipe, share) => {
+          setItems((prev) => [...prev, shareItem(recipe, share)]);
+          setRecipePickerOpen(false);
+        }}
+        newRecipeHref={`/food/recipes/new?date=${date}`}
+      />
     </div>
   );
 }
@@ -118,6 +148,7 @@ function ExistingMeal({ id }: { id: string }) {
   const meal = useMeal(id);
   const [editing, setEditing] = useState<number | 'new' | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [recipePickerOpen, setRecipePickerOpen] = useState(false);
 
   if (meal === undefined) {
     return (
@@ -169,9 +200,14 @@ function ExistingMeal({ id }: { id: string }) {
         <div className="h-4" />
         <ItemList items={items} onEdit={(i) => setEditing(i)} onAdd={() => setEditing('new')} macros={sumItems(meal.items)} />
         <div className="h-4" />
-        <Button size="lg" variant="secondary" full onClick={() => setEditing('new')} data-testid="add-food-button">
-          Add food
-        </Button>
+        <div className="grid grid-cols-2 gap-3">
+          <Button size="lg" variant="secondary" full onClick={() => setEditing('new')} data-testid="add-food-button">
+            Add food
+          </Button>
+          <Button size="lg" variant="secondary" full onClick={() => setRecipePickerOpen(true)} data-testid="from-recipe">
+            From a recipe
+          </Button>
+        </div>
         <div className="h-8" />
       </div>
 
@@ -217,6 +253,16 @@ function ExistingMeal({ id }: { id: string }) {
           toast('Meal deleted');
           nav('/food', { replace: true });
         }}
+      />
+
+      <RecipePickerSheet
+        open={recipePickerOpen}
+        onClose={() => setRecipePickerOpen(false)}
+        onAdd={async (recipe, share) => {
+          setRecipePickerOpen(false);
+          await logShare({ recipe, share, into: { mealId: id } });
+        }}
+        newRecipeHref={`/food/recipes/new?meal=${id}`}
       />
     </div>
   );

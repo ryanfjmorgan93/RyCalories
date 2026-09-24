@@ -104,26 +104,34 @@ export interface LogShareInput {
 }
 
 /**
- * Log a share of a recipe as ONE meal item, at portion basis — see domain/recipe.ts's
+ * The single meal item a share of `recipe` represents, at portion basis — see domain/recipe.ts's
  * `shareNutrition` for why a cooked dish's share is scaled from its exact totals rather than from
- * any single ingredient's weighed figure. Writes through the existing `addItem`/`addMeal`, so it
- * gets their transactional guarantees (an existing meal gains one item; a new meal is created with
- * its one item in the same transaction) for free. Returns the meal id logged into.
+ * any single ingredient's weighed figure. This is the one thing `logShare` writes; split out so
+ * the recipe builder's unsaved `NewMeal` (held in local state until Save, same as `MealEditScreen`)
+ * can append a share to its in-memory item list with no database write at all.
  *
  * Throws a plain `Error` when the share itself makes no sense (an invalid or exactly zero
- * fraction) — logging "0 of 2 portions" would write a meal item worth nothing, silently.
+ * fraction) — logging "0 of 2 portions" would produce a meal item worth nothing, silently.
+ */
+export function shareItem(recipe: Recipe, share: ShareInput): NewMealItem {
+  const fraction = shareFraction(share);
+  if (!fraction) throw new Error('Cannot log a zero, or invalid, share of this recipe.');
+  return {
+    name: recipe.name,
+    portion: shareLabel(share),
+    nutrition: shareNutrition(recipe.ingredients, fraction),
+    source: combinedSource(recipe.ingredients.map((i) => i.source)),
+    recipeId: recipe.id,
+  };
+}
+
+/**
+ * Log a share of a recipe as ONE meal item. Writes through the existing `addItem`/`addMeal`, so it
+ * gets their transactional guarantees (an existing meal gains one item; a new meal is created with
+ * its one item in the same transaction) for free. Returns the meal id logged into.
  */
 export async function logShare(input: LogShareInput): Promise<string> {
-  const fraction = shareFraction(input.share);
-  if (!fraction) throw new Error('Cannot log a zero, or invalid, share of this recipe.');
-
-  const item: NewMealItem = {
-    name: input.recipe.name,
-    portion: shareLabel(input.share),
-    nutrition: shareNutrition(input.recipe.ingredients, fraction),
-    source: combinedSource(input.recipe.ingredients.map((i) => i.source)),
-    recipeId: input.recipe.id,
-  };
+  const item = shareItem(input.recipe, input.share);
 
   if ('mealId' in input.into) {
     await addItem(input.into.mealId, item);

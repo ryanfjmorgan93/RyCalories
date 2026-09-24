@@ -10,6 +10,7 @@
  */
 
 import { addMacros, displayMacros, fromPer100, fromPortion, macrosOf, scaleMacros, trustOf, ZERO, type FoodSource, type Macros, type Nutrition } from './food';
+import type { IngredientCandidate } from './ingredientMatch';
 import type { RecipeIngredient } from './types';
 import { fmtNum, plural } from './format';
 
@@ -125,4 +126,43 @@ export function shareNutrition(ings: RecipeIngredient[], fraction: number): Nutr
 export function combinedSource(sources: FoodSource[]): FoodSource {
   if (sources.length === 0) return 'user';
   return sources.reduce((weakest, s) => (trustOf(s) < trustOf(weakest) ? s : weakest));
+}
+
+const UNKNOWN_MACROS: Macros = { kcal: NaN, protein: NaN, carbs: NaN, fat: NaN };
+
+function capitalise(s: string): string {
+  const t = s.trim();
+  return t ? t[0]!.toUpperCase() + t.slice(1) : t;
+}
+
+/**
+ * Build a fresh question-card ingredient for a recognised or typed name, matched (or not) against
+ * `matchIngredient`/`searchFoods`. `grams` always starts at 0 — never a plausible-looking default,
+ * see `recipeIsComplete` — and the figures come from the candidate, or stay all-`NaN` (see
+ * `ingredientGap`) until the user picks a food, scans a pack or types them by hand.
+ *
+ * The display name is the recognised or typed name, capitalised — UNLESS the candidate is a
+ * remembered food (`FoodMemory`, keyed `memory:…`), which keeps the name it was learned under: a
+ * memory saved as "Home chilli" must not be renamed to whatever the model or the user happened to
+ * call it this time. Brand and product are carried across only when the candidate itself carries
+ * them, which today only a memory or a scanned/looked-up label ever does — a bare table or alias
+ * match never sets `product`, because that field is what makes `isPackaged` key a FoodMemory row
+ * by brand/product rather than by name, and a CoFID table row is not a packaged product.
+ */
+export function toIngredient(candidate: IngredientCandidate | null, name: string, id: string): RecipeIngredient {
+  const fromMemory = candidate?.key.startsWith('memory:') ?? false;
+  const unit = candidate?.unit
+    ? { count: 0, unitGrams: candidate.unit.grams, label: candidate.unit.label, plural: candidate.unit.plural }
+    : undefined;
+  return {
+    id,
+    name: fromMemory ? candidate!.name : capitalise(name),
+    source: candidate?.source ?? 'user',
+    grams: 0,
+    per100: candidate?.per100 ?? UNKNOWN_MACROS,
+    ...(candidate?.key ? { foodKey: candidate.key } : {}),
+    ...(candidate?.brand ? { brand: candidate.brand } : {}),
+    ...(candidate?.product ? { product: candidate.product } : {}),
+    ...(unit ? { unit } : {}),
+  };
 }

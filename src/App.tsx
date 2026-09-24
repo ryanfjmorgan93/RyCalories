@@ -23,6 +23,8 @@ import { CheckInScreen } from './screens/CheckInScreen';
 import { FoodScreen } from './screens/FoodScreen';
 import { MealEditScreen } from './screens/MealEditScreen';
 import { ProgressScreen } from './screens/ProgressScreen';
+import { RecipesScreen } from './screens/RecipesScreen';
+import { RecipeBuilderScreen } from './screens/RecipeBuilderScreen';
 
 function Shell() {
   const dock = useSessionDock();
@@ -113,6 +115,11 @@ export function App() {
           <Route path="exercises/:id/edit" element={<ExerciseEditScreen />} />
           <Route path="food" element={<FoodScreen />} />
           <Route path="food/new" element={<MealEditScreen />} />
+          {/* Static, so they outrank food/:id (React Router ranks a literal segment above a
+              dynamic one regardless of declaration order — kept here first anyway for clarity). */}
+          <Route path="food/recipes" element={<RecipesScreen />} />
+          <Route path="food/recipes/new" element={<RecipeBuilderScreen />} />
+          <Route path="food/recipes/:id/edit" element={<RecipeBuilderScreen />} />
           <Route path="food/:id" element={<MealEditScreen />} />
           <Route path="history" element={<HistoryScreen />} />
           <Route path="history/:id" element={<SessionDetailScreen />} />
