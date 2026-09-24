@@ -14,6 +14,7 @@ import type {
   Phase,
   ProductCacheEntry,
   ProgressionDecision,
+  Recipe,
   Routine,
   RoutineExercise,
   Session,
@@ -21,12 +22,13 @@ import type {
   Settings,
 } from '@/domain/types';
 
-/** Bumped whenever the set of tables changes, so a restore can reason about what it is holding. */
-export const BACKUP_VERSION = 2;
+/** Bumped whenever the set of tables changes, so a restore can reason about what it is holding.
+ * 1 = workouts only (pre-merge). 2 = +nutrition. 3 = +recipes. */
+export const BACKUP_VERSION = 3;
 
 export interface Backup {
   app: 'iron';
-  /** 1 = workouts only (pre-merge). 2 = workouts and nutrition. */
+  /** 1 = workouts only (pre-merge). 2 = workouts and nutrition. 3 = +recipes. */
   version: number;
   exportedAt: string;
   tables: {
@@ -44,12 +46,14 @@ export interface Backup {
     foods?: FoodMemory[];
     productCache?: ProductCacheEntry[];
     phases?: Phase[];
+    // Recipes. Optional so a version 1/2 backup still satisfies the type and can be restored.
+    recipes?: Recipe[];
   };
 }
 
 /** Full JSON backup of every table. */
 export async function exportBackup(): Promise<Backup> {
-  const [exercises, routines, routineExercises, sessions, setLogs, decisions, bodyweight, settings, meals, mealItems, foods, productCache, phases] =
+  const [exercises, routines, routineExercises, sessions, setLogs, decisions, bodyweight, settings, meals, mealItems, foods, productCache, phases, recipes] =
     await Promise.all([
       db.exercises.toArray(),
       db.routines.toArray(),
@@ -64,6 +68,7 @@ export async function exportBackup(): Promise<Backup> {
       db.foods.toArray(),
       db.productCache.toArray(),
       db.phases.toArray(),
+      db.recipes.toArray(),
     ]);
   return {
     app: 'iron',
@@ -83,6 +88,7 @@ export async function exportBackup(): Promise<Backup> {
       foods,
       productCache,
       phases,
+      recipes,
     },
   };
 }

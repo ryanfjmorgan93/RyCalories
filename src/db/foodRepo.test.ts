@@ -303,6 +303,38 @@ describe('remembering food', () => {
     expect((await itemsForMeal(id))).toHaveLength(2);
     expect((await suggestFoods('')).map((f) => f.name)).toEqual(['Oats']);
   });
+
+  it('remembers a count-style amount as unitGrams/unitLabel, without persisting unit on the row', async () => {
+    const eggs: NewMealItem = {
+      name: 'Eggs',
+      portion: '3 eggs',
+      nutrition: fromPer100({ kcal: 143, protein: 12.6, carbs: 0.7, fat: 9.9 }, 150),
+      source: 'table',
+      unit: { count: 3, unitGrams: 50, label: 'egg', plural: 'eggs' },
+    };
+    const id = await addMeal({ name: 'Breakfast' }, [eggs]);
+    const remembered = await suggestFoods('egg');
+    expect(remembered[0]!.unitGrams).toBe(50);
+    expect(remembered[0]!.unitLabel).toBe('egg');
+    expect(remembered[0]!.unitPlural).toBe('eggs');
+
+    // NewMealItem.unit is a seam into rememberFood only — MealItem itself carries no such field.
+    const row = (await itemsForMeal(id))[0]!;
+    expect(row).not.toHaveProperty('unit');
+  });
+});
+
+describe('recipeId on a logged item', () => {
+  it('is persisted when set, conditionally like brand/product', async () => {
+    const id = await addMeal({ name: 'Lunch' }, [{ ...oats(80), recipeId: 'recipe-1' }]);
+    expect((await itemsForMeal(id))[0]!.recipeId).toBe('recipe-1');
+  });
+
+  it('is absent (not merely undefined) when not set', async () => {
+    const id = await addMeal({ name: 'Lunch' }, [oats(80)]);
+    const row = (await itemsForMeal(id))[0]!;
+    expect(row).not.toHaveProperty('recipeId');
+  });
 });
 
 describe('editing a food keeps its identity in step', () => {

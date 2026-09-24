@@ -5,7 +5,7 @@ import { nextSessionPlan } from './planQueries';
 import { buildSummary, resetToSeed, sessionDetail, startSession, wipeAll } from './repo';
 import { SEED_EXERCISE_IDS, SEED_EXERCISES, SEED_ROUTINE_IDS } from './seed';
 import { fromPer100 } from '@/domain/food';
-import { DEFAULT_SETTINGS, type Meal, type MealItem } from '@/domain/types';
+import { DEFAULT_SETTINGS, type Meal, type MealItem, type Recipe } from '@/domain/types';
 
 const MEAL: Meal = { id: 'm1', date: '2026-03-01', loggedAt: '2026-03-01T08:00:00.000Z', name: 'Porridge', slot: 'breakfast' };
 const ITEM: MealItem = {
@@ -16,6 +16,16 @@ const ITEM: MealItem = {
   portion: '80 g',
   source: 'label',
   nutrition: fromPer100({ kcal: 379, protein: 11, carbs: 60, fat: 8 }, 80),
+};
+const RECIPE: Recipe = {
+  id: 'r1',
+  name: 'Omelette',
+  ingredients: [
+    { id: 'ri1', name: 'Eggs', source: 'table', grams: 150, per100: { kcal: 143, protein: 12.6, carbs: 0.7, fat: 9.9 }, unit: { count: 3, unitGrams: 50, label: 'egg', plural: 'eggs' } },
+  ],
+  portionsMade: 1,
+  createdAt: '2026-03-01T08:00:00.000Z',
+  updatedAt: '2026-03-01T08:00:00.000Z',
 };
 
 async function seedNutrition(): Promise<void> {
@@ -39,6 +49,15 @@ function versionOneBackup(): Backup {
       bodyweight: [],
       settings: [],
     },
+  };
+}
+
+/** A backup taken after nutrition existed but before recipes did: no `recipes` key at all. */
+function versionTwoBackup(): Backup {
+  return {
+    ...versionOneBackup(),
+    version: 2,
+    tables: { ...versionOneBackup().tables, meals: [], mealItems: [], foods: [], productCache: [], phases: [] },
   };
 }
 
@@ -70,6 +89,19 @@ describe('backup covers every table', () => {
     expect(await db.meals.count()).toBe(1);
     expect(await db.mealItems.count()).toBe(1);
   });
+
+  it('round-trips recipe rows', async () => {
+    await db.recipes.put(RECIPE);
+    const backup = await exportBackup();
+    expect(backup.tables.recipes).toHaveLength(1);
+
+    await wipeAll();
+    expect(await db.recipes.count()).toBe(0);
+
+    await importBackup(backup, 'replace');
+    // The embedded ingredient — including its unit — survives the JSON round trip whole.
+    expect(await db.recipes.get('r1')).toEqual(RECIPE);
+  });
 });
 
 describe('restoring an older backup', () => {
@@ -84,6 +116,26 @@ describe('restoring an older backup', () => {
     expect(await db.mealItems.get('mi1')).toEqual(ITEM);
     // And it does not claim to have restored tables it never held.
     expect(counts.meals).toBeUndefined();
+  });
+
+  // Same rule, one table younger: a v2 file (nutrition, no recipes) restoring in replace mode must
+  // not wipe recipes it was never taken with — recipes follow the exact pattern nutrition itself
+  // set when it was the new table restoring over an older (v1) file.
+  it('leaves recipes alone when the file predates them', async () => {
+    await db.recipes.put(RECIPE);
+    const counts = await importBackup(versionTwoBackup(), 'replace');
+
+    expect(await db.recipes.count()).toBe(1);
+    expect(await db.recipes.get('r1')).toEqual(RECIPE);
+    expect(counts.recipes).toBeUndefined();
+    // The v2 file's own (empty) tables still restore normally alongside the untouched recipe.
+    expect(await db.meals.count()).toBe(0);
+  });
+
+  it('a version 1 file also leaves recipes alone', async () => {
+    await db.recipes.put(RECIPE);
+    await importBackup(versionOneBackup(), 'replace');
+    expect(await db.recipes.get('r1')).toEqual(RECIPE);
   });
 
   it('still clears the tables it can actually put back', async () => {
@@ -172,6 +224,12 @@ describe('backup validation', () => {
     expect(isBackup(versionOneBackup())).toBe(true);
   });
 
+  it('accepts versions 1 through 3', () => {
+    expect(isBackup({ ...versionOneBackup(), version: 1 })).toBe(true);
+    expect(isBackup(versionTwoBackup())).toBe(true);
+    expect(isBackup({ ...versionTwoBackup(), version: 3, tables: { ...versionTwoBackup().tables, recipes: [] } })).toBe(true);
+  });
+
   it('refuses a file from a newer build rather than silently dropping its tables', () => {
     expect(isBackup({ ...versionOneBackup(), version: BACKUP_VERSION + 1 })).toBe(false);
   });
@@ -185,5 +243,7 @@ describe('backup validation', () => {
   it('reports only the tables a file actually carries', () => {
     expect(tablesInBackup(versionOneBackup())).not.toContain('meals');
     expect(tablesInBackup(versionOneBackup())).toContain('sessions');
+    expect(tablesInBackup(versionTwoBackup())).not.toContain('recipes');
+    expect(tablesInBackup(versionTwoBackup())).toContain('meals');
   });
 });

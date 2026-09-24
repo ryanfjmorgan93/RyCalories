@@ -146,8 +146,15 @@ export async function backupBeforeMigrationIfNeeded(): Promise<void> {
  * The on-disk schema version (Dexie stores its version ×10) and the stored seed version, read raw
  * without an upgrade. Only called once `indexedDB.databases()` has shown the database exists — see
  * the note on `dumpRaw` about opening one that does not.
+ *
+ * Exported (alongside `migrationIsComing` below) as the smallest seam onto the "is a migration
+ * coming" decision: both are pure/IO-boundary pieces `doBackupBeforeMigration` composes, so a test
+ * can seed a raw on-disk version with fake-indexeddb, read it back with the exact function
+ * production uses, and check the exact comparison production makes — without needing the write side
+ * (`writeBackupContent`, via `@capacitor/filesystem`) to run outside a browser, which it cannot: its
+ * web implementation reads the bare global `window` and has no jsdom-compatible path in this suite.
  */
-async function probeRaw(): Promise<{ version: number; seedVersion: number }> {
+export async function probeRaw(): Promise<{ version: number; seedVersion: number }> {
   const idb = await new Promise<IDBDatabase>((resolve, reject) => {
     const req = indexedDB.open(DB_NAME);
     req.onsuccess = () => resolve(req.result);
@@ -168,6 +175,15 @@ async function probeRaw(): Promise<{ version: number; seedVersion: number }> {
   }
 }
 
+/** Whether a raw on-disk IndexedDB version (Dexie's schema version ×10) is behind what this build
+ * would open at — the exact comparison `doBackupBeforeMigration` gates the pre-migration backup on.
+ * A plain function so it can be asserted against directly rather than only through its IO-bound
+ * caller. `dbVersion` defaults to this build's `DB_VERSION` and is a parameter only for the test
+ * that deliberately checks the historical bug (an un-bumped `DB_VERSION`) by passing a lower one. */
+export function migrationIsComing(rawVersion: number, dbVersion: number = DB_VERSION): boolean {
+  return rawVersion < dbVersion * 10;
+}
+
 async function doBackupBeforeMigration(): Promise<void> {
   // `indexedDB.open(name)` with no version CREATES an empty database at version 1 if none already
   // exists — exactly the corruption a fresh install must not risk. `databases()` answers "does it
@@ -180,7 +196,7 @@ async function doBackupBeforeMigration(): Promise<void> {
   // This runs before first paint on every start, so decide from the version and the one settings
   // row, and only read the whole database when a migration is actually about to run.
   const probe = await probeRaw();
-  const migrationComing = probe.version < DB_VERSION * 10;
+  const migrationComing = migrationIsComing(probe.version);
   const seedComing = probe.seedVersion < DEFAULT_SETTINGS.seedVersion;
   if (!migrationComing && !seedComing) return;
 

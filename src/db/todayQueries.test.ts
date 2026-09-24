@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from './db';
 import { addMeal } from './foodRepo';
+import { getRecipe, logShare, saveRecipe } from './recipeRepo';
 import { getSettings, resetToSeed } from './repo';
 import { dayView, legDayFor, wasLegDay } from './todayQueries';
 import { SEED_ROUTINE_IDS } from './seed';
@@ -129,5 +130,25 @@ describe('the day view', () => {
     const s = await getSettings();
     expect(s.calorieStartDate).toBeUndefined();
     expect((await dayView(TODAY, s)).calories).toBeNull();
+  });
+
+  it('sums a logged recipe share exactly like any other item', async () => {
+    // A recipe share is just an ordinary MealItem with recipeId set — dayTotals/dayView must not
+    // need to know recipes exist at all for it to count.
+    const recipeId = await saveRecipe({
+      name: 'Omelette',
+      ingredients: [
+        { id: 'ri1', name: 'Eggs', source: 'table', grams: 150, per100: { kcal: 143, protein: 12.6, carbs: 0.7, fat: 9.9 } },
+        { id: 'ri2', name: 'Cheddar', source: 'table', grams: 100, per100: { kcal: 416, protein: 25.4, carbs: 0.1, fat: 34.4 } },
+      ],
+      portionsMade: 2,
+    });
+    const recipe = (await getRecipe(recipeId))!;
+    await logShare({ recipe, share: { mode: 'portions', made: 2, eaten: 1 }, into: { newMeal: { date: TODAY } } });
+
+    const view = await dayView(TODAY, await getSettings());
+    // 214.5 + 416 = 630.5 kcal total; half of that (315.25) is what dayTotals shows at DISPLAY
+    // precision (see foodRepo.sumItems) — 315, the same rounding any other logged item gets.
+    expect(view.eaten.kcal).toBe(315);
   });
 });

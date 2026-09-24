@@ -89,3 +89,221 @@ export async function expectClass(locator: Locator, cls: string, present = true)
   if (present) await expect(locator).toHaveClass(re);
   else await expect(locator).not.toHaveClass(re);
 }
+
+// ---------------------------------------------------------------------------
+// Raw IndexedDB seeding, shared between the history-safety and migration specs. Both need to build
+// the `iron` database as raw IndexedDB, at an exact past shape, BEFORE the app ever boots — done by
+// navigating to a same-origin static asset first (an icon; `vite preview` serves it verbatim, so no
+// app JS runs) and creating the database there with `page.evaluate`, then navigating to `/`. This is
+// the only way to control what "the database on the phone already looked like" before a build's boot
+// code ever touches it.
+
+export interface StoreSpec {
+  name: string;
+  keyPath: string;
+  indexes: { name: string; keyPath: string | string[] }[];
+}
+
+/**
+ * The exact Dexie v2 schema (src/db/db.ts, before recipes/v3), as raw IndexedDB store/index
+ * definitions. Compound index names are the literal `[a+b]` spec string — see Dexie's
+ * parseIndexSyntax/nameFromKeyPath — and their keyPath is the field list as an array.
+ */
+export const IRON_SCHEMA_V2: StoreSpec[] = [
+  {
+    name: 'exercises',
+    keyPath: 'id',
+    indexes: [
+      { name: 'name', keyPath: 'name' },
+      { name: 'kind', keyPath: 'kind' },
+      { name: 'muscleGroup', keyPath: 'muscleGroup' },
+      { name: 'createdAt', keyPath: 'createdAt' },
+    ],
+  },
+  {
+    name: 'routines',
+    keyPath: 'id',
+    indexes: [
+      { name: 'order', keyPath: 'order' },
+      { name: 'archived', keyPath: 'archived' },
+    ],
+  },
+  {
+    name: 'routineExercises',
+    keyPath: 'id',
+    indexes: [
+      { name: 'routineId', keyPath: 'routineId' },
+      { name: 'exerciseId', keyPath: 'exerciseId' },
+      { name: '[routineId+order]', keyPath: ['routineId', 'order'] },
+    ],
+  },
+  {
+    name: 'sessions',
+    keyPath: 'id',
+    indexes: [
+      { name: 'routineId', keyPath: 'routineId' },
+      { name: 'startedAt', keyPath: 'startedAt' },
+      { name: 'endedAt', keyPath: 'endedAt' },
+      { name: 'source', keyPath: 'source' },
+    ],
+  },
+  {
+    name: 'setLogs',
+    keyPath: 'id',
+    indexes: [
+      { name: 'sessionId', keyPath: 'sessionId' },
+      { name: 'routineExerciseId', keyPath: 'routineExerciseId' },
+      { name: 'exerciseId', keyPath: 'exerciseId' },
+      { name: 'completedAt', keyPath: 'completedAt' },
+      { name: '[sessionId+exerciseId]', keyPath: ['sessionId', 'exerciseId'] },
+      { name: '[sessionId+routineExerciseId]', keyPath: ['sessionId', 'routineExerciseId'] },
+      { name: '[exerciseId+completedAt]', keyPath: ['exerciseId', 'completedAt'] },
+      { name: '[routineExerciseId+completedAt]', keyPath: ['routineExerciseId', 'completedAt'] },
+    ],
+  },
+  {
+    name: 'decisions',
+    keyPath: 'id',
+    indexes: [
+      { name: 'sessionId', keyPath: 'sessionId' },
+      { name: 'routineExerciseId', keyPath: 'routineExerciseId' },
+      { name: 'decidedAt', keyPath: 'decidedAt' },
+      { name: '[routineExerciseId+decidedAt]', keyPath: ['routineExerciseId', 'decidedAt'] },
+    ],
+  },
+  { name: 'bodyweight', keyPath: 'id', indexes: [{ name: 'date', keyPath: 'date' }] },
+  { name: 'settings', keyPath: 'id', indexes: [] },
+  {
+    name: 'meals',
+    keyPath: 'id',
+    indexes: [
+      { name: 'date', keyPath: 'date' },
+      { name: 'loggedAt', keyPath: 'loggedAt' },
+      { name: '[date+loggedAt]', keyPath: ['date', 'loggedAt'] },
+    ],
+  },
+  {
+    name: 'mealItems',
+    keyPath: 'id',
+    indexes: [
+      { name: 'mealId', keyPath: 'mealId' },
+      { name: 'name', keyPath: 'name' },
+      { name: '[mealId+index]', keyPath: ['mealId', 'index'] },
+    ],
+  },
+  {
+    name: 'foods',
+    keyPath: 'id',
+    indexes: [
+      { name: 'key', keyPath: 'key' },
+      { name: 'name', keyPath: 'name' },
+      { name: 'lastUsedAt', keyPath: 'lastUsedAt' },
+    ],
+  },
+  { name: 'productCache', keyPath: 'key', indexes: [{ name: 'fetchedAt', keyPath: 'fetchedAt' }] },
+  { name: 'phases', keyPath: 'id', indexes: [{ name: 'startDate', keyPath: 'startDate' }] },
+];
+
+/** The current Dexie schema (v3: `IRON_SCHEMA_V2` plus `recipes`) — what an install already
+ * upgraded to the latest version looks like on disk. */
+export const IRON_SCHEMA_V3: StoreSpec[] = [
+  ...IRON_SCHEMA_V2,
+  { name: 'recipes', keyPath: 'id', indexes: [{ name: 'name', keyPath: 'name' }, { name: 'updatedAt', keyPath: 'updatedAt' }] },
+];
+
+/** Creates `iron` as raw IndexedDB at `version`, with `schema`, populated with `data`. Must run on a page that has never booted the app (see file header). */
+export async function createRawIronDb(page: Page, version: number, schema: StoreSpec[], data: Record<string, unknown[]>): Promise<void> {
+  await page.evaluate(
+    ({ version, schema, data }) => {
+      return new Promise<void>((resolve, reject) => {
+        const req = indexedDB.open('iron', version);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          for (const store of schema) {
+            const os = db.createObjectStore(store.name, { keyPath: store.keyPath });
+            for (const idx of store.indexes) os.createIndex(idx.name, idx.keyPath);
+          }
+        };
+        req.onsuccess = () => {
+          const db = req.result;
+          const names = Object.keys(data);
+          if (names.length === 0) {
+            db.close();
+            resolve();
+            return;
+          }
+          const tx = db.transaction(names, 'readwrite');
+          tx.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          tx.onerror = () => reject(tx.error);
+          for (const name of names) {
+            const store = tx.objectStore(name);
+            for (const row of data[name]) store.put(row);
+          }
+        };
+        req.onerror = () => reject(req.error);
+        req.onblocked = () => reject(new Error('iron database is blocked'));
+      });
+    },
+    { version, schema, data },
+  );
+}
+
+/** Reads every row of every store in `iron` at whatever version is on disk, bypassing Dexie — the same technique src/boot/recovery.ts uses. */
+export async function readRawIron(page: Page): Promise<{ version: number; tables: Record<string, any[]> }> {
+  return page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open('iron');
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    const names = Array.from(db.objectStoreNames);
+    const tables: Record<string, unknown[]> = {};
+    for (const name of names) {
+      tables[name] = await new Promise((resolve, reject) => {
+        const r = db.transaction(name, 'readonly').objectStore(name).getAll();
+        r.onsuccess = () => resolve(r.result);
+        r.onerror = () => reject(r.error);
+      });
+    }
+    const version = db.version;
+    db.close();
+    return { version, tables };
+  });
+}
+
+/** Reads the automatic-backup files the app has written, from the Filesystem plugin's OWN IndexedDB store ("Disc" — see @capacitor/filesystem's web implementation), the real artifact the app produced, not a stand-in for it. */
+export async function readBackupFiles(page: Page): Promise<{ path: string; content: string }[]> {
+  return page.evaluate(async () => {
+    const dbs = (await indexedDB.databases?.()) ?? [];
+    if (!dbs.some((d) => d.name === 'Disc')) return [];
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open('Disc');
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    const entries = await new Promise<any[]>((resolve, reject) => {
+      const r = db.transaction('FileStorage', 'readonly').objectStore('FileStorage').getAll();
+      r.onsuccess = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+    });
+    db.close();
+    return entries.filter((e) => e.type === 'file' && typeof e.path === 'string' && e.path.startsWith('/DOCUMENTS/Iron/')).map((e) => ({ path: e.path, content: e.content }));
+  });
+}
+
+export function backupsOfKind(files: { path: string; content: string }[], kind: 'auto' | 'premig' | 'predestr'): { path: string; content: string }[] {
+  return files.filter((f) => f.path.split('/').pop()?.startsWith(`iron-${kind}-`));
+}
+
+/**
+ * Waits for THIS page load's history check to have decided. The baseline and the notice both
+ * outlive a reload, so waiting on either can be satisfied by the previous load before this one's
+ * check has run — which made "no notice after reload" pass vacuously. main.tsx marks <html> once
+ * per load, after the decision is stored.
+ */
+export async function waitForHistoryCheckSettled(page: Page): Promise<void> {
+  await expect(page.locator('html')).toHaveAttribute('data-history-check', 'done', { timeout: 15_000 });
+}
