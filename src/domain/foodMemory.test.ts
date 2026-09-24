@@ -93,6 +93,23 @@ describe('what is worth remembering', () => {
   it('refuses a zero-weight portion', () => {
     expect(memoryFrom(item({ nutrition: fromPer100(OATS, 0) }))).toBeNull();
   });
+
+  it('stores unitGrams when a count-style amount produced the weight', () => {
+    const EGG: Macros = { kcal: 131, protein: 12.6, carbs: 0.8, fat: 9.5 };
+    const m = memoryFrom(item({ name: 'Eggs', nutrition: fromPer100(EGG, 150) }), { count: 3, unitGrams: 50 })!;
+    expect(m.unitGrams).toBe(50);
+    expect(m.typicalGrams).toBe(150);
+  });
+
+  it('ignores a nonsensical unit rather than storing a bad number', () => {
+    expect(memoryFrom(item(), { count: 0, unitGrams: 50 })!.unitGrams).toBeUndefined();
+    expect(memoryFrom(item(), { count: 3, unitGrams: 0 })!.unitGrams).toBeUndefined();
+    expect(memoryFrom(item(), { count: -1, unitGrams: 50 })!.unitGrams).toBeUndefined();
+  });
+
+  it('has no unitGrams when the amount was not a count', () => {
+    expect(memoryFrom(item())!.unitGrams).toBeUndefined();
+  });
 });
 
 describe('folding a new logging into what is remembered', () => {
@@ -133,6 +150,27 @@ describe('folding a new logging into what is remembered', () => {
     const merged = mergeMemory(existing, memoryFrom(item({ source: 'model', name: 'flapjack thing' }))!, at);
     expect(merged.name).toBe('Trek Protein Flapjack');
     expect(merged.brand).toBe('Trek');
+  });
+
+  it('carries a new unitGrams forward from a source of equal or higher trust', () => {
+    const existing = memory({ source: 'table', unitGrams: 50 });
+    const incoming = memoryFrom(item({ source: 'user' }), { count: 3, unitGrams: 55 })!;
+    const merged = mergeMemory(existing, incoming, at);
+    expect(merged.unitGrams).toBe(55);
+  });
+
+  it('never lets a lower-trust unitGrams overwrite a user-corrected one', () => {
+    const existing = memory({ source: 'user', unitGrams: 55 });
+    const incoming = memoryFrom(item({ source: 'table' }), { count: 3, unitGrams: 50 })!;
+    const merged = mergeMemory(existing, incoming, at);
+    expect(merged.unitGrams).toBe(55);
+  });
+
+  it('keeps the existing unitGrams when this logging carried no unit amount at all', () => {
+    const existing = memory({ source: 'user', unitGrams: 55 });
+    const incoming = memoryFrom(item({ source: 'user' }))!; // no unit this time — typed in grams
+    const merged = mergeMemory(existing, incoming, at);
+    expect(merged.unitGrams).toBe(55);
   });
 });
 

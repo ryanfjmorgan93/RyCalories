@@ -192,6 +192,32 @@ describe('trust hierarchy', () => {
   });
 });
 
+describe('the bundled UK food table sits between memory and a scanned label', () => {
+  it('may be overwritten by a label or a user correction', () => {
+    expect(mayOverwrite('table', 'label')).toBe(true);
+    expect(mayOverwrite('table', 'user')).toBe(true);
+  });
+
+  it('overwrites a model guess or a remembered figure', () => {
+    expect(mayOverwrite('model', 'table')).toBe(true);
+    expect(mayOverwrite('memory', 'table')).toBe(true);
+  });
+
+  it('may not be overwritten by a model guess or by memory', () => {
+    expect(mayOverwrite('table', 'model')).toBe(false);
+    expect(mayOverwrite('table', 'memory')).toBe(false);
+  });
+
+  it('may not overwrite a label or a user correction', () => {
+    expect(mayOverwrite('label', 'table')).toBe(false);
+    expect(mayOverwrite('user', 'table')).toBe(false);
+  });
+
+  it('refreshes itself', () => {
+    expect(mayOverwrite('table', 'table')).toBe(true);
+  });
+});
+
 describe('packaging detection', () => {
   it('recognises branded products', () => {
     expect(isPackaged({ brand: 'Trek', product: 'Protein Flapjack' })).toBe(true);

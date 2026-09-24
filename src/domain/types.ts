@@ -365,11 +365,19 @@ export interface MealItem {
   product?: string;
   source: import('./food').FoodSource;
   nutrition: import('./food').Nutrition;
+  /**
+   * The recipe this item's share was logged from, when it was. Not indexed: it exists so the UI
+   * can offer "log another share of this recipe" or similar, not so the app can query by it —
+   * deleting a recipe must never cascade to logged items (see `recipeRepo.deleteRecipe`), and an
+   * unindexed field can't accidentally be queried into that mistake.
+   */
+  recipeId?: string;
 }
 
 /**
  * Remembered nutrition for a food eaten before, stored per 100 g so any portion is derivable.
- * Reserved: declared so a later feature needs no migration, but nothing writes to it in v1.
+ * Written on every logged item by `foodRepo.rememberFood` (create, edit and recipe-share alike),
+ * merged by `mergeMemory`.
  */
 export interface FoodMemory {
   id: string;
@@ -381,9 +389,46 @@ export interface FoodMemory {
   per100: import('./food').Macros;
   /** Typical portion weight, as a suggestion only — portions genuinely vary. */
   typicalGrams?: number;
+  /** Grams per one unit (e.g. one egg, one rasher), when a count-based amount was logged. A
+   * remembered suggestion only, same standing as `typicalGrams` — the merge rule mirrors it. */
+  unitGrams?: number;
   source: import('./food').FoodSource;
   timesUsed: number;
   lastUsedAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Recipes (cooked meals: photo/typed ingredients → amounts → a saved recipe)
+
+/**
+ * One ingredient within a recipe. Always weighed: `grams` is the resolved total weight for this
+ * ingredient in the recipe, never a per-portion figure. 0 means "no amount entered yet" — a new
+ * ingredient card starts here, never with a plausible-looking default (see `recipeIsComplete`).
+ */
+export interface RecipeIngredient {
+  id: string;
+  name: string;
+  brand?: string;
+  product?: string;
+  source: import('./food').FoodSource;
+  grams: number;
+  per100: import('./food').Macros;
+  /** Match key back into the UK food table or food memory, when this ingredient came from one. */
+  foodKey?: string;
+  /** How the amount was entered, when it was a count rather than a typed weight. `unitGrams` is
+   * the estimate used to resolve `grams`; `count * unitGrams` reproduces it. */
+  unit?: { count: number; unitGrams: number; label: string; plural: string };
+}
+
+/** A saved cooked meal: its ingredients and how many portions it made. */
+export interface Recipe {
+  id: string;
+  name: string;
+  ingredients: RecipeIngredient[];
+  /** How many portions the whole recipe was divided into, e.g. 4 for a family chilli. */
+  portionsMade: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /** Cached Open Food Facts result, keyed by barcode or by normalised search query. */

@@ -25,13 +25,17 @@ export interface Macros {
 }
 
 /** Where a number came from. Drives both the UI badge and what may overwrite what. */
-export type FoodSource = 'model' | 'label' | 'user' | 'memory';
+export type FoodSource = 'model' | 'label' | 'user' | 'memory' | 'table';
 
 /**
  * Trust order. A source may only be overwritten by one of equal or higher trust, which is what
  * stops a model guess from entrenching itself in food memory and lending it false authority.
+ *
+ * `table` (the bundled UK CoFID food table) sits above `memory` and below `label`: it is a
+ * curated reference figure, better evidence than something merely remembered from an earlier
+ * guess, but not as specific as a scanned pack's own label.
  */
-const TRUST: Record<FoodSource, number> = { model: 0, memory: 1, label: 2, user: 3 };
+const TRUST: Record<FoodSource, number> = { model: 0, memory: 1, table: 2, label: 3, user: 4 };
 
 export function trustOf(source: FoodSource): number {
   return TRUST[source];
