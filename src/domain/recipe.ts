@@ -11,6 +11,7 @@
 
 import { addMacros, displayMacros, fromPer100, fromPortion, macrosOf, scaleMacros, trustOf, ZERO, type FoodSource, type Macros, type Nutrition } from './food';
 import type { IngredientCandidate } from './ingredientMatch';
+import type { MealEstimatePart } from './mealAnalysis';
 import type { RecipeIngredient } from './types';
 import { fmtNum, plural } from './format';
 
@@ -135,6 +136,19 @@ export function combinedSource(sources: FoodSource[]): FoodSource {
   return sources.reduce((weakest, s) => (trustOf(s) < trustOf(weakest) ? s : weakest));
 }
 
+/**
+ * The source a recipe's SHARE (`shareItem`/`logShare`) should be logged and remembered under.
+ * `'model'` — the lowest trust there is (`trustOf`) — while any ingredient's amount is still
+ * `amountEstimated`, whatever its own figures' source: a guessed weight makes the whole dish's
+ * total a guess, even when every per-100g figure came straight off the UK table. Once every
+ * amount has been confirmed or edited by the user, this is exactly `combinedSource` of the
+ * ingredients' own figures sources, as before "Estimate a meal out" existed.
+ */
+export function recipeSource(ings: RecipeIngredient[]): FoodSource {
+  if (ings.some((i) => i.amountEstimated)) return 'model';
+  return combinedSource(ings.map((i) => i.source));
+}
+
 const UNKNOWN_MACROS: Macros = { kcal: NaN, protein: NaN, carbs: NaN, fat: NaN };
 
 function capitalise(s: string): string {
@@ -171,5 +185,32 @@ export function toIngredient(candidate: IngredientCandidate | null, name: string
     ...(candidate?.brand ? { brand: candidate.brand } : {}),
     ...(candidate?.product ? { product: candidate.product } : {}),
     ...(unit ? { unit } : {}),
+  };
+}
+
+/**
+ * Build an ingredient from "Estimate a meal out": the same matching and naming rules as
+ * `toIngredient`, but with the model's guessed weight for this part filled straight in — the
+ * whole point being that estimates go straight to Review, with no one-at-a-time walk to type
+ * amounts nobody was going to weigh anyway.
+ *
+ * `grams` comes from `part.grams` (0 when the model gave none — `ingredientGap` then reports
+ * "amount" needed, exactly like a fresh question-card ingredient). A count-style unit keeps its
+ * `unitGrams` estimate; `count` is derived from the guessed weight, rounded to one decimal, so
+ * `count * unitGrams` still reproduces `grams` (see `RecipeIngredient.unit`'s doc comment).
+ *
+ * `amountEstimated: true` only when a real weight was actually filled in — a part with no amount
+ * is "needs an amount", the ordinary state `ingredientGap`/`amountLabel` already handle, not an
+ * estimate to show "≈ … · est." for.
+ */
+export function toEstimatedIngredient(candidate: IngredientCandidate | null, part: MealEstimatePart, id: string): RecipeIngredient {
+  const base = toIngredient(candidate, part.name, id);
+  const grams = part.grams !== undefined && Number.isFinite(part.grams) && part.grams > 0 ? part.grams : 0;
+  const unit = base.unit ? { ...base.unit, count: base.unit.unitGrams > 0 ? Math.round((grams / base.unit.unitGrams) * 10) / 10 : 0 } : undefined;
+  return {
+    ...base,
+    grams,
+    ...(unit ? { unit } : {}),
+    ...(grams > 0 ? { amountEstimated: true as const } : {}),
   };
 }

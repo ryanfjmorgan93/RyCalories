@@ -112,6 +112,26 @@ async function clickRow(page: Page, testId: string): Promise<void> {
   await page.getByTestId(testId).getByRole('button').first().click();
 }
 
+/**
+ * Install a fake Nano whose `generate` answers "Estimate a meal out" with a fixed JSON estimate —
+ * the `window.__ironNanoFake` seam `Nano.generate` reads, same as `installPhotoFake` does for
+ * `analyzeMeal`. Every `part` name here is one this repo's REAL bundled UK table/alias data
+ * actually resolves (via a curated alias, exact word match), so the review that follows is exercising
+ * real `matchIngredient` against real data, not a name chosen to merely look plausible.
+ */
+async function installEstimateFake(page: Page, parts: { name: string; grams?: number }[], dish?: string): Promise<void> {
+  await page.addInitScript(
+    ({ parts, dish }) => {
+      (window as unknown as { __ironNanoFake?: unknown }).__ironNanoFake = {
+        status: { state: 'ready', detail: 'ready' },
+        generate: async () => ({ text: JSON.stringify({ ...(dish ? { dish } : {}), parts }) }),
+        analyzeMeal: async () => ({ text: '{"ingredients":[]}' }),
+      };
+    },
+    { parts, dish },
+  );
+}
+
 test.describe('recipe builder', () => {
   test('manual floor: search the table, set an amount by hand, save and log — no Nano involved', async ({ page }) => {
     await fresh(page);
@@ -247,6 +267,8 @@ test.describe('recipe builder', () => {
 
     await expect(page.getByTestId('recipe-take-photo')).toBeDisabled();
     await expect(page.getByTestId('recipe-assistant-state')).toContainText('unavailable');
+    // "Estimate a meal out" is gated on the exact same Nano status as "Take a photo".
+    await expect(page.getByTestId('recipe-start-estimate')).toBeDisabled();
 
     await page.getByTestId('recipe-type-it').click();
     await page.getByTestId('recipe-typed-text').fill('3 eggs, 30g cheddar');
@@ -700,5 +722,182 @@ test.describe('recipe builder', () => {
 
     await expect(page.getByTestId('question-card')).toHaveCount(0);
     await expect(page.getByTestId('recipe-take-photo')).toBeVisible();
+  });
+});
+
+test.describe('estimate a meal out', () => {
+  test('typed description → five estimated parts straight to Review, rows sum to the total, save and log', async ({ page }) => {
+    await installEstimateFake(
+      page,
+      [
+        { name: 'beef mince', grams: 300 }, // "patties" — one entry for the whole dish, not two
+        { name: 'bread', grams: 90 }, // "bun"
+        { name: 'cheddar', grams: 40 },
+        { name: 'bacon', grams: 50 }, // has a unit (rasher, 25 g) — still shown as "≈ 50 g · est."
+        { name: 'mayonnaise', grams: 20 },
+      ],
+      'Five Guys double bacon cheeseburger',
+    );
+    await fresh(page);
+    await page.goto('/food/recipes/new');
+    await expect(page.getByTestId('recipe-start-estimate')).toBeEnabled();
+    await page.getByTestId('recipe-start-estimate').click();
+    await page.getByTestId('recipe-estimate-text').fill('Five Guys double bacon cheeseburger');
+    await page.getByTestId('recipe-estimate-submit').click();
+
+    // Straight to Review — no one-at-a-time question-card walk in between.
+    await expect(page.getByTestId('question-card')).toHaveCount(0);
+    await expect(page.getByTestId('recipe-name')).toHaveValue('Five Guys double bacon cheeseburger');
+    for (let i = 0; i < 5; i++) {
+      await expect(page.getByTestId(`review-row-${i}`)).toBeVisible();
+      await expect(page.getByTestId(`review-estimated-${i}`)).toContainText('est.');
+    }
+    await expect(page.getByTestId('review-estimate')).toBeVisible();
+
+    // Beef mince 300g @ 225 = 675; bread 90g @ 219 = 197.1 → 197; cheddar 40g @ 416 = 166.4 → 166;
+    // bacon 50g @ 215 = 107.5 → 108; mayonnaise 20g @ 686 = 137.2 → 137. Round each row then sum:
+    // 675 + 197 + 166 + 108 + 137 = 1283 — the real bundled CoFID figures, not hand-picked ones.
+    await expect(page.getByTestId('review-total-kcal')).toHaveText('1283 kcal');
+
+    await page.getByTestId('recipe-save-log').click();
+    await page.waitForURL(/\/food\/[0-9a-f-]+$/);
+    await expect(page.getByTestId('meal-total')).toContainText('1283 kcal');
+  });
+
+  test('editing an amount clears its "est." marker; the Estimate label stays until every amount is edited', async ({ page }) => {
+    await installEstimateFake(
+      page,
+      [
+        { name: 'beef mince', grams: 300 },
+        { name: 'bread', grams: 90 },
+        { name: 'cheddar', grams: 40 },
+        { name: 'bacon', grams: 50 },
+        { name: 'mayonnaise', grams: 20 },
+      ],
+      'Five Guys double bacon cheeseburger',
+    );
+    await fresh(page);
+    await page.goto('/food/recipes/new');
+    await page.getByTestId('recipe-start-estimate').click();
+    await page.getByTestId('recipe-estimate-text').fill('Five Guys double bacon cheeseburger');
+    await page.getByTestId('recipe-estimate-submit').click();
+    await expect(page.getByTestId('review-estimate')).toBeVisible();
+
+    // Edit only the first row's amount.
+    await clickRow(page, 'review-row-0');
+    await expect(page.getByTestId('question-grams')).toHaveValue('300');
+    await page.getByTestId('question-grams').fill('350');
+    await page.getByTestId('question-next').click();
+
+    await expect(page.getByTestId('review-estimated-0')).toHaveCount(0);
+    // The other four rows are still estimated, so the label stays.
+    await expect(page.getByTestId('review-estimate')).toBeVisible();
+
+    // Edit the remaining four amounts, one at a time.
+    await clickRow(page, 'review-row-1'); // bread: also a count-style unit ("slice")
+    await expect(page.getByTestId('question-count')).toBeVisible();
+    await page.getByTestId('question-count').fill('2');
+    await page.getByTestId('question-next').click();
+
+    await clickRow(page, 'review-row-2');
+    await page.getByTestId('question-grams').fill('45');
+    await page.getByTestId('question-next').click();
+
+    await clickRow(page, 'review-row-3'); // bacon: a count-style unit, not a plain grams field
+    await expect(page.getByTestId('question-count')).toBeVisible();
+    await page.getByTestId('question-count').fill('3');
+    await page.getByTestId('question-next').click();
+    await expect(page.getByTestId('review-estimated-3')).toHaveCount(0);
+    // Three of five edited so far — the label is still up.
+    await expect(page.getByTestId('review-estimate')).toBeVisible();
+
+    await clickRow(page, 'review-row-4');
+    await page.getByTestId('question-grams').fill('25');
+    await page.getByTestId('question-next').click();
+
+    // Every amount has now been edited — the factual "Estimate" label is gone.
+    await expect(page.getByTestId('review-estimate')).toHaveCount(0);
+    await expect(page.locator('[data-testid^="review-estimated-"]')).toHaveCount(0);
+  });
+
+  test('Nano unavailable: Estimate a meal out is disabled with the state shown, and the other start options still work', async ({ page }) => {
+    await page.addInitScript(() => {
+      (window as unknown as { __ironNanoFake?: unknown }).__ironNanoFake = {
+        status: { state: 'unavailable', detail: 'UNAVAILABLE · test fixture' },
+        generate: async () => ({ text: '' }),
+      };
+    });
+    await fresh(page);
+    await page.goto('/food/recipes/new');
+
+    await expect(page.getByTestId('recipe-start-estimate')).toBeDisabled();
+    await expect(page.getByTestId('recipe-assistant-state')).toContainText('unavailable');
+
+    // The other, non-Nano start option still completes a recipe end to end.
+    await page.getByTestId('recipe-add-ingredients').click();
+    await page.getByTestId('picker-search').fill('egg');
+    await page.getByTestId('picker-result-0').click();
+    await expect(page.getByTestId('review-row-0')).toBeVisible();
+  });
+
+  test('unparseable model output lands on recognise-none, never a stuck empty review with no explanation', async ({ page }) => {
+    await page.addInitScript(() => {
+      (window as unknown as { __ironNanoFake?: unknown }).__ironNanoFake = {
+        status: { state: 'ready', detail: 'ready' },
+        generate: async () => ({ text: 'Sorry, I cannot help with that.' }),
+      };
+    });
+    await fresh(page);
+    await page.goto('/food/recipes/new');
+    await page.getByTestId('recipe-start-estimate').click();
+    await page.getByTestId('recipe-estimate-text').fill('something unrecognisable');
+    await page.getByTestId('recipe-estimate-submit').click();
+
+    await expect(page.getByTestId('recognise-none')).toBeVisible();
+    await expect(page.getByTestId('question-card')).toHaveCount(0);
+    await expect(page.getByTestId('recipe-add-ingredient')).toBeVisible();
+  });
+
+  test('from an existing meal, Estimate opens the text box directly and the logged item is appended to that meal', async ({ page }) => {
+    await installEstimateFake(page, [{ name: 'cheddar', grams: 40 }], 'Cheese snack');
+    await fresh(page);
+
+    // Build an ordinary existing meal with one food item first, so there is a real meal id to
+    // navigate `estimate-meal` to.
+    await page.goto('/food/new');
+    await page.getByTestId('meal-name').fill('Snack');
+    await page.getByTestId('empty-add-food').click();
+    await page.getByTestId('food-name').fill('Toast');
+    await page.getByTestId('food-grams').fill('50');
+    await page.getByTestId('food-kcal').fill('250');
+    await page.getByTestId('food-protein').fill('8');
+    await page.getByTestId('food-carbs').fill('45');
+    await page.getByTestId('food-fat').fill('4');
+    await page.getByTestId('save-food').click();
+    await page.getByTestId('save-meal').click();
+    await page.waitForURL(/\/food\/[0-9a-f-]+$/);
+    const mealUrl = page.url();
+
+    await page.getByTestId('estimate-meal').click();
+    await expect(page).toHaveURL(/\/food\/recipes\/new\?start=estimate&meal=/);
+    // The text box opens directly — no need to tap "Estimate a meal out" first.
+    await expect(page.getByTestId('recipe-estimate-text')).toBeVisible();
+    await page.getByTestId('recipe-estimate-text').fill('a bit of cheese');
+    await page.getByTestId('recipe-estimate-submit').click();
+
+    await expect(page.getByTestId('review-row-0')).toContainText('Cheddar');
+    // 40 g @ 416 kcal/100g = 166.4 → 166, the real bundled CoFID figure.
+    await expect(page.getByTestId('review-total-kcal')).toHaveText('166 kcal');
+
+    await page.getByTestId('recipe-save-log').click();
+    // Back on the SAME meal, not a new one.
+    await page.waitForURL(mealUrl);
+    // The logged item takes the recipe/dish name ("Cheese snack"), the same as any other saved
+    // recipe's share — not the ingredient's own name. (Its kcal sits in the row's `right` slot,
+    // outside the row's own `<button>` — see `clickRow`'s doc comment above.)
+    const row = page.getByRole('button', { name: /Cheese snack/ });
+    await expect(row).toBeVisible();
+    await expect(row).toContainText('1 of 1 portion');
+    await expect(page.getByText('166 kcal')).toBeVisible();
   });
 });

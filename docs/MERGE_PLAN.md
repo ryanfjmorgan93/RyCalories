@@ -366,6 +366,15 @@ Photo or type a home-cooked meal, answer "how many eggs?", save it as a recipe, 
   handed to Nano by path, and deleted in `finally`; the folder is swept whenever the builder opens.
   This answers §8 Q1 for this feature: no meal photos are stored.
 - Schema v3 adds `recipes` (ingredients embedded in the row, so one `put` is atomic).
+- **Estimate a meal out** (offline, no web lookup — declined on cost): type "Five Guys double
+  bacon cheeseburger" and Nano breaks it into named parts with rough weights
+  (`MEAL_ESTIMATE_SYSTEM`/`parseMealEstimate`), matched against the same UK table/FoodMemory and
+  sent straight to Review — no one-at-a-time walk, since the amounts already arrived. Every
+  estimated amount is marked (`RecipeIngredient.amountEstimated`) and shown "≈ … · est."; editing
+  an amount clears its own marker. `recipeSource` logs and remembers the whole share as `'model'`
+  — the lowest trust there is — while any amount is still a guess, whatever the ingredients'
+  figures sources. Entry points: a fourth start option gated on Nano `ready`, and an `estimate-meal`
+  button on `MealEditScreen` (new and existing meals) that opens the builder on `?start=estimate`.
 
 ### P6 — Explicitly deferred to v1.1
 

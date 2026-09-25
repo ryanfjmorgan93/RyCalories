@@ -8,10 +8,12 @@ import {
   ingredientMacros,
   recipeDisplayTotals,
   recipeIsComplete,
+  recipeSource,
   recipeTotalGrams,
   shareFraction,
   shareLabel,
   shareNutrition,
+  toEstimatedIngredient,
   toIngredient,
 } from './recipe';
 import { ZERO, type Macros } from './food';
@@ -300,6 +302,63 @@ describe('toIngredient', () => {
     expect(i.product).toBe('Back Bacon');
     expect(i.source).toBe('label'); // the memory's own source rides along too
     expect(i.foodKey).toBe('memory:p:tesco back bacon');
+  });
+});
+
+describe('toEstimatedIngredient', () => {
+  it('fills grams from the part and marks the amount estimated', () => {
+    const candidate: IngredientCandidate = { key: 'table:17-001', name: 'Eggs, chicken, whole, raw', per100: EGG, source: 'table' };
+    const i = toEstimatedIngredient(candidate, { name: 'egg', grams: 150 }, 'id-1');
+    expect(i.name).toBe('Egg');
+    expect(i.grams).toBe(150);
+    expect(i.per100).toEqual(EGG);
+    expect(i.amountEstimated).toBe(true);
+  });
+
+  it('starts at grams 0, unmarked, for a part with no amount — "needs an amount", not an estimate', () => {
+    const i = toEstimatedIngredient(null, { name: 'mystery sauce' }, 'id-1');
+    expect(i.grams).toBe(0);
+    expect(i.amountEstimated).toBeUndefined();
+  });
+
+  it('derives a count unit\'s count from the guessed weight, rounded to one decimal, and keeps unitGrams', () => {
+    const candidate: IngredientCandidate = { key: 'table:17-001', name: 'Eggs, chicken, whole, raw', per100: EGG, source: 'table', unit: { label: 'egg', plural: 'eggs', grams: 50 } };
+    const i = toEstimatedIngredient(candidate, { name: 'egg', grams: 165 }, 'id-1');
+    expect(i.unit).toEqual({ count: 3.3, unitGrams: 50, label: 'egg', plural: 'eggs' });
+    expect(i.grams).toBe(165); // grams is the ground truth, not count * unitGrams recomputed
+  });
+
+  it('drops a bad or missing grams value to 0, never NaN or negative', () => {
+    expect(toEstimatedIngredient(null, { name: 'x', grams: NaN }, 'id-1').grams).toBe(0);
+    expect(toEstimatedIngredient(null, { name: 'x', grams: -50 }, 'id-1').grams).toBe(0);
+    expect(toEstimatedIngredient(null, { name: 'x' }, 'id-1').grams).toBe(0);
+  });
+
+  it('has no unit when the candidate has none, same as toIngredient', () => {
+    const candidate: IngredientCandidate = { key: 'table:12-001', name: 'Cheese, Cheddar, English', per100: { kcal: 416, protein: 25.4, carbs: 0.1, fat: 34.4 }, source: 'table' };
+    expect(toEstimatedIngredient(candidate, { name: 'cheddar', grams: 40 }, 'id-1').unit).toBeUndefined();
+  });
+});
+
+describe('recipeSource', () => {
+  it('is the weakest ingredient figures source once no amount is estimated', () => {
+    const ings = [ing({ source: 'table' }), ing({ source: 'label' })];
+    expect(recipeSource(ings)).toBe('table');
+  });
+
+  it('is "model" while any ingredient\'s amount is still estimated, even when every figure came from the table', () => {
+    const ings = [ing({ source: 'table' }), ing({ source: 'table', amountEstimated: true })];
+    expect(recipeSource(ings)).toBe('model');
+  });
+
+  it('goes back to the figures source once every amount has been edited (amountEstimated cleared)', () => {
+    const estimated = ing({ source: 'label', amountEstimated: true });
+    const edited = { ...estimated, amountEstimated: undefined };
+    expect(recipeSource([edited, ing({ source: 'table' })])).toBe('table');
+  });
+
+  it('defaults to "user" for an empty list, the same as combinedSource', () => {
+    expect(recipeSource([])).toBe('user');
   });
 });
 

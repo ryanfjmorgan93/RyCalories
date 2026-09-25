@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MEAL_PHOTO_PROMPT, MEAL_PHOTO_SYSTEM, parseMealAnalysis } from './mealAnalysis';
+import { MEAL_ESTIMATE_SYSTEM, MEAL_PHOTO_PROMPT, MEAL_PHOTO_SYSTEM, mealEstimatePrompt, parseMealAnalysis, parseMealEstimate } from './mealAnalysis';
 
 describe('prompt text', () => {
   it('asks for JSON only, with plain generic ingredient names and no amounts or nutrition', () => {
@@ -133,5 +133,93 @@ describe('capping at 12', () => {
     const result = parseMealAnalysis(JSON.stringify({ ingredients: names }));
     expect(result.ingredients).toHaveLength(12);
     expect(result.ingredients[0]).toBe('egg');
+  });
+});
+
+describe('MEAL_ESTIMATE_SYSTEM and mealEstimatePrompt', () => {
+  it('asks for JSON only, with plain generic component names, weights and no nutrition or commentary', () => {
+    expect(MEAL_ESTIMATE_SYSTEM).toMatch(/JSON/);
+    expect(MEAL_ESTIMATE_SYSTEM).toMatch(/dish/);
+    expect(MEAL_ESTIMATE_SYSTEM).toMatch(/parts/);
+    expect(MEAL_ESTIMATE_SYSTEM).toMatch(/grams/);
+    expect(MEAL_ESTIMATE_SYSTEM.toLowerCase()).toMatch(/no.*nutrition|nutrition figures/);
+    expect(MEAL_ESTIMATE_SYSTEM.length).toBeLessThan(700);
+  });
+
+  it('embeds the user\'s own text and asks for JSON only', () => {
+    const prompt = mealEstimatePrompt('Five Guys double bacon cheeseburger');
+    expect(prompt).toContain('Five Guys double bacon cheeseburger');
+    expect(prompt).toMatch(/JSON/);
+    expect(prompt).toMatch(/parts/);
+  });
+});
+
+describe('parseMealEstimate', () => {
+  it('parses a clean object with dish and parts', () => {
+    const raw = '{"dish": "Cheeseburger", "parts": [{"name": "beef patty", "grams": 150}, {"name": "burger bun", "grams": 90}]}';
+    expect(parseMealEstimate(raw)).toEqual({
+      dish: 'Cheeseburger',
+      parts: [
+        { name: 'beef patty', grams: 150 },
+        { name: 'burger bun', grams: 90 },
+      ],
+    });
+  });
+
+  it('parses an object with no dish', () => {
+    expect(parseMealEstimate('{"parts": [{"name": "rice", "grams": 200}]}')).toEqual({ parts: [{ name: 'rice', grams: 200 }] });
+  });
+
+  it('accepts a bare top-level array as the part list', () => {
+    expect(parseMealEstimate('[{"name": "egg", "grams": 50}]')).toEqual({ parts: [{ name: 'egg', grams: 50 }] });
+  });
+
+  it('extracts an object embedded in prose or a fence, same as parseMealAnalysis', () => {
+    const prose = 'Here you go: {"dish": "Fry-up", "parts": [{"name": "bacon", "grams": 50}]} enjoy!';
+    expect(parseMealEstimate(prose)).toEqual({ dish: 'Fry-up', parts: [{ name: 'bacon', grams: 50 }] });
+
+    const fenced = '```json\n{"dish": "Chilli", "parts": [{"name": "mince", "grams": 300}]}\n```';
+    expect(parseMealEstimate(fenced)).toEqual({ dish: 'Chilli', parts: [{ name: 'mince', grams: 300 }] });
+  });
+
+  it('drops a bad grams value to "no amount" rather than the whole part', () => {
+    const raw = '{"parts": [{"name": "cheddar", "grams": "a lot"}, {"name": "bacon", "grams": -5}, {"name": "egg", "grams": 3001}, {"name": "mayo", "grams": 0}]}';
+    expect(parseMealEstimate(raw)).toEqual({
+      parts: [{ name: 'cheddar' }, { name: 'bacon' }, { name: 'egg' }, { name: 'mayo' }],
+    });
+  });
+
+  it('accepts a grams value right up to the 3,000 g ceiling', () => {
+    expect(parseMealEstimate('{"parts": [{"name": "family chilli", "grams": 3000}]}')).toEqual({ parts: [{ name: 'family chilli', grams: 3000 }] });
+  });
+
+  it('dedupes parts by normalised, plural-insensitive name, SUMMING their grams', () => {
+    const raw = '{"dish": "Double cheeseburger", "parts": [{"name": "beef burger", "grams": 150}, {"name": "Beef burgers", "grams": 150}]}';
+    expect(parseMealEstimate(raw)).toEqual({ dish: 'Double cheeseburger', parts: [{ name: 'beef burger', grams: 300 }] });
+  });
+
+  it('keeps a part with an amount when the duplicate that follows has none', () => {
+    const raw = '{"parts": [{"name": "bacon", "grams": 50}, {"name": "bacon"}]}';
+    expect(parseMealEstimate(raw)).toEqual({ parts: [{ name: 'bacon', grams: 50 }] });
+  });
+
+  it('caps at 12 distinct parts, after deduping', () => {
+    const parts = [{ name: 'egg', grams: 50 }, { name: 'eggs', grams: 50 }, ...Array.from({ length: 14 }, (_, i) => ({ name: `part${i}`, grams: 10 }))];
+    const result = parseMealEstimate(JSON.stringify({ parts }));
+    expect(result.parts).toHaveLength(12);
+    expect(result.parts[0]).toEqual({ name: 'egg', grams: 100 });
+  });
+
+  it('garbage never throws and yields nothing', () => {
+    expect(parseMealEstimate('I could not follow that, sorry.')).toEqual({ parts: [] });
+    expect(parseMealEstimate('')).toEqual({ parts: [] });
+    expect(parseMealEstimate('{"dish": "X", "parts": [broken]}')).toEqual({ parts: [] });
+    expect(parseMealEstimate('42')).toEqual({ parts: [] });
+    expect(parseMealEstimate('{"dish": "X"}')).toEqual({ dish: 'X', parts: [] });
+  });
+
+  it('drops non-object part entries and parts with no usable name', () => {
+    const raw = '{"parts": [{"name": "egg", "grams": 50}, "bacon", 5, null, {"grams": 30}, {"name": "", "grams": 10}]}';
+    expect(parseMealEstimate(raw)).toEqual({ parts: [{ name: 'egg', grams: 50 }] });
   });
 });

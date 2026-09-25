@@ -269,6 +269,24 @@ describe('logging a share', () => {
     await expect(logShare({ recipe, share: { mode: 'portions', made: 0, eaten: 1 }, into: { newMeal: { date: TODAY } } })).rejects.toThrow();
   });
 
+  it('logs an item with source "model" while any ingredient\'s amount is still estimated from "Estimate a meal out"', async () => {
+    const estimated = eggs({ amountEstimated: true }); // source 'table', but the amount is a guess
+    const recipe = (await getRecipe(await saveRecipe({ name: 'Guessed omelette', ingredients: [estimated, cheddar()], portionsMade: 1 })))!;
+
+    const mealId = await logShare({ recipe, share: { mode: 'portions', made: 1, eaten: 1 }, into: { newMeal: { date: TODAY } } });
+    const item = (await itemsForMeal(mealId))[0]!;
+    expect(item.source).toBe('model');
+  });
+
+  it('logs the ordinary figures source once every estimated amount has been edited', async () => {
+    const edited = eggs(); // amountEstimated absent — the user edited it before saving
+    const recipe = (await getRecipe(await saveRecipe({ name: 'Confirmed omelette', ingredients: [edited, cheddar()], portionsMade: 1 })))!;
+
+    const mealId = await logShare({ recipe, share: { mode: 'portions', made: 1, eaten: 1 }, into: { newMeal: { date: TODAY } } });
+    const item = (await itemsForMeal(mealId))[0]!;
+    expect(item.source).toBe('table'); // both ingredients are source 'table', same as the unestimated case above
+  });
+
   it('does not clamp a share above the whole recipe', async () => {
     // "Never a number that flatters": seconds are real, so eating 2 of 1 portion is allowed and
     // logs at double the recipe's total, not capped back to 100%.

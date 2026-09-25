@@ -30,9 +30,47 @@ export interface MealAnalysis {
   ingredients: string[];
 }
 
+/**
+ * The system instruction sent with a typed "what did you eat out?" request — "Estimate a meal
+ * out" in the recipe builder. Breaks a described dish into its separate components, each with a
+ * total weight, so the bundled UK table can supply figures for every part. Still names only —
+ * never nutrition — the same rule `MEAL_PHOTO_SYSTEM` follows, just with a weight attached to
+ * each name this time (see `RecipeIngredient.amountEstimated`: an amount from the model is always
+ * marked, never trusted the way a typed or weighed one is).
+ */
+export const MEAL_ESTIMATE_SYSTEM =
+  'You break a takeaway, restaurant or home-cooked dish the user describes into its separate ' +
+  'components, each with a total weight in grams for the whole dish. Reply with JSON only, no ' +
+  'other text: {"dish": string, "parts": [{"name": string, "grams": number}]}. One entry per ' +
+  'distinct component — two burger patties is one entry at 300 g, never two entries. Use plain, ' +
+  'generic names that suit a UK food table, such as "beef burger", "burger bun", "cheddar", ' +
+  '"back bacon" or "mayonnaise" — never brand names. Do not include nutrition figures or any ' +
+  'other commentary.';
+
+/** The user-turn prompt for a typed meal-out description. */
+export function mealEstimatePrompt(text: string): string {
+  return (
+    `What did you eat: "${text}". Reply with JSON only: {"dish": "short name for the dish", ` +
+    '"parts": [{"name": "component", "grams": number}]}.'
+  );
+}
+
+export interface MealEstimatePart {
+  name: string;
+  /** Absent when the model gave no usable weight for this part — "no amount", never 0. */
+  grams?: number;
+}
+
+export interface MealEstimate {
+  dish?: string;
+  parts: MealEstimatePart[];
+}
+
 const MAX_NAME_LEN = 40;
 const MAX_DISH_LEN = 60;
 const MAX_INGREDIENTS = 12;
+const MAX_PARTS = 12;
+const MAX_GRAMS = 3000;
 
 /**
  * Turn the model's raw text response into a dish name and a bounded, deduplicated list of
@@ -49,6 +87,24 @@ export function parseMealAnalysis(raw: string): MealAnalysis {
   const dish = !Array.isArray(data) && isRecord(data) ? cleanDish(data.dish) : undefined;
 
   return dish !== undefined ? { dish, ingredients } : { ingredients };
+}
+
+/**
+ * Turn the model's raw text response to a meal-out estimate into a dish name and a bounded,
+ * deduplicated list of `{name, grams?}` parts. Same tolerant, never-throwing style as
+ * `parseMealAnalysis` — garbage becomes `{ parts: [] }`, which the caller treats as "estimated
+ * nothing" (`recognise-none`), never an error.
+ */
+export function parseMealEstimate(raw: string): MealEstimate {
+  const data = extractJson(raw);
+  if (data === undefined) return { parts: [] };
+
+  const rawParts = Array.isArray(data) ? data : isRecord(data) && Array.isArray(data.parts) ? data.parts : [];
+  const parts = dedupeParts(cleanParts(rawParts));
+
+  const dish = !Array.isArray(data) && isRecord(data) ? cleanDish(data.dish) : undefined;
+
+  return dish !== undefined ? { dish, parts } : { parts };
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -86,6 +142,49 @@ function dedupeNames(names: string[]): string[] {
     seen.add(key);
     out.push(name);
     if (out.length >= MAX_INGREDIENTS) break;
+  }
+  return out;
+}
+
+/** Each raw part must be an object with a usable `name`; `grams`, if present, must be a finite
+ * number strictly between 0 and 3,000 g or it is dropped (the ingredient keeps its name but no
+ * amount — "no amount", never a misleading 0). */
+function cleanParts(list: unknown[]): MealEstimatePart[] {
+  const out: MealEstimatePart[] = [];
+  for (const v of list) {
+    if (!isRecord(v) || typeof v.name !== 'string') continue;
+    const name = v.name.trim();
+    if (name.length === 0 || name.length > MAX_NAME_LEN) continue;
+    const grams = cleanGrams(v.grams);
+    out.push(grams !== undefined ? { name, grams } : { name });
+  }
+  return out;
+}
+
+function cleanGrams(v: unknown): number | undefined {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= MAX_GRAMS ? v : undefined;
+}
+
+/**
+ * Drop duplicates that differ only by case, whitespace or a trailing plural — same rule as
+ * `dedupeNames` — but SUM their grams rather than discarding the later entry: "two patties" said
+ * as two separate 150 g parts must total 300 g, not silently lose one. Caps at 12 distinct parts,
+ * same as `dedupeNames`'s ingredient cap.
+ */
+function dedupeParts(parts: MealEstimatePart[]): MealEstimatePart[] {
+  const seen = new Map<string, MealEstimatePart>();
+  const out: MealEstimatePart[] = [];
+  for (const part of parts) {
+    const key = singularKey(part.name);
+    const existing = seen.get(key);
+    if (existing) {
+      if (part.grams !== undefined) existing.grams = (existing.grams ?? 0) + part.grams;
+      continue;
+    }
+    if (out.length >= MAX_PARTS) break;
+    const copy: MealEstimatePart = { ...part };
+    seen.set(key, copy);
+    out.push(copy);
   }
   return out;
 }
