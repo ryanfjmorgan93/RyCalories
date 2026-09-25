@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from './db';
 import { resetToSeed, routineItems } from './repo';
-import { guessExerciseFromName, saveParsedRoutine, type ImportRow } from './routineImport';
+import { guessExerciseFromName, saveParsedRoutine, saveParsedRoutines, type ImportRow } from './routineImport';
 import { SEED_EXERCISE_IDS } from './seed';
 import type { ParsedRoutineLine } from '@/domain/routineText';
 
@@ -148,5 +148,27 @@ describe('saveParsedRoutine', () => {
     expect(await db.exercises.where('name').equals('Brand new lift').count()).toBe(0);
     const routines = await db.routines.toArray();
     expect(routines.some((r) => r.name === 'Broken')).toBe(false);
+  });
+
+  it('saves every routine of one paste together: a failure in the second leaves the first unwritten', async () => {
+    const routinesBefore = await db.routines.count();
+    const good: ImportRow[] = [{ line: line('Bench press', { sets: 3 }), choice: { kind: 'existing', exerciseId: BENCH_PRESS } }];
+    const bad: ImportRow[] = [{ line: line('Ghost'), choice: { kind: 'existing', exerciseId: 'does-not-exist' } }];
+    await expect(saveParsedRoutines([{ name: 'Day 1', rows: good }, { name: 'Day 2', rows: bad }])).rejects.toThrow();
+    expect(await db.routines.count()).toBe(routinesBefore);
+    expect((await db.routines.toArray()).some((r) => r.name === 'Day 1')).toBe(false);
+  });
+
+  it('an unknown name added as new on two days becomes one new exercise, used by both', async () => {
+    const saved = await saveParsedRoutines([
+      { name: 'Day 1', rows: [{ line: line('Landmine press', { sets: 3, repMin: 10, repMax: 12 }), choice: { kind: 'new' } }] },
+      { name: 'Day 2', rows: [{ line: line('landmine  Press', { sets: 2, repMin: 8, repMax: 8 }), choice: { kind: 'new' } }] },
+    ]);
+    expect(saved).toHaveLength(2);
+    expect(await db.exercises.filter((e) => e.name.toLowerCase().startsWith('landmine')).count()).toBe(1);
+    const day1 = await routineItems(saved[0]!.id);
+    const day2 = await routineItems(saved[1]!.id);
+    expect(day1[0]!.exercise.id).toBe(day2[0]!.exercise.id);
+    expect(day2[0]!.rx.targetSets).toBe(2);
   });
 });

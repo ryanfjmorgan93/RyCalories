@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { saveParsedRoutine, type ImportChoice, type ImportRow } from '@/db/routineImport';
+import { saveParsedRoutines, type ImportChoice, type ImportRow } from '@/db/routineImport';
 import { matchExercise } from '@/domain/exerciseMatch';
 import { fmtNum, fmtRange } from '@/domain/format';
 import { parseRoutineText, type ParsedRoutineLine } from '@/domain/routineText';
@@ -78,11 +78,13 @@ export function PasteRoutineSheet({ open, onClose }: { open: boolean; onClose: (
     if (saving || pending > 0 || total === 0) return;
     setSaving(true);
     try {
-      const saved = [];
-      for (const [ri, routine] of parsed.routines.entries()) {
-        const importRows: ImportRow[] = rows[ri]!.map((r) => ({ line: r.line, choice: r.choice! }));
-        if (importRows.length > 0) saved.push(await saveParsedRoutine(routine.name, importRows));
-      }
+      // All routines of the paste in one transaction: all saved, or none (and Save can be retried).
+      const saved = await saveParsedRoutines(
+        parsed.routines.map((routine, ri) => ({
+          name: routine.name,
+          rows: rows[ri]!.map((r): ImportRow => ({ line: r.line, choice: r.choice! })),
+        })),
+      );
       toast(saved.length === 1 ? 'Routine saved' : `${saved.length} routines saved`);
       reset();
       setSaving(false);
