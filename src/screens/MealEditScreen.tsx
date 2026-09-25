@@ -6,40 +6,56 @@ import { toDateKey } from '@/domain/dates';
 import { displayMacros, type Macros } from '@/domain/food';
 import { fmtDayKey, fmtGrams, fmtKcal } from '@/domain/format';
 import { MEAL_SLOTS, type MealItem, type MealSlot } from '@/domain/types';
-import { Button, IconButton } from '@/ui/components/Button';
+import { Button } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row } from '@/ui/components/Card';
 import { Chip } from '@/ui/components/Chip';
 import { MacroLine } from '@/ui/components/MacroBar';
 import { TextInput } from '@/ui/components/NumberField';
 import { Confirm } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
-import { PlusIcon, TopBar, TrashIcon } from '@/ui/components/TopBar';
+import { TopBar } from '@/ui/components/TopBar';
 import { FoodItemSheet } from '@/ui/FoodItemSheet';
 import { RecipePickerSheet } from '@/ui/RecipePickerSheet';
 import { useMeal, useToday } from '@/ui/hooks';
 
-/** A plain book icon for "From a recipe" — distinct from the plus used for "Add food". */
-function RecipeBookIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 19.5V5.5C4 4.67 4.67 4 5.5 4H19v15H6.5A2.5 2.5 0 0 0 4 21.5" />
-      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H19" />
-    </svg>
-  );
-}
-
-/** A plain scale/estimate icon for "Estimate" — distinct from the book used for "From a recipe". */
-function EstimateIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 3v3M12 6l-6 12h12L12 6ZM6 15h12" />
-    </svg>
-  );
-}
-
 export function MealEditScreen() {
   const { id } = useParams();
   return id ? <ExistingMeal id={id} /> : <NewMeal />;
+}
+
+/** The ways to add to a meal: always "Add food", plus "From a recipe" and "Estimate" while the
+ * meal is still empty — once it has an item, only "Add food" is offered. */
+function MealActionGrid({
+  showRecipeActions,
+  onAddFood,
+  onFromRecipe,
+  onEstimate,
+}: {
+  showRecipeActions: boolean;
+  onAddFood: () => void;
+  onFromRecipe: () => void;
+  onEstimate: () => void;
+}) {
+  if (!showRecipeActions) {
+    return (
+      <Button size="md" variant="secondary" full onClick={onAddFood} data-testid="add-food">
+        Add food
+      </Button>
+    );
+  }
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      <Button size="md" variant="secondary" full onClick={onAddFood} data-testid="add-food">
+        Add food
+      </Button>
+      <Button size="md" variant="secondary" full onClick={onFromRecipe} data-testid="from-recipe">
+        From a recipe
+      </Button>
+      <Button size="md" variant="secondary" full onClick={onEstimate} data-testid="estimate-meal">
+        Estimate
+      </Button>
+    </div>
+  );
 }
 
 /**
@@ -93,23 +109,6 @@ function NewMeal() {
         // Leaving with food that was never saved asks first — from the back arrow and, through it,
         // the Android back gesture, which used to leave the app with the draft intact.
         onBack={() => (items.length > 0 && !saving ? setConfirmLeave(true) : nav('/food'))}
-        right={
-          <div className="flex items-center">
-            {items.length === 0 && (
-              <>
-                <IconButton label="From a recipe" onClick={() => setRecipePickerOpen(true)} data-testid="from-recipe">
-                  <RecipeBookIcon />
-                </IconButton>
-                <IconButton label="Estimate a meal out" onClick={() => nav(`/food/recipes/new?start=estimate&date=${date}`)} data-testid="estimate-meal">
-                  <EstimateIcon />
-                </IconButton>
-              </>
-            )}
-            <IconButton label="Add food" onClick={() => setEditing('new')} data-testid="add-food">
-              <PlusIcon />
-            </IconButton>
-          </div>
-        }
       />
       <div className="px-4">
         <MealFields name={name} slot={slot} onName={setName} onSlot={setSlot} />
@@ -119,6 +118,13 @@ function NewMeal() {
           onEdit={(i) => setEditing(i)}
           onAdd={() => setEditing('new')}
           macros={macros}
+        />
+        <div className="h-4" />
+        <MealActionGrid
+          showRecipeActions={items.length === 0}
+          onAddFood={() => setEditing('new')}
+          onFromRecipe={() => setRecipePickerOpen(true)}
+          onEstimate={() => nav(`/food/recipes/new?start=estimate&date=${date}`)}
         />
         <div className="h-4" />
         <Button size="lg" variant="primary" full disabled={items.length === 0 || saving} onClick={() => void save()} data-testid="save-meal">
@@ -216,9 +222,9 @@ function ExistingMeal({ id }: { id: string }) {
         subtitle={fmtDayKey(meal.meal.date, today, '')}
         back="/food"
         right={
-          <IconButton label="Delete meal" onClick={() => setConfirmDelete(true)} data-testid="delete-meal">
-            <TrashIcon />
-          </IconButton>
+          <Button size="md" variant="ghost" onClick={() => setConfirmDelete(true)} data-testid="delete-meal">
+            Delete meal
+          </Button>
         }
       />
       <div className="px-4">
@@ -231,17 +237,12 @@ function ExistingMeal({ id }: { id: string }) {
         <div className="h-4" />
         <ItemList items={items} onEdit={(i) => setEditing(i)} onAdd={() => setEditing('new')} macros={sumItems(meal.items)} />
         <div className="h-4" />
-        <div className="grid grid-cols-3 gap-2">
-          <Button size="md" variant="secondary" full onClick={() => setEditing('new')} data-testid="add-food-button">
-            Add food
-          </Button>
-          <Button size="md" variant="secondary" full onClick={() => setRecipePickerOpen(true)} data-testid="from-recipe">
-            From a recipe
-          </Button>
-          <Button size="md" variant="secondary" full onClick={() => nav(`/food/recipes/new?start=estimate&meal=${id}`)} data-testid="estimate-meal">
-            Estimate
-          </Button>
-        </div>
+        <MealActionGrid
+          showRecipeActions
+          onAddFood={() => setEditing('new')}
+          onFromRecipe={() => setRecipePickerOpen(true)}
+          onEstimate={() => nav(`/food/recipes/new?start=estimate&meal=${id}`)}
+        />
         <div className="h-8" />
       </div>
 

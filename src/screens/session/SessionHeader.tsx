@@ -7,12 +7,11 @@ import { fmtDuration } from '@/domain/format';
 import { DEFAULT_SETTINGS, type Session, type Settings } from '@/domain/types';
 import { useAssistant } from '@/state/assistant';
 import { AssistantBox } from '@/ui/AssistantBox';
-import { Button, IconButton } from '@/ui/components/Button';
+import { Button } from '@/ui/components/Button';
 import { Toggle } from '@/ui/components/Chip';
 import { Sheet } from '@/ui/components/Sheet';
-import { MoreIcon, TopBar } from '@/ui/components/TopBar';
+import { TopBar } from '@/ui/components/TopBar';
 import { useNow } from '@/ui/hooks';
-import { AskIcon } from './icons';
 
 export function SessionHeader({
   session,
@@ -77,17 +76,20 @@ export function SessionHeader({
         }
         right={
           <>
-            <IconButton
-              label="Ask"
-              onClick={() => setAssistantOpen(true)}
-              disabled={assistantStatus?.state === 'unavailable'}
-              data-testid="ask-assistant"
-            >
-              <AskIcon />
-            </IconButton>
-            <IconButton label="Session options" onClick={() => setSessionMenuOpen(true)} data-testid="session-options">
-              <MoreIcon />
-            </IconButton>
+            <div className="flex items-center gap-0.5">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setAssistantOpen(true)}
+                disabled={assistantStatus?.state === 'unavailable'}
+                data-testid="ask-assistant"
+              >
+                Ask
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setSessionMenuOpen(true)} data-testid="session-options">
+                More
+              </Button>
+            </div>
             <Button variant="primary" size="md" onClick={onFinish} data-testid="finish-session" className="mr-2">
               Finish
             </Button>

@@ -11,7 +11,7 @@ import { Card, Divider, EmptyState, Row } from '@/ui/components/Card';
 import { MacroLine, MacroSplit, TargetBar } from '@/ui/components/MacroBar';
 import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
-import { BackIcon, ChevronIcon, MoreIcon, PlusIcon, TopBar } from '@/ui/components/TopBar';
+import { BackIcon, ChevronIcon, MoreIcon, TopBar } from '@/ui/components/TopBar';
 import { useDayMeals, useRecentMeals, useSettings, useToday } from '@/ui/hooks';
 
 /**
@@ -45,14 +45,7 @@ export function FoodScreen() {
 
   return (
     <div>
-      <TopBar
-        title="Food"
-        right={
-          <IconButton label="Add meal" onClick={() => nav(`/food/new?date=${date}`)} data-testid="add-meal">
-            <PlusIcon />
-          </IconButton>
-        }
-      />
+      <TopBar title="Food" />
 
       <div className="px-4">
         {/* Day navigation. Forward is capped at today: there is no logging food you have not eaten. */}

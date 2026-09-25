@@ -14,7 +14,7 @@ import { countsForProgression, countsForRecords } from '@/domain/sets';
 import type { Exercise, ExerciseKind, ProgressionDecision, ProgressionRule, RoutineExercise, SetLog } from '@/domain/types';
 import { useAssistant } from '@/state/assistant';
 import { AssistantBox } from '@/ui/AssistantBox';
-import { Button, IconButton } from '@/ui/components/Button';
+import { Button } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row, SectionTitle } from '@/ui/components/Card';
 import { Chip, Segmented } from '@/ui/components/Chip';
 import { LineChart, type ChartPoint } from '@/ui/components/LineChart';
@@ -101,15 +101,16 @@ export function ExerciseDetailScreen() {
         title={exercise.name}
         back="/exercises"
         right={
-          <div className="flex items-center">
-            <IconButton
-              label="Ask"
+          <div className="flex items-center gap-1">
+            <Button
+              size="md"
+              variant="ghost"
               onClick={() => setAskOpen(true)}
               disabled={assistantStatus?.state === 'unavailable'}
               data-testid="ask-assistant"
             >
-              <AskIcon />
-            </IconButton>
+              Ask
+            </Button>
             <Button size="md" variant="ghost" className="mr-1" onClick={() => nav(`/exercises/${exercise.id}/edit`)}>
               Edit
             </Button>
@@ -450,13 +451,4 @@ function dimSetLabel(s: SetLog, kind: ExerciseKind): string {
   if (kind === 'carry') return `${fmtNum(s.weight)}×${s.distanceM !== undefined ? `${fmtNum(s.distanceM)}m` : `${fmtNum(s.seconds ?? 0)}s`}`;
   if (kind === 'timed') return `${fmtNum(s.seconds ?? 0)}s`;
   return `${weightLabel(s, kind)}×${s.reps ?? 0}`;
-}
-
-function AskIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-      <path d="M12 8v3M12 14h.01" />
-    </svg>
-  );
 }

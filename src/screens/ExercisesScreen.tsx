@@ -2,11 +2,11 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { demoFrameUrl } from '@/data/exerciseDemos';
 import { MUSCLE_GROUPS, type Exercise, type MuscleGroup } from '@/domain/types';
-import { IconButton } from '@/ui/components/Button';
+import { Button } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row, SectionTitle } from '@/ui/components/Card';
 import { Chip } from '@/ui/components/Chip';
 import { TextInput } from '@/ui/components/NumberField';
-import { ChevronIcon, PlusIcon, TopBar } from '@/ui/components/TopBar';
+import { ChevronIcon, TopBar } from '@/ui/components/TopBar';
 import { useExercises } from '@/ui/hooks';
 
 type Filter = 'all' | MuscleGroup;
@@ -50,9 +50,9 @@ export function ExercisesScreen() {
       <TopBar
         title="Exercises"
         right={
-          <IconButton label="Add" onClick={() => nav('/exercises/new')} data-testid="add-exercise">
-            <PlusIcon />
-          </IconButton>
+          <Button size="md" variant="ghost" className="mr-1" onClick={() => nav('/exercises/new')} data-testid="add-exercise">
+            New exercise
+          </Button>
         }
       />
       <div className="px-4">
