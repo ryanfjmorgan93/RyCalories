@@ -407,10 +407,22 @@ export async function swipe(
   });
 }
 
-/** Centre of an element, for `swipe`. Waits for it to be visible first. */
+/**
+ * Centre of an element, for `swipe` — once it has stopped moving. A sheet slides up as it opens;
+ * measured mid-slide, the centre is where the element was, not where the finger will land, and on
+ * CI's slower runner a swipe aimed that way started below the list it was meant to scroll.
+ */
 export async function centreOf(locator: Locator): Promise<{ x: number; y: number }> {
   await expect(locator).toBeVisible();
-  const box = await locator.boundingBox();
+  let box = await locator.boundingBox();
+  await expect
+    .poll(async () => {
+      const prev = box;
+      await locator.page().waitForTimeout(60);
+      box = await locator.boundingBox();
+      return !!prev && !!box && prev.x === box.x && prev.y === box.y && prev.width === box.width && prev.height === box.height;
+    })
+    .toBe(true);
   if (!box) throw new Error('No bounding box');
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }

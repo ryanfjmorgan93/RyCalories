@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { addMeal, itemsForMeal, mealsOnDay, suggestFoods } from './foodRepo';
 import { db } from './db';
 import { deleteRecipe, getRecipe, listRecipes, logShare, saveRecipe, shareItem } from './recipeRepo';
@@ -92,10 +92,19 @@ describe('saving a recipe', () => {
   });
 
   it('mints the id in JS before the write, and lists newest-updated first', async () => {
-    const a = await saveRecipe({ name: 'A', ingredients: [eggs()], portionsMade: 1 });
-    const b = await saveRecipe({ name: 'B', ingredients: [eggs()], portionsMade: 1 });
-    expect(a).not.toBe(b);
-    expect((await listRecipes()).map((r) => r.id)).toEqual([b, a]);
+    // Two saves a few microseconds apart can share a millisecond, and then "newest" is a tie that
+    // came out either way in CI. Only Date is faked; IndexedDB's own scheduling stays real.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-09-01T10:00:00.000Z'));
+      const a = await saveRecipe({ name: 'A', ingredients: [eggs()], portionsMade: 1 });
+      vi.setSystemTime(new Date('2026-09-01T10:00:01.000Z'));
+      const b = await saveRecipe({ name: 'B', ingredients: [eggs()], portionsMade: 1 });
+      expect(a).not.toBe(b);
+      expect((await listRecipes()).map((r) => r.id)).toEqual([b, a]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('trims the name and falls back to Recipe for a blank one', async () => {
