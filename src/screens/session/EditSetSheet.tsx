@@ -32,7 +32,7 @@ export function EditSetSheet({
   const [type, setType] = useState<SetType>(set.type);
   return (
     <Sheet open onClose={onClose} title="Edit set">
-      <div className="mb-3 flex items-center gap-2 overflow-x-auto no-scrollbar" role="radiogroup" aria-label="Set type">
+      <div className="mb-3 flex items-center gap-2 overflow-x-auto no-scrollbar" role="radiogroup" aria-label="Set type" data-sheet-nodrag>
         <Chip size="lg" tone="warn" active={type === 'warmup'} onClick={() => setType('warmup')}>
           Warm-up
         </Chip>

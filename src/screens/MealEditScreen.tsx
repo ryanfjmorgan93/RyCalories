@@ -57,6 +57,7 @@ function NewMeal() {
   const [items, setItems] = useState<NewMealItem[]>([]);
   const [editing, setEditing] = useState<number | 'new' | null>(null);
   const [recipePickerOpen, setRecipePickerOpen] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false);
 
   const macros = items.reduce<Macros>(
     (acc, i) => {
@@ -89,6 +90,9 @@ function NewMeal() {
         title="New meal"
         subtitle={fmtDayKey(date, today, '')}
         back="/food"
+        // Leaving with food that was never saved asks first — from the back arrow and, through it,
+        // the Android back gesture, which used to leave the app with the draft intact.
+        onBack={() => (items.length > 0 && !saving ? setConfirmLeave(true) : nav('/food'))}
         right={
           <div className="flex items-center">
             {items.length === 0 && (
@@ -139,6 +143,19 @@ function NewMeal() {
         onSave={(item) => {
           setItems((prev) => (typeof editing === 'number' ? prev.map((p, i) => (i === editing ? item : p)) : [...prev, item]));
           setEditing(null);
+        }}
+      />
+
+      <Confirm
+        open={confirmLeave}
+        title="Discard this meal?"
+        confirmLabel="Discard"
+        cancelLabel="Keep"
+        danger
+        onCancel={() => setConfirmLeave(false)}
+        onConfirm={() => {
+          setConfirmLeave(false);
+          nav('/food');
         }}
       />
 

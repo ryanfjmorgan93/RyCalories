@@ -63,6 +63,8 @@ export function HoldToConfirm({
     <button
       type="button"
       data-testid={testId}
+      // A hold that drifts must not turn into dragging the sheet it sits in (Sheet.tsx).
+      data-sheet-nodrag
       disabled={disabled}
       // touch-none: without it a finger that drifts a few pixels lets the browser claim the gesture
       // as a scroll and fire pointercancel, so a real hold on the phone keeps resetting.

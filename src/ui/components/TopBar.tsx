@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { popBackAction, pushBackAction, type BackAction } from '@/state/overlays';
 import { IconButton } from './Button';
 
 export function TopBar({
@@ -22,6 +23,20 @@ export function TopBar({
     if (window.history.length > 1) nav(-1);
     else nav('/');
   };
+
+  // The Android back gesture does exactly what this arrow does (src/state/overlays.ts), so a
+  // screen's guard — an unsaved meal asking first — covers both.
+  const action = useRef<BackAction>({ run: goBack });
+  useLayoutEffect(() => {
+    action.current.run = goBack;
+  });
+  const hasBack = !!back;
+  useEffect(() => {
+    if (!hasBack) return;
+    const a = action.current;
+    pushBackAction(a);
+    return () => popBackAction(a);
+  }, [hasBack]);
   return (
     <header className="glass-fixed pt-safe sticky top-0 z-30 border-b">
       <div className="flex h-14 items-center gap-1 px-2">

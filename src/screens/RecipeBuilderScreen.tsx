@@ -23,7 +23,7 @@ import { Button } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row } from '@/ui/components/Card';
 import { MacroLine } from '@/ui/components/MacroBar';
 import { NumberField, NumberInput, TextInput } from '@/ui/components/NumberField';
-import { Sheet } from '@/ui/components/Sheet';
+import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { TopBar } from '@/ui/components/TopBar';
 import { RecipeShareFields, shareInputFrom, useShareState } from '@/ui/RecipeShareFields';
@@ -443,6 +443,9 @@ export function RecipeBuilderScreen() {
   const [estimateText, setEstimateText] = useState('');
   const [shareState, patchShare] = useShareState(1);
   const [saving, setSaving] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  // What an edit started from, to tell an untouched recipe from a changed one.
+  const [loaded, setLoaded] = useState<{ name: string; ingredients: RecipeIngredient[] } | null>(null);
 
   const photoInputRef = useRef<HTMLInputElement>(null);
   const ticketRef = useRef(0);
@@ -464,6 +467,7 @@ export function RecipeBuilderScreen() {
     loadedExistingRef.current = true;
     setName(existing.name);
     setIngredients(existing.ingredients);
+    setLoaded({ name: existing.name, ingredients: existing.ingredients });
     patchShare({ made: existing.portionsMade });
     setPhase('review');
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -640,10 +644,29 @@ export function RecipeBuilderScreen() {
 
   const loading = Boolean(id) && existing === undefined;
   const notFound = Boolean(id) && existing === null;
+  // Leaving with ingredients that were never saved asks first — from the back arrow and, through
+  // it, the Android back gesture, which used to leave the app with the draft intact.
+  const unsaved = !saving && (id ? !!loaded && (ingredients !== loaded.ingredients || name !== loaded.name) : ingredients.length > 0);
 
   return (
     <div>
-      <TopBar title={id ? name || 'Edit recipe' : 'New recipe'} back={backHref} />
+      <TopBar
+        title={id ? name || 'Edit recipe' : 'New recipe'}
+        back={backHref}
+        onBack={() => (unsaved ? setConfirmLeave(true) : nav(backHref))}
+      />
+      <Confirm
+        open={confirmLeave}
+        title={id ? 'Discard your changes?' : 'Discard this recipe?'}
+        confirmLabel="Discard"
+        cancelLabel="Keep"
+        danger
+        onCancel={() => setConfirmLeave(false)}
+        onConfirm={() => {
+          setConfirmLeave(false);
+          nav(backHref);
+        }}
+      />
 
       <input
         ref={photoInputRef}

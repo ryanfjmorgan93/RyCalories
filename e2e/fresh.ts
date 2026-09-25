@@ -1,4 +1,4 @@
-import { expect, type Browser, type BrowserContext, type Locator, type Page } from '@playwright/test';
+import { expect, type Browser, type BrowserContext, type CDPSession, type Locator, type Page } from '@playwright/test';
 
 /**
  * Start a test from a clean slate: no database, no local storage, and — this is the part that
@@ -42,14 +42,6 @@ export async function fresh(page: Page, ready = 'next-up'): Promise<void> {
 }
 
 /**
- * Click a button that may or may not appear, waiting properly for it.
- *
- * `locator.isVisible()` does NOT wait — it samples the DOM once and its `timeout` option is
- * ignored. Used as a guard it silently answers "no" for anything not yet rendered, so the click
- * is skipped and the test carries on past a step that never happened. That is how a modal sheet
- * came to be left open mid-test while the suite reported green.
- */
-/**
  * Log one set on an exercise card and wait until it has actually been recorded.
  *
  * Clicking set-done starts an IndexedDB write; the table only moves on to the next row once the
@@ -69,6 +61,14 @@ export async function logOneSet(page: Page, card: Locator, weight: number, reps:
   await clickIfPresent(page.getByTestId('rest-timer').getByRole('button', { name: 'Skip' }), 300);
 }
 
+/**
+ * Click a button that may or may not appear, waiting properly for it.
+ *
+ * `locator.isVisible()` does NOT wait — it samples the DOM once and its `timeout` option is
+ * ignored. Used as a guard it silently answers "no" for anything not yet rendered, so the click
+ * is skipped and the test carries on past a step that never happened. That is how a modal sheet
+ * came to be left open mid-test while the suite reported green.
+ */
 export async function clickIfPresent(locator: Locator, timeout = 1500): Promise<boolean> {
   try {
     await locator.waitFor({ state: 'visible', timeout });
@@ -349,4 +349,68 @@ export function backupsOfKind(files: { path: string; content: string }[], kind: 
  */
 export async function waitForHistoryCheckSettled(page: Page): Promise<void> {
   await expect(page.locator('html')).toHaveAttribute('data-history-check', 'done', { timeout: 15_000 });
+}
+
+// ---------------------------------------------------------------------------
+// Real touch input.
+
+const touchSessions = new WeakMap<Page, CDPSession>();
+
+/**
+ * Drag a finger from `from` to `to` through Chromium's own touch pipeline (CDP
+ * `Input.dispatchTouchEvent`), as a phone would.
+ *
+ * Not a synthetic DOM `TouchEvent`: one of those reaches the page's listeners and nothing else —
+ * no native scrolling, no `touch-action`, no "the browser has taken this gesture" — which are
+ * exactly what a sheet's pull-to-close has to get right, so a test built on it would pass whatever
+ * the sheet did. Checked in this suite's headless Chromium under the Pixel 7 profile
+ * (`hasTouch`): these events scroll an `overflow-y: auto` list natively, the first touchmove
+ * arrives about 16 px out and is cancelable, and once the browser starts scrolling the rest are
+ * not — the same sequence a finger produces.
+ *
+ * `steps` moves spread over `durationMs`: many over a long time is a slow pull, few over a short
+ * time is a flick. Each event carries an explicit timestamp on that schedule, which is what the
+ * page sees as `event.timeStamp`: a CDP round trip takes tens of milliseconds, so without it every
+ * gesture reached the page slower than written and a flick measured as a slow pull. Moves under
+ * ~16 px are swallowed by the browser's own slop, so keep drags longer than that.
+ *
+ * `holdMs` keeps the finger still before lifting it, so the release has no speed: no fling. A
+ * scroll that flings keeps coasting after the finger lifts, and Chrome hands the NEXT touch that
+ * starts during the coast to scrolling outright (its touchmoves arrive uncancelable) — so a test
+ * that swipes again straight after a flinging scroll is not testing the page's own decision.
+ */
+export async function swipe(
+  page: Page,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  { steps = 12, durationMs = 240, holdMs = 0 }: { steps?: number; durationMs?: number; holdMs?: number } = {},
+): Promise<void> {
+  let cdp = touchSessions.get(page);
+  if (!cdp) {
+    cdp = await page.context().newCDPSession(page);
+    touchSessions.set(page, cdp);
+  }
+  const at = (f: number) => [{ x: from.x + (to.x - from.x) * f, y: from.y + (to.y - from.y) * f }];
+  const start = Date.now() / 1000; // CDP timestamps are seconds since the epoch
+  const stepS = durationMs / steps / 1000;
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: at(0), timestamp: start });
+  for (let i = 1; i <= steps; i++) {
+    await page.waitForTimeout(durationMs / steps);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: at(i / steps), timestamp: start + i * stepS });
+  }
+  // The finger lifts one frame after its last move, as it does on a phone — or after holding still.
+  if (holdMs > 0) await page.waitForTimeout(holdMs);
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchEnd',
+    touchPoints: [],
+    timestamp: start + (durationMs + Math.max(8, holdMs)) / 1000,
+  });
+}
+
+/** Centre of an element, for `swipe`. Waits for it to be visible first. */
+export async function centreOf(locator: Locator): Promise<{ x: number; y: number }> {
+  await expect(locator).toBeVisible();
+  const box = await locator.boundingBox();
+  if (!box) throw new Error('No bounding box');
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }

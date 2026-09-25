@@ -345,6 +345,18 @@ unlogged days are excluded from every average, the count of days each average st
 beside it, and below half coverage the screen says outright that the averages describe the logged
 days rather than the window.
 
+**Findable actions, sheets that pull down, and the back gesture (September 2026).** The owner
+spent a while hunting for New meal's three header icons (book, triangle, plus — no words). Every
+header action now shows a word; icons remain only for Back, the Food day arrows and row-level ⋯
+menus, and New meal carries the same labelled Add food / From a recipe / Estimate row the saved
+meal already had. Sheets close on a pull down (`src/ui/components/sheetGesture.ts` decides,
+`Sheet.tsx` wires native touch listeners). The Android back gesture used to leave the app
+outright, past any open sheet or unsaved meal; with `@capacitor/app` it now closes the top sheet,
+else does what the screen's back arrow does, else minimises (`src/state/overlays.ts`). Escape
+drives the same stack — it used to close every stacked sheet at once. Because back now navigates
+instead of leaving, an unsaved meal or recipe asks "Discard?" first, from the arrow and the
+gesture alike.
+
 ### P5b — Cooked meals · **M** · ✅ shipped
 
 Photo or type a home-cooked meal, answer "how many eggs?", save it as a recipe, log your share.
@@ -584,6 +596,24 @@ counts drop below a baseline without an in-app delete, and a Backups card in Set
 - **A tight loop of set-done clicks logs the wrong sets.** The table only moves on when the live
   query answers; filling the next row first types into the row still live. `logOneSet` in
   `e2e/fresh.ts` waits for the set's own logged row.
+
+### 6.8 Pull-to-close sheets — traps paid for
+
+- **React's `onTouchMove` is passive**, so it cannot `preventDefault` and the list scrolls under
+  the dragged sheet. The listeners are added by hand with `{ passive: false }`.
+- **The browser decides at the first touchmove, not ours.** Chrome swallows about 16 px of slop,
+  then the first touchmove is the only one that can stop a scroll starting. Whose gesture it is
+  gets decided there, once; a move that arrives uncancelable already belongs to the browser.
+- **A touch that starts while a list is still coasting from a fling arrives uncancelable** (a
+  Chrome intervention). A test that swipes again straight after a flinging scroll passes whatever
+  the sheet decides; `swipe({ holdMs })` lifts the finger without speed.
+- **Synthetic DOM `TouchEvent`s prove nothing here** — no native scroll, no `touch-action`. `swipe`
+  in `e2e/fresh.ts` goes through CDP `Input.dispatchTouchEvent`, with explicit timestamps: a CDP
+  round trip is tens of milliseconds, and without them every flick measured as a slow pull.
+- **Drag state is written straight onto the panel**, not through React state, so a test watching
+  `data-drag-state` sees a drag inside the touch handler, not a render later.
+- Each of the four behaviours (scroll first, flick, settle back, top-only Escape) was shown to fail
+  its test when broken on purpose.
 
 ---
 

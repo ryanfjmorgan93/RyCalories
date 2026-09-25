@@ -25,6 +25,7 @@ import { MealEditScreen } from './screens/MealEditScreen';
 import { ProgressScreen } from './screens/ProgressScreen';
 import { RecipesScreen } from './screens/RecipesScreen';
 import { RecipeBuilderScreen } from './screens/RecipeBuilderScreen';
+import { useAndroidBackButton } from './ui/useAndroidBackButton';
 
 function Shell() {
   const dock = useSessionDock();
@@ -90,6 +91,12 @@ function SessionShell() {
   );
 }
 
+/** Side effect only, like ScrollToTop: the Android back gesture (src/ui/useAndroidBackButton.ts). */
+function AndroidBackButton() {
+  useAndroidBackButton();
+  return null;
+}
+
 function ScrollToTop() {
   const { pathname } = useLocation();
   // Reset scroll on route change (mobile browsers keep the previous offset otherwise).
@@ -103,6 +110,7 @@ export function App() {
   return (
     <BrowserRouter>
       <ScrollToTop />
+      <AndroidBackButton />
       <Ambient />
       <Routes>
         <Route element={<Shell />}>
