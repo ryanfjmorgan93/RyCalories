@@ -7,12 +7,12 @@ import { sessionSeconds } from '@/db/historyQueries';
 import { fmtDateLong, fmtDuration, fmtKg, fmtNum, fmtWeight, targetLine } from '@/domain/format';
 import { countsForVolume, feelLabel, setBadges } from '@/domain/sets';
 import type { ExerciseKind, ProgressionDecision, Session, SetLog } from '@/domain/types';
-import { Button, IconButton } from '@/ui/components/Button';
+import { Button } from '@/ui/components/Button';
 import { Card, Divider, Stat } from '@/ui/components/Card';
 import { Chip } from '@/ui/components/Chip';
-import { Confirm, Sheet } from '@/ui/components/Sheet';
+import { Confirm } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
-import { MoreIcon, TopBar } from '@/ui/components/TopBar';
+import { TopBar } from '@/ui/components/TopBar';
 import { useRoutineItems } from '@/ui/hooks';
 
 const timeFmt = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -26,7 +26,6 @@ export function SessionDetailScreen() {
   const { id } = useParams();
   const nav = useNavigate();
   const detail = useLiveQuery(() => (id ? sessionDetail(id) : null), [id]);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   useEffect(() => {
@@ -65,9 +64,9 @@ export function SessionDetailScreen() {
         subtitle={`${fmtDateLong(session.startedAt)}, ${fmtTime(session.startedAt)}${session.deload ? ' · Deload' : ''}`}
         back
         right={
-          <IconButton label="More" onClick={() => setMenuOpen(true)}>
-            <MoreIcon />
-          </IconButton>
+          <Button size="md" variant="ghost" onClick={() => setDeleteOpen(true)} data-testid="delete-session">
+            Delete session
+          </Button>
         }
       />
       <div className="px-4">
@@ -110,20 +109,6 @@ export function SessionDetailScreen() {
         </Button>
         <div className="h-6" />
       </div>
-
-      <Sheet open={menuOpen} onClose={() => setMenuOpen(false)} title={session.title}>
-        <Button
-          size="lg"
-          variant="danger"
-          full
-          onClick={() => {
-            setMenuOpen(false);
-            setDeleteOpen(true);
-          }}
-        >
-          Delete session
-        </Button>
-      </Sheet>
 
       <Confirm
         open={deleteOpen}

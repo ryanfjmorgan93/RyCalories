@@ -20,7 +20,7 @@ import { Chip, Toggle } from '@/ui/components/Chip';
 import { NumberInput, TextInput } from '@/ui/components/NumberField';
 import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
-import { MoreIcon, TopBar } from '@/ui/components/TopBar';
+import { TopBar } from '@/ui/components/TopBar';
 import { ExercisePicker } from '@/ui/ExercisePicker';
 import { defaultRestSec, RoutineExerciseEditor } from '@/ui/RoutineExerciseEditor';
 import { useActiveSession, useRoutineItems, useSettings } from '@/ui/hooks';
@@ -82,9 +82,9 @@ export function RoutineEditScreen() {
         subtitle={[routine.isLowerBody ? 'Lower body' : null, routine.targetMinutes ? `target ${routine.targetMinutes} min` : null].filter(Boolean).join(' · ') || undefined}
         back="/routines"
         right={
-          <IconButton label="More" onClick={() => setMenuOpen(true)} data-testid="routine-menu">
-            <MoreIcon />
-          </IconButton>
+          <Button size="md" variant="ghost" onClick={() => setMenuOpen(true)} data-testid="routine-menu">
+            More
+          </Button>
         }
       />
       <div className="px-4">

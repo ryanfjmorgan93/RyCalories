@@ -10,7 +10,7 @@ import { Toggle } from '@/ui/components/Chip';
 import { NumberInput, TextInput } from '@/ui/components/NumberField';
 import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
-import { MoreIcon, PlusIcon, TopBar } from '@/ui/components/TopBar';
+import { MoreIcon, TopBar } from '@/ui/components/TopBar';
 import { useRoutines } from '@/ui/hooks';
 
 export function RoutinesScreen() {
@@ -48,15 +48,15 @@ export function RoutinesScreen() {
       <TopBar
         title="Routines"
         right={
-          <IconButton label="New routine" onClick={() => setNewOpen(true)} data-testid="new-routine">
-            <PlusIcon />
-          </IconButton>
+          <Button size="md" variant="ghost" onClick={() => setNewOpen(true)} data-testid="new-routine">
+            New routine
+          </Button>
         }
       />
       <div className="px-4">
         <div className="h-2" />
         {routines === undefined && <div className="py-8 text-center text-sm text-muted">Loading…</div>}
-        {routines && routines.length === 0 && <EmptyState>No routines yet. Tap + to add one.</EmptyState>}
+        {routines && routines.length === 0 && <EmptyState>No routines yet.</EmptyState>}
         {routines && routines.length > 0 && (
           <Card>
             {routines.map((r, i) => (

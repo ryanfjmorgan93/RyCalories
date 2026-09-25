@@ -266,8 +266,7 @@ test.describe('backup, loss and restore', () => {
     await page.getByRole('button', { name: /Lower \(Hinge\)/ }).first().click();
     await expect(page).toHaveURL(/\/history\/[0-9a-f-]+$/);
 
-    await page.getByLabel('More').click();
-    await page.getByRole('button', { name: 'Delete session' }).click();
+    await page.getByTestId('delete-session').click();
     await page.getByRole('button', { name: 'Delete', exact: true }).click();
     await expect(page).toHaveURL(/\/history$/);
 
