@@ -97,9 +97,14 @@ export function ProgressScreen() {
       <TopBar
         title="Progress"
         right={
-          <Button size="md" variant="ghost" className="mr-1" onClick={() => setClaudeOpen(true)} data-testid="claude-open">
-            Claude
-          </Button>
+          <div className="mr-1 flex gap-0.5">
+            <Button size="md" variant="ghost" onClick={() => nav('/coach')} data-testid="coach-open">
+              Coach
+            </Button>
+            <Button size="md" variant="ghost" onClick={() => setClaudeOpen(true)} data-testid="claude-open">
+              Claude
+            </Button>
+          </div>
         }
       />
       <ClaudeSheet open={claudeOpen} onClose={() => setClaudeOpen(false)} />

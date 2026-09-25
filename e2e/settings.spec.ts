@@ -68,7 +68,9 @@ test('the assistant Download button re-enables even though the web fake emits no
   await fresh(page);
   await page.goto('/settings');
 
-  const downloadButton = page.getByRole('button', { name: 'Download' });
+  // The assistant's own Download, not the Coach model's beside it (which this fake, having no
+  // separate full-model status, also reports as downloadable).
+  const downloadButton = page.getByTestId('assistant-download');
   await expect(downloadButton).toBeVisible();
   await expect(page.getByText('Download (about 2 GB)')).toBeVisible();
 

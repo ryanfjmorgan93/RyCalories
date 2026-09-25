@@ -407,6 +407,28 @@ calls Claude; the owner carries text both ways in their own Claude app.
 - A weight in the reply starts the exercise in normal mode at that weight; no weight starts it
   calibrating. A seconds line only sets seconds on a timed exercise.
 
+### P5d — The coach, on the phone's own Nano 4 · **M** · ✅ shipped
+
+Option 3 of the coach choices. The Fold 8 is on Google's nano-v4 list (Gemini Nano 4, built on
+Gemma 4), so the owner chose that over downloading Gemma 4 through LiteRT-LM: no 3 GB download,
+nothing new leaving the phone, Settings → About unchanged.
+
+- **The fuller variant.** `NanoPlugin` keeps the default client for Ask, meal naming and
+  estimates, and builds a second with `ModelPreference.FULL` (genai-prompt 1.0.0-beta4) that the
+  coach alone uses; every method takes `model: 'full' | 'default'`. Settings → Assistant has a
+  Coach model line whose detail reads the base model name and token limit on the phone.
+- **Streamed.** The fuller variant is slow (about 5 tokens a second measured on a Pixel), so
+  `generateStream` forwards each `StreamingCallback.onNewText` piece as a `nanoStream` event and
+  the answer grows on screen.
+- **Fitted, not guessed.** `coachContextLadder` (`src/domain/coach.ts`) offers the owner's data
+  fullest first — the same lines as Copy for Claude, food averaged over logged days only — and
+  the store counts each rung with `countTokens` until prompt plus the reply's room fits
+  `getTokenLimit`. An exercise the question names keeps its 26 weeks and is the last thing cut.
+  Each answer says what it read ("Read: training 8 weeks · food 4 weeks · …").
+- **Build a routine** asks for the Paste a routine line format and opens the draft in that same
+  review — matching, Choose/Add new, one-transaction save. Entry points: Progress → Coach, and
+  Routines → New routine → Draft with coach.
+
 ### P6 — Explicitly deferred to v1.1
 
 Adaptive TDEE and the strength-versus-cut "Loop" chart — the cross-domain tier not chosen for

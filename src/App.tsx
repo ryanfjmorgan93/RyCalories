@@ -23,6 +23,7 @@ import { CheckInScreen } from './screens/CheckInScreen';
 import { FoodScreen } from './screens/FoodScreen';
 import { MealEditScreen } from './screens/MealEditScreen';
 import { ProgressScreen } from './screens/ProgressScreen';
+import { CoachScreen } from './screens/CoachScreen';
 import { RecipesScreen } from './screens/RecipesScreen';
 import { RecipeBuilderScreen } from './screens/RecipeBuilderScreen';
 import { useAndroidBackButton } from './ui/useAndroidBackButton';
@@ -132,6 +133,7 @@ export function App() {
           <Route path="history" element={<HistoryScreen />} />
           <Route path="history/:id" element={<SessionDetailScreen />} />
           <Route path="progress" element={<ProgressScreen />} />
+          <Route path="coach" element={<CoachScreen />} />
           <Route path="body" element={<BodyweightScreen />} />
           <Route path="settings" element={<SettingsScreen />} />
           <Route path="checkin" element={<CheckInScreen />} />

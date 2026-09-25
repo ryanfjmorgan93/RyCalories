@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { saveParsedRoutines, type ImportChoice, type ImportRow } from '@/db/routineImport';
 import { matchExercise } from '@/domain/exerciseMatch';
@@ -35,10 +35,25 @@ function rowKey(ri: number, ei: number, line: ParsedRoutineLine): string {
  * Paste a routine someone (or Claude) wrote; each exercise is matched to the library, anything
  * it is not sure of waits for a choice, and nothing is saved until Save.
  */
-export function PasteRoutineSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function PasteRoutineSheet({
+  open,
+  onClose,
+  initialText,
+  title = 'Paste a routine',
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** Text to start from — the coach's drafted routine — instead of an empty box. */
+  initialText?: string;
+  title?: string;
+}) {
   const nav = useNavigate();
   const exercises = useExercises();
-  const [text, setText] = useState('');
+  const [text, setText] = useState(initialText ?? '');
+  // Each time the sheet opens on a different draft, start from that draft.
+  useEffect(() => {
+    if (open && initialText !== undefined) setText(initialText);
+  }, [open, initialText]);
   const [overrides, setOverrides] = useState<Record<string, ImportChoice>>({});
   const [pickerFor, setPickerFor] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -104,7 +119,7 @@ export function PasteRoutineSheet({ open, onClose }: { open: boolean; onClose: (
       <Sheet
         open={open}
         onClose={close}
-        title="Paste a routine"
+        title={title}
         footer={
           <div className="grid grid-cols-2 gap-3">
             <Button size="lg" variant="secondary" onClick={close}>

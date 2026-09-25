@@ -65,6 +65,9 @@ The owner does not check on device. Correctness has to come from the code and th
   `claudeSummary.ts`, `routineText.ts` and `exerciseMatch.ts` are the Claude bridge: a text
   summary the owner copies into their own Claude app, and a pasted reply read back as routines.
   The app never calls Claude; Copy and Share hand text to the OS and send nothing themselves.
+  `coach.ts` is the coach: which of the owner's data a question reads, fitted to the on-device
+  model's token limit. It runs on the same AICore Nano (the fuller variant), so nothing new
+  leaves the device.
   `recipe.ts`, `mealAnalysis.ts`, `mealText.ts` and `ingredientMatch.ts` are cooked meals: the
   AI only names ingredients (on the phone, from a photo); amounts come from the user and figures
   from a scanned pack, a food logged before, or the bundled UK table — never from the model.

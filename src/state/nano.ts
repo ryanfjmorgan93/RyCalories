@@ -8,6 +8,13 @@ import type { PluginListenerHandle } from '@capacitor/core';
 
 export type NanoState = 'ready' | 'downloadable' | 'downloading' | 'unavailable';
 
+/**
+ * Which of AICore's model variants a call uses. 'default' is what ML Kit picks with no preference
+ * — the Ask box, meal naming and meal estimates, unchanged. 'full' asks for the fuller variant
+ * (`ModelPreference.FULL`), slower and more capable: the coach.
+ */
+export type NanoModel = 'default' | 'full';
+
 export interface NanoStatus {
   state: NanoState;
   detail: string;
@@ -18,6 +25,23 @@ export interface NanoDownloadEvent {
   downloaded: number;
   total: number;
   error?: string;
+  /** Which variant is downloading; absent from a plugin older than the coach means 'default'. */
+  model?: NanoModel;
+}
+
+/** One piece of a streamed answer, for the `generateStream` call with the same `requestId`. */
+export interface NanoStreamEvent {
+  requestId: string;
+  text: string;
+}
+
+export interface NanoStreamOptions {
+  model?: NanoModel;
+  system: string;
+  prompt: string;
+  requestId: string;
+  maxOutputTokens?: number;
+  temperature?: number;
 }
 
 export interface NanoGenerateOptions {
@@ -36,11 +60,16 @@ export interface NanoAnalyzeOptions {
 }
 
 export interface NanoPlugin {
-  status(): Promise<NanoStatus>;
-  download(): Promise<{ started: boolean }>;
+  status(opts?: { model?: NanoModel }): Promise<NanoStatus>;
+  download(opts?: { model?: NanoModel }): Promise<{ started: boolean }>;
   generate(opts: NanoGenerateOptions): Promise<{ text: string }>;
   analyzeMeal(opts: NanoAnalyzeOptions): Promise<{ text: string }>;
+  /** Tokens the prompt takes, and the most the model accepts. */
+  countTokens(opts: { model?: NanoModel; system: string; prompt: string }): Promise<{ tokens: number; limit: number }>;
+  /** The answer arrives piece by piece as `nanoStream` events; resolves with the whole of it. */
+  generateStream(opts: NanoStreamOptions): Promise<{ text: string }>;
   addListener(eventName: 'nanoDownload', fn: (e: NanoDownloadEvent) => void): Promise<PluginListenerHandle>;
+  addListener(eventName: 'nanoStream', fn: (e: NanoStreamEvent) => void): Promise<PluginListenerHandle>;
 }
 
 /**
@@ -50,8 +79,13 @@ export interface NanoPlugin {
  */
 interface IronNanoFake {
   status: NanoStatus;
+  /** The 'full' variant's status; the default one's when absent. */
+  statusFull?: NanoStatus;
   generate(opts: NanoGenerateOptions): Promise<{ text: string }>;
   analyzeMeal?(opts: NanoAnalyzeOptions): Promise<{ text: string }>;
+  countTokens?(opts: { model?: NanoModel; system: string; prompt: string }): Promise<{ tokens: number; limit: number }>;
+  /** Calls `emit` for each piece, which the web plugin turns into a `nanoStream` event. */
+  generateStream?(opts: NanoStreamOptions, emit: (text: string) => void): Promise<{ text: string }>;
 }
 
 function getFake(): IronNanoFake | undefined {
@@ -59,9 +93,9 @@ function getFake(): IronNanoFake | undefined {
 }
 
 class NanoWeb extends WebPlugin implements NanoPlugin {
-  async status(): Promise<NanoStatus> {
+  async status(opts?: { model?: NanoModel }): Promise<NanoStatus> {
     const fake = getFake();
-    if (fake) return fake.status;
+    if (fake) return opts?.model === 'full' ? (fake.statusFull ?? fake.status) : fake.status;
     return { state: 'unavailable', detail: 'Only on the Android app.' };
   }
 
@@ -78,6 +112,19 @@ class NanoWeb extends WebPlugin implements NanoPlugin {
   async analyzeMeal(opts: NanoAnalyzeOptions): Promise<{ text: string }> {
     const fake = getFake();
     if (fake?.analyzeMeal) return fake.analyzeMeal(opts);
+    throw new Error('Only on the Android app.');
+  }
+
+  async countTokens(opts: { model?: NanoModel; system: string; prompt: string }): Promise<{ tokens: number; limit: number }> {
+    const fake = getFake();
+    if (fake?.countTokens) return fake.countTokens(opts);
+    throw new Error('Only on the Android app.');
+  }
+
+  async generateStream(opts: NanoStreamOptions): Promise<{ text: string }> {
+    const fake = getFake();
+    // Pieces go out through the same event, and the same listeners, as the Android plugin's.
+    if (fake?.generateStream) return fake.generateStream(opts, (text) => this.notifyListeners('nanoStream', { requestId: opts.requestId, text }));
     throw new Error('Only on the Android app.');
   }
 }

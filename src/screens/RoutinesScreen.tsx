@@ -206,6 +206,20 @@ function NewRoutineSheet({ open, onClose, onPaste }: { open: boolean; onClose: (
       >
         Paste a routine
       </Button>
+      <Button
+        size="md"
+        variant="outline"
+        full
+        className="mt-2"
+        onClick={() => {
+          reset();
+          onClose();
+          nav('/coach?mode=routine');
+        }}
+        data-testid="draft-with-coach"
+      >
+        Draft with coach
+      </Button>
       <div className="h-2" />
     </Sheet>
   );

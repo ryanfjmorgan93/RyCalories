@@ -88,7 +88,7 @@ function weekdayOf(key: string): string {
 }
 
 /** "Tue 23 Sep" or "Tue 23 Sep 2026". */
-function fmtDayHeading(key: string, withYear = false): string {
+export function fmtDayHeading(key: string, withYear = false): string {
   return `${weekdayOf(key)} ${fmtDateKey(key, withYear)}`;
 }
 
@@ -114,10 +114,16 @@ function filteredBodyweight(input: ClaudeSummaryInput): Bodyweight[] {
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-function buildTrainingBlock(input: ClaudeSummaryInput): string {
+/**
+ * The section builders below are shared with the on-device coach (`./coach`), which reads the same
+ * data in the same words but has to fit it into a few thousand tokens: `heading` names a training
+ * block narrowed to some exercises, and `detail` drops per-day lines while keeping the counts that
+ * say what an average covers.
+ */
+export function buildTrainingBlock(input: ClaudeSummaryInput, heading = 'TRAINING'): string {
   const { asOf, training } = input;
   const from = windowStart(asOf, training.days);
-  const lines = [`TRAINING · ${fmtRangeHeading(from, asOf)} · ${plural(training.sessions.length, 'session')}`];
+  const lines = [`${heading} · ${fmtRangeHeading(from, asOf)} · ${plural(training.sessions.length, 'session')}`];
   if (training.sessions.length === 0) {
     lines.push('No sessions in this window.');
     return lines.join('\n');
@@ -136,7 +142,7 @@ function buildTrainingBlock(input: ClaudeSummaryInput): string {
   return lines.join('\n');
 }
 
-function buildFoodBlock(input: ClaudeSummaryInput): string {
+export function buildFoodBlock(input: ClaudeSummaryInput, detail: 'days' | 'averages' = 'days'): string {
   const { asOf, food } = input;
   const from = windowStart(asOf, food.days);
   const loggedDays = food.perDay.filter((d) => d.macros !== null);
@@ -164,6 +170,7 @@ function buildFoodBlock(input: ClaudeSummaryInput): string {
     targets.push(p);
   }
   if (targets.length > 0) lines.push(`Targets: ${targets.join(' · ')}`);
+  if (detail === 'averages') return lines.join('\n');
   const sorted = [...food.perDay].sort((a, b) => b.date.localeCompare(a.date));
   for (const d of sorted) {
     if (d.macros === null) {
@@ -177,7 +184,7 @@ function buildFoodBlock(input: ClaudeSummaryInput): string {
   return lines.join('\n');
 }
 
-function buildBodyweightBlock(input: ClaudeSummaryInput): string {
+export function buildBodyweightBlock(input: ClaudeSummaryInput, detail: 'entries' | 'summary' = 'entries'): string {
   const { asOf, bodyweight } = input;
   const from = windowStart(asOf, bodyweight.days);
   const readings = filteredBodyweight(input);
@@ -197,12 +204,13 @@ function buildBodyweightBlock(input: ClaudeSummaryInput): string {
   }
   stat += ` · first in window ${fmtNum(first.kg)} kg (${fmtDateKey(first.date)})`;
   lines.push(stat);
+  if (detail === 'summary') return lines.join('\n');
   const entries = readings.map((b) => `${fmtDateKey(b.date)} ${fmtNum(b.kg)}`);
   for (let i = 0; i < entries.length; i += 7) lines.push(entries.slice(i, i + 7).join(' · '));
   return lines.join('\n');
 }
 
-function buildRoutinesBlock(input: ClaudeSummaryInput): string {
+export function buildRoutinesBlock(input: ClaudeSummaryInput): string {
   const lines = ['ROUTINES'];
   if (input.routines.length === 0) {
     lines.push('No routines.');

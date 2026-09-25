@@ -16,12 +16,17 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.mlkit.genai.common.DownloadCallback;
 import com.google.mlkit.genai.common.FeatureStatus;
 import com.google.mlkit.genai.common.GenAiException;
+import com.google.mlkit.genai.common.StreamingCallback;
 import com.google.mlkit.genai.prompt.Candidate;
+import com.google.mlkit.genai.prompt.CountTokensResponse;
 import com.google.mlkit.genai.prompt.GenerateContentRequest;
 import com.google.mlkit.genai.prompt.GenerateContentResponse;
 import com.google.mlkit.genai.prompt.Generation;
+import com.google.mlkit.genai.prompt.GenerationConfig;
 import com.google.mlkit.genai.prompt.GenerativeModel;
 import com.google.mlkit.genai.prompt.ImagePart;
+import com.google.mlkit.genai.prompt.ModelConfig;
+import com.google.mlkit.genai.prompt.ModelPreference;
 import com.google.mlkit.genai.prompt.SystemInstruction;
 import com.google.mlkit.genai.prompt.TextPart;
 import com.google.mlkit.genai.prompt.java.GenerativeModelFutures;
@@ -41,6 +46,14 @@ import java.util.concurrent.atomic.AtomicLong;
  * single-thread pool owned by this plugin, so the wait for AICore happens off the bridge thread
  * and {@code call.resolve}/{@code call.reject} run once the future is already done (get() then
  * returns immediately). Nothing here ever calls {@code future.get()} from the bridge thread.
+ *
+ * Two clients are built lazily and cached: {@link #ensureModel()} is the existing default client
+ * (unchanged), and {@link #ensureFullModel()} asks ML Kit for the FULL {@link ModelPreference}
+ * instead. Every {@code @PluginMethod} reads an optional string {@code model} from the call —
+ * {@code "full"} selects the full client, anything else or a missing value selects the default
+ * one — via {@link #modelFor(PluginCall)}. {@link #generateStream} streams chunks back as they
+ * arrive through {@code notifyListeners("nanoStream", …)}, on the same executor listener as every
+ * other completion; nothing waits on the stream from the bridge thread either.
  */
 @CapacitorPlugin(name = "Nano")
 public class NanoPlugin extends Plugin {
@@ -56,6 +69,7 @@ public class NanoPlugin extends Plugin {
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private GenerativeModelFutures model;
+    private GenerativeModelFutures fullModel;
 
     private synchronized GenerativeModelFutures ensureModel() {
         if (model == null) {
@@ -65,19 +79,83 @@ public class NanoPlugin extends Plugin {
         return model;
     }
 
+    /** Same as {@link #ensureModel()} but built with {@link ModelPreference#FULL}. */
+    private synchronized GenerativeModelFutures ensureFullModel() {
+        if (fullModel == null) {
+            ModelConfig.Builder modelConfig = new ModelConfig.Builder();
+            modelConfig.setPreference(ModelPreference.FULL);
+            GenerationConfig.Builder generationConfig = new GenerationConfig.Builder();
+            generationConfig.setModelConfig(modelConfig.build());
+            GenerativeModel client = Generation.INSTANCE.getClient(generationConfig.build());
+            fullModel = GenerativeModelFutures.from(client);
+        }
+        return fullModel;
+    }
+
+    /** {@code "full"} when the call asked for the full model, {@code "default"} otherwise. */
+    private static String modelName(PluginCall call) {
+        return "full".equals(call.getString("model")) ? "full" : "default";
+    }
+
+    /** Resolves the call's optional {@code model} string to the matching cached client. */
+    private GenerativeModelFutures modelFor(PluginCall call) {
+        return "full".equals(modelName(call)) ? ensureFullModel() : ensureModel();
+    }
+
     @PluginMethod
     public void status(PluginCall call) {
-        ListenableFuture<Integer> future = ensureModel().checkStatus();
+        GenerativeModelFutures target = modelFor(call);
+        ListenableFuture<Integer> future = target.checkStatus();
         future.addListener(() -> {
             try {
                 int status = future.get();
-                JSObject result = new JSObject();
-                result.put("state", stateName(status));
-                result.put("detail", buildDetail(status));
-                call.resolve(result);
+                readDetailExtras(call, target, status);
             } catch (Exception e) {
                 rejectWith(call, "status_failed", e);
             }
+        }, executor);
+    }
+
+    /**
+     * Chains {@code getBaseModelName()} then {@code getTokenLimit()} on {@link #executor}, off
+     * the back of a resolved {@code checkStatus()}, and resolves {@code call} once both have
+     * either come back or failed. Neither read blocks the other's listener, and a failure on
+     * either (e.g. the model is not downloaded yet) just leaves that part out of the detail
+     * string rather than failing the status call.
+     */
+    private void readDetailExtras(PluginCall call, GenerativeModelFutures target, int status) {
+        // Only an installed model has a name and a limit to read. Asked before then, a future that
+        // never completed would leave the status call — and the Settings card — waiting for ever.
+        if (status != FeatureStatus.AVAILABLE) {
+            JSObject result = new JSObject();
+            result.put("state", stateName(status));
+            result.put("detail", buildDetail(status, null, null));
+            call.resolve(result);
+            return;
+        }
+        ListenableFuture<String> nameFuture = target.getBaseModelName();
+        nameFuture.addListener(() -> {
+            String baseModelName;
+            try {
+                baseModelName = nameFuture.get();
+            } catch (Exception e) {
+                baseModelName = null;
+            }
+            final String resolvedName = baseModelName;
+
+            ListenableFuture<Integer> limitFuture = target.getTokenLimit();
+            limitFuture.addListener(() -> {
+                Integer tokenLimit;
+                try {
+                    tokenLimit = limitFuture.get();
+                } catch (Exception e) {
+                    tokenLimit = null;
+                }
+                JSObject result = new JSObject();
+                result.put("state", stateName(status));
+                result.put("detail", buildDetail(status, resolvedName, tokenLimit));
+                call.resolve(result);
+            }, executor);
         }, executor);
     }
 
@@ -86,27 +164,28 @@ public class NanoPlugin extends Plugin {
         // Remembers the size announced by onDownloadStarted so every later event can still report
         // a total; ML Kit only gives it to us once.
         final AtomicLong totalBytes = new AtomicLong(-1);
-        ensureModel().download(new DownloadCallback() {
+        final String modelName = modelName(call);
+        modelFor(call).download(new DownloadCallback() {
             @Override
             public void onDownloadStarted(long bytesToDownload) {
                 totalBytes.set(bytesToDownload);
-                emitDownload("started", 0, bytesToDownload, null);
+                emitDownload("started", 0, bytesToDownload, null, modelName);
             }
 
             @Override
             public void onDownloadProgress(long totalBytesDownloaded) {
-                emitDownload("progress", totalBytesDownloaded, totalBytes.get(), null);
+                emitDownload("progress", totalBytesDownloaded, totalBytes.get(), null, modelName);
             }
 
             @Override
             public void onDownloadCompleted() {
                 long total = totalBytes.get();
-                emitDownload("completed", total, total, null);
+                emitDownload("completed", total, total, null, modelName);
             }
 
             @Override
             public void onDownloadFailed(GenAiException e) {
-                emitDownload("failed", -1, totalBytes.get(), String.valueOf(e.getMessage()));
+                emitDownload("failed", -1, totalBytes.get(), String.valueOf(e.getMessage()), modelName);
             }
         });
         JSObject result = new JSObject();
@@ -129,7 +208,7 @@ public class NanoPlugin extends Plugin {
         if (maxOutputTokens != null) builder.setMaxOutputTokens(maxOutputTokens);
         if (temperature != null) builder.setTemperature(temperature);
 
-        ListenableFuture<GenerateContentResponse> future = ensureModel().generateContent(builder.build());
+        ListenableFuture<GenerateContentResponse> future = modelFor(call).generateContent(builder.build());
         future.addListener(() -> {
             try {
                 GenerateContentResponse response = future.get();
@@ -144,6 +223,110 @@ public class NanoPlugin extends Plugin {
                 call.resolve(result);
             } catch (Exception e) {
                 rejectWith(call, "generate_failed", e);
+            }
+        }, executor);
+    }
+
+    /**
+     * Counts the tokens {@code system}/{@code prompt} would cost, built the same way
+     * {@link #generate} builds its request, alongside the selected client's current token
+     * limit. Both reads run through ML Kit futures, never blocking the bridge thread.
+     */
+    @PluginMethod
+    public void countTokens(PluginCall call) {
+        String prompt = call.getString("prompt");
+        if (prompt == null || prompt.isEmpty()) {
+            call.reject("bad_request: prompt is required");
+            return;
+        }
+        String system = call.getString("system", "");
+        GenerativeModelFutures target = modelFor(call);
+
+        GenerateContentRequest request = new GenerateContentRequest.Builder(new SystemInstruction(system), new TextPart(prompt)).build();
+
+        ListenableFuture<CountTokensResponse> tokensFuture = target.countTokens(request);
+        tokensFuture.addListener(() -> {
+            try {
+                int tokens = tokensFuture.get().getTotalTokens();
+                ListenableFuture<Integer> limitFuture = target.getTokenLimit();
+                limitFuture.addListener(() -> {
+                    try {
+                        int limit = limitFuture.get();
+                        JSObject result = new JSObject();
+                        result.put("tokens", tokens);
+                        result.put("limit", limit);
+                        call.resolve(result);
+                    } catch (Exception e) {
+                        rejectWith(call, "count_tokens_failed", e);
+                    }
+                }, executor);
+            } catch (Exception e) {
+                rejectWith(call, "count_tokens_failed", e);
+            }
+        }, executor);
+    }
+
+    /**
+     * Same request shape as {@link #generate}, but streamed: every chunk ML Kit hands to
+     * {@link StreamingCallback#onNewText} is forwarded immediately as a {@code nanoStream} event
+     * carrying the call's {@code requestId}, so the UI can render it as it arrives.
+     * {@code onNewThought} chunks are dropped — this plugin only ever surfaces the answer, never
+     * the model's reasoning. Once the future completes, {@code call} resolves with the first
+     * candidate's text, falling back to the streamed chunks concatenated if the response itself
+     * carried none.
+     */
+    @PluginMethod
+    public void generateStream(PluginCall call) {
+        String requestId = call.getString("requestId");
+        if (requestId == null || requestId.isEmpty()) {
+            call.reject("bad_request: requestId is required");
+            return;
+        }
+        String prompt = call.getString("prompt");
+        if (prompt == null || prompt.isEmpty()) {
+            call.reject("bad_request: prompt is required");
+            return;
+        }
+        String system = call.getString("system", "");
+        Integer maxOutputTokens = call.getInt("maxOutputTokens");
+        Float temperature = call.getFloat("temperature");
+
+        GenerateContentRequest.Builder builder = new GenerateContentRequest.Builder(new SystemInstruction(system), new TextPart(prompt));
+        if (maxOutputTokens != null) builder.setMaxOutputTokens(maxOutputTokens);
+        if (temperature != null) builder.setTemperature(temperature);
+
+        // Collected purely as a fallback for the final resolve, in case the response carries no
+        // candidate text of its own once streaming finishes.
+        final StringBuilder streamed = new StringBuilder();
+        StreamingCallback callback = new StreamingCallback() {
+            @Override
+            public void onNewText(String chunk) {
+                streamed.append(chunk);
+                JSObject data = new JSObject();
+                data.put("requestId", requestId);
+                data.put("text", chunk);
+                notifyListeners("nanoStream", data);
+            }
+        };
+
+        ListenableFuture<GenerateContentResponse> future = modelFor(call).generateContent(builder.build(), callback);
+        future.addListener(() -> {
+            try {
+                GenerateContentResponse response = future.get();
+                List<Candidate> candidates = response.getCandidates();
+                String text = candidates.isEmpty() ? null : candidates.get(0).getText();
+                if ((text == null || text.isEmpty()) && streamed.length() > 0) {
+                    text = streamed.toString();
+                }
+                if (text == null || text.isEmpty()) {
+                    call.reject("empty: no candidate text returned");
+                    return;
+                }
+                JSObject result = new JSObject();
+                result.put("text", text);
+                call.resolve(result);
+            } catch (Exception e) {
+                rejectWith(call, "generate_stream_failed", e);
             }
         }, executor);
     }
@@ -209,7 +392,7 @@ public class NanoPlugin extends Plugin {
                 if (maxOutputTokens != null) builder.setMaxOutputTokens(maxOutputTokens);
                 if (temperature != null) builder.setTemperature(temperature);
 
-                ListenableFuture<GenerateContentResponse> future = ensureModel().generateContent(builder.build());
+                ListenableFuture<GenerateContentResponse> future = modelFor(call).generateContent(builder.build());
                 final Bitmap sent = bitmap;
                 handedOff = true;
                 future.addListener(() -> {
@@ -246,15 +429,19 @@ public class NanoPlugin extends Plugin {
         if (model != null) {
             model.getGenerativeModel().close();
         }
+        if (fullModel != null) {
+            fullModel.getGenerativeModel().close();
+        }
         executor.shutdown();
     }
 
-    private void emitDownload(String phase, long downloaded, long total, String error) {
+    private void emitDownload(String phase, long downloaded, long total, String error, String modelName) {
         JSObject data = new JSObject();
         data.put("phase", phase);
         data.put("downloaded", downloaded);
         data.put("total", total);
         if (error != null) data.put("error", error);
+        data.put("model", modelName);
         notifyListeners("nanoDownload", data);
     }
 
@@ -286,12 +473,23 @@ public class NanoPlugin extends Plugin {
         }
     }
 
-    /** FeatureStatus name plus the device/AICore diagnostics the plan asks for. */
-    private String buildDetail(int status) {
-        return featureStatusName(status)
-            + " · " + Build.MANUFACTURER + " " + Build.MODEL
-            + " · SDK " + Build.VERSION.SDK_INT
-            + " · AICore " + aiCoreVersion();
+    /**
+     * FeatureStatus name, the base model name and token limit when they could be read, and the
+     * device/AICore diagnostics — in that order, each segment joined by " · ". A null
+     * {@code baseModelName} or {@code tokenLimit} simply drops its segment.
+     */
+    private String buildDetail(int status, String baseModelName, Integer tokenLimit) {
+        StringBuilder detail = new StringBuilder(featureStatusName(status));
+        if (baseModelName != null && !baseModelName.isEmpty()) {
+            detail.append(" · ").append(baseModelName);
+        }
+        if (tokenLimit != null) {
+            detail.append(" · ").append(tokenLimit).append(" tokens");
+        }
+        detail.append(" · ").append(Build.MANUFACTURER).append(" ").append(Build.MODEL)
+            .append(" · SDK ").append(Build.VERSION.SDK_INT)
+            .append(" · AICore ").append(aiCoreVersion());
+        return detail.toString();
     }
 
     private String aiCoreVersion() {

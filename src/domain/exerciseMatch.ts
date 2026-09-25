@@ -53,7 +53,7 @@ const ABBREVIATION_PATTERNS: [RegExp, string][] = [
   [/\bchin[\s-]?up\b/gi, 'chin up'],
 ];
 
-function expandAbbreviations(s: string): string {
+export function expandAbbreviations(s: string): string {
   let out = s;
   for (const [re, replacement] of ABBREVIATION_PATTERNS) out = out.replace(re, replacement);
   return out;
