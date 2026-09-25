@@ -1,6 +1,140 @@
 [
   {
     "words": [
+      "beef patty",
+      "beef patties",
+      "burger patty",
+      "burger patties",
+      "patty",
+      "patties",
+      "beef burger",
+      "beef burgers",
+      "hamburger patty",
+      "burger"
+    ],
+    "code": "18-042"
+  },
+  {
+    "words": [
+      "burger bun",
+      "burger buns",
+      "bun",
+      "buns",
+      "bread roll",
+      "bread rolls",
+      "roll",
+      "brioche bun"
+    ],
+    "code": "11-1006",
+    "unit": {
+      "label": "bun",
+      "plural": "buns",
+      "grams": 60,
+      "unitSource": "estimate"
+    }
+  },
+  {
+    "words": [
+      "fries",
+      "french fries",
+      "chips",
+      "fast food fries"
+    ],
+    "code": "13-486"
+  },
+  {
+    "words": [
+      "cheese slice",
+      "cheese slices",
+      "american cheese",
+      "processed cheese",
+      "burger cheese"
+    ],
+    "code": "12-527",
+    "unit": {
+      "label": "slice",
+      "plural": "slices",
+      "grams": 20,
+      "unitSource": "estimate"
+    }
+  },
+  {
+    "words": [
+      "pickle",
+      "pickles",
+      "gherkin",
+      "gherkins"
+    ],
+    "code": "13-246"
+  },
+  {
+    "words": [
+      "doner meat",
+      "doner kebab meat",
+      "doner"
+    ],
+    "code": "19-539"
+  },
+  {
+    "words": [
+      "pitta",
+      "pitta bread",
+      "pita",
+      "pita bread"
+    ],
+    "code": "11-974"
+  },
+  {
+    "words": [
+      "tortilla",
+      "tortilla wrap",
+      "wrap",
+      "wraps"
+    ],
+    "code": "11-925"
+  },
+  {
+    "words": [
+      "frankfurter",
+      "hot dog sausage"
+    ],
+    "code": "19-495"
+  },
+  {
+    "words": [
+      "bagel",
+      "bagels"
+    ],
+    "code": "11-970"
+  },
+  {
+    "words": [
+      "naan",
+      "naan bread"
+    ],
+    "code": "11-973"
+  },
+  {
+    "words": [
+      "coleslaw"
+    ],
+    "code": "15-635"
+  },
+  {
+    "words": [
+      "milkshake"
+    ],
+    "code": "12-327"
+  },
+  {
+    "words": [
+      "grilled chicken",
+      "grilled chicken breast"
+    ],
+    "code": "18-323"
+  },
+  {
+    "words": [
       "egg",
       "eggs"
     ],

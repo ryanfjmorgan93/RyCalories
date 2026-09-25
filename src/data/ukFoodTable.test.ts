@@ -1,3 +1,4 @@
+import { matchIngredient } from '@/domain/ingredientMatch';
 import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { loadUkFoodTable, UK_FOOD_TABLE_ATTRIBUTION, type FoodAlias, type TableFood } from './ukFoodTable';
@@ -112,5 +113,23 @@ describe('ukFoodTable', () => {
     // eslint-disable-next-line no-console -- the plan asks for this to be reported.
     console.log(`ukFoodTable.json is ${(bytes / 1024).toFixed(1)} KB`);
     expect(bytes).toBeGreaterThan(0);
+  });
+});
+
+describe('takeaway parts resolve against the real table', () => {
+  // The names the on-device model uses when it estimates a meal out. Unmatched, each would land as
+  // "figures needed" and block Save until picked by hand.
+  it.each([
+    ['beef patty', '18-042'],
+    ['burger bun', '11-1006'],
+    ['fries', '13-486'],
+    ['cheese slice', '12-527'],
+    ['bacon', '19-497'],
+    ['mayonnaise', undefined],
+  ])('%s', async (name, code) => {
+    const { foods, aliases } = await loadUkFoodTable();
+    const { best } = matchIngredient(name, { foods, aliases, memories: [] });
+    expect(best).not.toBeNull();
+    if (code) expect(best!.code).toBe(code);
   });
 });
