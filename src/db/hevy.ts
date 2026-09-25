@@ -342,17 +342,24 @@ export async function planHevyImport(parsed: HevyParsed): Promise<HevyImportPlan
 // ---------------------------------------------------------------------------
 // Guessing attributes for brand-new exercises
 
-const LOWER = /squat|leg|calf|calves|hip|deadlift|lunge|glute|hamstring|adduct|abduct|thrust|rdl|step.?up|extension \(machine\)|back extension|hyperextension/i;
-const COMPOUND = /press|squat|deadlift|row|pulldown|pull.?up|chin.?up|thrust|lunge|dip|shrug|clean|snatch/i;
+// Exported (alongside the functions below) so `src/db/routineImport.ts` can mirror this guessing
+// for a pasted exercise name, which has no `HevyExerciseStat` to read `hasDistance`/`hasDuration`/
+// `bodyweightOnly` from — see `guessExerciseFromName` there. Extracted from inline regex literals
+// into named consts; `guessKind` below behaves exactly as before.
+export const LOWER = /squat|leg|calf|calves|hip|deadlift|lunge|glute|hamstring|adduct|abduct|thrust|rdl|step.?up|extension \(machine\)|back extension|hyperextension/i;
+export const COMPOUND = /press|squat|deadlift|row|pulldown|pull.?up|chin.?up|thrust|lunge|dip|shrug|clean|snatch/i;
+export const CARRY_TITLE_RE = /walk|carry/i;
+export const TIMED_TITLE_RE = /plank|hold|hang/i;
+export const BODYWEIGHT_PLUS_TITLE_RE = /hyperextension|back extension|\bdip\b|pull.?up|chin.?up|push.?up/i;
 
 function guessKind(stat: HevyExerciseStat): ExerciseKind {
-  if (stat.hasDistance || /walk|carry/i.test(stat.title)) return 'carry';
-  if (stat.hasDuration && stat.bodyweightOnly && /plank|hold|hang/i.test(stat.title)) return 'timed';
-  if (/hyperextension|back extension|\bdip\b|pull.?up|chin.?up|push.?up/i.test(stat.title)) return 'bodyweight_plus';
+  if (stat.hasDistance || CARRY_TITLE_RE.test(stat.title)) return 'carry';
+  if (stat.hasDuration && stat.bodyweightOnly && TIMED_TITLE_RE.test(stat.title)) return 'timed';
+  if (BODYWEIGHT_PLUS_TITLE_RE.test(stat.title)) return 'bodyweight_plus';
   return 'reps';
 }
 
-function guessMuscle(title: string): MuscleGroup {
+export function guessMuscle(title: string): MuscleGroup {
   const t = title.toLowerCase();
   const rules: [RegExp, MuscleGroup][] = [
     [/hamstring|leg curl|romanian|rdl|good morning/, 'hamstrings'],
@@ -377,7 +384,7 @@ function guessMuscle(title: string): MuscleGroup {
   return 'other';
 }
 
-function guessIncrement(title: string, isLower: boolean): number {
+export function guessIncrement(title: string, isLower: boolean): number {
   const t = title.toLowerCase();
   if (/dumbbell|\bdb\b/.test(t)) return 2;
   if (/machine|cable|smith/.test(t)) return 5;
