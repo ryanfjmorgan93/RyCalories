@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { buildSystemPrompt } from '../domain/assistant';
 import { Nano, type NanoDownloadEvent, type NanoState } from '../state/nano';
 import { NanoBackend, useAssistant } from '../state/assistant';
+import { copyText } from './clipboard';
 import { Button } from './components/Button';
 import { Card, Row } from './components/Card';
 import { Chip } from './components/Chip';
@@ -35,36 +36,6 @@ function chipTone(state: NanoState | undefined, isDownloading: boolean): 'ok' | 
   return 'neutral';
 }
 
-/**
- * Copies `text` to the clipboard. Tries the Clipboard API first, then falls back to the legacy
- * selection-and-execCommand method — the Android WebView this app actually ships in can have
- * `navigator.clipboard` missing or rejecting even though a copy is otherwise possible there.
- * Returns whether a copy actually happened; never claims success it didn't get.
- */
-async function copyText(text: string): Promise<boolean> {
-  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch {
-      // Fall through to the legacy method below.
-    }
-  }
-  try {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.focus();
-    ta.select();
-    const ok = document.execCommand('copy');
-    document.body.removeChild(ta);
-    return ok;
-  } catch {
-    return false;
-  }
-}
 
 /** Settings card for the on-device assistant: status, download, a smoke test, and the one fact about data leaving the device. */
 export function AssistantSettingsCard() {

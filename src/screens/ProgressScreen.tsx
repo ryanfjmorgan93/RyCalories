@@ -11,7 +11,9 @@ import { strengthLevel, type StrengthLevel } from '@/domain/standards';
 import { e1rmChange } from '@/domain/strength';
 import { averagesAreMeaningful, type Average, type Trend } from '@/domain/trends';
 import type { Exercise, MuscleGroup } from '@/domain/types';
+import { ClaudeSheet } from '@/ui/ClaudeSheet';
 import { BodyMap } from '@/ui/components/BodyMap';
+import { Button } from '@/ui/components/Button';
 import { CalendarHeatmap } from '@/ui/components/CalendarHeatmap';
 import { Card, Divider, EmptyState, Row, SectionTitle } from '@/ui/components/Card';
 import { Segmented } from '@/ui/components/Chip';
@@ -40,6 +42,7 @@ export function ProgressScreen() {
   const today = useToday();
   const settings = useSettings();
   const [window, setWindow] = useState<Window>('28');
+  const [claudeOpen, setClaudeOpen] = useState(false);
 
   const data = useLiveQuery(
     async () => (settings ? trendWindow(today, Number(window), settings) : undefined),
@@ -91,7 +94,15 @@ export function ProgressScreen() {
 
   return (
     <div>
-      <TopBar title="Progress" />
+      <TopBar
+        title="Progress"
+        right={
+          <Button size="md" variant="ghost" className="mr-1" onClick={() => setClaudeOpen(true)} data-testid="claude-open">
+            Claude
+          </Button>
+        }
+      />
+      <ClaudeSheet open={claudeOpen} onClose={() => setClaudeOpen(false)} />
       <div className="px-4">
         <Segmented value={window} onChange={setWindow} options={WINDOWS} />
         <div className="h-4" />
