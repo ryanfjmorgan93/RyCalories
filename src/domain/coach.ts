@@ -23,7 +23,6 @@ import {
 import { windowStart } from './checkin';
 import { expandAbbreviations } from './exerciseMatch';
 import { fmtSetsLine } from './format';
-import { tokens } from './products';
 import { countsForVolume } from './sets';
 
 export type CoachMode = 'ask' | 'routine';
@@ -74,15 +73,41 @@ export function buildCoachPrompt(context: string, thread: CoachTurn[], question:
 }
 
 /**
- * Exercises in the log that the question names: any word of an exercise's name (gym shorthand
- * expanded, so "RDL" is a Romanian deadlift) that the question also uses. "Bench" names Bench
- * Press (Barbell); "squat" names every squat in the log, which is the honest reading of it.
+ * Words in exercise names that are also everyday words, or equipment, or a body part: alone they
+ * name nothing ("in a row", "leg day", "my bodyweight", "did it dip"). They count only as part of
+ * a two-word match — "leg press", "lat pulldown" — never on their own.
+ */
+const GENERIC_NAME_WORDS = new Set([
+  'row', 'dip', 'press', 'fly', 'walk', 'hold', 'raise', 'pull', 'push', 'carry', 'jump', 'step', 'swing',
+  'leg', 'arm', 'back', 'chest', 'shoulder', 'hip', 'side', 'front', 'rear', 'lat', 'core', 'neck',
+  'bodyweight', 'weighted', 'machine', 'cable', 'barbell', 'dumbbell', 'kettlebell', 'band', 'smith',
+  'single', 'one', 'seated', 'standing', 'lying', 'incline', 'decline', 'reverse', 'close', 'wide', 'grip',
+  'high', 'low', 'heavy', 'light', 'iso', 'lateral', 'overhead', 'split', 'up', 'down',
+]);
+function wordList(s: string): string[] {
+  return expandAbbreviations(s.replace(/\([^()]*\)/g, ' '))
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+    .map((w) => (w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w));
+}
+
+/**
+ * Exercises in the log that the question names, gym shorthand expanded (so "RDL" is a Romanian
+ * deadlift): a distinctive word of the name the question uses ("bench", "squat", "deadlift",
+ * "curl"), or two words of the name side by side ("leg press").
+ * "Squat" names every squat in the log, which is the honest reading of it.
  */
 export function namedExercises(question: string, names: readonly string[]): string[] {
-  const asked = tokens(expandAbbreviations(question));
+  const asked = wordList(question);
+  const askedSet = new Set(asked);
+  const askedPairs = new Set(asked.slice(1).map((w, i) => `${asked[i]} ${w}`));
   return [...new Set(names)].filter((name) => {
-    const own = tokens(expandAbbreviations(name.replace(/\([^()]*\)/g, ' ')));
-    for (const t of own) if (t.length >= 3 && asked.has(t)) return true;
+    const own = wordList(name);
+    for (const t of own) {
+      if (t.length >= 3 && askedSet.has(t) && !GENERIC_NAME_WORDS.has(t)) return true;
+    }
+    for (let i = 1; i < own.length; i++) if (askedPairs.has(`${own[i - 1]} ${own[i]}`)) return true;
     return false;
   });
 }
@@ -207,6 +232,10 @@ export function coachContextLadder(input: ClaudeSummaryInput, question: string, 
     if (named.length > 0) {
       specs.push(
         { trainingDays: longest, named, otherDays: full, food: 'days', bodyweight: 'entries', routines: true },
+        // The rest of training shrinks before it goes: a question can name an exercise and still
+        // be about the week as a whole.
+        { trainingDays: longest, named, otherDays: 28, food: 'averages', bodyweight: 'summary', routines: false },
+        { trainingDays: longest, named, otherDays: 14, food: 'averages', bodyweight: 'summary', routines: false },
         { trainingDays: longest, named, food: 'averages', bodyweight: 'summary', routines: false },
         { trainingDays: 84, named, food: 'averages', bodyweight: 'summary', routines: false },
         { trainingDays: 42, named, food: 'none', bodyweight: 'summary', routines: false },

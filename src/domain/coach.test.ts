@@ -89,6 +89,23 @@ describe('namedExercises', () => {
     expect(namedExercises('Should I buy a barbell?', ['Bench Press (Barbell)'])).toEqual([]);
   });
 
+  it('everyday words that are also in exercise names name nothing on their own', () => {
+    const library = ['Barbell Row', 'Dip', 'Bodyweight Squat', 'Leg Press', 'Back Extension', 'Cable Fly', 'Farmers Walk'];
+    expect(namedExercises('How many days in a row have I trained?', library)).toEqual([]);
+    expect(namedExercises("What's my bw been doing lately?", library)).toEqual([]);
+    expect(namedExercises('How is my bodyweight trend?', library)).toEqual([]);
+    expect(namedExercises('Did my numbers dip this week?', library)).toEqual([]);
+    expect(namedExercises('Was leg day too long?', library)).toEqual([]);
+    expect(namedExercises('My back is sore after Monday', library)).toEqual([]);
+  });
+
+  it('two words of a name side by side still name it', () => {
+    const library = ['Leg Press', 'Barbell Row', 'Lat Pulldown (Machine)', 'Cable Fly'];
+    expect(namedExercises('Should I go heavier on leg press?', library)).toEqual(['Leg Press']);
+    expect(namedExercises('barbell row form', library)).toEqual(['Barbell Row']);
+    expect(namedExercises('Is my lat pulldown moving?', library)).toEqual(['Lat Pulldown (Machine)']);
+  });
+
   it('a question naming nothing names nothing', () => {
     expect(namedExercises('How was last week?', names)).toEqual([]);
   });
@@ -124,6 +141,15 @@ describe('coachContextLadder — ask', () => {
     for (const rung of ladder.slice(0, -1)) expect(rung.text, rung.label).toContain('Bench Press (Barbell): ');
     // …and the narrowest still quotes the latest bench session.
     expect(ladder[ladder.length - 2]!.text).toContain('Bench Press (Barbell): 85 × 8, 7');
+  });
+
+  it('with an exercise named, the rest of training shrinks to 4 then 2 weeks before it goes', () => {
+    const labels = coachContextLadder(input(), 'Why has my bench stalled?', 'ask').map((r) => r.label);
+    expect(labels.slice(1, 4)).toEqual([
+      'Bench Press (Barbell) 26 weeks · other training 4 weeks · food 4 weeks averages · bodyweight 8 weeks summary',
+      'Bench Press (Barbell) 26 weeks · other training 2 weeks · food 4 weeks averages · bodyweight 8 weeks summary',
+      'Bench Press (Barbell) 26 weeks · food 4 weeks averages · bodyweight 8 weeks summary',
+    ]);
   });
 
   it('food is averaged over logged days only, the count beside it, even with the day lines cut', () => {

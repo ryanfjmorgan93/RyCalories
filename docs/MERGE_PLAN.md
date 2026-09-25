@@ -679,6 +679,20 @@ counts drop below a baseline without an in-app delete, and a Backups card in Set
 - **A regex's optional unit swallowed the space after the numbers**, so " and " never matched as a
   separator between two exercises. The whitespace belongs inside the optional group.
 
+### 6.10 The coach — traps paid for
+
+- **Exercise names are full of everyday words.** Matching any word of a name read "days in a
+  row" as Barbell Row, "bw" as Bodyweight Squat and "did it dip" as Dip; with a real log the
+  fullest context rarely fits, and the next rung kept only the misread exercise. Generic words
+  (row, leg, back, press, bodyweight, equipment…) now count only as two words side by side ("leg
+  press"), and the rest of training shrinks to 4 and 2 weeks before it goes.
+- **A model can go quiet for good.** Evicted mid-question, a future may never settle, and the
+  screen said "Answering…" for ever. Counting is given 20 s; an answer is given up after 2 min
+  with nothing new, the clock restarting with every piece, because the fuller variant can take
+  many seconds before its first word.
+- **Clear must drop an answer still on its way**, or it reappears when it lands; a generation
+  count in the store ignores anything from before the Clear.
+
 ---
 
 ## 7. Repo and release

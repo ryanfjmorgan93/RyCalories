@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClaudeSummaryInput } from '../domain/claudeSummary';
 import { buildCoachPrompt, buildCoachSystemPrompt, coachContextLadder } from '../domain/coach';
-import { createCoachStore, REPLY_TOKENS, type CoachBackend } from './coach';
+import { COUNT_TIMEOUT_MS, createCoachStore, QUIET_TIMEOUT_MS, REPLY_TOKENS, type CoachBackend } from './coach';
 import type { NanoStatus } from './nano';
 
 const READY: NanoStatus = { state: 'ready', detail: 'AVAILABLE · nano-v4-full · 4000 tokens' };
@@ -154,5 +154,86 @@ describe('coach store', () => {
     await store.getState().ask('q', 'ask');
     await store.getState().ask('r', 'routine');
     expect(system).toEqual([buildCoachSystemPrompt('ask'), buildCoachSystemPrompt('routine')]);
+  });
+});
+
+describe('coach store — a model that goes quiet, and Clear', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const base = (): CoachBackend => ({
+    status: async () => READY,
+    download: async () => undefined,
+    countTokens: async (_s, prompt) => ({ tokens: prompt.length, limit: 100_000 }),
+    stream: async () => 'unused',
+  });
+
+  it('a count that never comes back ends in an error, not "Answering…" for ever', async () => {
+    vi.useFakeTimers();
+    const backend: CoachBackend = { ...base(), countTokens: () => new Promise(() => undefined) };
+    const store = await ready(createCoachStore(backend, async () => INPUT));
+    const asked = store.getState().ask('How was last week?', 'ask');
+    await vi.advanceTimersByTimeAsync(COUNT_TIMEOUT_MS - 1);
+    expect(store.getState().pending).not.toBeNull();
+    await vi.advanceTimersByTimeAsync(1);
+    await asked;
+    expect(store.getState()).toMatchObject({ pending: null, error: 'The model did not answer.' });
+  });
+
+  it('an answer that stops arriving is given up after a quiet spell, keeping nothing', async () => {
+    vi.useFakeTimers();
+    const backend: CoachBackend = {
+      ...base(),
+      stream: (_s, _p, _m, onText) => {
+        onText('Your bench');
+        return new Promise(() => undefined);
+      },
+    };
+    const store = await ready(createCoachStore(backend, async () => INPUT));
+    const asked = store.getState().ask('How was last week?', 'ask');
+    await vi.advanceTimersByTimeAsync(QUIET_TIMEOUT_MS);
+    await asked;
+    expect(store.getState()).toMatchObject({ pending: null, error: 'The model did not answer.', entries: [] });
+  });
+
+  it('a slow answer that keeps arriving is not cut off, however long it takes in all', async () => {
+    vi.useFakeTimers();
+    const backend: CoachBackend = {
+      ...base(),
+      stream: async (_s, _p, _m, onText) => {
+        for (const piece of ['one ', 'two ', 'three']) {
+          await new Promise((r) => setTimeout(r, QUIET_TIMEOUT_MS - 1000));
+          onText(piece);
+        }
+        return 'one two three';
+      },
+    };
+    const store = await ready(createCoachStore(backend, async () => INPUT));
+    const asked = store.getState().ask('How was last week?', 'ask');
+    await vi.advanceTimersByTimeAsync(3 * QUIET_TIMEOUT_MS);
+    await asked;
+    expect(store.getState().error).toBeNull();
+    expect(store.getState().entries[0]!.answer).toBe('one two three');
+  });
+
+  it('Clear while an answer is coming drops it: nothing reappears when it finishes', async () => {
+    let finish: (text: string) => void = () => undefined;
+    const backend: CoachBackend = {
+      ...base(),
+      stream: (_s, _p, _m, onText) =>
+        new Promise((resolve) => {
+          onText('Half');
+          finish = resolve;
+        }),
+    };
+    const store = await ready(createCoachStore(backend, async () => INPUT));
+    const asked = store.getState().ask('How was last week?', 'ask');
+    await vi.waitFor(() => expect(store.getState().pending?.partial).toBe('Half'));
+    store.getState().reset();
+    expect(store.getState().pending).toBeNull();
+    finish('Half an answer.');
+    await asked;
+    expect(store.getState()).toMatchObject({ pending: null, entries: [], error: null });
   });
 });

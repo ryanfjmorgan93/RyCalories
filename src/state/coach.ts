@@ -15,6 +15,38 @@ import { describeAnalyzeMealError, Nano, type NanoStatus } from './nano';
 /** Room left in the model's limit for the answer. A drafted routine needs more than a reply. */
 export const REPLY_TOKENS: Record<CoachMode, number> = { ask: 600, routine: 800 };
 
+/**
+ * How long the model may go quiet before the question is given up. Counting is quick. An answer
+ * gets longer: the fuller variant can take many seconds to read a few thousand tokens before its
+ * first word, so the clock restarts with every piece that arrives rather than timing the whole.
+ * Without these, a model dropped mid-question (AICore evicting it, say) left "Answering…" for ever.
+ */
+export const COUNT_TIMEOUT_MS = 20_000;
+export const QUIET_TIMEOUT_MS = 120_000;
+
+const NO_ANSWER = 'The model did not answer.';
+
+/** `start`'s promise, rejected if `touch` is not called for `ms` — measured from the start and from each touch. */
+function untilQuiet<T>(ms: number, start: (touch: () => void) => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let timer = setTimeout(() => reject(new Error(NO_ANSWER)), ms);
+    const touch = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => reject(new Error(NO_ANSWER)), ms);
+    };
+    start(touch).then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e: unknown) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
 export interface CoachBackend {
   status(): Promise<NanoStatus>;
   /** Starts AICore's download of the fuller variant; progress arrives as `nanoDownload` events. */
@@ -90,6 +122,8 @@ function threadFor(entries: CoachEntry[], mode: CoachMode): CoachTurn[] {
  * streaming against a fake model. `useCoach` below is the app's, on the Nano plugin and the database.
  */
 export function createCoachStore(backend: CoachBackend, loadInput: () => Promise<ClaudeSummaryInput>) {
+  // Bumped by Clear: a question still being answered from before it is dropped, not saved.
+  let generation = 0;
   return create<CoachState>((set, get) => ({
     status: null,
     entries: [],
@@ -125,6 +159,8 @@ export function createCoachStore(backend: CoachBackend, loadInput: () => Promise
         return;
       }
 
+      const mine = ++generation;
+      const current = () => generation === mine;
       set({ pending: { mode, question, label: '', partial: '' }, error: null });
       try {
         const system = buildCoachSystemPrompt(mode);
@@ -133,22 +169,28 @@ export function createCoachStore(backend: CoachBackend, loadInput: () => Promise
         let chosen: { prompt: string; label: string } | null = null;
         for (const rung of ladder) {
           const prompt = buildCoachPrompt(rung.text, thread, question);
-          const { tokens, limit } = await backend.countTokens(system, prompt);
+          const { tokens, limit } = await untilQuiet(COUNT_TIMEOUT_MS, () => backend.countTokens(system, prompt));
+          if (!current()) return;
           if (tokens + REPLY_TOKENS[mode] <= limit) {
             chosen = { prompt, label: rung.label };
             break;
           }
         }
+        if (!current()) return;
         if (!chosen) {
           set({ pending: null, error: 'Question too long for the model.' });
           return;
         }
         const { label, prompt } = chosen;
         set({ pending: { mode, question, label, partial: '' } });
-        const whole = await backend.stream(system, prompt, REPLY_TOKENS[mode], (piece) => {
-          const p = get().pending;
-          if (p) set({ pending: { ...p, partial: p.partial + piece } });
-        });
+        const whole = await untilQuiet(QUIET_TIMEOUT_MS, (touch) =>
+          backend.stream(system, prompt, REPLY_TOKENS[mode], (piece) => {
+            touch();
+            const p = get().pending;
+            if (p && current()) set({ pending: { ...p, partial: p.partial + piece } });
+          }),
+        );
+        if (!current()) return;
         const answer = whole.trim();
         if (!answer) {
           set({ pending: null, error: 'The model did not answer.' });
@@ -158,11 +200,14 @@ export function createCoachStore(backend: CoachBackend, loadInput: () => Promise
         if (mode === 'routine') entry.hasRoutine = parseRoutineText(answer).routines.length > 0;
         set({ entries: [...get().entries, entry], pending: null });
       } catch (e) {
-        set({ pending: null, error: describeAnalyzeMealError(e) });
+        if (current()) set({ pending: null, error: describeAnalyzeMealError(e) });
       }
     },
 
-    reset: () => set({ entries: [], error: null }),
+    reset: () => {
+      generation++;
+      set({ entries: [], error: null, pending: null });
+    },
   }));
 }
 
