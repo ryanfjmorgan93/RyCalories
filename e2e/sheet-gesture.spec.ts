@@ -88,18 +88,12 @@ test('a scrolled list scrolls back first; only a pull from its top closes the sh
   const scrollTop = () => list.evaluate((el) => el.scrollTop);
   const states = await recordDragStates(page);
 
-  // Scroll the exercise list down by dragging up inside it — holding still before lifting, so it
-  // does not fling: a touch that starts while a list is still coasting belongs to the browser,
-  // which would make the next step pass whatever the sheet decided (see `swipe`).
+  // Setup, not the thing under test: put the list part-way down. Scrolled by a swipe instead, this
+  // step passed locally every time and once left the list at 0 on CI; what is being tested is the
+  // pull that follows, which stays real touch input.
   const mid = await centreOf(list);
-  await swipe(page, { x: mid.x, y: mid.y + 120 }, { x: mid.x, y: mid.y - 120 }, { holdMs: 300 });
+  await list.evaluate((el) => el.scrollTo({ top: 200 }));
   await expect.poll(scrollTop).toBeGreaterThan(80);
-  const settled = async () => {
-    const a = await scrollTop();
-    await page.waitForTimeout(150);
-    return a === (await scrollTop());
-  };
-  await expect.poll(settled).toBe(true);
 
   // Pull down inside the scrolled list: it scrolls back to the top — even though the finger
   // carries on past the top in the same gesture, the sheet does not move.
