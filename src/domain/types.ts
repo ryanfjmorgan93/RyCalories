@@ -422,6 +422,14 @@ export interface RecipeIngredient {
   /** How the amount was entered, when it was a count rather than a typed weight. `unitGrams` is
    * the estimate used to resolve `grams`; `count * unitGrams` reproduces it. */
   unit?: { count: number; unitGrams: number; label: string; plural: string };
+  /**
+   * True when `grams` came from "Estimate a meal out" (the on-device model's guess at this
+   * component's weight), never entered or confirmed by the user. Cleared the moment the user
+   * edits the amount — see `recipeSource`, which marks the whole recipe's logged source `'model'`
+   * while any ingredient still carries this, so a guessed amount can never enter FoodMemory or a
+   * logged item as more than a guess.
+   */
+  amountEstimated?: true;
 }
 
 /** A saved cooked meal: its ingredients and how many portions it made. */

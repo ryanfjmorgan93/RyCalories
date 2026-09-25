@@ -9,7 +9,7 @@ import { db } from './db';
 import { nowIso } from '@/domain/dates';
 import { fromPer100 } from '@/domain/food';
 import { uuid } from '@/domain/ids';
-import { combinedSource, recipeIsComplete, shareFraction, shareLabel, shareNutrition, type ShareInput } from '@/domain/recipe';
+import { recipeIsComplete, recipeSource, shareFraction, shareLabel, shareNutrition, type ShareInput } from '@/domain/recipe';
 import type { MealSlot, Recipe, RecipeIngredient } from '@/domain/types';
 
 export interface SaveRecipeInput {
@@ -121,6 +121,11 @@ export interface LogShareInput {
  *
  * Throws a plain `Error` when the share itself makes no sense (an invalid or exactly zero
  * fraction) — logging "0 of 2 portions" would produce a meal item worth nothing, silently.
+ *
+ * `source` is `recipeSource`, not `combinedSource` of the ingredients' own figures: while any
+ * ingredient's amount is still `amountEstimated` (an unedited "Estimate a meal out" guess), the
+ * whole share is logged and remembered as `'model'` — the lowest trust there is — however good the
+ * per-100g figures themselves are.
  */
 export function shareItem(recipe: Recipe, share: ShareInput): NewMealItem {
   const fraction = shareFraction(share);
@@ -129,7 +134,7 @@ export function shareItem(recipe: Recipe, share: ShareInput): NewMealItem {
     name: recipe.name,
     portion: shareLabel(share),
     nutrition: shareNutrition(recipe.ingredients, fraction),
-    source: combinedSource(recipe.ingredients.map((i) => i.source)),
+    source: recipeSource(recipe.ingredients),
     recipeId: recipe.id,
   };
 }

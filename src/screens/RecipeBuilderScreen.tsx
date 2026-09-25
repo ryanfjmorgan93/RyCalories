@@ -10,9 +10,9 @@ import { displayMacros, fromPer100, type Macros } from '@/domain/food';
 import { fmtGrams, fmtKcal, fmtNum } from '@/domain/format';
 import { uuid } from '@/domain/ids';
 import { matchIngredient, mergeByFood, searchFoods, type IngredientCandidate, type MatchSources, type TableFood } from '@/domain/ingredientMatch';
-import { MEAL_PHOTO_PROMPT, MEAL_PHOTO_SYSTEM, parseMealAnalysis } from '@/domain/mealAnalysis';
+import { MEAL_ESTIMATE_SYSTEM, MEAL_PHOTO_PROMPT, MEAL_PHOTO_SYSTEM, mealEstimatePrompt, parseMealAnalysis, parseMealEstimate, type MealEstimatePart } from '@/domain/mealAnalysis';
 import { parseMealText } from '@/domain/mealText';
-import { countToGrams, gapsCount, ingredientGap, recipeDisplayTotals, recipeIsComplete, shareFraction, toIngredient } from '@/domain/recipe';
+import { countToGrams, gapsCount, ingredientGap, recipeDisplayTotals, recipeIsComplete, shareFraction, toEstimatedIngredient, toIngredient } from '@/domain/recipe';
 import type { Recipe, RecipeIngredient } from '@/domain/types';
 import { describeAnalyzeMealError, Nano } from '@/state/nano';
 import { useAssistant } from '@/state/assistant';
@@ -28,7 +28,7 @@ import { toast } from '@/ui/components/Toast';
 import { TopBar } from '@/ui/components/TopBar';
 import { RecipeShareFields, shareInputFrom, useShareState } from '@/ui/RecipeShareFields';
 
-type Phase = 'start' | 'recognising' | 'questions' | 'review';
+type Phase = 'start' | 'recognising' | 'estimating' | 'questions' | 'review';
 
 interface TypedAmount {
   count?: number;
@@ -63,6 +63,21 @@ function buildIngredients(names: string[], sources: MatchSources, amounts?: Map<
   const { merged, unmatched } = mergeByFood(matches);
   const fromGroup = merged.map((g) => applyTypedAmount(toIngredient(g.candidate, g.names[0]!, uuid()), amounts?.get(g.names[0]!)));
   const fromUnmatched = unmatched.map((n) => applyTypedAmount(toIngredient(null, n, uuid()), amounts?.get(n)));
+  return [...fromGroup, ...fromUnmatched];
+}
+
+/**
+ * Turn "Estimate a meal out"'s parsed `{name, grams?}` parts into ingredients: match each,
+ * merge duplicates that resolved to the same food (see `mergeByFood`, same as `buildIngredients`),
+ * and build every one with `toEstimatedIngredient` so its guessed weight arrives already filled
+ * in and marked — estimates go straight to Review, with no one-at-a-time walk.
+ */
+function buildEstimatedIngredients(parts: MealEstimatePart[], sources: MatchSources): RecipeIngredient[] {
+  const gramsByName = new Map(parts.map((p) => [p.name, p.grams]));
+  const matches = parts.map((p) => ({ name: p.name, candidate: matchIngredient(p.name, sources).best }));
+  const { merged, unmatched } = mergeByFood(matches);
+  const fromGroup = merged.map((g) => toEstimatedIngredient(g.candidate, { name: g.names[0]!, grams: gramsByName.get(g.names[0]!) }, uuid()));
+  const fromUnmatched = unmatched.map((n) => toEstimatedIngredient(null, { name: n, grams: gramsByName.get(n) }, uuid()));
   return [...fromGroup, ...fromUnmatched];
 }
 
@@ -230,7 +245,9 @@ function QuestionCardBody({
                     value={ingredient.unit.count > 0 ? ingredient.unit.count : null}
                     onChange={(v) => {
                       const count = v ?? 0;
-                      onChange({ unit: { ...ingredient.unit!, count }, grams: countToGrams(count, ingredient.unit!.unitGrams) });
+                      // Editing the amount — count or grams-per-unit, below — clears amountEstimated:
+                      // once the user has touched it, it is no longer an unconfirmed guess.
+                      onChange({ unit: { ...ingredient.unit!, count }, grams: countToGrams(count, ingredient.unit!.unitGrams), amountEstimated: undefined });
                     }}
                     step={1}
                     min={0}
@@ -244,7 +261,7 @@ function QuestionCardBody({
                       value={ingredient.unit.unitGrams}
                       onChange={(v) => {
                         const unitGrams = v ?? ingredient.unit!.unitGrams;
-                        onChange({ unit: { ...ingredient.unit!, unitGrams }, grams: countToGrams(ingredient.unit!.count, unitGrams) });
+                        onChange({ unit: { ...ingredient.unit!, unitGrams }, grams: countToGrams(ingredient.unit!.count, unitGrams), amountEstimated: undefined });
                       }}
                       onBlur={() => setEditingUnitGrams(false)}
                       min={1}
@@ -259,7 +276,14 @@ function QuestionCardBody({
               </>
             ) : (
               <Field label="How many grams?">
-                <NumberField value={ingredient.grams > 0 ? ingredient.grams : null} onChange={(v) => onChange({ grams: v ?? 0 })} step={10} min={0} mode="numeric" testId="question-grams" />
+                <NumberField
+                  value={ingredient.grams > 0 ? ingredient.grams : null}
+                  onChange={(v) => onChange({ grams: v ?? 0, amountEstimated: undefined })}
+                  step={10}
+                  min={0}
+                  mode="numeric"
+                  testId="question-grams"
+                />
               </Field>
             )}
 
@@ -415,12 +439,15 @@ export function RecipeBuilderScreen() {
   const [recogniseNote, setRecogniseNote] = useState<{ kind: 'none' | 'error'; detail?: string } | null>(null);
   const [showTyping, setShowTyping] = useState(false);
   const [typedText, setTypedText] = useState('');
+  const [showEstimateInput, setShowEstimateInput] = useState(false);
+  const [estimateText, setEstimateText] = useState('');
   const [shareState, patchShare] = useShareState(1);
   const [saving, setSaving] = useState(false);
 
   const photoInputRef = useRef<HTMLInputElement>(null);
   const ticketRef = useRef(0);
   const loadedExistingRef = useRef(false);
+  const startedEstimateRef = useRef(false);
 
   useEffect(() => {
     void sweepMealPhotos();
@@ -443,6 +470,17 @@ export function RecipeBuilderScreen() {
   }, [id, existing]);
 
   const sources: MatchSources = useMemo(() => ({ foods: table?.foods ?? [], aliases: table?.aliases ?? [], memories }), [table, memories]);
+
+  // `?start=estimate` (MealEditScreen's Estimate button) opens the text box directly, the same
+  // way it would after tapping "Estimate a meal out" — but only once `status` has actually loaded
+  // and reads `ready`, the same gate the start button itself is under; on any other state the
+  // screen just lands on the ordinary start phase, showing why.
+  useEffect(() => {
+    if (startedEstimateRef.current || !status) return;
+    if (params.get('start') !== 'estimate') return;
+    startedEstimateRef.current = true;
+    if (status.state === 'ready') setShowEstimateInput(true);
+  }, [status, params]);
 
   const search = params.toString();
   const backHref = `/food/recipes${search ? `?${search}` : ''}`;
@@ -493,6 +531,36 @@ export function RecipeBuilderScreen() {
   const cancelRecognition = () => {
     ticketRef.current += 1;
     setPhase('start');
+  };
+
+  // -- Estimate a meal out ------------------------------------------------------------------------
+
+  const runEstimate = async () => {
+    const text = estimateText.trim();
+    if (!text) return;
+    setRecogniseNote(null);
+    setPhase('estimating');
+    const ticket = (ticketRef.current += 1);
+    try {
+      const { text: raw } = await Nano.generate({ system: MEAL_ESTIMATE_SYSTEM, prompt: mealEstimatePrompt(text), temperature: 0.2, maxOutputTokens: 300 });
+      if (ticket !== ticketRef.current) return;
+      const estimate = parseMealEstimate(raw);
+      if (estimate.parts.length === 0) {
+        setRecogniseNote({ kind: 'none' });
+        setPhase('review');
+        return;
+      }
+      // Straight to Review, never the one-at-a-time walk: the amounts are already there.
+      setIngredients(buildEstimatedIngredients(estimate.parts, sources));
+      if (estimate.dish && !name.trim()) setName(estimate.dish);
+      setShowEstimateInput(false);
+      setEstimateText('');
+      setPhase('review');
+    } catch (e) {
+      if (ticket !== ticketRef.current) return;
+      setRecogniseNote({ kind: 'error', detail: describeAnalyzeMealError(e) });
+      setPhase('review');
+    }
   };
 
   // -- Typed text --------------------------------------------------------------------------------
@@ -627,6 +695,20 @@ export function RecipeBuilderScreen() {
               <Button size="xl" full variant="secondary" onClick={() => setPickerFor('add')} data-testid="recipe-add-ingredients">
                 Add ingredients
               </Button>
+
+              {/* Gated on the same Nano status as "Take a photo" — `recipe-assistant-state` above
+                  already states it factually, once, for both. */}
+              <Button size="xl" full variant="secondary" disabled={status?.state !== 'ready'} onClick={() => setShowEstimateInput((v) => !v)} data-testid="recipe-start-estimate">
+                Estimate a meal out
+              </Button>
+              {showEstimateInput && (
+                <div className="grid gap-2">
+                  <TextInput multiline value={estimateText} onChange={setEstimateText} placeholder="What did you eat?" testId="recipe-estimate-text" />
+                  <Button size="lg" full variant="primary" disabled={!estimateText.trim()} onClick={() => void runEstimate()} data-testid="recipe-estimate-submit">
+                    Estimate
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 
@@ -638,6 +720,20 @@ export function RecipeBuilderScreen() {
                 </div>
                 <div className="h-4" />
                 <Button size="lg" variant="secondary" onClick={cancelRecognition} data-testid="recipe-recognise-cancel">
+                  Cancel
+                </Button>
+              </Card>
+            </div>
+          )}
+
+          {phase === 'estimating' && (
+            <div className="px-4">
+              <Card className="p-6 text-center">
+                <div className="text-base font-semibold" data-testid="recipe-estimating">
+                  Estimating…
+                </div>
+                <div className="h-4" />
+                <Button size="lg" variant="secondary" onClick={cancelRecognition} data-testid="recipe-estimate-cancel">
                   Cancel
                 </Button>
               </Card>
@@ -701,7 +797,13 @@ export function RecipeBuilderScreen() {
                         <Row
                           onClick={() => setSheetIndex(i)}
                           title={ing.name}
-                          subtitle={amountLabel(ing)}
+                          subtitle={
+                            ing.amountEstimated ? (
+                              <span data-testid={`review-estimated-${i}`}>≈ {fmtGrams(ing.grams)} · est.</span>
+                            ) : (
+                              amountLabel(ing)
+                            )
+                          }
                           right={rowMacros ? <span className="num font-extrabold tabular-nums">{fmtKcal(rowMacros.kcal)}</span> : <span className="text-muted">—</span>}
                         />
                       </div>
@@ -717,10 +819,17 @@ export function RecipeBuilderScreen() {
 
               <div className="h-4" />
               {complete ? (
-                <div className="flex items-baseline justify-between rounded-xl bg-surface-2 px-3 py-3">
-                  <span className="num font-extrabold tabular-nums" data-testid="review-total-kcal">
-                    {fmtKcal(recipeDisplayTotals(ingredients).kcal)}
-                  </span>
+                <div className="flex items-baseline justify-between gap-3 rounded-xl bg-surface-2 px-3 py-3">
+                  <div className="flex items-baseline gap-2">
+                    <span className="num font-extrabold tabular-nums" data-testid="review-total-kcal">
+                      {fmtKcal(recipeDisplayTotals(ingredients).kcal)}
+                    </span>
+                    {ingredients.some((i) => i.amountEstimated) && (
+                      <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-muted" data-testid="review-estimate">
+                        Estimate
+                      </span>
+                    )}
+                  </div>
                   <MacroLine m={recipeDisplayTotals(ingredients)} className="text-sm text-muted" />
                 </div>
               ) : (

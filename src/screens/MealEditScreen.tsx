@@ -28,6 +28,15 @@ function RecipeBookIcon() {
   );
 }
 
+/** A plain scale/estimate icon for "Estimate" — distinct from the book used for "From a recipe". */
+function EstimateIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3v3M12 6l-6 12h12L12 6ZM6 15h12" />
+    </svg>
+  );
+}
+
 export function MealEditScreen() {
   const { id } = useParams();
   return id ? <ExistingMeal id={id} /> : <NewMeal />;
@@ -83,9 +92,14 @@ function NewMeal() {
         right={
           <div className="flex items-center">
             {items.length === 0 && (
-              <IconButton label="From a recipe" onClick={() => setRecipePickerOpen(true)} data-testid="from-recipe">
-                <RecipeBookIcon />
-              </IconButton>
+              <>
+                <IconButton label="From a recipe" onClick={() => setRecipePickerOpen(true)} data-testid="from-recipe">
+                  <RecipeBookIcon />
+                </IconButton>
+                <IconButton label="Estimate a meal out" onClick={() => nav(`/food/recipes/new?start=estimate&date=${date}`)} data-testid="estimate-meal">
+                  <EstimateIcon />
+                </IconButton>
+              </>
             )}
             <IconButton label="Add food" onClick={() => setEditing('new')} data-testid="add-food">
               <PlusIcon />
@@ -200,12 +214,15 @@ function ExistingMeal({ id }: { id: string }) {
         <div className="h-4" />
         <ItemList items={items} onEdit={(i) => setEditing(i)} onAdd={() => setEditing('new')} macros={sumItems(meal.items)} />
         <div className="h-4" />
-        <div className="grid grid-cols-2 gap-3">
-          <Button size="lg" variant="secondary" full onClick={() => setEditing('new')} data-testid="add-food-button">
+        <div className="grid grid-cols-3 gap-2">
+          <Button size="md" variant="secondary" full onClick={() => setEditing('new')} data-testid="add-food-button">
             Add food
           </Button>
-          <Button size="lg" variant="secondary" full onClick={() => setRecipePickerOpen(true)} data-testid="from-recipe">
+          <Button size="md" variant="secondary" full onClick={() => setRecipePickerOpen(true)} data-testid="from-recipe">
             From a recipe
+          </Button>
+          <Button size="md" variant="secondary" full onClick={() => nav(`/food/recipes/new?start=estimate&meal=${id}`)} data-testid="estimate-meal">
+            Estimate
           </Button>
         </div>
         <div className="h-8" />
