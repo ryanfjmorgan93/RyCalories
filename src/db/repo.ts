@@ -20,6 +20,7 @@ import {
   type SessionOutcome,
   type Suggestion,
 } from '@/domain/engine';
+import { normaliseName } from '@/domain/exerciseMatch';
 import { uuid } from '@/domain/ids';
 import type { PersonalRecord } from '@/domain/records';
 import { countsForProgression, countsForRecords, countsForVolume } from '@/domain/sets';
@@ -182,13 +183,9 @@ export async function findExerciseByName(name: string): Promise<Exercise | undef
   return all.find((e) => normaliseName(e.name) === key || (e.aliases ?? []).some((a) => normaliseName(a) === key));
 }
 
-export function normaliseName(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[’']/g, '')
-    .replace(/[^a-z0-9()+]+/g, ' ')
-    .trim();
-}
+// `normaliseName` lives in `@/domain/exerciseMatch` (a pure domain module) and is re-exported here
+// so every existing caller of `./repo` — the Hevy importer included — keeps working unchanged.
+export { normaliseName };
 
 // ---------------------------------------------------------------------------
 // Routines
