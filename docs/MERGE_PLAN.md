@@ -631,6 +631,13 @@ counts drop below a baseline without an in-app delete, and a Backups card in Set
   round trip is tens of milliseconds, and without them every flick measured as a slow pull.
 - **Drag state is written straight onto the panel**, not through React state, so a test watching
   `data-drag-state` sees a drag inside the touch handler, not a render later.
+- **"Wait a frame, then see if the panel is still there" is a race.** After a pull-away the sheet
+  asks its caller to close and slides back up if the caller declined. Judged one animation frame
+  later, a slow render left the panel in place and a closing sheet bounced up first (one full local
+  run in about ten). The close now runs inside `flushSync`, so the panel's presence is the answer
+  the moment it returns; the test forces every frame ahead of React's render so the old order
+  cannot hide. A close that navigates is a transition `flushSync` cannot flush — close the sheet's
+  own state first.
 - Each of the four behaviours (scroll first, flick, settle back, top-only Escape) was shown to fail
   its test when broken on purpose.
 

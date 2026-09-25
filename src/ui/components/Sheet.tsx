@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 import { popSheet, pushSheet, type SheetHandle } from '@/state/overlays';
 import { Button } from './Button';
 import {
@@ -141,12 +141,14 @@ export function Sheet({
       timers.push(
         window.setTimeout(
           () => {
-            handle.current.close();
-            // A caller that closed has unmounted the panel by the next frame. One that declined
-            // (or turned "close" into "next step") still has it: bring it back up.
-            requestAnimationFrame(() => {
-              if (panel.isConnected) settleBack();
-            });
+            // Render the caller's answer now, so the panel's presence says what it decided: a
+            // caller that closed has removed it; one that declined (or turned "close" into "next
+            // step") still has it, so it comes back up. Waiting a frame for React instead was a
+            // race: on a slow frame the panel was still there, slid back up, and only then went.
+            // A close that navigates is a transition, which this cannot flush — close the sheet's
+            // own state first.
+            flushSync(() => handle.current.close());
+            if (panel.isConnected) settleBack();
           },
           reducedMotion() ? 0 : LEAVE_MS,
         ),
