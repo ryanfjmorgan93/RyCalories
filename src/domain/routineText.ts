@@ -57,7 +57,7 @@ const DAY_PREFIX_RE = /^(day|week|workout|session|routine)\b/i;
  * "Tempo 3-1-1", "Rest 90s between sets", "Notes: …", "Progression: …", "Deload …". "Tempo" is a
  * note only with its count after it — "Tempo squat" is an exercise.
  */
-const NOTE_LINE_RE = /^(?:warm[\s-]?ups?|cool[\s-]?downs?|rest|notes?|progression|deload)\b|^tempo\s*:?\s*(?:\d|$)/i;
+const NOTE_LINE_RE = /^(?:warm[\s-]?ups?|cool[\s-]?downs?|rest(?![\s-]*pause)|notes?|progression|deload)\b|^tempo\s*:?\s*(?:\d|$)/i;
 
 /**
  * A note that is only a label ("Warm-up:", "**Cool-down (5 min)**") opens a block: the lines under
@@ -73,6 +73,9 @@ const NOTE_BLOCK_RE = /^(?:warm[\s-]?ups?|cool[\s-]?downs?|notes?)$/i;
  */
 const SECTION_LABEL_RE =
   /^(?:(?:super|giant|tri|compound)[\s-]?sets?|circuits?|main(?:\s+(?:lifts?|work|sets?))?|accessor(?:y|ies)(?:\s+(?:work|lifts?))?|finishers?)\b(?:\s+[A-Za-z]?\d{0,2}\b)?\s*(?:\([^()]*\))?\s*(?:[:.-]\s*|$)/i;
+
+/** What can follow a group label and still be only the label: "Superset 1: 3 rounds", "Circuit - x3". */
+const ROUNDS_ONLY_RE = /^(?:\d+\s*(?:rounds?|times|circuits?)|x\s*\d+)(?:\s+through)?\.?$/i;
 
 /** "Warm-up (10 min):" → "Warm-up". */
 function bareLabel(s: string): string {
@@ -146,7 +149,7 @@ function cleanName(s: string): string {
   for (let i = 0; i < 5; i++) {
     let next = cur;
     for (const re of TRAILING_NOTE_PATTERNS) next = next.replace(re, '');
-    next = next.trim().replace(/[-,:;]+$/, '').trim();
+    next = next.trim().replace(/[-,:;.]+$/, '').trim();
     if (next === cur) break;
     cur = next;
   }
@@ -296,7 +299,7 @@ export function parseRoutineText(text: string): { routines: ParsedRoutine[]; ign
     if (label) {
       inNoteBlock = false;
       normalized = normalized.slice(label[0].length).trim();
-      if (normalized === '') continue;
+      if (normalized === '' || ROUNDS_ONLY_RE.test(normalized)) continue;
     }
 
     if (NOTE_LINE_RE.test(normalized)) {
@@ -317,6 +320,13 @@ export function parseRoutineText(text: string): { routines: ParsedRoutine[]; ign
 
     const pieces = splitCombined(normalized);
     const extracted = pieces.map(extractLine);
+    // A sentence that happens to hold a set count ("Do 3 sets to failure on the last exercise.")
+    // is advice, not an exercise: once its numbers are gone it is still a sentence.
+    const isSentence = /[.!?]$/.test(normalized) && wordCount(extracted[0]!.name) > 4;
+    if (extracted[0]!.hasNumbers && isSentence) {
+      ignored.push(rawLine);
+      continue;
+    }
     if (extracted[0]!.hasNumbers) {
       extracted.forEach((e, i) => {
         const line: ParsedRoutineLine = { raw: rawLine, name: e.name || pieces[i]! };

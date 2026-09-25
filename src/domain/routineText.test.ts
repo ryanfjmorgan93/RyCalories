@@ -341,6 +341,29 @@ describe('parseRoutineText — what a chatbot actually writes (review findings)'
   });
 });
 
+describe('parseRoutineText — edges found re-reading the fixes', () => {
+  it('"Rest-pause curls" is an exercise, not a rest note', () => {
+    const [l] = exercisesOf('Day 1\nRest-pause curls 3x10');
+    expect(l).toMatchObject({ name: 'Rest-pause curls', sets: 3 });
+  });
+
+  it('a group label followed only by its round count is still only a label', () => {
+    const { routines } = parseRoutineText('Day 1\nSuperset 1: 3 rounds\nBench press 3x10\nCircuit - x3\nRow 3x10');
+    expect(routines).toEqual([{ name: 'Day 1', exercises: [expect.objectContaining({ name: 'Bench press' }), expect.objectContaining({ name: 'Row' })] }]);
+  });
+
+  it('a full stop after the numbers does not land in the name', () => {
+    const [l] = exercisesOf('Bench press 3x8.');
+    expect(l).toMatchObject({ name: 'Bench press', sets: 3, repMin: 8 });
+  });
+
+  it('a sentence holding a set count is advice, not an exercise', () => {
+    const { routines, ignored } = parseRoutineText('Day 1\nBench press 3x8\nDo 3 sets to failure on the last exercise.\nFinish with 2 sets of 15 on the cable fly.');
+    expect(routines[0]!.exercises.map((e) => e.name)).toEqual(['Bench press']);
+    expect(ignored).toEqual(['Do 3 sets to failure on the last exercise.', 'Finish with 2 sets of 15 on the cable fly.']);
+  });
+});
+
 describe('parseRoutineText — garbage in', () => {
   it('never throws, and yields an empty result for empty input', () => {
     expect(() => parseRoutineText('')).not.toThrow();
