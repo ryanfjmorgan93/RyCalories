@@ -28,13 +28,14 @@ export const VELOCITY_WINDOW_MS = 100;
  * would fight the finger, and the browser only lets a gesture be taken from it at the start.
  *
  * - `fromHandle`: the touch began on the handle or title, where nothing scrolls, so any
- *   movement drags.
+ *   downward movement drags. Upward or flat drift is left alone: claiming it would swallow the
+ *   click of a tap on Close whose thumb rolled up as it lifted.
  * - `scrollEligible`: every scrollable box between the finger and the panel was already at its
  *   top when the touch began. Only then can a pull down mean "close" rather than "scroll back".
  */
 export function decideDragIntent(dx: number, dy: number, fromHandle: boolean, scrollEligible: boolean): DragIntent {
   if (Math.hypot(dx, dy) < DRAG_SLOP_PX) return 'pending';
-  if (fromHandle) return 'drag';
+  if (fromHandle) return dy > 0 ? 'drag' : 'scroll';
   if (!scrollEligible) return 'scroll';
   return dy > 0 && dy > Math.abs(dx) ? 'drag' : 'scroll';
 }

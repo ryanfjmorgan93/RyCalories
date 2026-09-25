@@ -49,6 +49,7 @@ export function ExercisesScreen() {
     <div>
       <TopBar
         title="Exercises"
+        back="/routines"
         right={
           <Button size="md" variant="ghost" className="mr-1" onClick={() => nav('/exercises/new')} data-testid="add-exercise">
             New exercise

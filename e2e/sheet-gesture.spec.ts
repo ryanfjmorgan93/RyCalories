@@ -141,3 +141,27 @@ test('stacked sheets: a pull, and Escape, close only the one on top', async ({ p
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
+
+test('a second finger mid-drag hands the sheet back instead of stranding it', async ({ page }) => {
+  const title = await openAddFood(page);
+  const states = await recordDragStates(page);
+  const from = await centreOf(title);
+  const cdp = await page.context().newCDPSession(page);
+  const t0 = Date.now() / 1000;
+  const p1 = (dy: number) => ({ x: from.x, y: from.y + dy, id: 1 });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [p1(0)], timestamp: t0 });
+  for (let i = 1; i <= 6; i++) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [p1(i * 10)], timestamp: t0 + i * 0.03 });
+  }
+  // A second finger lands on the panel while the first is still dragging.
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [p1(60), { x: from.x + 80, y: from.y + 200, id: 2 }],
+    timestamp: t0 + 0.25,
+  });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [], timestamp: t0 + 0.3 });
+  // Dragged, then handed back to rest — not left hanging mid-drag.
+  await expect.poll(states).toEqual(['dragging', 'settling', 'idle']);
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByTestId('sheet-panel')).not.toHaveAttribute('style', /translateY/);
+});

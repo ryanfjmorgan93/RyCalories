@@ -89,7 +89,7 @@ export function BodyweightScreen() {
   if (!entries || !settings) {
     return (
       <div>
-        <TopBar title="Bodyweight" />
+        <TopBar title="Bodyweight" back="/progress" />
         <div className="px-4 py-8 text-muted">Loading…</div>
       </div>
     );
@@ -97,7 +97,7 @@ export function BodyweightScreen() {
 
   return (
     <div>
-      <TopBar title="Bodyweight" />
+      <TopBar title="Bodyweight" back="/progress" />
       <div className="px-4">
         <LogCard latest={latest} today={today} />
 

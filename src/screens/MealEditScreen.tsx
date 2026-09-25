@@ -108,7 +108,12 @@ function NewMeal() {
         back="/food"
         // Leaving with food that was never saved asks first — from the back arrow and, through it,
         // the Android back gesture, which used to leave the app with the draft intact.
-        onBack={() => (items.length > 0 && !saving ? setConfirmLeave(true) : nav('/food'))}
+        // While a save is in flight it does nothing; the save's own navigation is about to follow.
+        onBack={() => {
+          if (saving) return;
+          if (items.length > 0) setConfirmLeave(true);
+          else nav('/food');
+        }}
       />
       <div className="px-4">
         <MealFields name={name} slot={slot} onName={setName} onSlot={setSlot} />

@@ -155,6 +155,9 @@ export function Sheet({
 
     const onTouchStart = (e: TouchEvent) => {
       if (busy || e.touches.length !== 1) {
+        // A second finger mid-drag ends the drag: hand the panel back rather than leave it
+        // stranded where the first finger had it.
+        if (gesture?.intent === 'drag') settleBack();
         gesture = null;
         return;
       }

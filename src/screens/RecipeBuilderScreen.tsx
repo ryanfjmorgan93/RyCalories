@@ -445,7 +445,7 @@ export function RecipeBuilderScreen() {
   const [saving, setSaving] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
   // What an edit started from, to tell an untouched recipe from a changed one.
-  const [loaded, setLoaded] = useState<{ name: string; ingredients: RecipeIngredient[] } | null>(null);
+  const [loaded, setLoaded] = useState<{ name: string; ingredients: RecipeIngredient[]; made: number } | null>(null);
 
   const photoInputRef = useRef<HTMLInputElement>(null);
   const ticketRef = useRef(0);
@@ -467,7 +467,7 @@ export function RecipeBuilderScreen() {
     loadedExistingRef.current = true;
     setName(existing.name);
     setIngredients(existing.ingredients);
-    setLoaded({ name: existing.name, ingredients: existing.ingredients });
+    setLoaded({ name: existing.name, ingredients: existing.ingredients, made: existing.portionsMade });
     patchShare({ made: existing.portionsMade });
     setPhase('review');
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -646,14 +646,25 @@ export function RecipeBuilderScreen() {
   const notFound = Boolean(id) && existing === null;
   // Leaving with ingredients that were never saved asks first — from the back arrow and, through
   // it, the Android back gesture, which used to leave the app with the draft intact.
-  const unsaved = !saving && (id ? !!loaded && (ingredients !== loaded.ingredients || name !== loaded.name) : ingredients.length > 0);
+  // Compared by value: an edit that nets out to what was saved is no change.
+  const unsaved = id
+    ? !!loaded &&
+      (name !== loaded.name ||
+        (shareState.made ?? 1) !== loaded.made ||
+        JSON.stringify(ingredients) !== JSON.stringify(loaded.ingredients))
+    : ingredients.length > 0;
 
   return (
     <div>
       <TopBar
         title={id ? name || 'Edit recipe' : 'New recipe'}
         back={backHref}
-        onBack={() => (unsaved ? setConfirmLeave(true) : nav(backHref))}
+        // While a save is in flight it does nothing; the save's own navigation is about to follow.
+        onBack={() => {
+          if (saving) return;
+          if (unsaved) setConfirmLeave(true);
+          else nav(backHref);
+        }}
       />
       <Confirm
         open={confirmLeave}

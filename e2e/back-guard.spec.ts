@@ -68,3 +68,42 @@ test('an unsaved recipe asks before back discards it', async ({ page }) => {
   await discard.getByRole('button', { name: 'Discard' }).click();
   await expect(page).toHaveURL(/\/food\/recipes$/);
 });
+
+test('an edited recipe asks before back throws away a changed portion count; an untouched one goes straight back', async ({ page }) => {
+  await fresh(page);
+  await page.goto('/food/recipes/new');
+  await page.getByTestId('recipe-add-ingredients').click();
+  await page.getByTestId('picker-search').fill('egg');
+  await page.getByTestId('picker-result-0').click();
+  await page.getByTestId('review-row-0').click();
+  await page.getByTestId('question-count').fill('2');
+  await page.getByTestId('question-next').click();
+  await page.getByTestId('recipe-name').fill('Omelette');
+  await expect(page.getByTestId('review-total-kcal')).toBeVisible();
+  await page.getByTestId('recipe-save').click();
+  await page.waitForURL(/\/food\/recipes$/);
+
+  const openEdit = async () => {
+    await page.getByTestId('recipe-more-Omelette').click();
+    await page.getByTestId('recipe-edit').click();
+    await expect(page).toHaveURL(/\/food\/recipes\/[0-9a-f-]+\/edit/);
+    await expect(page.getByTestId('recipe-name')).toHaveValue('Omelette');
+  };
+  const back = page.locator('header').getByRole('button', { name: 'Back' });
+
+  // Untouched: straight back, no question.
+  await openEdit();
+  await back.click();
+  await expect(page).toHaveURL(/\/food\/recipes$/);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+
+  // Only the portions changed: that is still a change worth asking about.
+  await openEdit();
+  await page.getByTestId('share-made').fill('4');
+  await back.click();
+  const discard = page.getByRole('dialog').filter({ hasText: 'Discard your changes?' });
+  await expect(discard).toBeVisible();
+  await discard.getByRole('button', { name: 'Keep' }).click();
+  await expect(discard).toHaveCount(0);
+  await expect(page.getByTestId('share-made')).toHaveValue('4');
+});

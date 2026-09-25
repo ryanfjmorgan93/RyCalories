@@ -17,10 +17,14 @@ describe('decideDragIntent', () => {
     expect(decideDragIntent(3, 4, false, true)).toBe('pending');
   });
 
-  it('from the handle, any movement past the slop drags — sideways and upward included', () => {
+  it('from the handle, any downward movement past the slop drags, however diagonal', () => {
     expect(decideDragIntent(0, 20, true, false)).toBe('drag');
     expect(decideDragIntent(30, 2, true, false)).toBe('drag');
-    expect(decideDragIntent(0, -20, true, false)).toBe('drag');
+  });
+
+  it('from the handle, upward or flat drift is not claimed, so a tap on Close still clicks', () => {
+    expect(decideDragIntent(0, -20, true, false)).toBe('scroll');
+    expect(decideDragIntent(20, 0, true, false)).toBe('scroll');
   });
 
   it('from the body, a downward, mostly vertical pull at the top of the list drags', () => {
