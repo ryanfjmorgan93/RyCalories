@@ -109,6 +109,7 @@ export function Sheet({
     const settleBack = () => {
       busy = true;
       setDragState('settling');
+      scrim.style.pointerEvents = '';
       panel.style.transition = `transform ${SETTLE_MS}ms cubic-bezier(0.2, 0.8, 0.2, 1)`;
       scrim.style.transition = `opacity ${SETTLE_MS}ms ease`;
       place(0);
@@ -130,6 +131,9 @@ export function Sheet({
       setDragState('settling');
       const active = document.activeElement;
       if (active instanceof HTMLElement && panel.contains(active)) active.blur();
+      // A tap on the scrim during the slide-out would close it a second time; for a caller whose
+      // "close" means "next step" (HevyImportSheet's result), that is a skipped step.
+      scrim.style.pointerEvents = 'none';
       panel.style.transition = `transform ${LEAVE_MS}ms ease-in`;
       scrim.style.transition = `opacity ${LEAVE_MS}ms ease-in`;
       panel.style.transform = `translateY(${panel.offsetHeight + 24}px)`;
