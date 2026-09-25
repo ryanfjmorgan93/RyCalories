@@ -31,7 +31,9 @@ export interface ParsedRoutine {
 const BOLD_RE = /\*\*(.+?)\*\*/g;
 const UNDERSCORE_EMPHASIS_RE = /__(.+?)__/g;
 const MARKDOWN_HEADING_PREFIX_RE = /^\s{0,3}#{1,6}\s+/;
-const BULLET_PREFIX_RE = /^\s*(?:[-*•–—]|\d+[.)])\s+/;
+// "-", "•", "1.", "2)", and superset positions "A1.", "B2)", "C1:", "1a." — the letter-digit pair
+// is how a chatbot numbers exercises it wants done back to back.
+const BULLET_PREFIX_RE = /^\s*(?:[-*•–—]|\d+[a-z]?[.)]|[A-Za-z]\d{1,2}[.):]?)\s+/;
 const DASH_RE = /[–—]/g;
 
 /** Strip markdown emphasis/heading/bullet markers, normalise dashes and "×", collapse whitespace. */
@@ -50,27 +52,75 @@ const MARKDOWN_HEADING_LINE_RE = /^#{1,6}\s+\S/;
 const FULLY_BOLD_LINE_RE = /^(\*\*[^*]+\*\*|__[^_]+__)$/;
 const DAY_PREFIX_RE = /^(day|week|workout|session|routine)\b/i;
 
+/**
+ * Lines that are advice about the routine, not part of it: "Warm-up: 5 min bike", "Cool down",
+ * "Tempo 3-1-1", "Rest 90s between sets", "Notes: …", "Progression: …", "Deload …". "Tempo" is a
+ * note only with its count after it — "Tempo squat" is an exercise.
+ */
+const NOTE_LINE_RE = /^(?:warm[\s-]?ups?|cool[\s-]?downs?|rest|notes?|progression|deload)\b|^tempo\s*:?\s*(?:\d|$)/i;
+
+/**
+ * A note that is only a label ("Warm-up:", "**Cool-down (5 min)**") opens a block: the lines under
+ * it are the warm-up, not the routine, up to the next heading or blank line.
+ */
+const NOTE_BLOCK_RE = /^(?:warm[\s-]?ups?|cool[\s-]?downs?|notes?)$/i;
+
+/**
+ * Labels that group exercises inside one day — "Superset 1:", "Superset A", "Giant set", "Tri-set",
+ * "Circuit (3 rounds):", "Main lifts:", "Accessories:", "Finisher:". They are not a new routine, so
+ * the day's name stands. A label with an exercise after it ("Superset: Bench 3x10, Row 3x10") keeps
+ * the exercise.
+ */
+const SECTION_LABEL_RE =
+  /^(?:(?:super|giant|tri|compound)[\s-]?sets?|circuits?|main(?:\s+(?:lifts?|work|sets?))?|accessor(?:y|ies)(?:\s+(?:work|lifts?))?|finishers?)\b(?:\s+[A-Za-z]?\d{0,2}\b)?\s*(?:\([^()]*\))?\s*(?:[:.-]\s*|$)/i;
+
+/** "Warm-up (10 min):" → "Warm-up". */
+function bareLabel(s: string): string {
+  return s.replace(/\([^()]*\)/g, ' ').replace(/[:.\-\s]+$/, '').trim();
+}
+
 // ---------------------------------------------------------------------------
 // Numbers: weight, then sets/reps/seconds
 
+/** "80", "62.5", "62,5", optionally a range "70-80" / "70 to 80". */
+const KG_NUMBER = String.raw`(\d+(?:[.,]\d+)?)(?:\s*(?:-|to)\s*\d+(?:[.,]\d+)?)?`;
+
+/**
+ * A range ("@ 70-80kg") starts at its lower end: the engine adds weight from wherever the routine
+ * starts, and a start the owner cannot lift for the prescribed reps is the one mistake it cannot
+ * walk back. The whole range is consumed either way, so "-80kg" never lands in the name.
+ */
 const WEIGHT_PATTERNS: RegExp[] = [
-  // "@ 80kg", "@80 kg"
-  /@\s*(\d+(?:[.,]\d+)?)\s*kg\b/i,
+  // "@ 80kg", "@80 kg", "@ 70-80kg"
+  new RegExp(String.raw`@\s*${KG_NUMBER}\s*kgs?\b`, 'i'),
   // "at 80 kg"
-  /\bat\s+(\d+(?:[.,]\d+)?)\s*kg\b/i,
+  new RegExp(String.raw`\bat\s+${KG_NUMBER}\s*kgs?\b`, 'i'),
   // ", 80kg"
-  /,\s*(\d+(?:[.,]\d+)?)\s*kg\b/i,
+  new RegExp(String.raw`,\s*${KG_NUMBER}\s*kgs?\b`, 'i'),
   // "@ 100" — a bare number after @ is kg.
-  /@\s*(\d+(?:[.,]\d+)?)\b/i,
+  new RegExp(String.raw`@\s*${KG_NUMBER}(?![\d.,])`, 'i'),
 ];
 
 /**
- * "4x6-8", "4 x 6-8", "3 sets of 8-10", "3 sets x 10 reps", "3x30s", "3 x 45 sec", "5x5" — the
- * exercise's own name never contains these numbers, so whatever this matches is removed from the
- * line before the leftover text becomes the name.
+ * "4x6-8", "4 x 6-8", "3 sets of 8-10", "3 sets x 10 reps", "3x30s", "3 x 45 sec", "3x1 min",
+ * "5x5" — the exercise's own name never contains these numbers, so whatever this matches is
+ * removed from the line before the leftover text becomes the name. Group 4 is a seconds unit,
+ * group 5 a minutes unit. A bare "m" is not minutes: on a carry it is metres.
  */
-const SETS_REPS_RE =
-  /(\d+)\s*(?:sets?)?\s*(?:x|of)\s*(\d+(?:[.,]\d+)?)(?:\s*(?:-|to)\s*(\d+(?:[.,]\d+)?))?\s*(seconds|secs|sec|s)?\b(?:\s*reps?)?/i;
+const SETS_REPS_SOURCE = String.raw`(\d+)\s*(?:sets?)?\s*(?:x|of)\s*(\d+(?:[.,]\d+)?)(?:\s*(?:-|to)\s*(\d+(?:[.,]\d+)?))?(?:\s*(?:(seconds?|secs?|s)|(minutes?|mins?)))?\b(?:\s*reps?)?`;
+const SETS_REPS_RE = new RegExp(SETS_REPS_SOURCE, 'i');
+
+/**
+ * "3xAMRAP", "3 x max", "3 sets of max reps", "3 sets to failure", "3 sets, AMRAP": the sets are
+ * known, the reps are "as many as you can", which is no number at all — the exercise keeps its
+ * own rep range.
+ */
+const OPEN_REPS_SOURCE = String.raw`(\d+)\s*(?:sets?)?\s*(?:x|of|,)?\s*(?:amrap|max(?:imum)?|(?:to\s+)?failure)\b(?:\s*reps?)?`;
+const OPEN_REPS_RE = new RegExp(OPEN_REPS_SOURCE, 'i');
+
+/** Either shape, anywhere in a line — how a line holding two exercises is recognised. */
+const ANY_NUMBERS_RE = new RegExp(`${SETS_REPS_SOURCE}|${OPEN_REPS_SOURCE}`, 'gi');
+const HAS_NUMBERS_RE = new RegExp(ANY_NUMBERS_RE.source, 'i');
 
 const TRAILING_NOTE_PATTERNS: RegExp[] = [
   // "(each side)", leftover "()" once its numbers are removed from inside.
@@ -78,10 +128,16 @@ const TRAILING_NOTE_PATTERNS: RegExp[] = [
   // "- notes" — a dash with a space on both sides, so a hyphenated exercise name like
   // "Bent-over row" (no space before its hyphen) is never mistaken for a trailing note.
   /\s+-\s+[a-z][a-z '/]*$/i,
-  // ", RPE 8"
-  /,?\s*rpe\s*\d+(?:[.,]\d+)?\s*$/i,
-  // "rest 90s" / ", rest 90"
-  /,?\s*rest\s*\d+\s*(?:seconds|secs|sec|s)?\s*$/i,
+  // ", RPE 8", "RPE 7-8", "@ RPE 8", "RIR 2"
+  /,?\s*@?\s*(?:rpe|rir)\s*\d+(?:[.,]\d+)?(?:\s*(?:-|to)\s*\d+(?:[.,]\d+)?)?\s*$/i,
+  // "rest 90s", ", rest 60-90 sec", "rest 2 min"
+  /,?\s*rest\s*\d+(?:\s*(?:-|to)\s*\d+)?\s*(?:seconds?|secs?|s|minutes?|mins?)?\s*$/i,
+  // "each side", "per leg", "/side", "each arm"
+  /,?\s*(?:(?:each|per|a)\s+|\/\s*)(?:side|leg|arm|hand)s?\s*$/i,
+  // "to failure", "AMRAP", "max reps", "last set AMRAP"
+  /,?\s*(?:last\s+set\s+)?(?:(?:to|until)\s+failure|amrap|max\s+reps)\s*$/i,
+  // "3-1-1 tempo", "tempo 3-1-1", "tempo 3-0-1-0"
+  /,?\s*(?:tempo\s*:?\s*)?\d-\d-\d(?:-\d)?(?:\s*tempo)?\s*$/i,
 ];
 
 /** Trim, strip trailing annotations left over once the numbers are gone, repeat until stable. */
@@ -111,30 +167,77 @@ function toNumber(s: string): number {
   return Number(s.replace(',', '.'));
 }
 
-function extractLine(normalized: string): ExtractedLine {
-  let s = normalized;
-  let weightKg: number | undefined;
+function takeWeight(s: string): { rest: string; weightKg?: number } {
   for (const re of WEIGHT_PATTERNS) {
     const m = re.exec(s);
-    if (m) {
-      weightKg = toNumber(m[1]!);
-      s = s.slice(0, m.index) + ' ' + s.slice(m.index + m[0].length);
-      break;
-    }
+    if (m) return { rest: s.slice(0, m.index) + ' ' + s.slice(m.index + m[0].length), weightKg: toNumber(m[1]!) };
   }
+  return { rest: s };
+}
+
+/** Whatever numbers are left once the first set-and-rep group was taken: a back-off set on the same line. */
+function stripLeftoverNumbers(s: string): string {
+  let out = s.replace(ANY_NUMBERS_RE, ' ');
+  for (;;) {
+    const { rest, weightKg } = takeWeight(out);
+    if (weightKg === undefined) return out;
+    out = rest;
+  }
+}
+
+function extractLine(normalized: string): ExtractedLine {
+  const { rest: s, weightKg } = takeWeight(normalized);
 
   const m = SETS_REPS_RE.exec(s);
-  if (!m) return { hasNumbers: false, name: cleanName(s) };
+  if (m) {
+    const minutes = m[5] !== undefined;
+    const scale = minutes ? 60 : 1;
+    const repMin = Math.round(toNumber(m[2]!) * scale);
+    const repMax = m[3] !== undefined ? Math.round(toNumber(m[3]) * scale) : repMin;
+    const rest = s.slice(0, m.index) + ' ' + s.slice(m.index + m[0].length);
+    const result: ExtractedLine = { hasNumbers: true, sets: Number(m[1]), repMin, repMax, name: cleanName(stripLeftoverNumbers(rest)) };
+    if (m[4] !== undefined || minutes) result.seconds = true;
+    if (weightKg !== undefined) result.weightKg = weightKg;
+    return result;
+  }
 
-  const sets = Number(m[1]);
-  const repMin = toNumber(m[2]!);
-  const repMax = m[3] !== undefined ? toNumber(m[3]) : repMin;
-  const seconds = m[4] !== undefined;
-  const rest = s.slice(0, m.index) + ' ' + s.slice(m.index + m[0].length);
-  const result: ExtractedLine = { hasNumbers: true, sets, repMin, repMax, name: cleanName(rest) };
-  if (seconds) result.seconds = true;
-  if (weightKg !== undefined) result.weightKg = weightKg;
-  return result;
+  const open = OPEN_REPS_RE.exec(s);
+  if (open) {
+    const rest = s.slice(0, open.index) + ' ' + s.slice(open.index + open[0].length);
+    const result: ExtractedLine = { hasNumbers: true, sets: Number(open[1]), name: cleanName(stripLeftoverNumbers(rest)) };
+    if (weightKg !== undefined) result.weightKg = weightKg;
+    return result;
+  }
+
+  return { hasNumbers: false, name: cleanName(s) };
+}
+
+/**
+ * "Bench press 3x10, Row 3x10" is two exercises. The cut between two set-and-rep groups goes at
+ * the last comma, semicolon, "+" or " / " between them (so "Bench 3x8, 80kg, Row 3x10" keeps its
+ * weight on the bench), else at the first " and " / " & " / " then " (so "Clean and press" in the
+ * second name is not cut). No separator, or a piece left with no name ("1x5 @ 100kg, 3x8 @ 80kg"
+ * is one exercise's top set and back-off) — the line stays whole.
+ */
+function splitCombined(s: string): string[] {
+  const groups = [...s.matchAll(ANY_NUMBERS_RE)];
+  if (groups.length < 2) return [s];
+  const pieces: string[] = [];
+  let from = 0;
+  for (let i = 0; i < groups.length - 1; i++) {
+    const gapStart = groups[i]!.index! + groups[i]![0].length;
+    const gap = s.slice(gapStart, groups[i + 1]!.index!);
+    const strong = [...gap.matchAll(/[,;+|]|\s\/\s/g)];
+    const weak = /\s(?:and|&|then)\s/i.exec(gap);
+    const sep = strong.length > 0 ? strong[strong.length - 1]! : weak;
+    if (!sep) continue;
+    pieces.push(s.slice(from, gapStart + sep.index!));
+    from = gapStart + sep.index! + sep[0].length;
+  }
+  pieces.push(s.slice(from));
+  const trimmed = pieces.map((p) => p.trim()).filter(Boolean);
+  if (trimmed.length < 2 || trimmed.some((p) => !extractLine(p).name)) return [s];
+  return trimmed;
 }
 
 // ---------------------------------------------------------------------------
@@ -155,19 +258,32 @@ export function parseRoutineText(text: string): { routines: ParsedRoutine[]; ign
   let seenMeaningful = false;
   let prevWasBlank = false;
 
+  // Inside a "Warm-up:" / "Cool-down:" / "Notes:" block: its lines are not the routine.
+  let inNoteBlock = false;
+
+  const addExercise = (line: ParsedRoutineLine) => {
+    if (!current) {
+      current = { name: 'Pasted routine', exercises: [] };
+      routines.push(current);
+    }
+    current.exercises.push(line);
+  };
+
   const rawLines = (text ?? '').split(/\r\n|\r|\n/);
   for (const rawLine of rawLines) {
     if (rawLine.trim() === '') {
       prevWasBlank = true;
+      inNoteBlock = false;
       continue;
     }
     const trimmedOriginal = rawLine.trim();
     const wasMarkdownHeadingMarker = MARKDOWN_HEADING_LINE_RE.test(trimmedOriginal);
     const wasFullyBold = FULLY_BOLD_LINE_RE.test(trimmedOriginal);
 
-    const normalized = normaliseLine(rawLine);
+    let normalized = normaliseLine(rawLine);
     if (normalized === '') {
       prevWasBlank = true;
+      inNoteBlock = false;
       continue;
     }
     const isFirstMeaningful = !seenMeaningful;
@@ -175,19 +291,42 @@ export function parseRoutineText(text: string): { routines: ParsedRoutine[]; ign
     seenMeaningful = true;
     prevWasBlank = false;
 
-    const extracted = extractLine(normalized);
-    if (extracted.hasNumbers) {
-      const line: ParsedRoutineLine = { raw: rawLine, name: extracted.name || normalized };
-      if (extracted.sets !== undefined) line.sets = extracted.sets;
-      if (extracted.repMin !== undefined) line.repMin = extracted.repMin;
-      if (extracted.repMax !== undefined) line.repMax = extracted.repMax;
-      if (extracted.seconds) line.seconds = true;
-      if (extracted.weightKg !== undefined) line.weightKg = extracted.weightKg;
-      if (!current) {
-        current = { name: 'Pasted routine', exercises: [] };
-        routines.push(current);
-      }
-      current.exercises.push(line);
+    // A superset / section label: skipped, and the routine it sits in carries on.
+    const label = SECTION_LABEL_RE.exec(normalized);
+    if (label) {
+      inNoteBlock = false;
+      normalized = normalized.slice(label[0].length).trim();
+      if (normalized === '') continue;
+    }
+
+    if (NOTE_LINE_RE.test(normalized)) {
+      ignored.push(rawLine);
+      if (NOTE_BLOCK_RE.test(bareLabel(normalized))) inNoteBlock = true;
+      continue;
+    }
+
+    const looksLikeHeading = wasMarkdownHeadingMarker || wasFullyBold || DAY_PREFIX_RE.test(normalized);
+    // A block ends at a heading: marked as one, or a short "Upper A:" with no numbers of its own.
+    const endsBlock =
+      looksLikeHeading || (/:$/.test(normalized) && wordCount(normalized) <= 6 && !HAS_NUMBERS_RE.test(normalized));
+    if (inNoteBlock && !endsBlock) {
+      ignored.push(rawLine);
+      continue;
+    }
+    inNoteBlock = false;
+
+    const pieces = splitCombined(normalized);
+    const extracted = pieces.map(extractLine);
+    if (extracted[0]!.hasNumbers) {
+      extracted.forEach((e, i) => {
+        const line: ParsedRoutineLine = { raw: rawLine, name: e.name || pieces[i]! };
+        if (e.sets !== undefined) line.sets = e.sets;
+        if (e.repMin !== undefined) line.repMin = e.repMin;
+        if (e.repMax !== undefined) line.repMax = e.repMax;
+        if (e.seconds) line.seconds = true;
+        if (e.weightKg !== undefined) line.weightKg = e.weightKg;
+        addExercise(line);
+      });
       continue;
     }
 
@@ -203,8 +342,7 @@ export function parseRoutineText(text: string): { routines: ParsedRoutine[]; ign
     }
 
     const endsWithColon = /:$/.test(normalized);
-    const isHeading =
-      isFirstMeaningful || followsBlank || endsWithColon || wasMarkdownHeadingMarker || wasFullyBold || DAY_PREFIX_RE.test(normalized);
+    const isHeading = !label && (isFirstMeaningful || followsBlank || endsWithColon || looksLikeHeading);
     if (isHeading) {
       current = { name: normalized.replace(/:$/, '').trim(), exercises: [] };
       routines.push(current);
@@ -213,11 +351,7 @@ export function parseRoutineText(text: string): { routines: ParsedRoutine[]; ign
 
     // Short, pattern-less line that is neither a heading nor prose — an exercise named with no
     // numbers at all, e.g. "Face pulls" sat in the middle of a list.
-    if (!current) {
-      current = { name: 'Pasted routine', exercises: [] };
-      routines.push(current);
-    }
-    current.exercises.push({ raw: rawLine, name: normalized });
+    addExercise({ raw: rawLine, name: extracted[0]!.name || normalized });
   }
 
   return { routines: routines.filter((r) => r.exercises.length > 0), ignored };

@@ -246,6 +246,101 @@ Let me know if you want a deload week built in too.`;
   });
 });
 
+describe('parseRoutineText — what a chatbot actually writes (review findings)', () => {
+  it('superset positions "A1.", "A2)", "B1:", "1a." are list markers, not part of the name', () => {
+    const ex = exercisesOf('Day 1\nA1. Bench press 3x10\nA2) Row 3x10\nB1: Curl 3x12\n1a. Dips 3x8');
+    expect(ex.map((e) => e.name)).toEqual(['Bench press', 'Row', 'Curl', 'Dips']);
+  });
+
+  it('minutes are seconds ×60, flagged as seconds, and "min" never lands in the name', () => {
+    const [plank, side, hang] = exercisesOf('Core\nPlank 3x1 min\nSide plank 3 x 1-2 mins\nDead hang 2x1.5 minutes');
+    expect(plank).toMatchObject({ name: 'Plank', sets: 3, repMin: 60, repMax: 60, seconds: true });
+    expect(side).toMatchObject({ name: 'Side plank', sets: 3, repMin: 60, repMax: 120, seconds: true });
+    expect(hang).toMatchObject({ name: 'Dead hang', sets: 2, repMin: 90, repMax: 90, seconds: true });
+  });
+
+  it('two exercises on one line are two exercises, each with its own numbers', () => {
+    const ex = exercisesOf('Day 1\nSuperset: Bench press 3x10, Row 3x12\nClean and press 3x5 and Pull-up 3x8');
+    expect(ex).toEqual([
+      expect.objectContaining({ name: 'Bench press', sets: 3, repMin: 10 }),
+      expect.objectContaining({ name: 'Row', sets: 3, repMin: 12 }),
+      // "and" inside a name is not a separator when a clearer one exists between the two groups.
+      expect.objectContaining({ name: 'Clean and press', sets: 3, repMin: 5 }),
+      expect.objectContaining({ name: 'Pull-up', sets: 3, repMin: 8 }),
+    ]);
+  });
+
+  it('a weight after a comma stays with the exercise before it when the line splits', () => {
+    const [bench, row] = exercisesOf('Bench press 3x8, 80kg, Row 3x10');
+    expect(bench).toMatchObject({ name: 'Bench press', weightKg: 80 });
+    expect(row).toMatchObject({ name: 'Row' });
+    expect(row!.weightKg).toBeUndefined();
+  });
+
+  it('a top set and back-off on one line stay one exercise, with no numbers left in its name', () => {
+    const [l, ...rest] = exercisesOf('Squat 1x5 @ 100kg, 3x8 @ 80kg');
+    expect(rest).toEqual([]);
+    expect(l).toMatchObject({ name: 'Squat', sets: 1, repMin: 5, weightKg: 100 });
+  });
+
+  it('warm-up, cool-down, tempo, rest and notes lines are not exercises; "Tempo squat" still is', () => {
+    const { routines, ignored } = parseRoutineText(
+      'Day 1 - Upper\nWarm-up: 5 min bike\nBench press 3x8\nTempo 3-1-1\nRest 90s between sets\nNotes: add 2.5kg when you hit 10\nCool down: 5 min walk\nTempo squat 3x5',
+    );
+    expect(routines).toHaveLength(1);
+    expect(routines[0]!.exercises.map((e) => e.name)).toEqual(['Bench press', 'Tempo squat']);
+    expect(ignored).toEqual(['Warm-up: 5 min bike', 'Tempo 3-1-1', 'Rest 90s between sets', 'Notes: add 2.5kg when you hit 10', 'Cool down: 5 min walk']);
+  });
+
+  it('a "Warm-up:" block is left out up to the next heading, and the routine carries on after it', () => {
+    const { routines, ignored } = parseRoutineText(
+      'Day 1 - Upper\nWarm-up:\n- Bike 5 min\n- Band pull-aparts 2x15\nMain:\n- Bench 4x6\nCool-down (5 min):\n- Stretch\n\nDay 2\nSquat 3x5',
+    );
+    expect(routines.map((r) => r.name)).toEqual(['Day 1 - Upper', 'Day 2']);
+    expect(routines[0]!.exercises.map((e) => e.name)).toEqual(['Bench']);
+    expect(ignored).toEqual(['Warm-up:', '- Bike 5 min', '- Band pull-aparts 2x15', 'Cool-down (5 min):', '- Stretch']);
+  });
+
+  it('a warm-up block also ends at a short "Upper A:" heading with no blank line before it', () => {
+    const { routines } = parseRoutineText('Warm-up:\n- Bike 5 min\nUpper A:\nBench 4x6');
+    expect(routines).toEqual([{ name: 'Upper A', exercises: [expect.objectContaining({ name: 'Bench' })] }]);
+  });
+
+  it('"Superset 1:", "Circuit (3 rounds):" and "Giant set" group exercises inside the day; the day keeps its name', () => {
+    const { routines } = parseRoutineText(
+      'Day 1 - Upper\nSuperset 1:\nBench press 3x10\nRow 3x10\nSuperset 2 (3 rounds):\nCurl 3x12\nCircuit (3 rounds):\nPush-ups 3x10\nGiant set\nDips 3x8',
+    );
+    expect(routines).toHaveLength(1);
+    expect(routines[0]!.name).toBe('Day 1 - Upper');
+    expect(routines[0]!.exercises.map((e) => e.name)).toEqual(['Bench press', 'Row', 'Curl', 'Push-ups', 'Dips']);
+  });
+
+  it('a weight range starts at its lower end and none of it lands in the name', () => {
+    const [bench, squat, row] = exercisesOf('Day 1\nBench press 3x8 @ 70-80kg\nSquat 3x5 at 100 to 110 kg\nRow 3x10, 60-70kg');
+    expect(bench).toMatchObject({ name: 'Bench press', weightKg: 70 });
+    expect(squat).toMatchObject({ name: 'Squat', weightKg: 100 });
+    expect(row).toMatchObject({ name: 'Row', weightKg: 60 });
+  });
+
+  it('"each leg", "per side", "/side", "to failure", "RPE 7-8" and tempo counts are not part of the name', () => {
+    const ex = exercisesOf(
+      'Day 1\nLunges 3x10 each leg\nBulgarian split squat 3x8 per side @ 20kg\nPush-ups 3x12 to failure\nBench 3x8 RPE 7-8\nSquat 3x5 3-1-1 tempo\nRDL 3x8 tempo 3-0-1-0\nSide plank 3x30s /side',
+    );
+    expect(ex.map((e) => e.name)).toEqual(['Lunges', 'Bulgarian split squat', 'Push-ups', 'Bench', 'Squat', 'RDL', 'Side plank']);
+    expect(ex[1]).toMatchObject({ sets: 3, repMin: 8, weightKg: 20 });
+  });
+
+  it('AMRAP, max and failure as the reps keep the sets and leave the reps to the exercise', () => {
+    const ex = exercisesOf('Day 1\nPush-ups 3xAMRAP\nDips 3 x max\nPull-ups 3 sets to failure\nChin-ups 3 sets of max reps\nInverted row 3 sets, AMRAP');
+    expect(ex.map((e) => e.name)).toEqual(['Push-ups', 'Dips', 'Pull-ups', 'Chin-ups', 'Inverted row']);
+    for (const e of ex) {
+      expect(e.sets).toBe(3);
+      expect(e.repMin).toBeUndefined();
+      expect(e.repMax).toBeUndefined();
+    }
+  });
+});
+
 describe('parseRoutineText — garbage in', () => {
   it('never throws, and yields an empty result for empty input', () => {
     expect(() => parseRoutineText('')).not.toThrow();

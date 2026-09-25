@@ -72,43 +72,59 @@ function scoreAgainst(query: string, text: string): number {
   return Math.max(withParens, withoutParens);
 }
 
+interface Scored {
+  score: number;
+  /** The score came from the candidate's own name, not one of its aliases. */
+  ownName: boolean;
+  candidate: MatchCandidate;
+}
+
 /** Best score for a candidate: the best of its name and every alias. */
-function bestCandidateScore(query: string, candidate: MatchCandidate): number {
-  let best = scoreAgainst(query, candidate.name);
+function bestCandidateScore(query: string, candidate: MatchCandidate): Scored {
+  const own = scoreAgainst(query, candidate.name);
+  let best = own;
   for (const alias of candidate.aliases ?? []) {
     const s = scoreAgainst(query, alias);
     if (s > best) best = s;
   }
-  return best;
+  return { score: best, ownName: own >= best, candidate };
 }
 
-/** Deterministic tie-break: higher score, then shorter candidate name, then id. */
-function isBetter(a: { score: number; candidate: MatchCandidate }, b: { score: number; candidate: MatchCandidate }): boolean {
-  if (a.score !== b.score) return a.score > b.score;
-  if (a.candidate.name.length !== b.candidate.name.length) return a.candidate.name.length < b.candidate.name.length;
-  return a.candidate.id < b.candidate.id;
+const SCORE_EPSILON = 1e-9;
+
+/**
+ * Higher score first; at the same score, a candidate matched on its own name beats one matched
+ * only through an alias ("Curl" is a curl before it is Neck's "Neck Curl" alias).
+ */
+function compare(a: Scored, b: Scored): number {
+  if (Math.abs(a.score - b.score) > SCORE_EPSILON) return b.score - a.score;
+  if (a.ownName !== b.ownName) return a.ownName ? -1 : 1;
+  return 0;
 }
 
 export function matchExercise(name: string, candidates: MatchCandidate[]): ExerciseMatch | null {
   const key = normaliseName(name);
   if (!key || candidates.length === 0) return null;
 
-  let exactBest: { score: number; candidate: MatchCandidate } | null = null;
+  // Exact: the library's own spelling. A candidate whose name is the key beats one that only
+  // carries it as an alias; two identically named exercises fall back to id so the answer is stable.
+  const exact: Scored[] = [];
   for (const c of candidates) {
-    const isExact = normaliseName(c.name) === key || (c.aliases ?? []).some((a) => normaliseName(a) === key);
-    if (!isExact) continue;
-    const entry = { score: 1, candidate: c };
-    if (!exactBest || isBetter(entry, exactBest)) exactBest = entry;
+    const ownName = normaliseName(c.name) === key;
+    if (ownName || (c.aliases ?? []).some((a) => normaliseName(a) === key)) exact.push({ score: 1, ownName, candidate: c });
   }
-  if (exactBest) return { id: exactBest.candidate.id, score: 1, via: 'exact' };
+  if (exact.length > 0) {
+    exact.sort((a, b) => compare(a, b) || (a.candidate.id < b.candidate.id ? -1 : a.candidate.id > b.candidate.id ? 1 : 0));
+    return { id: exact[0]!.candidate.id, score: 1, via: 'exact' };
+  }
 
-  let fuzzyBest: { score: number; candidate: MatchCandidate } | null = null;
-  for (const c of candidates) {
-    const score = bestCandidateScore(name, c);
-    if (score <= EXERCISE_MATCH_THRESHOLD) continue;
-    const entry = { score, candidate: c };
-    if (!fuzzyBest || isBetter(entry, fuzzyBest)) fuzzyBest = entry;
-  }
-  if (!fuzzyBest) return null;
-  return { id: fuzzyBest.candidate.id, score: fuzzyBest.score, via: 'fuzzy' };
+  // Fuzzy: a guess the owner confirms. When two different exercises are equally good answers
+  // ("Calf raise" against Seated and Standing Calf Raise, "Press" against every press), no guess
+  // is honest, so the row is left for the owner to choose instead of picking one by name length.
+  const fuzzy = candidates.map((c) => bestCandidateScore(name, c)).filter((s) => s.score > EXERCISE_MATCH_THRESHOLD);
+  if (fuzzy.length === 0) return null;
+  fuzzy.sort(compare);
+  const [best, runnerUp] = fuzzy;
+  if (runnerUp && compare(best!, runnerUp) === 0) return null;
+  return { id: best!.candidate.id, score: best!.score, via: 'fuzzy' };
 }

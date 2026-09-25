@@ -126,15 +126,48 @@ describe('matchExercise — fuzzy scoring, threshold and abbreviations', () => {
 });
 
 describe('matchExercise — ties and determinism', () => {
-  it('breaks a tied score by shorter candidate name, then by id', () => {
+  it('two exercises with the same name: the exact pass settles on the lower id, every time', () => {
     const candidates: MatchCandidate[] = [
       { id: 'zzz', name: 'Bench Press Extra Long Name' },
       { id: 'bbb', name: 'Bench Press' },
       { id: 'aaa', name: 'Bench Press' },
     ];
-    // "bbb" and "aaa" tie on name; "aaa" wins the id tie-break.
-    const m = matchExercise('Bench press', candidates);
-    expect(m?.id).toBe('aaa');
+    expect(matchExercise('Bench press', candidates)?.id).toBe('aaa');
+  });
+
+  it('an exact match on an exercise\'s own name beats the same words carried as another\'s alias', () => {
+    const candidates: MatchCandidate[] = [
+      { id: 'a', name: 'Neck', aliases: ['Curl'] },
+      { id: 'b', name: 'Curl' },
+    ];
+    expect(matchExercise('Curl', candidates)).toEqual({ id: 'b', score: 1, via: 'exact' });
+  });
+
+  it('"Curl" and "Extension" are not Neck: a shorter name no longer wins a tie reached through an alias', () => {
+    // Neck carries "Neck Curl" and "Neck Extension" as aliases, which score "Curl" exactly as well
+    // as DB Curl or Hammer Curl score it on their own names. Before, the shortest name — "Neck" —
+    // won that tie, so a pasted "Curl 3x10" arrived as neck work.
+    const neck = idFor('Neck');
+    for (const q of ['Curl', 'Curls', 'Extension']) {
+      const m = matchExercise(q, CANDIDATES);
+      expect(m?.id, q).not.toBe(neck);
+    }
+  });
+
+  it('at the same score, an exercise matched on its own name beats one matched only through an alias', () => {
+    const candidates: MatchCandidate[] = [
+      { id: 'neck', name: 'Neck', aliases: ['Neck Curl'] },
+      { id: 'hammer', name: 'Hammer Curl' },
+    ];
+    expect(matchExercise('Curl', candidates)?.id).toBe('hammer');
+  });
+
+  it('two different exercises that answer equally well are no match at all, left for the owner to choose', () => {
+    expect(matchExercise('Calf raise', CANDIDATES)).toBeNull(); // Seated or Standing?
+    expect(matchExercise('Curl', CANDIDATES)).toBeNull(); // DB, Hammer?
+    expect(matchExercise('Extension', CANDIDATES)).toBeNull(); // Leg or Back?
+    // …while a clear winner among several partial matches still wins.
+    expect(matchExercise('Standing calf raise', CANDIDATES)?.id).toBe(idFor('Standing Calf Raise'));
   });
 
   it('is deterministic across repeated calls with the same input', () => {
@@ -165,6 +198,13 @@ describe('seed fixture sanity', () => {
       'Iso-Lateral Row (Machine)',
       'Incline DB Press',
       "Farmer's Carry",
+      'Neck',
+      'DB Curl',
+      'Hammer Curl',
+      'Leg Extension',
+      'Back Extension',
+      'Seated Calf Raise',
+      'Standing Calf Raise',
     ]) {
       expect(byId(idFor(name)).name).toBe(name);
     }

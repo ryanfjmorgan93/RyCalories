@@ -388,6 +388,25 @@ Photo or type a home-cooked meal, answer "how many eggs?", save it as a recipe, 
   figures sources. Entry points: a fourth start option gated on Nano `ready`, and an `estimate-meal`
   button on `MealEditScreen` (new and existing meals) that opens the builder on `?start=estimate`.
 
+### P5c — Talking to Claude: copy out, paste back · **S** · ✅ shipped
+
+Option 1 of the coach choices (option 3, a bigger model on the phone, is next). The app never
+calls Claude; the owner carries text both ways in their own Claude app.
+
+- **Copy for Claude** (Progress → Claude): `buildClaudeSummary` (`src/domain/claudeSummary.ts`)
+  writes plain dated lines — sessions and top sets, food averaged over logged days only (the
+  count of logged days sits beside every average), weigh-ins, and routines if switched on
+  (off by default). It ends with the one line format a reply should use so it pastes back.
+  Copy or Share hands the text to the OS; nothing is sent by the app, so Settings → About's list
+  of three is unchanged.
+- **Paste a routine** (Routines → New routine): `parseRoutineText` reads the reply,
+  `matchExercise` matches each name against the library (exact on name or alias, else token F1
+  above 0.5 with gym abbreviations expanded), and every unmatched row waits for Choose or Add new
+  before Save. `saveParsedRoutines` writes every routine of one paste in one transaction, learns a
+  chosen name as an alias, and adds an unknown name once even when two days use it.
+- A weight in the reply starts the exercise in normal mode at that weight; no weight starts it
+  calibrating. A seconds line only sets seconds on a timed exercise.
+
 ### P6 — Explicitly deferred to v1.1
 
 Adaptive TDEE and the strength-versus-cut "Loop" chart — the cross-domain tier not chosen for
@@ -614,6 +633,22 @@ counts drop below a baseline without an in-app delete, and a Backups card in Set
   `data-drag-state` sees a drag inside the touch handler, not a render later.
 - Each of the four behaviours (scroll first, flick, settle back, top-only Escape) was shown to fail
   its test when broken on purpose.
+
+### 6.9 Paste a routine — traps paid for
+
+- **A tie is not a match.** "Curl" scores the same against DB Curl, Hammer Curl and Neck's alias
+  "Neck Curl"; breaking the tie by the shortest name sent a pasted curl to neck work. Two different
+  exercises at the same top score now leave the row for the owner, and an exercise matched on its
+  own name beats one matched only through an alias.
+- **A chatbot's routine is not one exercise per line.** It numbers supersets "A1." / "B2)", puts
+  two exercises on a line ("Superset: Bench 3x10, Row 3x10"), labels groups ("Superset 1:",
+  "Circuit (3 rounds):") that must not start a new routine, writes warm-up and cool-down blocks
+  and tempo/rest notes that are not exercises, gives minutes ("3x1 min"), weight ranges
+  ("@ 70-80kg", which starts at the lower end) and open reps ("3xAMRAP", "3 sets to failure").
+  Each of those left junk in a name or saved a note as an exercise before; each has a test in
+  `routineText.test.ts` shown to fail on the old parser.
+- **A regex's optional unit swallowed the space after the numbers**, so " and " never matched as a
+  separator between two exercises. The whitespace belongs inside the optional group.
 
 ---
 

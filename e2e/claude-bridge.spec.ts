@@ -123,3 +123,38 @@ test('Paste a routine matches what it can, asks about the rest, saves, and learn
   await expect(page.getByTestId('paste-row').first().getByTestId('paste-row-name')).toHaveText('Iso-Lateral Row (Machine)');
   await expect(page.getByTestId('paste-save')).toBeEnabled();
 });
+
+test('Paste a routine reads a superset day as one routine: labels, warm-up and two-to-a-line handled', async ({ page }) => {
+  await fresh(page);
+  await page.goto('/routines');
+  await page.getByTestId('new-routine').click();
+  await page.getByTestId('paste-routine').click();
+
+  await page.getByTestId('paste-text').fill(
+    [
+      '**Day 1 – Upper**',
+      'Warm-up:',
+      '- Bike 5 min',
+      '- Band pull-aparts 2x15',
+      'Superset 1:',
+      'A1. Bench press 4x6-8 @ 70-80kg',
+      'A2. Curl 3x10-12',
+      'Superset 2: Lateral raise 3x15, Face pull 3x15',
+      'Plank 3x1 min',
+    ].join('\n'),
+  );
+
+  const rows = page.getByTestId('paste-row');
+  await expect(rows).toHaveCount(5);
+  await expect(page.getByTestId('paste-routine-0')).toContainText('Day 1 - Upper · 5 exercises');
+  await expect(page.getByTestId('paste-routine-1')).toHaveCount(0);
+  await expect(rows.nth(0).getByTestId('paste-row-name')).toHaveText('Bench Press (Barbell)');
+  await expect(rows.nth(0)).toContainText('4 × 6–8 · 70 kg');
+  // "Curl" is as much DB Curl as Hammer Curl, and never Neck: it waits for the owner.
+  await expect(rows.nth(1).getByTestId('paste-row-name')).toHaveText('Curl');
+  await expect(rows.nth(1).getByTestId('paste-choose')).toBeVisible();
+  await expect(rows.nth(2).getByTestId('paste-row-name')).toHaveText('Lateral Raise');
+  await expect(rows.nth(3).getByTestId('paste-row-name')).toHaveText('Face Pull');
+  await expect(rows.nth(4)).toContainText('3 × 60');
+  await expect(page.getByTestId('paste-facts')).toContainText('3 lines not used');
+});
