@@ -455,6 +455,13 @@ export interface ProductCacheEntry {
   key: string;
   /** Null records a confident miss, so an unrecognised food stops re-hitting the network. */
   per100: import('./food').Macros | null;
+  /**
+   * Which reading of the database a miss was judged by. A miss written by an earlier build, which
+   * refused entries with kilojoules only or no `product_name`, is asked again by a build that can
+   * read them; the marker is what tells the two apart. Absent on a hit, and on misses written
+   * before the marker existed.
+   */
+  missVersion?: number;
   /** The matched product's barcode, when there was one. */
   code?: string;
   name?: string;

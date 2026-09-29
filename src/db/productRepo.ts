@@ -45,6 +45,14 @@ const SEARCH_PAGE_SIZE = 24;
  */
 const MISS_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
+/**
+ * Bumped whenever `parseProduct` learns to read an entry it used to refuse. A miss written under an
+ * older reading is not trusted at all: the pack may have been in the database the whole time, and
+ * a month is too long to keep telling the owner it is not. Misses written with no marker (before
+ * this existed) count as version 1.
+ */
+const MISS_VERSION = 2;
+
 export interface Lookup {
   label: LabelNutrition | null;
   /**
@@ -103,6 +111,7 @@ async function cached(key: string): Promise<Lookup | null> {
   const row = await db.productCache.get(key).catch(() => undefined);
   if (!row) return null;
   if (row.per100 === null) {
+    if ((row.missVersion ?? 1) !== MISS_VERSION) return null;
     const age = Date.now() - Date.parse(row.fetchedAt);
     if (!Number.isFinite(age) || age > MISS_TTL_MS) return null;
     return { label: null, from: 'cache' };
@@ -132,7 +141,7 @@ async function remember(key: string, label: LabelNutrition | null): Promise<void
         ...(label.packGrams !== undefined ? { packGrams: label.packGrams } : {}),
         fetchedAt: nowIso(),
       }
-    : { key, per100: null, fetchedAt: nowIso() };
+    : { key, per100: null, missVersion: MISS_VERSION, fetchedAt: nowIso() };
   try {
     await db.productCache.put(row);
   } catch {

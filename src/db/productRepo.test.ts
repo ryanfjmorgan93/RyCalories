@@ -354,6 +354,25 @@ describe('a pack the database knows only in part', () => {
     expect(again.partial).toBeUndefined();
   });
 
+  it('asks again about a miss an earlier build recorded, which could not read kilojoules or a missing name', async () => {
+    // What the previous build wrote for the owner's two packs: a miss with no marker, a day old.
+    await db.productCache.put({ key: `code:${MI_GORENG}`, per100: null, fetchedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() });
+    const calls = mockFetch([{ body: { status: 1, product: { code: MI_GORENG, product_name: 'Mi Goreng', nutriments: { 'energy-kj_100g': 1900 } } } }]);
+    const result = await lookupBarcode(MI_GORENG);
+    expect(calls).toHaveLength(1);
+    expect(result.from).toBe('network');
+    expect(result.label?.per100.kcal).toBe(454);
+  });
+
+  it('trusts a miss it recorded itself for the month, and writes the marker that says so', async () => {
+    const calls = mockFetch([{ status: 404, body: { status: 0, status_verbose: 'product not found' } }]);
+    expect(await lookupBarcode(MI_GORENG)).toEqual({ label: null, from: 'network' });
+    const row = await db.productCache.get(`code:${MI_GORENG}`);
+    expect(row?.missVersion).toBe(2);
+    expect(await lookupBarcode(MI_GORENG)).toEqual({ label: null, from: 'cache' });
+    expect(calls).toHaveLength(1);
+  });
+
   it('asks for the fallback name fields, or an entry that only has one would look nameless', async () => {
     const calls = mockFetch([{ body: { status: 1, product: { code: MI_GORENG, nutriments: {} } } }]);
     await lookupBarcode(MI_GORENG);
