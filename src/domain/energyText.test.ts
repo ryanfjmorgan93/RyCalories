@@ -99,9 +99,13 @@ describe('the gate line', () => {
     expect(maintenanceGateText(estimateMaintenance(window(28), []))).toBe('No weigh-ins in the first and last weeks');
   });
 
+  it('says a window too short for any estimate needs the longer windows', () => {
+    expect(maintenanceGateText(estimateMaintenance(window(14), readings([1, 80], [10, 79.8])))).toBe('Needs the 4 or 8 week window');
+  });
+
   it('gives the days between weigh-ins that there are', () => {
-    const m = estimateMaintenance(window(14), readings([1, 80], [10, 79.5]));
-    expect(maintenanceGateText(m)).toBe('Needs 14 days between weigh-ins (9)');
+    const m = estimateMaintenance(window(20), readings([1, 80], [14, 79.8]));
+    expect(maintenanceGateText(m)).toBe('Needs 14 days between weigh-ins (13)');
   });
 
   it('gives the days logged that there are, out of the days needed', () => {

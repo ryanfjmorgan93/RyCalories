@@ -501,7 +501,14 @@ export function ExerciseCard({
               {swappedToId ? (
                 <>
                   <div className="mb-2 text-sm text-muted">Swapped for {swappedExercise?.name ?? '…'}</div>
-                  <Button full variant="ghost" onClick={() => void undoSwap(session.id, rx.id)}>
+                  <Button
+                    full
+                    variant="ghost"
+                    onClick={async () => {
+                      await undoSwap(session.id, rx.id);
+                      useSessionDraft.getState().clearSlot(session.id, draftSlotKey(undefined, swappedToId));
+                    }}
+                  >
                     Undo
                   </Button>
                 </>
@@ -839,6 +846,7 @@ function CardMenuAndSheets({
         onConfirm={async () => {
           setRemoveConfirm(false);
           await removeExtraExercise(session.id, exercise.id);
+          useSessionDraft.getState().clearSlot(session.id, draftSlotKey(null, exercise.id));
         }}
       />
 

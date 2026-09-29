@@ -403,6 +403,12 @@ export interface FoodMemory {
    * is one filter over it.
    */
   barcode?: string;
+  /**
+   * Every pack typed in under this name, digits only. Two packs can share a name (two brands of
+   * chicken fries), so one field would let the second overwrite the first. `barcode` above is the
+   * single field rows written before this list existed carry; it is still read, never written.
+   */
+  barcodes?: string[];
   source: import('./food').FoodSource;
   timesUsed: number;
   lastUsedAt: string;

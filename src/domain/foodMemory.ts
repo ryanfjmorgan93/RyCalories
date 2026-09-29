@@ -83,7 +83,7 @@ export function memoryFrom(
     ...(rememberPortion ? { typicalGrams: grams } : {}),
     ...(validUnit ? { unitGrams: unit.unitGrams } : {}),
     ...(validUnit && unit.label ? { unitLabel: unit.label, unitPlural: unit.plural || unit.label } : {}),
-    ...(item.barcode ? { barcode: item.barcode } : {}),
+    ...(item.barcode ? { barcodes: [item.barcode] } : {}),
     source: item.source,
   };
 }
@@ -94,14 +94,28 @@ export function memoryFrom(
  * ones the user typed (or applied) when they first met this pack, which is why the lookup also
  * hands back the memory itself — its `source` is the truthful badge, not "label".
  */
-export function labelFromMemory(m: FoodMemory): LabelNutrition {
+export function labelFromMemory(m: FoodMemory, code?: string): LabelNutrition {
   return {
-    code: m.barcode ?? '',
+    code: code ?? memoryBarcodes(m)[0] ?? '',
     brand: m.brand ?? '',
     name: m.product ?? m.name,
     per100: m.per100,
     ...(m.typicalGrams !== undefined ? { servingGrams: m.typicalGrams } : {}),
   };
+}
+
+/** Every barcode a remembered food was typed in against, the pre-list `barcode` field included. */
+export function memoryBarcodes(m: Pick<FoodMemory, 'barcode' | 'barcodes'>): string[] {
+  const all = [...(m.barcodes ?? []), ...(m.barcode ? [m.barcode] : [])];
+  return [...new Set(all)];
+}
+
+function barcodesOf(
+  existing: Pick<FoodMemory, 'barcode' | 'barcodes'>,
+  incoming: Pick<FoodMemory, 'barcode' | 'barcodes'>,
+): Pick<FoodMemory, 'barcodes'> {
+  const all = [...new Set([...memoryBarcodes(existing), ...memoryBarcodes(incoming)])];
+  return all.length > 0 ? { barcodes: all } : {};
 }
 
 function perHundred(n: Nutrition): Macros | null {
@@ -130,9 +144,9 @@ export function mergeMemory(
     name: takeNumbers ? incoming.name || existing.name : existing.name,
     ...(incoming.brand ? { brand: incoming.brand } : {}),
     ...(incoming.product ? { product: incoming.product } : {}),
-    // A fact about the pack, not a figure, so the trust rule does not apply: the barcode stays
-    // unless this logging names one (spread from `existing` above), and a new one replaces it.
-    ...(incoming.barcode ? { barcode: incoming.barcode } : {}),
+    // Facts about packs, not figures, so the trust rule does not apply: every code this food was
+    // typed in against is kept, so a second pack under the same name adds to the first.
+    ...barcodesOf(existing, incoming),
     per100: takeNumbers ? incoming.per100 : existing.per100,
     source: takeNumbers ? incoming.source : existing.source,
     // The most recent portion is the better suggestion: it is what you actually ate last time.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { labelFromMemory, memoryFrom, memoryKey, mergeMemory, normalise, rankMemories } from './foodMemory';
+import { labelFromMemory, memoryBarcodes, memoryFrom, memoryKey, mergeMemory, normalise, rankMemories } from './foodMemory';
 import { fromPer100, fromPortion, weigh, type Macros } from './food';
 import type { FoodMemory, MealItem } from './types';
 
@@ -291,22 +291,24 @@ describe('the barcode a food was typed in against', () => {
   const chickenFries = { name: 'Chicken fries', source: 'user' as const, nutrition: fromPer100({ kcal: 250, protein: 14, carbs: 20, fat: 12 }, 100) };
 
   it('memoryFrom carries the barcode of the pack, and nothing when there was none', () => {
-    expect(memoryFrom({ ...chickenFries, barcode: '5099999999994' })!.barcode).toBe('5099999999994');
-    expect(memoryFrom(chickenFries)).not.toHaveProperty('barcode');
-    expect(memoryFrom({ ...chickenFries, barcode: '' })).not.toHaveProperty('barcode');
+    expect(memoryFrom({ ...chickenFries, barcode: '5099999999994' })!.barcodes).toEqual(['5099999999994']);
+    expect(memoryFrom(chickenFries)).not.toHaveProperty('barcodes');
+    expect(memoryFrom({ ...chickenFries, barcode: '' })).not.toHaveProperty('barcodes');
   });
 
-  it('mergeMemory keeps the barcode it had when this logging names none', () => {
+  it('mergeMemory keeps the barcodes it had when this logging names none, the old single field included', () => {
     const existing = memory({ key: 'n:chicken fries', name: 'Chicken fries', barcode: '5099999999994' });
     const merged = mergeMemory(existing, memoryFrom(chickenFries)!, at);
-    expect(merged.barcode).toBe('5099999999994');
+    expect(memoryBarcodes(merged)).toEqual(['5099999999994']);
   });
 
-  it('mergeMemory takes a barcode from a logging that names one', () => {
+  it('mergeMemory adds a second pack under the same name rather than replacing the first', () => {
     const existing = memory({ key: 'n:chicken fries', name: 'Chicken fries' });
-    expect(mergeMemory(existing, memoryFrom({ ...chickenFries, barcode: '5099999999994' })!, at).barcode).toBe('5099999999994');
-    const other = mergeMemory({ ...existing, barcode: '5099999999994' }, memoryFrom({ ...chickenFries, barcode: '5012345678900' })!, at);
-    expect(other.barcode).toBe('5012345678900');
+    const first = mergeMemory(existing, memoryFrom({ ...chickenFries, barcode: '5099999999994' })!, at);
+    expect(first.barcodes).toEqual(['5099999999994']);
+    const both = mergeMemory(first, memoryFrom({ ...chickenFries, barcode: '5012345678900' })!, at);
+    expect(both.barcodes).toEqual(['5099999999994', '5012345678900']);
+    expect(mergeMemory(both, memoryFrom({ ...chickenFries, barcode: '5099999999994' })!, at).barcodes).toEqual(['5099999999994', '5012345678900']);
   });
 
   it('mergeMemory takes the barcode even from a logging whose numbers it will not take', () => {
@@ -314,7 +316,13 @@ describe('the barcode a food was typed in against', () => {
     const corrected = memory({ key: 'n:chicken fries', name: 'Chicken fries', source: 'user' });
     const merged = mergeMemory(corrected, memoryFrom({ ...chickenFries, source: 'model', barcode: '5099999999994' })!, at);
     expect(merged.source).toBe('user');
-    expect(merged.barcode).toBe('5099999999994');
+    expect(merged.barcodes).toEqual(['5099999999994']);
+  });
+
+  it('labelFromMemory answers with the code that was scanned', () => {
+    const m = memory({ name: 'Chicken fries', barcodes: ['5099999999994', '5012345678900'] });
+    expect(labelFromMemory(m, '5012345678900').code).toBe('5012345678900');
+    expect(labelFromMemory(m).code).toBe('5099999999994');
   });
 
   it('labelFromMemory reads a remembered food back as the label a scan would have given', () => {

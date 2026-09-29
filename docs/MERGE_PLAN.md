@@ -457,11 +457,17 @@ the scales moved.
   balance at 7,700 kcal a kg; maintenance is intake minus that balance, to the nearest 50, and
   never clamped. The rate line ("At your logged 2,400 a day, about −0.1 kg a week") is worked from
   the ROUNDED maintenance, so the figure and the line under it agree.
-- **Three gates, checked in this order**, each of which replaces the figure with the one fact that
-  fell short (`energyText.ts` words them; the counts are always available): a weigh-in is needed
-  in both the first and the last week of the window; the two centres must be at least 14 days
-  apart (a 2-week window can never pass this one and a 4-week window can never fail it); and at least
-  0.8 of the window's days must be logged. A gated estimate carries no figure and no advice.
+- **Four gates, checked in this order**, each of which replaces the figure with the one fact that
+  fell short (`energyText.ts` words them; the counts are always available): the window must be long
+  enough for its two week-groups' centres ever to sit 14 days apart, so the 2-week window says
+  "Needs the 4 or 8 week window" rather than a span it could never reach; a weigh-in is needed in
+  both the first and the last week of the window; the two centres must be at least 14 days apart;
+  and at least 0.8 of the window's days must be logged. A gated estimate carries no figure and no
+  advice.
+- **Today is left out of intake.** A day still being eaten is not a day's intake: a breakfast
+  logged at ten would pull the figure down until the evening. The card passes `today`, and intake
+  and the logged-days count are read over finished days only ("of 27"); today's weigh-in still
+  counts, because a reading is complete when it is taken.
 - **Why 0.8 and not the 0.5 that lets Eating show an average.** An average over half a window
   still describes those days. A maintenance figure needs more: it assumes the unlogged days were
   eaten like the logged ones, and every kcal of error in that intake mean lands in the estimate
@@ -669,14 +675,17 @@ counts drop below a baseline without an in-app delete, and a Backups card in Set
 - **The 30-day miss cache is per barcode, and it hides a pack that gains an entry.** A status-0
   answer and a status-1 entry the parser refuses were both cached as a miss for `MISS_TTL_MS`. The
   partial (name, no figures) is deliberately not cached: the pack is real and its name worth keeping,
-  and the entry may gain figures. A miss cached by an earlier build stays until it expires or the
-  product cache is cleared (Settings → Food lookup, switched off and on again).
+  and the entry may gain figures. Misses carry `missVersion`; one recorded under an older parser
+  (`missVersion` absent or behind `MISS_VERSION` in `productRepo.ts`) is asked again rather than
+  trusted, so a pack the old parser refused gets a second look. Bump `MISS_VERSION` whenever the
+  parser learns to read something it used to refuse.
 - **Type it once.** A food saved after a scan the database could not fill is remembered against the
-  barcode (`FoodMemory.barcode`, from `NewMealItem.barcode`, which — like `unit` — is never written
+  barcode (`FoodMemory.barcodes`, from `NewMealItem.barcode`, which — like `unit` — is never written
   to the meal row). `lookupBarcode` asks the food memory first, before the cache and before the
-  network, so the next scan fills from memory: it beats a cached miss and works offline. One barcode
-  per remembered food (the memory key is the name, so a second pack with the same name replaces the
-  first's barcode). A memory hit is the user's own entry, so the sheet applies it like a tapped
+  network, so the next scan fills from memory: it beats a cached miss and works offline. The memory
+  key is the name, so two packs with the same name share one row: `barcodes` is the union of every
+  code typed in against it, and rows written before the list existed are still read through their
+  single `barcode` field (`memoryBarcodes`). A memory hit is the user's own entry, so the sheet applies it like a tapped
   suggestion and the recipe builder badges it with `memory.source`, never "label".
 
 

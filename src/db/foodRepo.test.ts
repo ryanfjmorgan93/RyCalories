@@ -331,7 +331,7 @@ describe('a barcode typed in against a food', () => {
 
   it('is remembered with the food and never written to the logged row', async () => {
     const id = await addMeal({ name: 'Snack' }, [{ ...oats(100), name: 'Chicken fries', barcode: CODE }]);
-    expect((await suggestFoods('chicken'))[0]!.barcode).toBe(CODE);
+    expect((await suggestFoods('chicken'))[0]!.barcodes).toEqual([CODE]);
     expect((await itemsForMeal(id))[0]!).not.toHaveProperty('barcode');
   });
 
@@ -341,17 +341,17 @@ describe('a barcode typed in against a food', () => {
     const remembered = await suggestFoods('chicken');
     expect(remembered).toHaveLength(1);
     expect(remembered[0]!.timesUsed).toBe(2);
-    expect(remembered[0]!.barcode).toBe(CODE);
+    expect(remembered[0]!.barcodes).toEqual([CODE]);
   });
 
   it('is remembered when it comes with the edit of a saved food, too', async () => {
     const mealId = await addMeal({ name: 'Snack' }, [{ ...oats(100), name: 'Chicken fries' }]);
     const row = (await itemsForMeal(mealId))[0]!;
-    expect((await suggestFoods('chicken'))[0]!.barcode).toBeUndefined();
+    expect((await suggestFoods('chicken'))[0]!.barcodes).toBeUndefined();
 
     await updateItem(row.id, { portion: '120 g' }, { barcode: CODE });
 
-    expect((await suggestFoods('chicken'))[0]!.barcode).toBe(CODE);
+    expect((await suggestFoods('chicken'))[0]!.barcodes).toEqual([CODE]);
     expect((await itemsForMeal(mealId))[0]!).not.toHaveProperty('barcode');
   });
 });

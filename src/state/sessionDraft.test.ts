@@ -38,6 +38,17 @@ describe('session draft store', () => {
     expect(store.getState().sessions).toEqual({});
   });
 
+  it('clearSlot forgets one removed extra and leaves the rest of the session', () => {
+    const store = createSessionDraftStore(() => fakeStorage());
+    const extra = draftSlotKey(null, 'leg-press');
+    store.getState().setDraft('s1', extra, { weight: 140, reps: 12, extraRows: 1 });
+    store.getState().setDraft('s1', 'rx1', { weight: 60 });
+    store.getState().clearSlot('s1', extra);
+    expect(store.getState().sessions).toEqual({ s1: { rx1: { weight: 60 } } });
+    store.getState().clearSlot('s1', 'rx1');
+    expect(store.getState().sessions).toEqual({});
+  });
+
   it('clearSession forgets that session only', () => {
     const store = createSessionDraftStore(() => fakeStorage());
     store.getState().setDraft('s1', 'rx1', { weight: 60 });

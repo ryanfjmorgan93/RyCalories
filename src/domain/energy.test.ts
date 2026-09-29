@@ -220,10 +220,10 @@ describe('the gates', () => {
     expect(short.rateAtIntakeKgPerWeek).toBeNull();
   });
 
-  it('is always too short over a fortnight, because the centres cannot be 14 days apart', () => {
+  it('says the window is too short over a fortnight, because the centres cannot be 14 days apart', () => {
     const m = estimateMaintenance(window(14), readings([0, 80], [13, 79]));
     expect(m.spanDays).toBe(13);
-    expect(m.basis).toBe('too_short');
+    expect(m.basis).toBe('window_too_short');
   });
 
   it('does not divide by a zero span when one reading serves both ends of a short window', () => {
@@ -231,7 +231,7 @@ describe('the gates', () => {
     expect(m.weighInsStart).toBe(1);
     expect(m.weighInsEnd).toBe(1);
     expect(m.spanDays).toBe(0);
-    expect(m.basis).toBe('too_short');
+    expect(m.basis).toBe('window_too_short');
     expect(m.balanceKcalPerDay).toBeNull();
   });
 
@@ -260,21 +260,48 @@ describe('the gates', () => {
     expect(m.maintenanceKcal).toBeNull();
   });
 
-  it('checks weigh-ins first, then the span, then the logging', () => {
-    // Nothing logged and a short span and no readings at the far end: the weigh-ins gate speaks.
-    const noneAtEnd = estimateMaintenance(window(14, () => undefined), readings([0, 80]));
+  it('checks the window first, then weigh-ins, then the span, then the logging', () => {
+    // A fortnight can never reach the span, whatever else is missing: the window gate speaks.
+    expect(estimateMaintenance(window(14, () => undefined), readings([0, 80])).basis).toBe('window_too_short');
+    // Nothing logged and no readings at the far end of a long enough window: the weigh-ins gate speaks.
+    const noneAtEnd = estimateMaintenance(window(20, () => undefined), readings([0, 80]));
     expect(noneAtEnd.basis).toBe('too_few_weighins');
     // Nothing logged and a short span, both groups present: the span gate speaks.
-    const shortAndUnlogged = estimateMaintenance(window(14, () => undefined), readings([0, 80], [13, 79]));
+    const shortAndUnlogged = estimateMaintenance(window(20, () => undefined), readings([0, 80], [13, 79]));
     expect(shortAndUnlogged.basis).toBe('too_short');
     // Long enough, but nothing logged: the logging gate speaks.
     const unlogged = estimateMaintenance(window(28, () => undefined), STEADY_LOSS);
     expect(unlogged.basis).toBe('too_few_logged_days');
   });
 
+  it('the shortest window that can pass the span gate is 15 days', () => {
+    expect(estimateMaintenance(window(15), readings([0, 80], [14, 79.8])).basis).not.toBe('window_too_short');
+    expect(estimateMaintenance(window(14), readings([0, 80], [13, 79.8])).basis).toBe('window_too_short');
+  });
+
+  it('reads intake over finished days only: today\'s breakfast does not move the figure', () => {
+    const today = addDays(FROM, 28);
+    const days = [...window(28), { date: today, trained: false, kcal: 400 }];
+    const withToday = estimateMaintenance(days, STEADY_LOSS, { today });
+    const without = estimateMaintenance(window(28), STEADY_LOSS);
+    expect(withToday.intakeAvg).toBe(2400);
+    expect(withToday.totalDays).toBe(28);
+    expect(withToday.loggedDays).toBe(28);
+    expect(withToday.maintenanceKcal).toBe(without.maintenanceKcal);
+    // Without being told which day is today, the 400 counts and pulls the average down.
+    expect(estimateMaintenance(days, STEADY_LOSS).intakeAvg).toBeLessThan(2400);
+  });
+
+  it('still reads today\'s weigh-in: a reading is complete when it is taken', () => {
+    const today = addDays(FROM, 27);
+    const m = estimateMaintenance(window(28), readings([0, 80], [27, 79.5]), { today });
+    expect(m.weighInsEnd).toBe(1);
+    expect(m.endKg).toBe(79.5);
+  });
+
   it('has nothing to say about an empty window', () => {
     const m = estimateMaintenance([], readings([0, 80]));
-    expect(m.basis).toBe('too_few_weighins');
+    expect(m.basis).toBe('window_too_short');
     expect(m.totalDays).toBe(0);
     expect(m.loggedDays).toBe(0);
   });

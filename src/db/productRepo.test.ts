@@ -320,6 +320,25 @@ describe('a barcode the user typed in once', () => {
     expect(calls).toHaveLength(1);
   });
 
+  it('answers both packs of two typed in under the same name', async () => {
+    await addMeal({ name: 'Snack' }, [chickenFries()]);
+    await addMeal({ name: 'Snack' }, [chickenFries({ barcode: '5012345678900' })]);
+    const calls = mockFetch([]);
+    const first = await lookupBarcode(CHICKEN_FRIES_CODE);
+    const second = await lookupBarcode('5012345678900');
+    expect([first.from, first.label?.code]).toEqual(['memory', CHICKEN_FRIES_CODE]);
+    expect([second.from, second.label?.code]).toEqual(['memory', '5012345678900']);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('is answered from a food remembered before the list of codes existed', async () => {
+    await db.foods.add({ id: 'old-pack', key: 'n:old pack', name: 'Old pack', per100: { kcal: 300, protein: 1, carbs: 1, fat: 1 }, barcode: CHICKEN_FRIES_CODE, source: 'user', timesUsed: 1, lastUsedAt: '2026-01-01T00:00:00.000Z' });
+    const calls = mockFetch([]);
+    const r = await lookupBarcode(CHICKEN_FRIES_CODE);
+    expect([r.from, r.label?.per100.kcal]).toEqual(['memory', 300]);
+    expect(calls).toHaveLength(0);
+  });
+
   it('is answered when only the digits of the code match', async () => {
     await addMeal({ name: 'Snack' }, [chickenFries()]);
     const calls = mockFetch([]);

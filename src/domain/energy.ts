@@ -43,7 +43,7 @@ export const END_WINDOW_DAYS = 7;
 /** The estimate is shown to this many kcal: finer than that is a claim the inputs cannot make. */
 const ROUND_TO_KCAL = 50;
 
-export type MaintenanceBasis = 'ok' | 'too_few_logged_days' | 'too_short' | 'too_few_weighins';
+export type MaintenanceBasis = 'ok' | 'window_too_short' | 'too_few_logged_days' | 'too_short' | 'too_few_weighins';
 
 export interface Maintenance {
   basis: MaintenanceBasis;
@@ -123,14 +123,18 @@ export function loggedDaysNeeded(totalDays: number): number {
  * Estimate maintenance over a window. `days` is the window (every day of it, logged or not) and
  * `readings` may hold any bodyweight rows: those outside the window are ignored.
  */
-export function estimateMaintenance(days: DayRecord[], readings: Bodyweight[]): Maintenance {
+export function estimateMaintenance(days: DayRecord[], readings: Bodyweight[], opts: { today?: string } = {}): Maintenance {
   const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
-  const totalDays = sorted.length;
   const first = sorted[0]?.date ?? null;
-  const last = sorted[totalDays - 1]?.date ?? null;
+  const last = sorted[sorted.length - 1]?.date ?? null;
 
+  // Today is not over: a breakfast logged at ten is not a day's intake, and counting it would pull
+  // the estimate down until the last meal of the day is in. Intake is read over finished days only;
+  // today's weigh-in still counts, because a reading is complete the moment it is taken.
+  const intakeDays = opts.today === undefined ? sorted : sorted.filter((d) => d.date !== opts.today);
+  const totalDays = intakeDays.length;
   // A day counts as logged when it has an intake figure — a logged zero is a fast, not a blank.
-  const logged = sorted.filter((d) => d.kcal !== undefined);
+  const logged = intakeDays.filter((d) => d.kcal !== undefined);
   const loggedDays = logged.length;
   const intakeAvg = loggedDays > 0 ? logged.reduce((s, d) => s + d.kcal!, 0) / loggedDays : null;
 
@@ -152,7 +156,10 @@ export function estimateMaintenance(days: DayRecord[], readings: Bodyweight[]): 
   const deltaKg = start && end ? end.kg - start.kg : null;
 
   let basis: MaintenanceBasis = 'ok';
-  if (!start || !end) basis = 'too_few_weighins';
+  // The two week-groups' centres can sit at most (window − 1) days apart, so a window that short
+  // can never meet the span gate however often the owner weighs in. Say that, not "weigh in more".
+  if (sorted.length - 1 < MIN_SPAN_DAYS) basis = 'window_too_short';
+  else if (!start || !end) basis = 'too_few_weighins';
   else if (spanDays < MIN_SPAN_DAYS) basis = 'too_short';
   else if (loggedDays === 0 || loggedDays / totalDays < MIN_COVERAGE_FOR_ESTIMATE) basis = 'too_few_logged_days';
 

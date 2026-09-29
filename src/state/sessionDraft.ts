@@ -25,6 +25,8 @@ export interface SessionDraftState {
   setDraft: (sessionId: string, slotKey: string, patch: SlotDraft) => void;
   /** Forget every draft of a session — when it is saved or discarded. */
   clearSession: (sessionId: string) => void;
+  /** Forget one slot's draft: an extra removed or a swap undone takes its typed values with it. */
+  clearSlot: (sessionId: string, slotKey: string) => void;
 }
 
 export const SESSION_DRAFT_KEY = 'iron-session-draft';
@@ -103,6 +105,13 @@ export function createSessionDraftStore(getStorage: () => StateStorage) {
           }),
         clearSession: (sessionId) =>
           set((s) => (sessionId in s.sessions ? { sessions: without(s.sessions, sessionId) } : s)),
+        clearSlot: (sessionId, slotKey) =>
+          set((s) => {
+            const slots = s.sessions[sessionId];
+            if (!slots || !(slotKey in slots)) return s;
+            const rest = without(slots, slotKey);
+            return { sessions: Object.keys(rest).length ? { ...s.sessions, [sessionId]: rest } : without(s.sessions, sessionId) };
+          }),
       }),
       {
         name: SESSION_DRAFT_KEY,

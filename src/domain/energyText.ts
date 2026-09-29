@@ -43,6 +43,8 @@ export function maintenanceGateText(m: Maintenance): string | null {
   switch (m.basis) {
     case 'ok':
       return null;
+    case 'window_too_short':
+      return 'Needs the 4 or 8 week window';
     case 'too_few_weighins':
       if (m.weighInsStart === 0 && m.weighInsEnd === 0) return 'No weigh-ins in the first and last weeks';
       return m.weighInsStart === 0 ? 'No weigh-in in the first week of the window' : 'No weigh-in in the last week of the window';

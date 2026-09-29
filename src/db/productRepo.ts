@@ -19,7 +19,7 @@ import {
   type LabelNutrition,
   type MatchQuery,
 } from '@/domain/products';
-import { labelFromMemory, normalise } from '@/domain/foodMemory';
+import { labelFromMemory, memoryBarcodes, normalise } from '@/domain/foodMemory';
 import type { FoodMemory, ProductCacheEntry } from '@/domain/types';
 
 const BARCODE_URL = 'https://world.openfoodfacts.org/api/v2/product';
@@ -193,10 +193,10 @@ export async function lookupBarcode(code: string): Promise<Lookup> {
   // Unindexed on purpose: `foods` holds what one person has eaten, and a filter over it is cheaper
   // than a schema version. Never throws, like `cached`.
   const remembered = await db.foods
-    .filter((f) => f.barcode === digits)
+    .filter((f) => memoryBarcodes(f).includes(digits))
     .first()
     .catch(() => undefined);
-  if (remembered) return { label: labelFromMemory(remembered), from: 'memory', memory: remembered };
+  if (remembered) return { label: labelFromMemory(remembered, digits), from: 'memory', memory: remembered };
 
   const hit = await cached(key);
   if (hit) return hit;

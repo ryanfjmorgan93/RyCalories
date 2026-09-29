@@ -129,7 +129,7 @@ export function ProgressScreen() {
             <EatingCard trend={data.trend} />
 
             <SectionTitle>Maintenance</SectionTitle>
-            <MaintenanceCard trend={data.trend} bodyweight={data.bodyweight} />
+            <MaintenanceCard trend={data.trend} bodyweight={data.bodyweight} today={today} />
 
             <SectionTitle>Training</SectionTitle>
             <TrainingCard trend={data.trend} />
@@ -279,8 +279,8 @@ function EatingCard({ trend }: { trend: Trend }) {
  * What the window's intake and weight change add up to. Either a figure with the days and weigh-ins
  * it stands on, or the one input that fell short — never a figure with a caveat beside it.
  */
-function MaintenanceCard({ trend, bodyweight }: { trend: Trend; bodyweight: Bodyweight[] }) {
-  const m = estimateMaintenance(trend.days, bodyweight);
+function MaintenanceCard({ trend, bodyweight, today }: { trend: Trend; bodyweight: Bodyweight[]; today: string }) {
+  const m = estimateMaintenance(trend.days, bodyweight, { today });
   const gate = maintenanceGateText(m);
   return (
     <Card className="p-4" data-testid="maintenance-card">
