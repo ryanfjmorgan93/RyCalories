@@ -1,5 +1,6 @@
 import type { Decision } from './engine';
 import type { ExerciseKind, RoutineExercise } from './types';
+import { dateKeyToDate } from './dates';
 
 const nf = new Intl.NumberFormat('en-GB', { maximumFractionDigits: 2 });
 
@@ -174,6 +175,20 @@ export function fmtDayKey(key: string, today: string, yesterday: string): string
     month: 'short',
     ...(sameYear ? {} : { year: 'numeric' }),
   }).format(d);
+}
+
+/**
+ * A training week (identified by its Monday, as a YYYY-MM-DD key) as a heading: "This week" for
+ * the week starting `thisWeek`, otherwise "Week of 15 Sep" — with the year when it is not the same
+ * year as `thisWeek`, so "Week of 29 Dec" cannot be read as either of two years.
+ *
+ * The key is parsed as local midnight (`dateKeyToDate`), never with `new Date('2026-09-14')`,
+ * which is UTC midnight and reads as the previous day anywhere behind UTC.
+ */
+export function fmtWeekOf(weekStart: string, thisWeek: string): string {
+  if (weekStart === thisWeek) return 'This week';
+  const sameYear = weekStart.slice(0, 4) === thisWeek.slice(0, 4);
+  return `Week of ${fmtDate(dateKeyToDate(weekStart).toISOString(), { day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) })}`;
 }
 
 /** Time of day from an ISO timestamp: "08:14". */

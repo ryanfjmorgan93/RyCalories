@@ -324,3 +324,60 @@ export async function repeatMeal(id: string, date: string): Promise<string | und
     })),
   );
 }
+
+/** How many meals a day holds. The Food screen reads this to decide whether "Copy yesterday" shows. */
+export async function mealCountOnDay(date: string): Promise<number> {
+  return db.meals.where('date').equals(date).count();
+}
+
+/**
+ * Copy every meal of `fromDate` onto `toDate`, in ONE transaction: a day is copied whole or not
+ * at all. Returns how many meals were copied — 0 when `fromDate` has none, and 0 when the two
+ * days are the same, because copying a day onto itself would only double it.
+ *
+ * What is copied is what `repeatMeal` copies (name, slot, notes, each item as logged) plus the
+ * item's recipe link. The meal's photo, typed text and AI confidence stay behind: they describe
+ * how the ORIGINAL was logged, not what was eaten. Rows are written directly rather than through
+ * `addMeal`, because `addMeal` opens its own transaction and then teaches FoodMemory — neither
+ * belongs inside a day-sized one. FoodMemory is taught after the commit, as `addMeal` does.
+ *
+ * Copies get strictly increasing `loggedAt`, a millisecond apart. `mealsOnDay` orders meals with
+ * no slot by `loggedAt`, so copies written in the same millisecond would fall back to sorting by
+ * random id and the copied day would come back in a different order from the one it came from.
+ */
+export async function copyDay(fromDate: string, toDate: string): Promise<number> {
+  if (fromDate === toDate) return 0;
+  const base = Date.now();
+  const copied = await db.transaction('rw', [db.meals, db.mealItems], async () => {
+    const source = await mealsOnDay(fromDate);
+    for (const [n, { meal, items }] of source.entries()) {
+      const id = uuid();
+      await db.meals.put({
+        id,
+        date: toDate,
+        loggedAt: new Date(base + n).toISOString(),
+        name: meal.name.trim() || 'Meal',
+        ...(meal.slot ? { slot: meal.slot } : {}),
+        ...(meal.notes ? { notes: meal.notes } : {}),
+      });
+      if (items.length) {
+        await db.mealItems.bulkPut(
+          items.map((it) =>
+            toItemRow(uuid(), id, it.index, {
+              name: it.name,
+              portion: it.portion,
+              nutrition: it.nutrition,
+              source: it.source,
+              brand: it.brand,
+              product: it.product,
+              recipeId: it.recipeId,
+            }),
+          ),
+        );
+      }
+    }
+    return source;
+  });
+  for (const { items } of copied) for (const it of items) await rememberFood(it);
+  return copied.length;
+}

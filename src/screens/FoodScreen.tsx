@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
 import { addDays, isoToDateKey } from '@/domain/dates';
-import { fmtDayKey, fmtKcal, fmtTime } from '@/domain/format';
+import { fmtDayKey, fmtKcal, fmtTime, plural } from '@/domain/format';
 import { ZERO } from '@/domain/food';
 import { dayView } from '@/db/todayQueries';
-import { deleteMeal, repeatMeal, type MealWithItems } from '@/db/foodRepo';
+import { copyDay, deleteMeal, mealCountOnDay, repeatMeal, type MealWithItems } from '@/db/foodRepo';
 import { Button, IconButton } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row } from '@/ui/components/Card';
 import { MacroLine, MacroSplit, TargetBar } from '@/ui/components/MacroBar';
@@ -43,6 +43,32 @@ export function FoodScreen() {
   const yesterday = addDays(today, -1);
   const isToday = date === today;
 
+  // "Copy yesterday" shows on an empty day whose previous day has food. Both counts come from one
+  // live query that says which day it answered for: dexie-react-hooks keeps its previous result
+  // across a dependency change, so trusting a stale answer could offer the button on a day that
+  // already has meals, for the length of one IndexedDB round trip.
+  const dayBefore = addDays(date, -1);
+  const counts = useLiveQuery(
+    async () => ({ date, dayBefore, shown: await mealCountOnDay(date), before: await mealCountOnDay(dayBefore) }),
+    [date, dayBefore],
+  );
+  const copyable = counts && counts.date === date && counts.dayBefore === dayBefore && counts.shown === 0 ? counts.before : 0;
+  const [copyingDay, setCopyingDay] = useState(false);
+  const copyPreviousDay = async () => {
+    // Latched before the await: copyDay mints new ids on every call, so a second tap would put
+    // the whole day onto this one twice.
+    if (copyingDay) return;
+    setCopyingDay(true);
+    try {
+      const n = await copyDay(dayBefore, date);
+      if (n > 0) toast(`Copied ${plural(n, 'meal')}`);
+    } catch {
+      toast('Could not copy the day', 'danger');
+    } finally {
+      setCopyingDay(false);
+    }
+  };
+
   return (
     <div>
       <TopBar title="Food" />
@@ -74,6 +100,16 @@ export function FoodScreen() {
         <DayBody key={date} date={date} today={today} isToday={isToday} onMenu={setMenuFor} />
 
         <div className="h-4" />
+        {copyable > 0 && (
+          // Its own full-width row above the others: "Copy yesterday · 2 meals" does not fit
+          // beside Repeat and Recipes on a phone. It says "yesterday" only while today is the day
+          // shown; on any other day the source is the day before that one, and it says so.
+          <div className="pb-3">
+            <Button size="lg" variant="secondary" full disabled={copyingDay} onClick={() => void copyPreviousDay()} data-testid="copy-yesterday">
+              {`Copy ${isToday ? 'yesterday' : 'day before'} · ${plural(copyable, 'meal')}`}
+            </Button>
+          </div>
+        )}
         <div className="grid grid-cols-[1fr_auto_auto] gap-3">
           <Button size="lg" variant="primary" full onClick={() => nav(`/food/new?date=${date}`)} data-testid="add-meal-button">
             Add meal

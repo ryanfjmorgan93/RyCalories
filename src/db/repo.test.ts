@@ -5,8 +5,10 @@ import {
   addExtraExercise,
   buildSummary,
   createRoutineFromSession,
+  deleteRoutine,
   deleteSet,
   ensureSeeded,
+  listRoutines,
   exerciseHistory,
   clearSessionLockIn,
   finishSession,
@@ -17,6 +19,7 @@ import {
   migrateSeed,
   previousSets,
   resetToSeed,
+  restoreRoutine,
   routineItems,
   saveSettings,
   setSessionLockIn,
@@ -1050,5 +1053,68 @@ describe('migrateSeed (WP3)', () => {
     const rdl = await db.exercises.get(RDL);
     expect(rdl?.equipment).toBe('barbell');
     expect(rdl?.demo).toBe('romanian-deadlift');
+  });
+});
+
+describe('restoreRoutine', () => {
+  beforeEach(async () => {
+    await resetToSeed();
+  });
+
+  /** Give a routine a session, so deleting it archives rather than removes. */
+  async function archive(routineId: string): Promise<void> {
+    const session = await startSession(routineId);
+    await finishSession(session.id, { choices: [] }); // one live session at a time; a finished one still counts as history
+    expect(await deleteRoutine(routineId)).toBe('archived');
+  }
+
+  it('brings an archived routine back as the last active one, with its exercises', async () => {
+    const exercisesBefore = (await routineItems(HINGE)).length;
+    await archive(HINGE);
+    expect((await listRoutines()).map((r) => r.id)).not.toContain(HINGE);
+    expect((await db.routines.get(HINGE))?.archived).toBe(true);
+
+    await restoreRoutine(HINGE);
+
+    const restored = await db.routines.get(HINGE);
+    expect(restored?.archived).toBe(false);
+    // The seed's orders are 0..4, so the last is 4 and the restored routine takes 5.
+    expect(restored?.order).toBe(5);
+    const active = await listRoutines();
+    expect(active.at(-1)?.id).toBe(HINGE);
+    expect(active).toHaveLength(5);
+    expect((await routineItems(HINGE)).length).toBe(exercisesBefore);
+    expect(exercisesBefore).toBeGreaterThan(0);
+  });
+
+  it('goes after the last ACTIVE routine: an archived one further along the week does not count', async () => {
+    await archive(DAY5); // order 4, the highest
+    await archive(HINGE);
+    await restoreRoutine(HINGE);
+    // Active orders are now 1, 2, 3 and Hinge's own: max active is 3, so Hinge takes 4, not 5.
+    expect((await db.routines.get(HINGE))?.order).toBe(4);
+
+    await restoreRoutine(DAY5);
+    expect((await db.routines.get(DAY5))?.order).toBe(5);
+    expect((await listRoutines()).slice(-2).map((r) => r.id)).toEqual([HINGE, DAY5]);
+  });
+
+  it('takes order 0 when every routine is archived', async () => {
+    await db.routines.toCollection().modify({ archived: true });
+    await restoreRoutine(SQUAT);
+    expect((await db.routines.get(SQUAT))?.order).toBe(0);
+    expect((await listRoutines()).map((r) => r.id)).toEqual([SQUAT]);
+  });
+
+  it('leaves a routine that is not archived exactly where it is', async () => {
+    const before = await db.routines.get(HINGE);
+    await restoreRoutine(HINGE);
+    expect(await db.routines.get(HINGE)).toEqual(before);
+  });
+
+  it('does nothing for a routine that does not exist', async () => {
+    const count = await db.routines.count();
+    await restoreRoutine('missing');
+    expect(await db.routines.count()).toBe(count);
   });
 });

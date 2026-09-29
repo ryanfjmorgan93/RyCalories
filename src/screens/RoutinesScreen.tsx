@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
 import { db } from '@/db/db';
-import { createRoutine, deleteRoutine, duplicateRoutine, reorderRoutines } from '@/db/repo';
+import { createRoutine, deleteRoutine, duplicateRoutine, reorderRoutines, restoreRoutine } from '@/db/repo';
 import type { Routine } from '@/domain/types';
 import { Button, IconButton } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row } from '@/ui/components/Card';
@@ -10,7 +10,7 @@ import { Toggle } from '@/ui/components/Chip';
 import { NumberInput, TextInput } from '@/ui/components/NumberField';
 import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
-import { MoreIcon, TopBar } from '@/ui/components/TopBar';
+import { ChevronIcon, MoreIcon, TopBar } from '@/ui/components/TopBar';
 import { useRoutines } from '@/ui/hooks';
 import { PasteRoutineSheet } from '@/ui/PasteRoutineSheet';
 
@@ -23,6 +23,15 @@ export function RoutinesScreen() {
   const [deleteFor, setDeleteFor] = useState<Routine | null>(null);
 
   const exerciseCount = useLiveQuery(() => db.exercises.count(), []);
+
+  // A routine with sessions is archived rather than deleted, and nothing else lists it. By name:
+  // an archived routine has no place in the week to order it by.
+  const archived = useLiveQuery(
+    async () => (await db.routines.filter((r) => !!r.archived).toArray()).sort((a, b) => a.name.localeCompare(b.name)),
+    [],
+  );
+  const [archivedOpen, setArchivedOpen] = useState(false);
+  const [restoring, setRestoring] = useState<string | null>(null);
 
   const rxCounts = useLiveQuery(async () => {
     const all = await db.routineExercises.toArray();
@@ -85,6 +94,55 @@ export function RoutinesScreen() {
               </div>
             ))}
           </Card>
+        )}
+        {archived && archived.length > 0 && (
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => setArchivedOpen((v) => !v)}
+              aria-expanded={archivedOpen}
+              data-testid="archived-toggle"
+              className="flex h-11 w-full items-center justify-between rounded-xl border border-line px-3 text-sm font-semibold text-muted active:bg-surface-2"
+            >
+              {`Archived · ${archived.length}`}
+              <ChevronIcon className={`transition-transform ${archivedOpen ? 'rotate-90' : ''}`} />
+            </button>
+            {archivedOpen && (
+              <Card className="mt-2" data-testid="archived-list">
+                {archived.map((r, i) => (
+                  <div key={r.id}>
+                    {i > 0 && <Divider />}
+                    <Row
+                      title={r.name}
+                      subtitle={subtitleFor(r)}
+                      right={
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={restoring !== null}
+                          data-testid={`restore-routine-${r.name}`}
+                          onClick={async () => {
+                            // Latched before the await: a second tap while the write is in flight
+                            // would compute its order against the first's.
+                            if (restoring !== null) return;
+                            setRestoring(r.id);
+                            try {
+                              await restoreRoutine(r.id);
+                              toast('Routine restored');
+                            } finally {
+                              setRestoring(null);
+                            }
+                          }}
+                        >
+                          Restore
+                        </Button>
+                      }
+                    />
+                  </div>
+                ))}
+              </Card>
+            )}
+          </div>
         )}
         <div className="h-4" />
         <Card>
