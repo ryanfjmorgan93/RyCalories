@@ -6,11 +6,13 @@ import { bestsForExercise, e1rmSeries } from '@/db/recordsQueries';
 import { trendWindow } from '@/db/trendQueries';
 import { dateKeyToDate, mondayOf } from '@/domain/dates';
 import { bandStatus, movingAverage, weeklyDelta } from '@/domain/bodyweight';
+import { estimateMaintenance } from '@/domain/energy';
+import { maintenanceBasisText, maintenanceFigureText, maintenanceGateText, maintenanceRateText } from '@/domain/energyText';
 import { fmtDate, fmtGrams, fmtKcal, fmtKg, fmtNum, fmtSignedKg } from '@/domain/format';
 import { strengthLevel, type StrengthLevel } from '@/domain/standards';
 import { e1rmChange } from '@/domain/strength';
 import { averagesAreMeaningful, type Average, type Trend } from '@/domain/trends';
-import type { Exercise, MuscleGroup } from '@/domain/types';
+import type { Bodyweight, Exercise, MuscleGroup } from '@/domain/types';
 import { ClaudeSheet } from '@/ui/ClaudeSheet';
 import { BodyMap } from '@/ui/components/BodyMap';
 import { Button } from '@/ui/components/Button';
@@ -121,6 +123,9 @@ export function ProgressScreen() {
 
             <SectionTitle>Eating</SectionTitle>
             <EatingCard trend={data.trend} />
+
+            <SectionTitle>Maintenance</SectionTitle>
+            <MaintenanceCard trend={data.trend} bodyweight={data.bodyweight} />
 
             <SectionTitle>Training</SectionTitle>
             <TrainingCard trend={data.trend} />
@@ -246,6 +251,36 @@ function EatingCard({ trend }: { trend: Trend }) {
         // An average of four days out of twenty-eight describes those four days. Say which it is.
         <div className="mt-1 text-xs text-warn" data-testid="thin-coverage">
           These averages cover {trend.loggedDays} {trend.loggedDays === 1 ? 'day' : 'days'}, not the window.
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/**
+ * What the window's intake and weight change add up to. Either a figure with the days and weigh-ins
+ * it stands on, or the one input that fell short — never a figure with a caveat beside it.
+ */
+function MaintenanceCard({ trend, bodyweight }: { trend: Trend; bodyweight: Bodyweight[] }) {
+  const m = estimateMaintenance(trend.days, bodyweight);
+  const gate = maintenanceGateText(m);
+  return (
+    <Card className="p-4" data-testid="maintenance-card">
+      {gate === null ? (
+        <>
+          <div className="num text-2xl font-extrabold tabular-nums" data-testid="maintenance-kcal">
+            {maintenanceFigureText(m)}
+          </div>
+          <div className="mt-1 text-xs text-muted num tabular-nums" data-testid="maintenance-basis">
+            {maintenanceBasisText(m)}
+          </div>
+          <div className="mt-3 border-t border-line pt-3 text-sm num tabular-nums" data-testid="maintenance-rate">
+            {maintenanceRateText(m)}
+          </div>
+        </>
+      ) : (
+        <div className="text-sm text-muted num tabular-nums" data-testid="maintenance-gate">
+          {gate}
         </div>
       )}
     </Card>
