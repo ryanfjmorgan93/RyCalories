@@ -3,6 +3,7 @@ import { db } from './db';
 import {
   addItem,
   addMeal,
+  copyDay,
   dayTotals,
   deleteItem,
   deleteMeal,
@@ -10,6 +11,7 @@ import {
   getMeal,
   itemsForMeal,
   loggedDays,
+  mealCountOnDay,
   mealsOnDay,
   recentMeals,
   repeatMeal,
@@ -443,5 +445,99 @@ describe('recent meals, for repeating one', () => {
     await repeatMeal(recent!.meal.id, '2026-03-05');
     expect((await mealsOnDay('2026-03-05')).map((m) => m.meal.name)).toEqual(['Breakfast']);
     expect(await dayTotals(TODAY)).toEqual({ kcal: 0, protein: 0, carbs: 0, fat: 0 });
+  });
+});
+
+describe('copying a day', () => {
+  const FROM = '2026-03-01';
+  const TO = '2026-03-02';
+
+  it('copies every meal with its items and macros exactly, and leaves the original day alone', async () => {
+    await addMeal({ name: 'Breakfast', slot: 'breakfast', notes: 'with honey', date: FROM }, [oats(100), shake()]);
+    await addMeal(
+      { name: 'Lunch', slot: 'lunch', date: FROM },
+      [{ name: 'Beans', portion: '1 tin', nutrition: fromPortion({ kcal: 312, protein: 20, carbs: 44, fat: 1.4 }), source: 'label', brand: 'Heinz', product: 'Baked Beans' }],
+    );
+    const before = await mealsOnDay(FROM);
+
+    expect(await copyDay(FROM, TO)).toBe(2);
+
+    const copies = await mealsOnDay(TO);
+    expect(copies.map((m) => m.meal.name)).toEqual(['Breakfast', 'Lunch']);
+    expect(copies.map((m) => m.meal.slot)).toEqual(['breakfast', 'lunch']);
+    expect(copies[0]!.meal.notes).toBe('with honey');
+    copies.forEach((c, i) => {
+      // Items exactly as logged: same foods, same portions, same figures, same provenance.
+      const strip = (items: typeof c.items) => items.map(({ id: _id, mealId: _mealId, ...rest }) => rest);
+      expect(strip(c.items)).toEqual(strip(before[i]!.items));
+      expect(c.macros).toEqual(before[i]!.macros);
+      expect(c.meal.id).not.toBe(before[i]!.meal.id);
+      expect(c.items.every((it) => it.mealId === c.meal.id)).toBe(true);
+    });
+    expect(await dayTotals(TO)).toEqual(await dayTotals(FROM));
+    expect(copies[1]!.items[0]).toMatchObject({ source: 'label', brand: 'Heinz', product: 'Baked Beans' });
+
+    // The original day is exactly what it was.
+    expect(await mealsOnDay(FROM)).toEqual(before);
+  });
+
+  it('keeps a day with no meal slots in the order it was eaten', async () => {
+    // Slotless meals sort by loggedAt. Written in one millisecond they would fall back to random
+    // ids, so the copied day would shuffle. Six meals, seeded out of alphabetical order, so a
+    // shuffle cannot pass by luck (1 in 720).
+    const names = ['F', 'B', 'E', 'A', 'D', 'C'];
+    for (const [i, name] of names.entries()) {
+      const id = await addMeal({ name, date: FROM }, [oats(50 + i)]);
+      await db.meals.update(id, { loggedAt: `2026-03-01T08:00:0${i}.000Z` });
+    }
+    expect((await mealsOnDay(FROM)).map((m) => m.meal.name)).toEqual(names);
+
+    expect(await copyDay(FROM, TO)).toBe(6);
+    expect((await mealsOnDay(TO)).map((m) => m.meal.name)).toEqual(names);
+  });
+
+  it('is atomic: a meal that cannot be written rolls back the meals copied before it', async () => {
+    const a = await addMeal({ name: 'Breakfast', slot: 'breakfast', date: FROM }, [oats(), shake()]);
+    const b = await addMeal({ name: 'Lunch', slot: 'lunch', date: FROM }, [oats(60)]);
+    // The second meal throws once copyDay reaches it: a row with no name, which the app never
+    // writes, so it stands in for "the write failed part-way through the day".
+    await db.meals.update(b, { name: null as unknown as string });
+    const mealsBefore = await db.meals.count();
+    const itemsBefore = await db.mealItems.count();
+
+    await expect(copyDay(FROM, TO)).rejects.toThrow();
+
+    expect(await db.meals.where('date').equals(TO).count()).toBe(0);
+    expect(await db.meals.count()).toBe(mealsBefore);
+    expect(await db.mealItems.count()).toBe(itemsBefore);
+    expect((await getMeal(a))?.items).toHaveLength(2);
+  });
+
+  it('returns 0 and writes nothing when the day has no meals', async () => {
+    await addMeal({ name: 'Elsewhere', date: '2026-03-09' }, [oats()]);
+    expect(await copyDay(FROM, TO)).toBe(0);
+    expect(await db.meals.count()).toBe(1);
+    expect(await db.mealItems.count()).toBe(1);
+  });
+
+  it('copies nothing when asked to copy a day onto itself', async () => {
+    await addMeal({ name: 'Breakfast', date: FROM }, [oats()]);
+    expect(await copyDay(FROM, FROM)).toBe(0);
+    expect(await mealsOnDay(FROM)).toHaveLength(1);
+  });
+
+  it('adds to a day that already has food rather than replacing it', async () => {
+    await addMeal({ name: 'Yesterday breakfast', slot: 'breakfast', date: FROM }, [oats()]);
+    await addMeal({ name: 'Already here', slot: 'snack', date: TO }, [shake()]);
+    expect(await copyDay(FROM, TO)).toBe(1);
+    expect((await mealsOnDay(TO)).map((m) => m.meal.name)).toEqual(['Yesterday breakfast', 'Already here']);
+  });
+
+  it('counts the meals on a day', async () => {
+    await addMeal({ name: 'A', date: FROM }, []);
+    await addMeal({ name: 'B', date: FROM }, [oats()]);
+    await addMeal({ name: 'C', date: TO }, []);
+    expect(await mealCountOnDay(FROM)).toBe(2);
+    expect(await mealCountOnDay('2026-03-09')).toBe(0);
   });
 });

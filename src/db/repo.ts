@@ -226,6 +226,22 @@ export async function deleteRoutine(id: string): Promise<'deleted' | 'archived'>
   return used > 0 ? 'archived' : 'deleted';
 }
 
+/**
+ * Bring an archived routine back, last in the weekly order. `deleteRoutine` only archives a routine
+ * that has sessions, and keeps its exercises, so restoring is just un-hiding it. One transaction, so
+ * the order it takes is the one it was computed against. A routine that is not archived is left
+ * exactly where it is: restoring it would silently move it to the end of the week.
+ */
+export async function restoreRoutine(id: string): Promise<void> {
+  await db.transaction('rw', db.routines, async () => {
+    const routine = await db.routines.get(id);
+    if (!routine?.archived) return;
+    const active = (await db.routines.toArray()).filter((r) => !r.archived);
+    const order = active.length ? Math.max(...active.map((r) => r.order)) + 1 : 0;
+    await db.routines.update(id, { archived: false, order });
+  });
+}
+
 export async function duplicateRoutine(id: string): Promise<Routine> {
   const src = await db.routines.get(id);
   if (!src) throw new Error('Routine not found');

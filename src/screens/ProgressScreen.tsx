@@ -4,22 +4,21 @@ import { useNavigate } from 'react-router-dom';
 import { db } from '@/db/db';
 import { bestsForExercise, e1rmSeries } from '@/db/recordsQueries';
 import { trendWindow } from '@/db/trendQueries';
-import { dateKeyToDate, mondayOf } from '@/domain/dates';
+import { addDays, dateKeyToDate, mondayOf } from '@/domain/dates';
 import { bandStatus, movingAverage, weeklyDelta } from '@/domain/bodyweight';
-import { fmtDate, fmtGrams, fmtKcal, fmtKg, fmtNum, fmtSignedKg } from '@/domain/format';
+import { fmtDate, fmtGrams, fmtKcal, fmtKg, fmtNum, fmtSignedKg, fmtWeekOf } from '@/domain/format';
 import { strengthLevel, type StrengthLevel } from '@/domain/standards';
 import { e1rmChange } from '@/domain/strength';
 import { averagesAreMeaningful, type Average, type Trend } from '@/domain/trends';
-import type { Exercise, MuscleGroup } from '@/domain/types';
+import type { Exercise, MuscleGroup, Settings } from '@/domain/types';
 import { ClaudeSheet } from '@/ui/ClaudeSheet';
 import { BodyMap } from '@/ui/components/BodyMap';
-import { Button } from '@/ui/components/Button';
+import { Button, IconButton } from '@/ui/components/Button';
 import { CalendarHeatmap } from '@/ui/components/CalendarHeatmap';
 import { Card, Divider, EmptyState, Row, SectionTitle } from '@/ui/components/Card';
 import { Segmented } from '@/ui/components/Chip';
 import { LineChart, type ChartPoint } from '@/ui/components/LineChart';
-import { ChevronIcon, TopBar } from '@/ui/components/TopBar';
-import type { WeeklySetsRow } from '@/db/volumeQueries';
+import { BackIcon, ChevronIcon, TopBar } from '@/ui/components/TopBar';
 import { useCalendar, useExercises, useMuscleRecency, useRecentRecords, useSettings, useToday, useWeeklySets } from '@/ui/hooks';
 
 type Window = '14' | '28' | '56';
@@ -50,7 +49,12 @@ export function ProgressScreen() {
   );
 
   const calendar = useCalendar(12, today, settings);
-  const weeklyRows = useWeeklySets(mondayOf(today), settings);
+  // The body map is always this week. The weekly-sets card below it can be stepped back through
+  // earlier weeks, so it asks for its own week rather than borrowing this one.
+  const thisWeek = mondayOf(today);
+  const [weeksBack, setWeeksBack] = useState(0);
+  const shownWeek = addDays(thisWeek, -7 * weeksBack);
+  const weeklyRows = useWeeklySets(thisWeek, settings);
   const recency = useMuscleRecency(today);
   const exercises = useExercises();
   const recentRecords = useRecentRecords(10);
@@ -134,7 +138,21 @@ export function ProgressScreen() {
             </Card>
 
             <SectionTitle>Weekly sets</SectionTitle>
-            <WeeklySetsCard rows={weeklyRows ?? []} />
+            <div className="flex items-center gap-1 pb-2">
+              <IconButton label="Previous week" onClick={() => setWeeksBack((n) => n + 1)} data-testid="week-prev">
+                <BackIcon />
+              </IconButton>
+              <div className="min-w-0 flex-1 truncate text-center text-base font-bold" data-testid="week-label">
+                {fmtWeekOf(shownWeek, thisWeek)}
+              </div>
+              <IconButton label="Next week" disabled={weeksBack === 0} onClick={() => setWeeksBack((n) => Math.max(0, n - 1))} data-testid="week-next">
+                <ChevronIcon className="text-current" />
+              </IconButton>
+            </div>
+            {/* Keyed by the week. dexie-react-hooks keeps its previous result across a dependency
+                change, so without a remount the week just left would sit under the new week's
+                heading until IndexedDB answered. */}
+            <WeeklySetsCard key={shownWeek} weekStart={shownWeek} thisWeek={thisWeek} settings={settings} />
 
             <SectionTitle>Strength</SectionTitle>
             <StrengthCard standards={standardsRows ?? []} changes={changeRows ?? []} />
@@ -285,14 +303,16 @@ function CalendarCard({ calendar, today }: { calendar: NonNullable<ReturnType<ty
   );
 }
 
-function WeeklySetsCard({ rows }: { rows: WeeklySetsRow[] }) {
+function WeeklySetsCard({ weekStart, thisWeek, settings }: { weekStart: string; thisWeek: string; settings: Settings | undefined }) {
+  const rows = useWeeklySets(weekStart, settings);
+  if (rows === undefined) return <div className="py-8 text-center text-sm text-muted">Loading…</div>;
   if (rows.length === 0) {
-    return <EmptyState>No sets logged this week.</EmptyState>;
+    return <EmptyState>{weekStart === thisWeek ? 'No sets logged this week.' : 'No sets logged that week.'}</EmptyState>;
   }
   return (
     <Card data-testid="weekly-sets">
       {rows.map((r, i) => (
-        <div key={r.muscleGroup}>
+        <div key={r.muscleGroup} data-testid={`weekly-row-${r.muscleGroup}`}>
           {i > 0 && <Divider />}
           <Row
             title={r.muscleGroup}
