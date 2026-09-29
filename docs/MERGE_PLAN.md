@@ -436,12 +436,41 @@ nothing new leaving the phone, Settings → About unchanged.
 
 ### P6 — Explicitly deferred to v1.1
 
-Adaptive TDEE and the strength-versus-cut "Loop" chart — the cross-domain tier not chosen for
-v1. Recorded here so they are deferred deliberately rather than forgotten.
+The strength-versus-cut "Loop" chart — the cross-domain tier not chosen for v1. Recorded here so
+it is deferred deliberately rather than forgotten. (Adaptive TDEE was on this list too and shipped
+as P7, in a form that shows a figure only when its inputs allow one.)
 
 Food memory was on this list and has been pulled forward into P3: it turned out to be the
 difference between a logger that is used daily and one that is abandoned, which puts it under
 §2.3 rather than in the intelligence tier.
+
+### P7 — Maintenance calories · **S** · ✅ shipped
+
+A "Maintenance" card on Progress, under Eating, over the same 2/4/8-week window. It is arithmetic
+on the owner's own logs, not a model: what was eaten on the days that were logged, against how far
+the scales moved.
+
+- **The maths** (`estimateMaintenance`, `src/domain/energy.ts`). Intake is the mean kcal over
+  logged days only. Weight is the mean of the readings in the first 7 days of the window against
+  the mean of the readings in the last 7, never one day against another. Between the two groups'
+  centre dates (the mean of their dates, rounded to a day) the change in kg becomes a daily
+  balance at 7,700 kcal a kg; maintenance is intake minus that balance, to the nearest 50, and
+  never clamped. The rate line ("At your logged 2,400 a day, about −0.1 kg a week") is worked from
+  the ROUNDED maintenance, so the figure and the line under it agree.
+- **Three gates, checked in this order**, each of which replaces the figure with the one fact that
+  fell short (`energyText.ts` words them; the counts are always available): a weigh-in is needed
+  in both the first and the last week of the window; the two centres must be at least 14 days
+  apart (a 2-week window can never pass this one and a 4-week window can never fail it); and at least
+  0.8 of the window's days must be logged. A gated estimate carries no figure and no advice.
+- **Why 0.8 and not the 0.5 that lets Eating show an average.** An average over half a window
+  still describes those days. A maintenance figure needs more: it assumes the unlogged days were
+  eaten like the logged ones, and every kcal of error in that intake mean lands in the estimate
+  one for one, where the weight change it is set against is small. At 0.8 no more than one day in
+  five rests on the assumption. The gate's "Needs 23 of 28 days logged" is worked out with the
+  same comparison the gate uses (`loggedDaysNeeded`), so the line and the gate cannot disagree.
+- The figure is an estimate of a body that is not a calorimeter: 7,700 kcal a kg is the usual
+  conventional value, water moves the scales, and the card shows the days and weigh-ins it stands
+  on beside it ("22 of 28 days logged · weigh-ins 1–5 Sep (3) and 22–26 Sep (3)").
 
 ---
 
