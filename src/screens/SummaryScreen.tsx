@@ -7,6 +7,7 @@ import { lockInBlocked, type Suggestion } from '@/domain/engine';
 import type { PersonalRecord } from '@/domain/records';
 import { NIGGLE_TAGS, type Niggle, type NiggleTag } from '@/domain/types';
 import { sessionVolume } from '@/domain/volume';
+import { useSessionDraft } from '@/state/sessionDraft';
 import { useTimer } from '@/state/timer';
 import { Button } from '@/ui/components/Button';
 import { Card, SectionTitle } from '@/ui/components/Card';
@@ -201,6 +202,7 @@ export function SummaryScreen() {
         notes,
         checklist: summary.routine?.isLowerBody ? checklist : undefined,
       });
+      useSessionDraft.getState().clearSession(summary.session.id);
       // Fire-and-forget: must not slow down or block the finish flow.
       backupAfterSessionFinish();
       toast('Session saved', 'ok');
@@ -374,6 +376,7 @@ export function SummaryScreen() {
         onCancel={() => setDiscardOpen(false)}
         onConfirm={async () => {
           await discardSession(summary.session.id);
+          useSessionDraft.getState().clearSession(summary.session.id);
           nav('/', { replace: true });
           toast('Session discarded');
         }}

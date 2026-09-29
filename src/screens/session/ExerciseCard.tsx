@@ -32,6 +32,7 @@ import { liveVerdict } from '@/domain/verdict';
 import { flashAmbient } from '@/state/ambient';
 import { success, tap, warning } from '@/state/haptics';
 import { primeAudio, requestNotificationsOnce } from '@/state/notify';
+import { draftSlotKey, hasTypedValue, readSlotDraft, useSessionDraft } from '@/state/sessionDraft';
 import { useTimer } from '@/state/timer';
 import { Button, IconButton } from '@/ui/components/Button';
 import { Card } from '@/ui/components/Card';
@@ -39,12 +40,12 @@ import { Chip } from '@/ui/components/Chip';
 import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { MoreIcon } from '@/ui/components/TopBar';
+import { EditSetSheet } from '@/ui/EditSetSheet';
 import { ExerciseDemo } from '@/ui/ExerciseDemo';
 import { PlateSheet } from '@/ui/PlateSheet';
 import { SwapExerciseSheet } from '@/ui/SwapExerciseSheet';
 import { CompletionMoment } from './CompletionMoment';
 import { DoneCard } from './DoneCard';
-import { EditSetSheet } from './EditSetSheet';
 import { ChevronIcon, PencilIcon } from './icons';
 import { SetTable } from './SetTable';
 import type { Draft, Slot } from './types';
@@ -121,8 +122,13 @@ export function ExerciseCard({
   const [swapOpen, setSwapOpen] = useState(false);
   const [howToOpen, setHowToOpen] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
-  const [reopened, setReopened] = useState(false);
-  const [extraRows, setExtraRows] = useState(0);
+  // A typed-but-unlogged draft, and the "Add a set" rows, outlive a reload: read once, on mount,
+  // from the persisted store (src/state/sessionDraft.ts). Logged sets are already in IndexedDB.
+  const slotKey = draftSlotKey(rx?.id, exercise.id);
+  const [stored] = useState(() => readSlotDraft(useSessionDraft.getState().sessions, session.id, slotKey));
+  const [extraRows, setExtraRows] = useState(stored?.extraRows ?? 0);
+  // An open "Add a set" row is what reopens a finished card, so it brings the card back open too.
+  const [reopened, setReopened] = useState(!!stored?.extraRows);
   const [shakeKey, setShakeKey] = useState(0);
   const [lockingIn, setLockingIn] = useState(false);
   const timer = useTimer();
@@ -182,8 +188,35 @@ export function ExerciseCard({
     [nextRow],
   );
 
-  const [draft, setDraft] = useState<Draft>(defaultDraft);
-  const touched = useRef(false);
+  // A stored draft is a typed value, so it seeds the row and counts as touched: the ghost refresh
+  // below must not replace what the user had typed. A field they never typed (absent) still shows
+  // its ghost.
+  const [draft, setDraft] = useState<Draft>(() => {
+    const ghost = defaultDraft();
+    if (!hasTypedValue(stored)) return ghost;
+    return {
+      weight: stored?.weight !== undefined ? stored.weight : ghost.weight,
+      reps: stored?.reps !== undefined ? stored.reps : ghost.reps,
+      distanceM: stored?.distanceM !== undefined ? stored.distanceM : ghost.distanceM,
+      seconds: stored?.seconds !== undefined ? stored.seconds : ghost.seconds,
+    };
+  });
+  const touched = useRef(hasTypedValue(stored));
+
+  // Mirror the row into the store on every change. An untouched draft is only the ghost, which the
+  // card recomputes on its own, so it is not stored; open "Add a set" rows are. Logging a set clears
+  // `touched` and the ghost refresh above replaces the draft, so this also wipes what was typed —
+  // a reload must not bring a logged set back as a draft.
+  useEffect(() => {
+    const typed = touched.current;
+    useSessionDraft.getState().setDraft(session.id, slotKey, {
+      weight: typed ? draft.weight : undefined,
+      reps: typed ? draft.reps : undefined,
+      distanceM: typed ? draft.distanceM : undefined,
+      seconds: typed ? draft.seconds : undefined,
+      extraRows: extraRows > 0 ? extraRows : undefined,
+    });
+  }, [draft, extraRows, session.id, slotKey]);
 
   // Refresh the (untouched) draft whenever the live row's own ghost values move on: after a log,
   // when history finally loads, or when a deload toggle changes the prescription.

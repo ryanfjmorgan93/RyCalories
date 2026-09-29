@@ -4,15 +4,18 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { db } from '@/db/db';
 import { addExtraExercise, discardSession } from '@/db/repo';
 import { mergeStableSlots } from '@/domain/mergeStableSlots';
+import { isStaleSession, startedHoursAgoLabel } from '@/domain/session';
 import { countsForProgression } from '@/domain/sets';
 import type { Exercise, SetLog } from '@/domain/types';
+import { useSessionDraft } from '@/state/sessionDraft';
 import { useTimer } from '@/state/timer';
 import { Button } from '@/ui/components/Button';
+import { Card } from '@/ui/components/Card';
 import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { TopBar } from '@/ui/components/TopBar';
 import { ExercisePicker } from '@/ui/ExercisePicker';
-import { useRoutine, useRoutineItems, useSettings } from '@/ui/hooks';
+import { useNow, useRoutine, useRoutineItems, useSettings } from '@/ui/hooks';
 import { AllDoneCard } from './session/AllDoneCard';
 import { ExerciseCard } from './session/ExerciseCard';
 import { FoldList } from './session/FoldList';
@@ -34,6 +37,8 @@ export function LiveSessionScreen() {
     return (await db.exercises.bulkGet(ids)).filter((e): e is Exercise => !!e);
   }, [session?.extraExerciseIds?.join(',')]);
 
+  // Once a minute is plenty: the line below changes on the hour.
+  const now = useNow(60_000);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [finishOpen, setFinishOpen] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
@@ -244,6 +249,21 @@ export function LiveSessionScreen() {
         currentExerciseId={currentExerciseId}
         onFinish={finish}
       />
+      {isStaleSession(session.startedAt, now) && (
+        <div className="px-3 pt-3">
+          <Card className="flex items-center gap-3 px-4 py-3" data-testid="stale-session">
+            <div className="min-w-0 flex-1 text-base font-bold text-warn" data-testid="stale-session-age">
+              {startedHoursAgoLabel(session.startedAt, now)}
+            </div>
+            <Button size="sm" variant="primary" onClick={finish} data-testid="stale-finish">
+              Finish
+            </Button>
+            <Button size="sm" variant="danger" onClick={() => setDiscardOpen(true)} data-testid="stale-discard">
+              Discard
+            </Button>
+          </Card>
+        </div>
+      )}
       <div className="fold-shell px-3">
         <FoldList
           groups={groups}
@@ -372,6 +392,7 @@ export function LiveSessionScreen() {
             variant="danger"
             onClick={async () => {
               await discardSession(session.id);
+              useSessionDraft.getState().clearSession(session.id);
               useTimer.getState().skip();
               nav('/', { replace: true });
             }}
@@ -390,6 +411,7 @@ export function LiveSessionScreen() {
         onCancel={() => setDiscardOpen(false)}
         onConfirm={async () => {
           await discardSession(session.id);
+          useSessionDraft.getState().clearSession(session.id);
           useTimer.getState().skip();
           nav('/', { replace: true });
           toast('Session discarded');
