@@ -7,7 +7,8 @@ import { NumberField } from '@/ui/components/NumberField';
 import { Sheet } from '@/ui/components/Sheet';
 
 /**
- * Edit a logged set: its type, values, or delete it. No RIR/RPE here — effort is answered once,
+ * Edit a logged set: its type, values, or delete it. Used by the live session and by a finished
+ * session's detail page. No RIR/RPE here — effort is answered once,
  * for the whole slot, by the "How did that feel?" chips on the done card (`setSlotFeel`).
  */
 export function EditSetSheet({

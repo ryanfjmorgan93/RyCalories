@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { fmtDuration } from './domain/format';
+import { isStaleSession, startedHoursAgoLabel } from './domain/session';
 import { useNow, useSessionDock } from './ui/hooks';
 import { useTimer } from './state/timer';
 import { Ambient } from './ui/Ambient';
@@ -56,6 +57,9 @@ function SessionDock({ session }: { session: { id: string; title: string; starte
   const nav = useNavigate();
   const now = useNow(1000, true);
   const elapsed = Math.max(0, Math.floor((now - Date.parse(session.startedAt)) / 1000));
+  // A workout left open for hours is more likely forgotten than in progress: say how long ago it
+  // started instead of "Live", and colour the clock.
+  const stale = isStaleSession(session.startedAt, now);
   return (
     <div className="bottom-dock content-max fixed inset-x-0 z-30 mx-auto px-3">
       <button
@@ -66,11 +70,15 @@ function SessionDock({ session }: { session: { id: string; title: string; starte
       >
         <span aria-hidden="true" className="pulse-ring h-2.5 w-2.5 shrink-0 rounded-full bg-accent" />
         <span className="min-w-0 flex-1">
-          <span className="block text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Live</span>
+          <span className="block text-[11px] font-bold uppercase tracking-[0.12em] text-muted" data-testid="live-banner-caption">
+            {stale ? startedHoursAgoLabel(session.startedAt, now) : 'Live'}
+          </span>
           <span className="block truncate text-base font-extrabold leading-tight">{session.title}</span>
         </span>
         <span className="flex shrink-0 items-center gap-2">
-          <span className="num text-base font-extrabold">{fmtDuration(elapsed)}</span>
+          <span className={`num text-base font-extrabold ${stale ? 'text-warn' : ''}`} data-testid="live-banner-clock">
+            {fmtDuration(elapsed)}
+          </span>
           <span className="rounded-control bg-accent px-3 py-1.5 text-sm font-bold text-accent-fg">Resume</span>
         </span>
       </button>

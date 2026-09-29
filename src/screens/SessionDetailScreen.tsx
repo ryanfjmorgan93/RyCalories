@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
 import { recordsForNewSets } from '@/db/recordsQueries';
-import { createRoutineFromSession, deleteSession, sessionDetail, type SessionGroup } from '@/db/repo';
+import { createRoutineFromSession, deleteSession, deleteSet, sessionDetail, updateSet, type SessionGroup } from '@/db/repo';
 import { sessionSeconds } from '@/db/historyQueries';
 import { fmtDateLong, fmtDuration, fmtKg, fmtNum, fmtWeight, legDayProteinLabel, targetLine } from '@/domain/format';
 import { countsForVolume, feelLabel, setBadges } from '@/domain/sets';
@@ -13,6 +13,7 @@ import { Chip } from '@/ui/components/Chip';
 import { Confirm } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { TopBar } from '@/ui/components/TopBar';
+import { EditSetSheet } from '@/ui/EditSetSheet';
 import { useRoutineItems, useSettings } from '@/ui/hooks';
 
 const timeFmt = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -180,39 +181,70 @@ function GroupCard({ group, session }: { group: SessionGroup; session: Session }
     [exercise.id, sets, session.startedAt, decision?.rule],
   );
   const prIndices = useMemo(() => new Set((prRecords ?? []).map((r) => r.setIndex)), [prRecords]);
+  // The set open in the editor, by id — so it follows the live query rather than holding a copy.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const editing = editingId ? (sets.find((s) => s.id === editingId) ?? null) : null;
 
   return (
-    <Card className="mt-3 overflow-hidden">
-      <button type="button" className="block w-full min-h-14 px-4 py-3 text-left active:bg-surface-2" onClick={() => nav(`/exercises/${exercise.id}`)}>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="text-lg font-extrabold leading-tight">{exercise.name}</span>
-          {isExtra && <Chip size="sm">extra</Chip>}
+    <>
+      <Card className="mt-3 overflow-hidden" data-testid={`detail-card-${exercise.name}`}>
+        <button type="button" className="block w-full min-h-14 px-4 py-3 text-left active:bg-surface-2" onClick={() => nav(`/exercises/${exercise.id}`)}>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="text-lg font-extrabold leading-tight">{exercise.name}</span>
+            {isExtra && <Chip size="sm">extra</Chip>}
+          </div>
+          {rx && (
+            <div className="mt-0.5 text-sm text-muted">
+              {targetLine(rx, kind)}
+              {exercise.unilateral ? ' · per side' : ''}
+            </div>
+          )}
+        </button>
+
+        <div className="border-t border-line">
+          {sets.map((s, i) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => setEditingId(s.id)}
+              className="flex min-h-14 w-full items-center gap-3 border-b border-line px-4 py-2.5 text-left last:border-b-0 active:bg-surface-2"
+              data-testid={`detail-set-${i}`}
+            >
+              <span className={`num w-7 text-center text-sm font-bold ${badges[i] === 'W' ? 'text-warn' : badges[i] === 'D' ? 'text-info' : 'text-muted'}`}>{badges[i]}</span>
+              <span className="num flex-1 text-lg font-bold" data-testid="detail-set-label">{setLabel(s, kind)}</span>
+              {prIndices.has(i) && (
+                <span data-testid="pr-chip">
+                  <Chip size="sm" tone="ok">PR</Chip>
+                </span>
+              )}
+              {s.rir !== undefined && <Chip size="sm">{feelLabel(s.rir)}</Chip>}
+            </button>
+          ))}
         </div>
-        {rx && (
-          <div className="mt-0.5 text-sm text-muted">
-            {targetLine(rx, kind)}
-            {exercise.unilateral ? ' · per side' : ''}
-          </div>
-        )}
-      </button>
 
-      <div className="border-t border-line">
-        {sets.map((s, i) => (
-          <div key={s.id} className="flex items-center gap-3 border-b border-line px-4 py-2.5 last:border-b-0">
-            <span className={`num w-7 text-center text-sm font-bold ${badges[i] === 'W' ? 'text-warn' : badges[i] === 'D' ? 'text-info' : 'text-muted'}`}>{badges[i]}</span>
-            <span className="num flex-1 text-lg font-bold">{setLabel(s, kind)}</span>
-            {prIndices.has(i) && (
-              <span data-testid="pr-chip">
-                <Chip size="sm" tone="ok">PR</Chip>
-              </span>
-            )}
-            {s.rir !== undefined && <Chip size="sm">{feelLabel(s.rir)}</Chip>}
-          </div>
-        ))}
-      </div>
+        {decision && <DecisionLine decision={decision} kind={kind} />}
+      </Card>
 
-      {decision && <DecisionLine decision={decision} kind={kind} />}
-    </Card>
+      {/* A finished session's sets edit the same way a live one's do. The stored decision is left
+          as it was — it records what was decided at the time — and records are worked out on read,
+          so bests follow the edit. */}
+      {editing && (
+        <EditSetSheet
+          set={editing}
+          kind={kind}
+          increment={rx?.increment ?? exercise.defaultIncrement}
+          onClose={() => setEditingId(null)}
+          onDelete={async () => {
+            await deleteSet(editing.id);
+            setEditingId(null);
+          }}
+          onSave={async (patch) => {
+            await updateSet(editing.id, patch);
+            setEditingId(null);
+          }}
+        />
+      )}
+    </>
   );
 }
 
