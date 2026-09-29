@@ -11,6 +11,7 @@
  */
 
 import { gramsOf, isPackaged, macrosOf, mayOverwrite, scaleMacros, type Macros, type Nutrition } from './food';
+import type { LabelNutrition } from './products';
 import type { FoodMemory, MealItem } from './types';
 
 /** Text reduced to its identifying words, for keys and for search. */
@@ -57,9 +58,13 @@ export function memoryKey(item: Pick<MealItem, 'name' | 'brand' | 'product'>): s
  * batch chilli, never a single serving), so a recipe save must not teach `typicalGrams` from it: a
  * later plain log of "Beef mince" would then pre-fill the whole batch. The per-100g figures and
  * unit weight are still genuine facts about the food either way, so they are always remembered.
+ *
+ * `item.barcode` is the pack's barcode when the food was typed in after a scan the database could
+ * not fill (see `NewMealItem.barcode`); it is remembered so the next scan of that pack fills from
+ * here. A `MealItem` row never carries one.
  */
 export function memoryFrom(
-  item: Pick<MealItem, 'name' | 'brand' | 'product' | 'source' | 'nutrition'>,
+  item: Pick<MealItem, 'name' | 'brand' | 'product' | 'source' | 'nutrition'> & { barcode?: string },
   unit?: { count: number; unitGrams: number; label?: string; plural?: string },
   opts?: { portion?: boolean },
 ): Omit<FoodMemory, 'id' | 'timesUsed' | 'lastUsedAt'> | null {
@@ -78,7 +83,24 @@ export function memoryFrom(
     ...(rememberPortion ? { typicalGrams: grams } : {}),
     ...(validUnit ? { unitGrams: unit.unitGrams } : {}),
     ...(validUnit && unit.label ? { unitLabel: unit.label, unitPlural: unit.plural || unit.label } : {}),
+    ...(item.barcode ? { barcode: item.barcode } : {}),
     source: item.source,
+  };
+}
+
+/**
+ * A remembered food read back as the label a scan of its barcode would have returned, so a
+ * caller that only knows labels can use it. Nothing here is a label's claim: the figures are the
+ * ones the user typed (or applied) when they first met this pack, which is why the lookup also
+ * hands back the memory itself — its `source` is the truthful badge, not "label".
+ */
+export function labelFromMemory(m: FoodMemory): LabelNutrition {
+  return {
+    code: m.barcode ?? '',
+    brand: m.brand ?? '',
+    name: m.product ?? m.name,
+    per100: m.per100,
+    ...(m.typicalGrams !== undefined ? { servingGrams: m.typicalGrams } : {}),
   };
 }
 
@@ -108,6 +130,9 @@ export function mergeMemory(
     name: takeNumbers ? incoming.name || existing.name : existing.name,
     ...(incoming.brand ? { brand: incoming.brand } : {}),
     ...(incoming.product ? { product: incoming.product } : {}),
+    // A fact about the pack, not a figure, so the trust rule does not apply: the barcode stays
+    // unless this logging names one (spread from `existing` above), and a new one replaces it.
+    ...(incoming.barcode ? { barcode: incoming.barcode } : {}),
     per100: takeNumbers ? incoming.per100 : existing.per100,
     source: takeNumbers ? incoming.source : existing.source,
     // The most recent portion is the better suggestion: it is what you actually ate last time.

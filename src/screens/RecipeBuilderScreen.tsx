@@ -179,7 +179,9 @@ function QuestionCardBody({
     if (result.label) {
       onChange({
         per100: result.label.per100,
-        source: 'label',
+        // A food the user typed in against this barcode comes back as a label-shaped answer; it
+        // keeps the standing it had, rather than acquiring a label's.
+        source: result.memory?.source ?? 'label',
         brand: result.label.brand || undefined,
         product: result.label.name || undefined,
       });
@@ -359,7 +361,7 @@ function IngredientPickerSheet({
       key: `label:${result.label.code || code}`,
       name: result.label.name || result.label.brand || 'Scanned item',
       per100: result.label.per100,
-      source: 'label',
+      source: result.memory?.source ?? 'label',
       ...(result.label.brand ? { brand: result.label.brand } : {}),
       ...(result.label.name ? { product: result.label.name } : {}),
     };

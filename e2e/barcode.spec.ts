@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { denyCamera, fresh } from './fresh';
 import { FIXTURE_CODE } from './fixtures/ean13';
 
@@ -123,6 +123,32 @@ async function routeOffHit(page: Page): Promise<void> {
   await page.route(OFF_ROUTE, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(OFF_HIT) }),
   );
+}
+
+/**
+ * Answer every Open Food Facts request with one fixed response, and count the requests. For the
+ * entries the database really has that are patchy — no kcal field, no name, no figures at all —
+ * which routeOffByCode's three fixed products cannot express.
+ */
+async function routeOffWith(page: Page, response: { status?: number; contentType?: string; body: string }): Promise<{ count: () => number }> {
+  let n = 0;
+  await page.route(OFF_ROUTE, async (route) => {
+    n += 1;
+    await route.fulfill({ status: response.status ?? 200, contentType: response.contentType ?? 'application/json', body: response.body });
+  });
+  return { count: () => n };
+}
+
+/** A hit shaped like a real Open Food Facts v2 answer: status 1 and a product around `product`. */
+function offProduct(product: Record<string, unknown>): string {
+  return JSON.stringify({ status: 1, code: FIXTURE_CODE, product: { code: FIXTURE_CODE, ...product } });
+}
+
+/** Type a code in by hand with the camera refused, on a fresh Add food sheet. */
+async function sheetWithCodeTyped(page: Page, browser: Browser, context: BrowserContext, code = FIXTURE_CODE): Promise<void> {
+  await openNewFoodSheet(page);
+  await denyCamera(browser, context, page);
+  await enterCode(page, code);
 }
 
 /** A brand-new "Add food" sheet, from a brand-new meal, ready for its first field. */
@@ -284,5 +310,142 @@ test.describe('barcode scanning', () => {
     await expect(page.getByTestId('food-name')).toHaveValue(/Flapjack/);
     await expect(page.getByTestId('scan-barcode')).toHaveText('Scan barcode');
     await expect(page.getByTestId('scan-barcode')).toBeEnabled();
+  });
+
+  // The owner scanned a pack of chicken fries and a pack of noodles and could not add either: Save
+  // stayed grey and nothing on the sheet said why. Each of the tests below is one way a scan ends
+  // with the sheet unable to save, and what it now shows or fills in instead.
+
+  test('a pack the database does not have is typed in once, and the next scan fills from memory', async ({ page, browser, context }) => {
+    const hits = await routeOffByCode(page);
+    await openNewFoodSheet(page);
+    await denyCamera(browser, context, page);
+
+    await enterCode(page, UNKNOWN_CODE);
+    await expect(page.getByTestId('lookup-notfound')).toHaveText('Not in the database. Type the name and figures from the pack.', {
+      timeout: DECODE_TIMEOUT,
+    });
+    await expect(page.getByTestId('food-needs-name')).toBeVisible();
+    await expect(page.getByTestId('save-food')).toBeDisabled();
+    expect(hits.get(UNKNOWN_CODE)).toBe(1);
+
+    await page.getByTestId('food-name').fill('Chicken fries');
+    await page.getByTestId('food-grams').fill('100');
+    await page.getByTestId('food-kcal').fill('250');
+    await page.getByTestId('food-protein').fill('14');
+    await page.getByTestId('food-carbs').fill('20');
+    await page.getByTestId('food-fat').fill('12');
+    await expect(page.getByTestId('save-food')).toBeEnabled();
+    await expect(page.getByTestId('food-needs-name')).toBeHidden();
+    await page.getByTestId('save-food').click();
+    await page.getByTestId('save-meal').click();
+    // The meal is what writes the food memory, so the meal's own page is the signal it has landed.
+    await page.waitForURL(/\/food\/[0-9a-f-]+$/);
+
+    // The same pack again, in a sheet that knows nothing of the last one.
+    await page.getByTestId('add-food').click();
+    await expect(page.getByTestId('food-name')).toHaveValue('');
+    await enterCode(page, UNKNOWN_CODE);
+    await expect(page.getByTestId('food-name')).toHaveValue('Chicken fries');
+    await expect(page.getByTestId('food-kcal')).toHaveValue('250');
+    await expect(page.getByTestId('food-protein')).toHaveValue('14');
+    await expect(page.getByTestId('lookup-notfound')).toBeHidden();
+    await expect(page.getByTestId('save-food')).toBeEnabled();
+    // The name above is only there once the lookup has answered, so any request it made has been
+    // counted already: still the one from the first scan.
+    expect(hits.get(UNKNOWN_CODE)).toBe(1);
+  });
+
+  test('an entry that gives its energy in kilojoules only is read as kcal', async ({ page, browser, context }) => {
+    await routeOffWith(page, {
+      body: offProduct({
+        product_name: 'Chicken Fries',
+        brands: 'Iceland',
+        nutriments: { 'energy-kj_100g': 1084, proteins_100g: 14, carbohydrates_100g: 20, fat_100g: 12 },
+      }),
+    });
+    await sheetWithCodeTyped(page, browser, context);
+
+    // 1084 kJ / 4.184, rounded.
+    await expect(page.getByTestId('food-kcal')).toHaveValue('259', { timeout: DECODE_TIMEOUT });
+    await expect(page.getByTestId('food-name')).toHaveValue('Iceland Chicken Fries');
+    await expect(page.getByTestId('save-food')).toBeEnabled();
+  });
+
+  test('an entry with figures and no name fills the figures and asks for the name', async ({ page, browser, context }) => {
+    await routeOffWith(page, {
+      body: offProduct({
+        product_name: '',
+        brands: '',
+        nutriments: { 'energy-kcal_100g': 450, proteins_100g: 9, carbohydrates_100g: 60, fat_100g: 18 },
+      }),
+    });
+    await sheetWithCodeTyped(page, browser, context);
+
+    await expect(page.getByTestId('food-kcal')).toHaveValue('450', { timeout: DECODE_TIMEOUT });
+    await expect(page.getByTestId('food-name')).toHaveValue('');
+    await expect(page.getByTestId('food-needs-name')).toBeVisible();
+    await expect(page.getByTestId('save-food')).toBeDisabled();
+
+    await page.getByTestId('food-name').fill('Noodles');
+    await expect(page.getByTestId('save-food')).toBeEnabled();
+    await expect(page.getByTestId('food-needs-name')).toBeHidden();
+    await expect(page.getByTestId('food-kcal')).toHaveValue('450');
+  });
+
+  test('an entry whose product_name is blank is named from its generic name', async ({ page, browser, context }) => {
+    await routeOffWith(page, {
+      body: offProduct({
+        product_name: '',
+        generic_name: 'Instant noodles',
+        nutriments: { 'energy-kcal_100g': 450, proteins_100g: 9, carbohydrates_100g: 60, fat_100g: 18 },
+      }),
+    });
+    await sheetWithCodeTyped(page, browser, context);
+
+    await expect(page.getByTestId('food-name')).toHaveValue('Instant noodles', { timeout: DECODE_TIMEOUT });
+    await expect(page.getByTestId('food-kcal')).toHaveValue('450');
+    await expect(page.getByTestId('food-needs-name')).toBeHidden();
+  });
+
+  test('an entry with a name and no figures fills the name, says so, and saves once the figures are typed', async ({ page, browser, context }) => {
+    await routeOffWith(page, {
+      body: offProduct({ product_name: 'Mi Goreng', brands: 'Indomie', nutriments: { proteins_100g: 9 } }),
+    });
+    await sheetWithCodeTyped(page, browser, context);
+
+    await expect(page.getByTestId('food-name')).toHaveValue('Indomie Mi Goreng', { timeout: DECODE_TIMEOUT });
+    await expect(page.getByTestId('lookup-nofigures')).toHaveText('No figures in the database. Type them from the pack.');
+    await expect(page.getByTestId('lookup-notfound')).toBeHidden();
+    await expect(page.getByTestId('food-kcal')).toHaveValue('');
+    // A name is enough to save.
+    await expect(page.getByTestId('save-food')).toBeEnabled();
+    await expect(page.getByTestId('food-needs-name')).toBeHidden();
+
+    await page.getByTestId('food-kcal').fill('450');
+    await page.getByTestId('save-food').click();
+    await expect(page.getByTestId('meal-total')).toContainText('450 kcal');
+    await page.getByTestId('save-meal').click();
+    await expect
+      .poll(async () => (await readMealItems(page)).some((i) => i.name === 'Indomie Mi Goreng'))
+      .toBe(true);
+  });
+
+  test('a service that answers 503 says the lookup is unavailable, and the Scan button comes back', async ({ page, browser, context }) => {
+    const asked = await routeOffWith(page, {
+      status: 503,
+      contentType: 'text/html',
+      body: '<html><body><h1>Service Temporarily Unavailable</h1></body></html>',
+    });
+    await sheetWithCodeTyped(page, browser, context);
+
+    await expect(page.getByTestId('lookup-unavailable')).toHaveText('Lookup unavailable. Try again, or type the figures from the pack.', {
+      timeout: DECODE_TIMEOUT,
+    });
+    expect(asked.count()).toBe(1);
+    await expect(page.getByTestId('scan-barcode')).toBeEnabled();
+    await expect(page.getByTestId('scan-barcode')).toHaveText('Scan barcode');
+    await expect(page.getByTestId('food-needs-name')).toBeVisible();
+    await expect(page.getByTestId('save-food')).toBeDisabled();
   });
 });

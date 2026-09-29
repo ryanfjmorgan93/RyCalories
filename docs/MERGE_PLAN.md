@@ -651,6 +651,33 @@ counts drop below a baseline without an in-app delete, and a Backups card in Set
 - **One decoded frame is not a read.** The camera loop now needs the same code on two consecutive
   frames (`src/domain/barcodeRead.ts`). A misread frame cannot be produced from the static fake
   camera, so only the pure rule is tested for it.
+- **A scan can end with an empty name in four ways, and Save stays grey for every one.** The
+  database has no entry (HTTP 404, `{"status":0}`); it has one with figures and no name; it has one
+  with a name and no energy figure; or it did not answer (a 503 page, the 8 s timeout, no
+  connection). Save is disabled only when the name is empty, and nothing said so — the owner scanned
+  a pack of chicken fries and a pack of noodles and could not add either. Now a "Needs a name" line
+  sits under the Food field whenever the name is empty and a lookup has answered or a figure has been
+  typed, and each miss line says what to type. An entry with figures and no name fills the figures
+  (`parseProduct` returns `name: ''`; the name-lookup matcher never picks it). An entry with a name
+  and no energy fills the name and says "No figures in the database." (`lookupBarcode` returns
+  `partial`).
+- **Open Food Facts entries are patchy, so `parseProduct` reads what is there.** `energy_100g` is
+  kJ by definition and is read as such only when `energy_unit` is kJ or absent; `energy-kj_100g` is
+  converted at 4.184 and rounded. The name falls back through `product_name_en`, `generic_name`,
+  `abbreviated_product_name` (all requested in `OFF_FIELDS`). Of 12 Indomie Mi Goreng entries on the
+  live database, 2 had no nutriments at all — so some packs will always need typing.
+- **The 30-day miss cache is per barcode, and it hides a pack that gains an entry.** A status-0
+  answer and a status-1 entry the parser refuses were both cached as a miss for `MISS_TTL_MS`. The
+  partial (name, no figures) is deliberately not cached: the pack is real and its name worth keeping,
+  and the entry may gain figures. A miss cached by an earlier build stays until it expires or the
+  product cache is cleared (Settings → Food lookup, switched off and on again).
+- **Type it once.** A food saved after a scan the database could not fill is remembered against the
+  barcode (`FoodMemory.barcode`, from `NewMealItem.barcode`, which — like `unit` — is never written
+  to the meal row). `lookupBarcode` asks the food memory first, before the cache and before the
+  network, so the next scan fills from memory: it beats a cached miss and works offline. One barcode
+  per remembered food (the memory key is the name, so a second pack with the same name replaces the
+  first's barcode). A memory hit is the user's own entry, so the sheet applies it like a tapped
+  suggestion and the recipe builder badges it with `memory.source`, never "label".
 
 
 ### 6.7 Cooked meals — traps paid for

@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from './db';
 import { clearProductCache, lookupBarcode, lookupName } from './productRepo';
+import { addMeal, type NewMealItem } from './foodRepo';
 import { wipeAll } from './repo';
+import { fromPer100 } from '@/domain/food';
 
 const TREK = {
   code: '5060088709054',
@@ -249,5 +251,134 @@ describe('clearing the cache', () => {
     await lookupBarcode('5060088709054');
     expect(await clearProductCache()).toBe(1);
     expect(await db.productCache.count()).toBe(0);
+  });
+});
+
+/** A pack the database has no entry for, typed in by the user against its barcode. */
+const CHICKEN_FRIES_CODE = '5099999999994';
+function chickenFries(over: Partial<NewMealItem> = {}): NewMealItem {
+  return {
+    name: 'Chicken fries',
+    portion: '100 g',
+    nutrition: fromPer100({ kcal: 250, protein: 14, carbs: 20, fat: 12 }, 100),
+    barcode: CHICKEN_FRIES_CODE,
+    ...over,
+  };
+}
+
+describe('a barcode the user typed in once', () => {
+  it('is answered from memory, and the network is never asked', async () => {
+    await addMeal({ name: 'Snack' }, [chickenFries()]);
+    // Any request at all is recorded and then refused, so an answer cannot have come from one.
+    const calls = mockFetch([]);
+
+    const r = await lookupBarcode(CHICKEN_FRIES_CODE);
+
+    expect(r.from).toBe('memory');
+    expect(r.label).toEqual({ code: CHICKEN_FRIES_CODE, brand: '', name: 'Chicken fries', per100: { kcal: 250, protein: 14, carbs: 20, fat: 12 }, servingGrams: 100 });
+    // The lookup hands back the food itself, whose source is the user's, so it is not badged a label.
+    expect(r.memory?.name).toBe('Chicken fries');
+    expect(r.memory?.source).toBe('user');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('is answered from memory while offline, before anyone checks the connection', async () => {
+    await addMeal({ name: 'Snack' }, [chickenFries()]);
+    const calls = mockFetch([]);
+    vi.stubGlobal('navigator', { onLine: false });
+    expect((await lookupBarcode(CHICKEN_FRIES_CODE)).from).toBe('memory');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('beats a miss cached earlier, which is what made the user type it in', async () => {
+    const earlier = mockFetch([OFF_NOT_FOUND]);
+    expect(await lookupBarcode(CHICKEN_FRIES_CODE)).toEqual({ label: null, from: 'network' });
+    expect((await lookupBarcode(CHICKEN_FRIES_CODE)).from).toBe('cache');
+    expect(earlier).toHaveLength(1);
+
+    await addMeal({ name: 'Snack' }, [chickenFries()]);
+    vi.unstubAllGlobals();
+    const later = mockFetch([]);
+
+    const r = await lookupBarcode(CHICKEN_FRIES_CODE);
+    expect(r.from).toBe('memory');
+    expect(r.label?.per100.kcal).toBe(250);
+    expect(later).toHaveLength(0);
+  });
+
+  it('is not what a different barcode is answered with', async () => {
+    await addMeal({ name: 'Snack' }, [chickenFries()]);
+    const calls = mockFetch([OFF_NOT_FOUND]);
+    expect(await lookupBarcode('5012345678900')).toEqual({ label: null, from: 'network' });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('is not what a food typed in with no barcode is answered with', async () => {
+    await addMeal({ name: 'Snack' }, [chickenFries({ barcode: undefined })]);
+    const calls = mockFetch([OFF_NOT_FOUND]);
+    expect((await lookupBarcode(CHICKEN_FRIES_CODE)).from).toBe('network');
+    expect(calls).toHaveLength(1);
+  });
+
+  it('is answered when only the digits of the code match', async () => {
+    await addMeal({ name: 'Snack' }, [chickenFries()]);
+    const calls = mockFetch([]);
+    expect((await lookupBarcode(' 5099 9999 99994 ')).from).toBe('memory');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('still refuses something that is not a barcode, memory or no memory', async () => {
+    await addMeal({ name: 'Snack' }, [chickenFries({ barcode: '123' })]);
+    // A barcode too short to be one is never stored by the sheet; even stored, it is not looked up.
+    expect(await lookupBarcode('123')).toEqual({ label: null, from: 'invalid' });
+  });
+});
+
+describe('a pack the database knows only in part', () => {
+  const MI_GORENG = '8991001000004';
+
+  it('names the pack when it has a name and no figures, and does not remember it as a miss', async () => {
+    const calls = mockFetch([
+      { body: { status: 1, product: { code: MI_GORENG, product_name: 'Mi Goreng', brands: 'Indomie, Salim', nutriments: { proteins_100g: 9 } } } },
+      { body: { status: 1, product: { code: MI_GORENG, product_name: 'Mi Goreng', brands: 'Indomie', nutriments: { 'energy-kcal_100g': 450 } } } },
+    ]);
+
+    expect(await lookupBarcode(MI_GORENG)).toEqual({ label: null, from: 'network', partial: { name: 'Mi Goreng', brand: 'Indomie' } });
+    expect(await db.productCache.count()).toBe(0);
+
+    // Asked again, because a cached miss would have hidden the entry for a month — and it has
+    // since gained its figures.
+    const again = await lookupBarcode(MI_GORENG);
+    expect(calls).toHaveLength(2);
+    expect(again.label?.per100.kcal).toBe(450);
+    expect(again.partial).toBeUndefined();
+  });
+
+  it('asks for the fallback name fields, or an entry that only has one would look nameless', async () => {
+    const calls = mockFetch([{ body: { status: 1, product: { code: MI_GORENG, nutriments: {} } } }]);
+    await lookupBarcode(MI_GORENG);
+    expect(calls[0]).toContain('generic_name');
+    expect(calls[0]).toContain('product_name_en');
+    expect(calls[0]).toContain('abbreviated_product_name');
+  });
+
+  it('leaves an entry with neither a name nor figures as the miss it is, and remembers it', async () => {
+    mockFetch([{ body: { status: 1, product: { code: MI_GORENG, brands: 'Indomie', nutriments: {} } } }]);
+    expect(await lookupBarcode(MI_GORENG)).toEqual({ label: null, from: 'network' });
+    expect(await db.productCache.count()).toBe(1);
+  });
+
+  it('reads the figures of an entry that gives its energy in kilojoules only', async () => {
+    mockFetch([{ body: { status: 1, product: { code: MI_GORENG, product_name: 'Chicken Fries', nutriments: { 'energy-kj_100g': 1084 } } } }]);
+    expect((await lookupBarcode(MI_GORENG)).label?.per100.kcal).toBe(259);
+  });
+
+  it('returns and remembers the figures of an entry with no name at all', async () => {
+    mockFetch([{ body: { status: 1, product: { code: MI_GORENG, nutriments: { 'energy-kcal_100g': 450, proteins_100g: 9 } } } }]);
+    const first = await lookupBarcode(MI_GORENG);
+    expect(first.label).toMatchObject({ name: '', per100: { kcal: 450, protein: 9 } });
+    const second = await lookupBarcode(MI_GORENG);
+    expect(second.from).toBe('cache');
+    expect(second.label?.name).toBe('');
   });
 });

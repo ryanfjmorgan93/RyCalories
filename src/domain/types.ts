@@ -396,6 +396,13 @@ export interface FoodMemory {
    * remembered count reads "3 rashers" rather than borrowing the food's own name. */
   unitLabel?: string;
   unitPlural?: string;
+  /**
+   * The pack's barcode (digits only), when the food was typed in after a scan the database could
+   * not fill, so the next scan of that pack fills from here instead of asking again. Absent on
+   * every food that was not typed in against a scan. Not indexed: `foods` is small and the lookup
+   * is one filter over it.
+   */
+  barcode?: string;
   source: import('./food').FoodSource;
   timesUsed: number;
   lastUsedAt: string;

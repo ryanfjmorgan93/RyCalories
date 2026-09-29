@@ -23,6 +23,11 @@ export interface LabelNutrition {
   /** Barcode, when the result came from one. */
   code: string;
   brand: string;
+  /**
+   * May be '' — a crowd-sourced entry can carry figures and no name at all. The figures are still
+   * worth filling in, so such a label is returned rather than dropped; `displayName` then falls
+   * back to the brand, and the name-lookup matcher skips it (it has nothing to match on).
+   */
   name: string;
   per100: Macros;
   /** Stated serving weight in grams, when the database knows one. */
@@ -31,8 +36,18 @@ export interface LabelNutrition {
   packGrams?: number;
 }
 
-/** What we ask Open Food Facts to return. Fewer fields, smaller response, faster on a phone. */
-export const OFF_FIELDS = 'code,product_name,brands,quantity,serving_size,serving_quantity,product_quantity,nutriments';
+/**
+ * What we ask Open Food Facts to return. Fewer fields, smaller response, faster on a phone.
+ * The extra name fields are fallbacks for entries whose `product_name` is blank — see `productName`.
+ */
+export const OFF_FIELDS =
+  'code,product_name,product_name_en,generic_name,abbreviated_product_name,brands,quantity,serving_size,serving_quantity,product_quantity,nutriments';
+
+/** The digits of a scanned or typed barcode, or null when they cannot be one (8 to 14 digits). */
+export function barcodeDigits(code: string): string | null {
+  const digits = code.replace(/\D/g, '');
+  return digits.length >= 8 && digits.length <= 14 ? digits : null;
+}
 
 /**
  * Words that carry no identity. "Bar" and "pack" are packaging, not product, and matching on them
@@ -117,10 +132,78 @@ export function plausiblePack(grams: number | undefined): number | undefined {
   return grams !== undefined && grams >= PACK_MIN_G && grams <= PACK_MAX_G ? grams : undefined;
 }
 
+/** kJ per kcal, the conversion food labels use. */
+const KJ_PER_KCAL = 4.184;
+
+/**
+ * kcal per 100 g from whichever energy field the entry carries, or undefined when it has none.
+ *
+ * In order: a stated kcal figure; a bare `energy-kcal` (only when its unit really is kcal); then
+ * kilojoules converted — `energy-kj_100g`, else `energy_100g`. Open Food Facts stores
+ * `energy_100g` in kJ by definition, whatever unit the contributor typed the pack's figure in
+ * (checked against the live API, September 2026: `energy_100g` 671.8 beside `energy-kcal_100g`
+ * 80.6). It is only read when `energy_unit` is kJ or absent — a different unit beside it says the
+ * entry is not laid out the usual way, and a guess that could be four times out is worse than
+ * leaving the user to type the figure.
+ *
+ * Zero is a real answer for the explicit kJ field (water) but not for `energy_100g`, where an
+ * absent figure and a zero are indistinguishable once the unit is missing too.
+ */
+function energyKcal(n: Record<string, unknown>): number | undefined {
+  const kcal = num(n, 'energy-kcal_100g');
+  if (kcal !== undefined) return kcal;
+
+  // Some entries only carry a bare energy-kcal. Take it only if the unit really is kcal.
+  const unit = typeof n['energy-kcal_unit'] === 'string' ? (n['energy-kcal_unit'] as string) : 'kcal';
+  if (unit.toLowerCase() === 'kcal') {
+    const bare = num(n, 'energy-kcal');
+    if (bare !== undefined) return bare;
+  }
+
+  const kj = num(n, 'energy-kj_100g');
+  if (kj !== undefined) return kj < 0 ? undefined : Math.round(kj / KJ_PER_KCAL);
+
+  const energyUnit = n['energy_unit'];
+  const inKj = energyUnit === undefined || (typeof energyUnit === 'string' && energyUnit.toLowerCase() === 'kj');
+  const energy = num(n, 'energy_100g');
+  if (inKj && energy !== undefined && energy > 0) return Math.round(energy / KJ_PER_KCAL);
+  return undefined;
+}
+
+/**
+ * The best name an entry offers. `product_name` is the one people fill in, but plenty of entries
+ * leave it blank and carry the same words as an English name, a generic name ("Instant noodles")
+ * or the abbreviated name printed on the pack, in that order.
+ */
+function productName(o: Record<string, unknown>): string {
+  for (const key of ['product_name', 'product_name_en', 'generic_name', 'abbreviated_product_name']) {
+    const t = firstText(o[key]);
+    if (t) return t;
+  }
+  return '';
+}
+
+/**
+ * The name and brand a product record gives about itself, or null when it has no name. For an
+ * entry `parseProduct` refuses for want of an energy figure: the pack is real and its name is
+ * worth putting on the sheet, so the user types only the figures.
+ */
+export function productIdentity(p: unknown): { name: string; brand?: string } | null {
+  if (!p || typeof p !== 'object') return null;
+  const o = p as Record<string, unknown>;
+  const name = productName(o);
+  if (!name) return null;
+  const brand = firstText(o['brands']);
+  return { name, ...(brand ? { brand } : {}) };
+}
+
 /**
  * Turn one Open Food Facts product object into label nutrition, or null when it is unusable.
- * The database is crowd-sourced and patchy: a product with no name or no energy figure is no use,
- * and pretending otherwise is how a food ends up with 0 kcal and a badge saying that is a fact.
+ * The database is crowd-sourced and patchy: a product with no energy figure is no use, and
+ * pretending otherwise is how a food ends up with 0 kcal and a badge saying that is a fact.
+ *
+ * A product with figures and no name at all IS returned, with `name: ''`: the figures are the hard
+ * part to type and the name is a word, so the sheet fills the figures and asks for the name.
  */
 export function parseProduct(p: unknown): LabelNutrition | null {
   if (!p || typeof p !== 'object') return null;
@@ -128,17 +211,10 @@ export function parseProduct(p: unknown): LabelNutrition | null {
   const n = o['nutriments'] as Record<string, unknown> | undefined;
   if (!n || typeof n !== 'object') return null;
 
-  let kcal = num(n, 'energy-kcal_100g');
-  if (kcal === undefined) {
-    // Some entries only carry a bare energy-kcal. Take it only if the unit really is kcal.
-    const unit = typeof n['energy-kcal_unit'] === 'string' ? (n['energy-kcal_unit'] as string) : 'kcal';
-    if (unit.toLowerCase() === 'kcal') kcal = num(n, 'energy-kcal');
-  }
+  const kcal = energyKcal(n);
   if (kcal === undefined || kcal < 0) return null;
 
-  const name = firstText(o['product_name']);
-  if (!name) return null;
-
+  const name = productName(o);
   const brand = firstText(o['brands']);
   const servingGrams = positive(num(o, 'serving_quantity')) ?? parseGrams(String(o['serving_size'] ?? ''));
   const packGrams = positive(num(o, 'product_quantity')) ?? parseGrams(String(o['quantity'] ?? ''));
@@ -223,6 +299,8 @@ export function bestMatch(query: MatchQuery, candidates: LabelNutrition[], thres
 
   const scored: Match[] = [];
   for (const label of candidates) {
+    // A nameless label (figures, no name) has no tokens, so it scores 0 and never reaches `scored`:
+    // there is nothing in it to match a name against. Pinned by a test, not left to the arithmetic.
     if (qBrand.size > 0 && intersectionSize(qBrand, tokens(label.brand)) === 0) continue;
     const score = tokenScore(qTokens, without(tokens(label.name), qBrand));
     // Strictly greater: a bare 0.5 is one word shared out of two on each side, which is what
@@ -296,7 +374,7 @@ export function portionLabel(label: LabelNutrition, grams: number): string {
  * "Trek Trek Protein Flapjacks"; the brand is only prepended when the name does not already lead
  * with it.
  */
-export function displayName(label: LabelNutrition): string {
+export function displayName(label: Pick<LabelNutrition, 'brand' | 'name'>): string {
   const brand = tidyCase(label.brand.trim());
   const name = tidyCase(label.name.trim());
   if (!brand) return name;
