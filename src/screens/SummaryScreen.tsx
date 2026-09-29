@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { backupAfterSessionFinish } from '@/db/historySafety';
 import { buildSummary, discardSession, finishSession, type SessionSummary, type SummaryItem } from '@/db/repo';
-import { decisionLine, fmtDate, fmtDuration, fmtKg, fmtNum, fmtWeight } from '@/domain/format';
+import { decisionLine, fmtDate, fmtDuration, fmtKg, fmtNum, fmtWeight, legDayProteinLabel } from '@/domain/format';
 import { lockInBlocked, type Suggestion } from '@/domain/engine';
 import type { PersonalRecord } from '@/domain/records';
 import { NIGGLE_TAGS, type Niggle, type NiggleTag } from '@/domain/types';
@@ -15,6 +15,7 @@ import { NumberField, TextInput } from '@/ui/components/NumberField';
 import { Confirm } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { TopBar } from '@/ui/components/TopBar';
+import { useSettings } from '@/ui/hooks';
 
 interface Choice {
   mode: 'accept' | 'override';
@@ -99,6 +100,7 @@ export function SummaryScreen() {
   const [checklist, setChecklist] = useState<{ electrolytes: boolean; protein: boolean }>({ electrolytes: false, protein: false });
   const [saving, setSaving] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
+  const settings = useSettings();
 
   useEffect(() => {
     useTimer.getState().skip();
@@ -346,7 +348,7 @@ export function SummaryScreen() {
             <Card className="px-4 py-1">
               <CheckRow label="Electrolytes (intra-workout)" checked={checklist.electrolytes} onChange={(v) => setChecklist((c) => ({ ...c, electrolytes: v }))} />
               <div className="h-px bg-line" />
-              <CheckRow label="Protein 200 g today" checked={checklist.protein} onChange={(v) => setChecklist((c) => ({ ...c, protein: v }))} />
+              <CheckRow label={`${legDayProteinLabel(settings?.proteinTargetLegDay)} today`} checked={checklist.protein} onChange={(v) => setChecklist((c) => ({ ...c, protein: v }))} />
             </Card>
           </>
         )}

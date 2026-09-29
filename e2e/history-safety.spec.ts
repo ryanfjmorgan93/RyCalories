@@ -320,3 +320,58 @@ test.describe('backup, loss and restore', () => {
     await expect.poll(async () => (await readRawIron(page)).tables.sessions.length, { timeout: 15_000 }).toBe(sessionsBefore);
   });
 });
+
+test.describe('Settings, Backups, Restore', () => {
+  test('Restore on a listed file opens the Merge / Replace sheet first, and Merge then restores it', async ({ page }) => {
+    await fresh(page);
+    await trainAndFinish(page);
+
+    await page.goto('/settings');
+    await page.getByTestId('backup-now').click();
+    // A backup that holds the finished session, not merely any backup: the sessions in the file itself.
+    await expect
+      .poll(async () => backupsOfKind(await readBackupFiles(page), 'auto').filter((f) => JSON.parse(f.content).tables.sessions.length > 0).length, { timeout: 15_000 })
+      .toBeGreaterThan(0);
+    const sessionsBefore = (await readRawIron(page)).tables.sessions.length;
+    expect(sessionsBefore).toBe(1);
+
+    // Loss through RAW IndexedDB, as in the test above, so there is something for a restore to put back.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          const req = indexedDB.open('iron');
+          req.onsuccess = () => {
+            const db = req.result;
+            const tx = db.transaction(['sessions', 'setLogs'], 'readwrite');
+            tx.objectStore('sessions').clear();
+            tx.objectStore('setLogs').clear();
+            tx.oncomplete = () => {
+              db.close();
+              resolve();
+            };
+            tx.onerror = () => reject(tx.error);
+          };
+          req.onerror = () => reject(req.error);
+        }),
+    );
+    expect((await readRawIron(page)).tables.sessions).toHaveLength(0);
+
+    // The listed row whose file carries that session, found by what it says it holds.
+    const row = page.getByTestId('backup-file').filter({ hasText: /\b1 session · / }).first();
+    await expect(row).toBeVisible();
+    await row.getByTestId('backup-restore').click();
+
+    // The sheet is the positive signal that the click was handled: it exists only once the file
+    // has been read and parsed. Both choices are offered, and nothing has been restored yet.
+    const replace = page.getByRole('button', { name: 'Replace everything' });
+    const merge = page.getByRole('button', { name: 'Merge', exact: true });
+    await expect(page.getByText('Restore backup', { exact: true })).toBeVisible();
+    await expect(replace).toBeVisible();
+    await expect(merge).toBeVisible();
+    expect((await readRawIron(page)).tables.sessions).toHaveLength(0);
+
+    await merge.click();
+    await expect.poll(async () => (await readRawIron(page)).tables.sessions.length, { timeout: 15_000 }).toBe(sessionsBefore);
+    await expect(merge).toHaveCount(0);
+  });
+});

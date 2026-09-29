@@ -46,3 +46,13 @@ export function isConsecutiveLower(
   const picked = routines.find((r) => r.id === pickedId);
   return Boolean(last?.isLowerBody && picked?.isLowerBody);
 }
+
+/**
+ * True when a routine is known to have no exercises, so there is nothing to start. `counts` is
+ * exercises-per-routine as the screens build it — a routine with no rows is simply absent from it —
+ * so absence means empty only once the counts have loaded: `undefined` (still loading) judges
+ * nothing, and a Start button must not flash disabled on every visit.
+ */
+export function hasNoExercises(counts: ReadonlyMap<string, number> | undefined, routineId: string): boolean {
+  return counts !== undefined && (counts.get(routineId) ?? 0) === 0;
+}

@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { BUILD_LABEL } from '@/buildInfo';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
@@ -12,6 +12,8 @@ import { dateKeyToDate, toDateKey } from '@/domain/dates';
 import { fmtNum } from '@/domain/format';
 import { calorieTargetOn } from '@/domain/nutrition';
 import { MUSCLE_GROUPS, type MuscleGroup, type Settings } from '@/domain/types';
+import type { NotificationPermissionStatus } from '@/domain/rest';
+import { cancelRestNotification, isNative, nativeNotificationPermission, requestNativeNotifications } from '@/state/native';
 import { notificationPermission, requestNotifications } from '@/state/notify';
 import { AboutCard } from '@/ui/AboutCard';
 import { AssistantSettingsCard } from '@/ui/AssistantSettingsCard';
@@ -35,7 +37,7 @@ const PLATE_SIZES = [25, 20, 15, 10, 5, 2.5, 1.25, 0.5];
 // Draft reseeding
 //
 // This screen mixes drafted cards (their own Save button) with instant-save controls elsewhere
-// on the same screen (toggles, plate chips, the theme and effort-scale segmented controls). Every
+// on the same screen (toggles, plate chips, the theme segmented control). Every
 // write goes through `saveSettings`, which bumps `settings.savedAt` regardless of which fields it
 // touched — so reseeding a card whenever `settings` changes at all reverts a half-typed draft the
 // moment the user flips an unrelated toggle. A card must reseed only when the SAVED values of the
@@ -388,12 +390,62 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 // ---------------------------------------------------------------------------
 // Rest timer
 
-const PERMISSION_LABEL: Record<ReturnType<typeof notificationPermission>, string> = {
-  granted: 'Allowed',
-  denied: 'Blocked in browser settings',
-  default: 'Not asked yet',
-  unsupported: 'Not supported here',
-};
+/** What the permission row knows: the phone's answer (async, so `loading` first) or the browser's. */
+type PermissionView = NotificationPermissionStatus | 'loading';
+
+function webPermissionView(): PermissionView {
+  const p = notificationPermission();
+  return p === 'default' ? 'prompt' : p;
+}
+
+function permissionLabel(perm: PermissionView, native: boolean): string {
+  switch (perm) {
+    case 'loading':
+      return 'Checking…';
+    case 'granted':
+      return 'Allowed';
+    case 'denied':
+      return native ? 'Blocked in system settings' : 'Blocked in browser settings';
+    case 'prompt':
+      return 'Not asked yet';
+    case 'unsupported':
+      return 'Not supported here';
+  }
+}
+
+/**
+ * The notification permission for the row in the Rest card. In the APK the web Notification API is
+ * not the thing that shows the rest-over notification (LocalNotifications is), so the row asks the
+ * plugin; in a browser it keeps asking the browser. Re-read when the app comes back to the front,
+ * because the user may have changed it in system settings in between.
+ */
+function useNotificationPermission(): { perm: PermissionView; native: boolean; request: () => Promise<void> } {
+  const native = isNative();
+  const [perm, setPerm] = useState<PermissionView>(() => (native ? 'loading' : webPermissionView()));
+  useEffect(() => {
+    if (!native) return;
+    let live = true;
+    const read = () => void nativeNotificationPermission().then((p) => live && setPerm(p));
+    read();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') read();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      live = false;
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [native]);
+  const request = async () => {
+    if (native) {
+      setPerm(await requestNativeNotifications());
+      return;
+    }
+    await requestNotifications();
+    setPerm(webPermissionView());
+  };
+  return { perm, native, request };
+}
 
 const REST_OWNED_KEYS: (keyof Settings)[] = ['restCompoundSec', 'restIsolationSec', 'restCarrySec'];
 
@@ -402,7 +454,7 @@ function RestCard({ settings }: { settings: Settings }) {
   const [isolation, setIsolation] = useState<number | null>(settings.restIsolationSec);
   const [carry, setCarry] = useState<number | null>(settings.restCarrySec);
   const [applyOpen, setApplyOpen] = useState(false);
-  const [perm, setPerm] = useState(() => notificationPermission());
+  const { perm, native, request: requestPermission } = useNotificationPermission();
   useOwnedReseed(settings, REST_OWNED_KEYS, () => {
     setCompound(settings.restCompoundSec);
     setIsolation(settings.restIsolationSec);
@@ -483,17 +535,22 @@ function RestCard({ settings }: { settings: Settings }) {
           checked={settings.restNotify}
           onChange={async (v) => {
             await saveSettings({ restNotify: v });
+            // Off mid-rest: the notification already scheduled for this rest must not still fire.
+            if (!v) await cancelRestNotification();
             toast('Saved', 'ok');
           }}
         />
         <Divider />
-        <div className="flex min-h-14 items-center gap-3 py-2">
+        <div className="flex min-h-14 items-center gap-3 py-2" data-testid="notification-permission">
           <div className="min-w-0 flex-1">
             <div className="font-semibold">Notification permission</div>
-            <div className="text-sm text-muted">{PERMISSION_LABEL[perm]}</div>
+            <div className="text-sm text-muted" data-testid="notification-permission-state">
+              {permissionLabel(perm, native)}
+            </div>
           </div>
-          {perm !== 'granted' && perm !== 'unsupported' && (
-            <Button size="md" variant="outline" onClick={async () => setPerm(await requestNotifications())}>
+          {/* On the phone a refusal can only be undone in system settings, so the button is for 'prompt' only. */}
+          {(perm === 'prompt' || (perm === 'denied' && !native)) && (
+            <Button size="md" variant="outline" onClick={() => void requestPermission()}>
               Allow notifications
             </Button>
           )}

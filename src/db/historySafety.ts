@@ -22,7 +22,7 @@ import {
 } from './autoBackup';
 import { db, DB_NAME, DB_VERSION } from './db';
 import { getBaseline, isPendingDeletion, writeBaseline } from './lossGuard';
-import { isBackup, importBackup } from './backup';
+import { isBackup, importBackup, type Backup } from './backup';
 import { dumpRaw } from '@/boot/recovery';
 import { BUILD_LABEL } from '@/buildInfo';
 import { nowIso } from '@/domain/dates';
@@ -253,14 +253,25 @@ export async function dismissHistoryNotice(): Promise<void> {
   await rebaseline();
 }
 
-/** Reads the named backup file, validates it, restores it (merge), then clears the notice and re-baselines. */
-export async function restoreHistoryNotice(filename: string): Promise<{ ok: boolean; error?: string }> {
+/** Reads the named backup file and checks it is an Iron backup. Restores nothing. */
+export async function loadListedBackup(filename: string): Promise<{ ok: true; backup: Backup } | { ok: false; error: string }> {
   try {
     const text = await readBackupFile(filename);
     if (!text) throw new Error('Backup file could not be read');
     const parsed: unknown = JSON.parse(text);
     if (!isBackup(parsed)) throw new Error('Not a valid Iron backup');
-    await importBackup(parsed, 'merge');
+    return { ok: true, backup: parsed };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** Reads the named backup file, validates it, restores it (merge), then clears the notice and re-baselines. */
+export async function restoreHistoryNotice(filename: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const loaded = await loadListedBackup(filename);
+    if (!loaded.ok) throw new Error(loaded.error);
+    await importBackup(loaded.backup, 'merge');
     clearStoredNotice();
     await rebaseline();
     return { ok: true };

@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { restDone } from '@/state/notify';
 import { remainingSec, useTimer } from '@/state/timer';
 import { fmtDuration } from '@/domain/format';
+import { shouldNotifyRestEnd } from '@/domain/rest';
 import { useNow, useSessionDock, useSettings } from './hooks';
 
 // The draining ring: same geometry as the approved mockup (r=20 on a 48×48 viewBox), so the
@@ -28,6 +29,7 @@ export function RestTimerBar() {
   const active = endsAt !== null;
   const now = useNow(250, active);
 
+  const notifyOnEnd = shouldNotifyRestEnd(settings);
   const remaining = remainingSec(endsAt, now);
   const overBy = endsAt === null ? 0 : Math.floor((now - endsAt) / 1000);
 
@@ -37,9 +39,9 @@ export function RestTimerBar() {
     markFired(endsAt);
     // If we're very late (e.g. reopened the app long after), stay quiet.
     if (now - endsAt < 60_000) {
-      void restDone({ vibrate: settings?.restVibrate ?? true, notify: settings?.restNotify ?? true, label });
+      void restDone({ vibrate: settings?.restVibrate ?? true, notify: notifyOnEnd, label });
     }
-  }, [now, endsAt, firedFor, markFired, label, settings?.restVibrate, settings?.restNotify]);
+  }, [now, endsAt, firedFor, markFired, label, settings?.restVibrate, notifyOnEnd]);
 
   useEffect(() => {
     if (endsAt === null) return;

@@ -9,7 +9,7 @@
  * still owed a turn when it hasn't hit its own target AND has fewer counted sets than the member
  * that was just logged now has.
  */
-import type { SetType } from './types';
+import type { SetType, Settings } from './types';
 
 export interface RestGroupMember {
   key: string;
@@ -35,4 +35,35 @@ export function shouldStartRest(members: RestGroupMember[], loggedKey: string, l
     (m) => m.key !== loggedKey && !m.skipped && m.counted < m.targetSets && m.counted < loggedCounted,
   );
   return !someoneElseNext;
+}
+
+/**
+ * Whether the end-of-rest cue should reach the system notification tray — pure. `restNotify` is the
+ * Settings → Rest toggle; `undefined` (settings not loaded yet, or no row) is on, the same default
+ * `RestTimerBar` uses for the in-app path, so the two paths never disagree about a fresh install.
+ */
+export function shouldNotifyRestEnd(settings: Pick<Settings, 'restNotify'> | undefined): boolean {
+  return settings?.restNotify ?? true;
+}
+
+/** What the notification-permission row can say — the app's own vocabulary, not the plugin's. */
+export type NotificationPermissionStatus = 'granted' | 'denied' | 'prompt' | 'unsupported';
+
+/**
+ * Collapse Capacitor's four permission states onto the three the row distinguishes. Android's
+ * 'prompt-with-rationale' (asked once and dismissed, the system will ask again) is still "not
+ * asked yet" from the user's side. Anything unrecognised is 'unsupported' rather than guessed at.
+ */
+export function mapPermissionState(state: string): NotificationPermissionStatus {
+  switch (state) {
+    case 'granted':
+      return 'granted';
+    case 'denied':
+      return 'denied';
+    case 'prompt':
+    case 'prompt-with-rationale':
+      return 'prompt';
+    default:
+      return 'unsupported';
+  }
 }

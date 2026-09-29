@@ -3,7 +3,9 @@ import { exportBackup, exportCsv, importBackup, type Backup } from './backup';
 import { db } from './db';
 import {
   addExtraExercise,
+  addRoutineExercise,
   buildSummary,
+  createRoutine,
   createRoutineFromSession,
   deleteSet,
   ensureSeeded,
@@ -16,6 +18,7 @@ import {
   logSet,
   migrateSeed,
   previousSets,
+  removeRoutineExercise,
   resetToSeed,
   routineItems,
   saveSettings,
@@ -129,6 +132,27 @@ describe('seeding', () => {
 describe('sessions and progression (acceptance §11)', () => {
   beforeEach(async () => {
     await resetToSeed();
+  });
+
+  it('a routine with no exercises cannot be started, and nothing is written', async () => {
+    const empty = await createRoutine({ name: 'Empty day', isLowerBody: false });
+
+    await expect(startSession(empty.id)).rejects.toThrow('Routine has no exercises');
+    await expect(startSession(empty.id, { deload: true })).rejects.toThrow('Routine has no exercises');
+
+    expect(await db.sessions.count()).toBe(0);
+    expect(await getActiveSession()).toBeUndefined();
+  });
+
+  it('a routine that has lost its last exercise cannot be started either; with one added back it can', async () => {
+    const routine = await createRoutine({ name: 'Two-way', isLowerBody: false });
+    const rx = await addRoutineExercise(routine.id, RDL);
+    await removeRoutineExercise(rx.id);
+    await expect(startSession(routine.id)).rejects.toThrow('Routine has no exercises');
+
+    await addRoutineExercise(routine.id, RDL);
+    const session = await startSession(routine.id);
+    expect(session.routineId).toBe(routine.id);
   });
 
   it('#2 — RDL 110 × 8,8,8,8 proposes 115, Accept stores it, next session prescribes 115', async () => {
@@ -456,6 +480,29 @@ describe('sessions and progression (acceptance §11)', () => {
     const rows = await db.bodyweight.where('date').equals('2026-09-08').toArray();
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ kg: 74.4, note: 'evening' });
+  });
+
+  it('re-logging a day with no note keeps that day\'s note; an empty note clears it', async () => {
+    await logBodyweight('2026-09-09', 74.0, 'after the gym');
+
+    // Home's quick "Log today" passes no note at all: the reading changes, the note stays.
+    await logBodyweight('2026-09-09', 74.3);
+    const kept = await db.bodyweight.where('date').equals('2026-09-09').toArray();
+    expect(kept).toHaveLength(1);
+    expect(kept[0]).toMatchObject({ kg: 74.3, note: 'after the gym' });
+
+    // The editor passes what is in its field: a cleared field is '' (or spaces) and removes the note.
+    await logBodyweight('2026-09-09', 74.3, '');
+    expect((await db.bodyweight.where('date').equals('2026-09-09').first())?.note).toBeUndefined();
+
+    await logBodyweight('2026-09-09', 74.3, 'evening');
+    await logBodyweight('2026-09-09', 74.3, '   ');
+    expect((await db.bodyweight.where('date').equals('2026-09-09').first())?.note).toBeUndefined();
+  });
+
+  it('a first reading with no note has none', async () => {
+    await logBodyweight('2026-09-10', 74.1);
+    expect((await db.bodyweight.where('date').equals('2026-09-10').first())?.note).toBeUndefined();
   });
 });
 

@@ -66,13 +66,21 @@ export function RoutineEditScreen() {
     await reorderRoutineExercises(ids);
   };
 
+  // Known empty (not merely still loading): nothing to start. A live session can still be resumed.
+  const noExercises = items !== undefined && items.length === 0;
+
   const start = async () => {
     if (active) {
       nav(`/session/${active.id}`);
       return;
     }
-    const s = await startSession(routine.id);
-    nav(`/session/${s.id}`);
+    if (noExercises) return;
+    try {
+      const s = await startSession(routine.id);
+      nav(`/session/${s.id}`);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not start', 'danger');
+    }
   };
 
   return (
@@ -111,7 +119,7 @@ export function RoutineEditScreen() {
         </Button>
 
         <div className="mt-6">
-          <Button size="xl" variant="primary" full onClick={() => void start()} data-testid="start-routine">
+          <Button size="xl" variant="primary" full disabled={noExercises && !active} onClick={() => void start()} data-testid="start-routine">
             {active ? `Resume ${active.title}` : 'Start this routine'}
           </Button>
         </div>

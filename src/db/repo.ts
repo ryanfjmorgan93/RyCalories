@@ -429,11 +429,18 @@ export async function getActiveSession(): Promise<Session | undefined> {
   return db.sessions.filter((s) => !s.endedAt).first();
 }
 
-/** Start a session for a routine. If one is already live, it is returned instead. */
+/**
+ * Start a session for a routine. If one is already live, it is returned instead. A routine with no
+ * exercises cannot be started: the session would open onto an empty screen and, saved, would count
+ * as a training day with nothing in it.
+ */
 export async function startSession(routineId: string, opts?: { deload?: boolean }): Promise<Session> {
-  return db.transaction('rw', [db.sessions, db.routines], async () => {
+  return db.transaction('rw', [db.sessions, db.routines, db.routineExercises], async () => {
     const active = await getActiveSession();
     if (active) return active;
+    if ((await db.routineExercises.where('routineId').equals(routineId).count()) === 0) {
+      throw new Error('Routine has no exercises');
+    }
     const routine = await db.routines.get(routineId);
     const s: Session = {
       id: uuid(),
@@ -1028,10 +1035,16 @@ export async function decisionsForRoutineExercise(routineExerciseId: string): Pr
 // ---------------------------------------------------------------------------
 // Bodyweight
 
-/** Upsert by date: logging the same day again replaces that day's reading. */
+/**
+ * Upsert by date: logging the same day again replaces that day's reading. The note follows what
+ * the caller said: `undefined` says nothing, so the day's existing note stays; a string (blank
+ * included) is the note, and a blank one clears it. A quick log with no note field must not
+ * silently delete a note the user wrote.
+ */
 export async function logBodyweight(date: string, kg: number, note?: string): Promise<Bodyweight> {
   const existing = await db.bodyweight.where('date').equals(date).first();
-  const entry: Bodyweight = { id: existing?.id ?? uuid(), date, kg: roundKg(kg), note: note?.trim() || undefined };
+  const kept = note === undefined ? existing?.note : note.trim() || undefined;
+  const entry: Bodyweight = { id: existing?.id ?? uuid(), date, kg: roundKg(kg), note: kept };
   await db.bodyweight.put(entry);
   return entry;
 }

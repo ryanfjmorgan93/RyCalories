@@ -6,6 +6,8 @@ import { Capacitor } from '@capacitor/core';
 import { Directory, Encoding, Filesystem } from '@capacitor/filesystem';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Share } from '@capacitor/share';
+import { db } from '@/db/db';
+import { mapPermissionState, shouldNotifyRestEnd, type NotificationPermissionStatus } from '@/domain/rest';
 
 const REST_NOTIFICATION_ID = 7001;
 
@@ -30,11 +32,41 @@ export async function ensureNativeNotificationPermission(): Promise<boolean> {
   }
 }
 
-/** Schedule the "Rest over" notification for the timer deadline (replaces any earlier one). */
+/**
+ * The system's notification permission as the app's own three words, for the Settings row. Reads
+ * the state without asking. 'unsupported' off the phone, or if the plugin cannot answer.
+ */
+export async function nativeNotificationPermission(): Promise<NotificationPermissionStatus> {
+  if (!isNative()) return 'unsupported';
+  try {
+    return mapPermissionState((await LocalNotifications.checkPermissions()).display);
+  } catch {
+    return 'unsupported';
+  }
+}
+
+/** Ask the system for notification permission now (the Settings row's button); returns the outcome. */
+export async function requestNativeNotifications(): Promise<NotificationPermissionStatus> {
+  if (!isNative()) return 'unsupported';
+  try {
+    return mapPermissionState((await LocalNotifications.requestPermissions()).display);
+  } catch {
+    return 'unsupported';
+  }
+}
+
+/**
+ * Schedule the "Rest over" notification for the timer deadline (replaces any earlier one). Honours
+ * Settings → Rest → notification: the pending one is always cancelled first, so switching the toggle
+ * off mid-rest and then adding time leaves nothing scheduled. Settings are read from the table
+ * directly rather than through repo.getSettings, which seeds a missing row — a write this path has
+ * no business making.
+ */
 export async function scheduleRestNotification(endsAt: number, label: string): Promise<void> {
   if (!isNative()) return;
   try {
     await cancelRestNotification();
+    if (!shouldNotifyRestEnd(await db.settings.get('settings'))) return;
     if (!(await ensureNativeNotificationPermission())) return;
     await LocalNotifications.schedule({
       notifications: [

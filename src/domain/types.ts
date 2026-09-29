@@ -115,7 +115,7 @@ export interface RoutineExercise {
   optional: boolean;
   restSecOverride?: number;
   /**
-   * §4.8 Phase 2 — share one progression number across routines. When true, this
+   * Share one progression number across routines. When true, this
    * routine-exercise's currentWeight / mode / increment are kept in sync with every other
    * linked routine-exercise of the same exercise.
    */
@@ -153,7 +153,7 @@ export interface Session {
   extraExerciseIds?: string[];
   /** Where the record came from. Absent = logged in this app. */
   source?: 'hevy' | 'backup';
-  /** Leg-day checklist state (Phase 2). */
+  /** Leg-day checklist state. */
   checklist?: { electrolytes?: boolean; protein?: boolean };
   /** True when this session started as a deload: prescriptions were reduced and no weight decision was written. */
   deload?: boolean;

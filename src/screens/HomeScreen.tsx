@@ -10,7 +10,7 @@ import { useHistoryNoticeStore } from '@/state/historyNotice';
 import { ZERO } from '@/domain/food';
 import { fmtDateTime, fmtKg, fmtMinutes, fmtNum, plural } from '@/domain/format';
 import type { Prescription } from '@/domain/prescription';
-import { isConsecutiveLower, suggestNextRoutine } from '@/domain/schedule';
+import { hasNoExercises, isConsecutiveLower, suggestNextRoutine } from '@/domain/schedule';
 import { dateKeyToDate } from '@/domain/dates';
 import { weeklyDelta, bandStatus } from '@/domain/bodyweight';
 import type { Routine } from '@/domain/types';
@@ -66,9 +66,13 @@ export function HomeScreen() {
   const plan = useNextSessionPlan(suggested?.id, settings);
   const calendar = useCalendar(12, todayKey, settings);
 
+  // A routine with no exercises has nothing to start; the buttons say so instead of opening an empty session.
+  const empty = (r: Routine) => hasNoExercises(rxCounts, r.id);
+  const exerciseCountText = (r: Routine) => (empty(r) ? 'No exercises' : `${rxCounts?.get(r.id) ?? 0} exercises`);
+
   const starting = useRef(false);
   const start = async (r: Routine) => {
-    if (starting.current) return;
+    if (starting.current || empty(r)) return;
     if (last?.routineId && isConsecutiveLower(routines ?? [], last.routineId, r.id) && pending?.id !== r.id) {
       setPending(r);
       return;
@@ -79,17 +83,21 @@ export function HomeScreen() {
       setPending(null);
       setPickOpen(false);
       nav(`/session/${s.id}`);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not start', 'danger');
     } finally {
       starting.current = false;
     }
   };
 
   const startDeload = async (r: Routine) => {
-    if (starting.current) return;
+    if (starting.current || empty(r)) return;
     starting.current = true;
     try {
       const s = await startSession(r.id, { deload: true });
       nav(`/session/${s.id}`);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not start', 'danger');
     } finally {
       starting.current = false;
     }
@@ -177,10 +185,15 @@ export function HomeScreen() {
 
             {suggested && (
               <div className="mt-4 grid gap-2">
-                <Button size="xl" variant="primary" full onClick={() => void start(suggested)} data-testid="start-session">
+                {empty(suggested) && (
+                  <div className="text-sm font-semibold text-warn" data-testid="next-up-empty">
+                    No exercises
+                  </div>
+                )}
+                <Button size="xl" variant="primary" full disabled={empty(suggested)} onClick={() => void start(suggested)} data-testid="start-session">
                   Start
                 </Button>
-                <Button size="lg" variant="outline" full onClick={() => void startDeload(suggested)} data-testid="start-deload">
+                <Button size="lg" variant="outline" full disabled={empty(suggested)} onClick={() => void startDeload(suggested)} data-testid="start-deload">
                   Start as deload
                 </Button>
               </div>
@@ -221,7 +234,7 @@ export function HomeScreen() {
               <Row
                 onClick={() => nav(`/routines/${r.id}`)}
                 title={r.name}
-                subtitle={`${rxCounts?.get(r.id) ?? 0} exercises${r.targetMinutes ? ` · ${r.targetMinutes} min` : ''}${r.isLowerBody ? ' · lower' : ''}`}
+                subtitle={`${exerciseCountText(r)}${r.targetMinutes ? ` · ${r.targetMinutes} min` : ''}${r.isLowerBody ? ' · lower' : ''}`}
                 right={
                   active ? (
                     <ChevronIcon />
@@ -230,6 +243,7 @@ export function HomeScreen() {
                       size="sm"
                       variant={suggested?.id === r.id ? 'primary' : 'outline'}
                       data-testid={`start-${r.name}`}
+                      disabled={empty(r)}
                       onClick={(e) => {
                         e.stopPropagation();
                         void start(r);
@@ -271,7 +285,13 @@ export function HomeScreen() {
           {(routines ?? []).map((r, i) => (
             <div key={r.id}>
               {i > 0 && <Divider />}
-              <Row title={r.name} subtitle={`${rxCounts?.get(r.id) ?? 0} exercises${r.isLowerBody ? ' · lower' : ''}`} onClick={() => void start(r)} right={<ChevronIcon />} />
+              <Row
+                title={r.name}
+                subtitle={`${exerciseCountText(r)}${r.isLowerBody ? ' · lower' : ''}`}
+                onClick={empty(r) ? undefined : () => void start(r)}
+                right={empty(r) ? undefined : <ChevronIcon />}
+                dim={empty(r)}
+              />
             </div>
           ))}
         </div>

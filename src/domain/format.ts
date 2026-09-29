@@ -16,6 +16,15 @@ export function fmtKg(n: number): string {
   return `${fmtNum(n)} kg`;
 }
 
+/**
+ * The leg-day protein line of the session checklist, from the owner's own target
+ * (`settings.proteinTargetLegDay`). While settings have not loaded the figure is left out rather
+ * than showing a default that may not be the target.
+ */
+export function legDayProteinLabel(grams: number | undefined): string {
+  return grams === undefined ? 'Protein' : `Protein ${fmtNum(grams)} g`;
+}
+
 /** Weight label aware of exercise kind: bodyweight_plus shows "+5 kg" / "bodyweight". */
 export function fmtWeight(kind: ExerciseKind, n: number): string {
   if (kind === 'bodyweight_plus') return n === 0 ? 'bodyweight' : `+${fmtNum(n)} kg`;

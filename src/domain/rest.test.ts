@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shouldStartRest, type RestGroupMember } from './rest';
+import { mapPermissionState, shouldNotifyRestEnd, shouldStartRest, type RestGroupMember } from './rest';
 
 /**
  * Plays out a whole session against `shouldStartRest`, following the same rotation `currentKey`
@@ -96,5 +96,30 @@ describe('shouldStartRest', () => {
       { key: 'b', targetSets: 4 },
     ]);
     expect(results).toEqual([false, true, false, true, false, true, false, true]);
+  });
+});
+
+describe('shouldNotifyRestEnd', () => {
+  it('follows the Settings toggle when there is a settings row', () => {
+    expect(shouldNotifyRestEnd({ restNotify: true })).toBe(true);
+    expect(shouldNotifyRestEnd({ restNotify: false })).toBe(false);
+  });
+
+  it('is on when there is no settings row, the same default the in-app cue uses', () => {
+    expect(shouldNotifyRestEnd(undefined)).toBe(true);
+  });
+});
+
+describe('mapPermissionState', () => {
+  it('maps the four Capacitor states onto granted / denied / prompt', () => {
+    expect(mapPermissionState('granted')).toBe('granted');
+    expect(mapPermissionState('denied')).toBe('denied');
+    expect(mapPermissionState('prompt')).toBe('prompt');
+    expect(mapPermissionState('prompt-with-rationale')).toBe('prompt');
+  });
+
+  it('reads a state it does not know as unsupported rather than guessing', () => {
+    expect(mapPermissionState('limited')).toBe('unsupported');
+    expect(mapPermissionState('')).toBe('unsupported');
   });
 });

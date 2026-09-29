@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
 import { backupNow, getBackupStatus, isStoragePersisted, listBackups, type BackupStatus } from '@/db/autoBackup';
-import { restoreHistoryNotice } from '@/db/historySafety';
+import type { Backup } from '@/db/backup';
+import { dismissHistoryNotice, loadListedBackup } from '@/db/historySafety';
 import { KEEP_AUTO, KEEP_SPECIAL, type BackupFileInfo } from '@/domain/backupPolicy';
 import { fmtDateTime, plural } from '@/domain/format';
+import { useHistoryNoticeStore } from '@/state/historyNotice';
 import { isNative } from '@/state/native';
 import { Button } from '@/ui/components/Button';
 import { Card, Divider, Row } from '@/ui/components/Card';
 import { toast } from '@/ui/components/Toast';
+import { RestoreSheet } from '@/ui/RestoreSheet';
 
 const KIND_LABEL: Record<BackupFileInfo['kind'], string> = {
   auto: 'Automatic',
@@ -19,6 +22,8 @@ export function BackupsCard() {
   const [status, setStatus] = useState<BackupStatus>(() => getBackupStatus());
   const [persisted, setPersisted] = useState<boolean | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // The listed file, read and parsed, waiting on the Merge / Replace choice in the sheet.
+  const [pending, setPending] = useState<Backup | null>(null);
 
   const refresh = async () => {
     const [list, persist] = await Promise.all([listBackups(), isStoragePersisted()]);
@@ -46,13 +51,15 @@ export function BackupsCard() {
     }
   };
 
+  // Restore is a choice, not a click: the file is read here and handed to the same sheet the
+  // file-import flow uses, so Merge and Replace are the user's to pick and Replace still confirms.
   const restore = async (filename: string) => {
     if (busy) return;
     setBusy(filename);
     try {
-      const res = await restoreHistoryNotice(filename);
-      toast(res.ok ? 'Restored' : (res.error ?? 'Restore failed'), res.ok ? 'ok' : 'danger');
-      await refresh();
+      const res = await loadListedBackup(filename);
+      if (res.ok) setPending(res.backup);
+      else toast(res.error, 'danger');
     } finally {
       setBusy(null);
     }
@@ -93,7 +100,7 @@ export function BackupsCard() {
       {files && files.length > 0 && (
         <div className="mt-3 overflow-hidden rounded-xl border border-line">
           {files.map((f, i) => (
-            <div key={f.filename}>
+            <div key={f.filename} data-testid="backup-file">
               {i > 0 && <Divider />}
               <Row
                 title={fmtDateTime(f.at)}
@@ -108,6 +115,19 @@ export function BackupsCard() {
           ))}
         </div>
       )}
+
+      <RestoreSheet
+        backup={pending}
+        open={pending !== null}
+        onClose={() => setPending(null)}
+        onRestored={() => {
+          // The restore has landed: a loss notice about what it just put back is stale, and the
+          // baseline is what is now on the phone.
+          void dismissHistoryNotice();
+          useHistoryNoticeStore.getState().setNotice(null);
+          void refresh();
+        }}
+      />
     </Card>
   );
 }

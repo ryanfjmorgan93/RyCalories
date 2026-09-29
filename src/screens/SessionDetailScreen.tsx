@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { recordsForNewSets } from '@/db/recordsQueries';
 import { createRoutineFromSession, deleteSession, sessionDetail, type SessionGroup } from '@/db/repo';
 import { sessionSeconds } from '@/db/historyQueries';
-import { fmtDateLong, fmtDuration, fmtKg, fmtNum, fmtWeight, targetLine } from '@/domain/format';
+import { fmtDateLong, fmtDuration, fmtKg, fmtNum, fmtWeight, legDayProteinLabel, targetLine } from '@/domain/format';
 import { countsForVolume, feelLabel, setBadges } from '@/domain/sets';
 import type { ExerciseKind, ProgressionDecision, Session, SetLog } from '@/domain/types';
 import { Button } from '@/ui/components/Button';
@@ -13,7 +13,7 @@ import { Chip } from '@/ui/components/Chip';
 import { Confirm } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { TopBar } from '@/ui/components/TopBar';
-import { useRoutineItems } from '@/ui/hooks';
+import { useRoutineItems, useSettings } from '@/ui/hooks';
 
 const timeFmt = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' });
 
@@ -236,12 +236,17 @@ function DecisionLine({ decision, kind }: { decision: ProgressionDecision; kind:
     case 'lock_in':
       text = `locked in at ${w(decision.toWeight)}`;
       break;
+    case 'deload':
+      // The Summary's wording: a deload leaves the prescription where it was.
+      text = `deload · stays ${w(decision.toWeight)}`;
+      tone = 'text-info';
+      break;
     case 'not_applicable':
       text = null;
   }
   if (text === null && decision.overrideTo === undefined) return null;
   return (
-    <div className={`border-t border-line px-4 py-2.5 text-sm font-semibold ${tone}`}>
+    <div className={`border-t border-line px-4 py-2.5 text-sm font-semibold ${tone}`} data-testid="decision-line">
       {text ?? 'no weight decision'}
       {decision.overrideTo !== undefined && <span className="text-accent"> · override to {w(decision.overrideTo)}</span>}
     </div>
@@ -249,6 +254,7 @@ function DecisionLine({ decision, kind }: { decision: ProgressionDecision; kind:
 }
 
 function SessionExtras({ session }: { session: Session }) {
+  const settings = useSettings();
   const niggles = session.niggles ?? [];
   const notes = session.notes?.trim() ?? '';
   const checklist = session.checklist;
@@ -290,7 +296,7 @@ function SessionExtras({ session }: { session: Session }) {
           <div className="px-4 pt-3 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Leg-day checklist</div>
           <ChecklistRow label="Electrolytes" done={!!checklist.electrolytes} />
           <Divider />
-          <ChecklistRow label="Protein 200 g" done={!!checklist.protein} />
+          <ChecklistRow label={legDayProteinLabel(settings?.proteinTargetLegDay)} done={!!checklist.protein} />
         </Card>
       )}
     </>

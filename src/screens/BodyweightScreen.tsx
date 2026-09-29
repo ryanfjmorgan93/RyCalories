@@ -186,7 +186,9 @@ function LogCard({ latest, today }: { latest: Bodyweight | undefined; today: str
 
   const save = async () => {
     if (kg === null || kg <= 0 || !date) return;
-    await logBodyweight(date, kg, note);
+    // A blank note field here is "no note given", so re-logging a day keeps the note already on it;
+    // clearing a note is the editor's job (its blank field is passed through as '').
+    await logBodyweight(date, kg, note.trim() === '' ? undefined : note);
     setKg(null);
     setNote('');
     toast(`Logged ${fmtKg(kg)} for ${shortDateLabel(date)}`, 'ok');

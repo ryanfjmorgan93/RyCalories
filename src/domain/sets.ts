@@ -84,8 +84,8 @@ export function formatEffort(rir: number, scale: EffortScale): string {
 }
 
 // ---------------------------------------------------------------------------
-// Feel — the plain-language replacement for RIR/RPE jargon everywhere but the live session screen
-// (rebuilt in a later phase) and Settings' effort-scale control (removed in that same phase).
+// Feel — the plain-language replacement for RIR/RPE jargon. Every screen uses it; the RIR/RPE
+// helpers above are left for reading stored `rir` values, and no control offers the choice now.
 
 export type Feel = 'Easy' | 'Good' | 'Hard' | 'Maxed';
 

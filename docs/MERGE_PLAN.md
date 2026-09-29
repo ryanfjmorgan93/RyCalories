@@ -65,6 +65,10 @@ copying `meals.json` and your photos to Google Drive. That contradicts the zero-
 principle the whole project is built on. The merged app should set explicit extraction
 rules, and the old app should be uninstalled rather than left dormant.
 
+**Iron itself is closed:** its manifest sets `android:allowBackup="false"`, guarded by
+`src/db/manifest.test.ts`. Its own backups (Documents/Iron, Settings → Export) are the only copy
+that leaves the app's storage.
+
 ### 2.3 The bar
 
 > "I'm not using this thing as my daily driver until it works seamlessly."
@@ -167,9 +171,9 @@ None of it visible, all of it load-bearing.
    list and AGP together.
 5. ⬜ **The additive route table** (§5.1) — an engineering decision, not a mockup decision.
    Lands with P3, which is blocked without it.
-6. ⬜ **Playwright in CI**, or stop describing end-to-end tests as a gate. The workflow's
-   only test step is `npm test` (`build-apk.yml:34`); the e2e suite runs on manual
-   discipline alone.
+6. ✅ **Playwright in CI.** `build-apk.yml` runs `npm test` (line 35) and then
+   `npx playwright test` (line 41) before the web build and the APK, with `retries: 0` (§6.3),
+   so a red e2e stops the release.
 
 ### P2 — Schema v2 and the backup fix · **M** · ✅ shipped (`14425b3`)
 
@@ -192,8 +196,9 @@ still one commit, because they could not safely be separated.
   Replace now clears only what the file can put back, `isBackup` reads the version field it
   previously ignored, and a file from a newer build is refused rather than stripped.
   Nine tests in `backup.test.ts`, one of them the exact old-file data-loss case.
-- ✅ `foods` is declared but **populated by nothing and consumed by nothing** in v1. It
-  exists only to avoid a later migration. Not a half-built feature.
+- ✅ `foods` was declared in v1 to avoid a later migration, populated by nothing. It is
+  now the **food memory**: `src/db/foodRepo.ts` writes it when a meal is logged and reads it
+  for the picker's ranked suggestions.
 
 **Still to verify on the phone, not in the sandbox.** The fake-indexeddb tests prove the
 schema delta and the row counts; they do **not** prove the upgrade completes on-device.
@@ -692,6 +697,24 @@ counts drop below a baseline without an in-app delete, and a Backups card in Set
   many seconds before its first word.
 - **Clear must drop an answer still on its way**, or it reappears when it lands; a generation
   count in the store ignores anything from before the Clear.
+
+### 6.11 Small faults — traps paid for
+
+- **A toggle that only the in-app path read.** "Notify when rest ends" gated the web
+  Notification in `RestTimerBar`, while the timer store scheduled the native notification without
+  ever reading it, so switching it off did nothing on the phone. Both paths now ask
+  `shouldNotifyRestEnd`, `scheduleRestNotification` cancels first and reads the settings row
+  directly (`repo.getSettings` seeds a missing row, a write that path has no business making),
+  and turning the toggle off cancels the pending one at once. The plugin cannot run in Vitest, so
+  `src/state/timer.test.ts` fakes it and proves only that the toggle reaches the scheduling call;
+  a notification actually appearing or not is checked on the phone. The Settings permission row
+  read the browser's `Notification`, which in the WebView says "Not supported here"; on the phone
+  it now asks the plugin.
+- **`allowBackup="true"` with no rules is a cloud upload nobody listed.** Capacitor's template
+  ships it on, and Settings → About lists what leaves the device: Android's Auto Backup copies
+  the whole IndexedDB to the owner's Google account behind that list. It is off, and a test
+  reads the real manifest, because a regenerated `android/` or a `cap` upgrade would quietly put
+  the template's line back.
 
 ---
 
