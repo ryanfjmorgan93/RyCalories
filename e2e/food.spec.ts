@@ -262,6 +262,39 @@ test.describe('nutrition', () => {
     await expect(page.getByTestId('calories-bar')).toContainText('606 kcal');
   });
 
+  test('Save says it needs a name once there is something for it to be the reason for', async ({ page }) => {
+    await page.goto('/food/new');
+    await page.getByTestId('meal-name').fill('Snack');
+    await page.getByTestId('empty-add-food').click();
+
+    // A sheet nobody has touched stays quiet, though Save is grey.
+    await expect(page.getByTestId('save-food')).toBeDisabled();
+    await expect(page.getByTestId('food-needs-name')).toBeHidden();
+
+    // A figure typed with no name.
+    await page.getByTestId('food-kcal').fill('250');
+    await expect(page.getByTestId('food-needs-name')).toBeVisible();
+    await expect(page.getByTestId('save-food')).toBeDisabled();
+
+    // Naming it clears the line.
+    await page.getByTestId('food-name').fill('Chicken fries');
+    await expect(page.getByTestId('food-needs-name')).toBeHidden();
+    await expect(page.getByTestId('save-food')).toBeEnabled();
+  });
+
+  test('a name typed then emptied says Save needs one, though no figure was typed', async ({ page }) => {
+    await page.goto('/food/new');
+    await page.getByTestId('meal-name').fill('Snack');
+    await page.getByTestId('empty-add-food').click();
+    await page.getByTestId('food-name').fill('Chicken fries');
+    await expect(page.getByTestId('save-food')).toBeEnabled();
+    await expect(page.getByTestId('food-needs-name')).toBeHidden();
+
+    await page.getByTestId('food-name').fill('');
+    await expect(page.getByTestId('food-needs-name')).toBeVisible();
+    await expect(page.getByTestId('save-food')).toBeDisabled();
+  });
+
   test('typing narrows the remembered foods, and an unweighed one is never offered', async ({ page }) => {
     await page.goto('/food/new');
     await page.getByTestId('meal-name').fill('Mixed');

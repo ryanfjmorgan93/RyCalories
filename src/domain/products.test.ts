@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  OFF_FIELDS,
+  barcodeDigits,
   bestMatch,
   displayName,
   parseGrams,
   parseProduct,
+  productIdentity,
   plausiblePack,
   portionGrams,
   portionLabel,
@@ -146,6 +149,17 @@ describe('numbers that distinguish one variant from another', () => {
   });
 });
 
+describe('a label with figures and no name', () => {
+  it('is never the answer to a name search', () => {
+    const nameless = label({ name: '', brand: 'Trek' });
+    expect(bestMatch({ text: 'Protein Flapjack' }, [nameless])).toBeNull();
+    expect(bestMatch({ text: 'Protein Flapjack', brand: 'Trek' }, [nameless])).toBeNull();
+    // ...and does not stop a named one being found beside it.
+    const named = label({ name: 'Protein Flapjack', brand: 'Trek' });
+    expect(bestMatch({ text: 'Protein Flapjack', brand: 'Trek' }, [nameless, named])?.label).toBe(named);
+  });
+});
+
 describe('choosing between plausible matches', () => {
   it('prefers an entry that knows its own portion', () => {
     const vague = label({ code: 'a', name: 'Protein Flapjack' });
@@ -216,8 +230,12 @@ describe('parsing a product record', () => {
     expect(parseProduct({ ...raw, nutriments: { proteins_100g: 15 } })).toBeNull();
   });
 
-  it('refuses an entry with no name', () => {
-    expect(parseProduct({ ...raw, product_name: '   ' })).toBeNull();
+  it('keeps the figures of an entry with no name at all, rather than refusing it', () => {
+    // The figures are the hard part to type. The sheet fills them and asks for the name.
+    const l = parseProduct({ ...raw, product_name: '   ' })!;
+    expect(l.name).toBe('');
+    expect(l.per100).toEqual({ kcal: 400, protein: 15, carbs: 45, fat: 15 });
+    expect(l.brand).toBe('Trek');
   });
 
   it('refuses anything that is not a product', () => {
@@ -242,7 +260,7 @@ describe('parsing a product record', () => {
   it('reads a name given as a language map rather than rendering it as [object Object]', () => {
     expect(parseProduct({ ...raw, product_name: { fr: 'Flapjack protéiné', en: 'Protein Flapjack' } })?.name).toBe('Protein Flapjack');
     expect(parseProduct({ ...raw, product_name: { fr: 'Flapjack protéiné' } })?.name).toBe('Flapjack protéiné');
-    expect(parseProduct({ ...raw, product_name: {} })).toBeNull();
+    expect(parseProduct({ ...raw, product_name: {} })?.name).toBe('');
   });
 
   it('reads numbers that arrive as strings', () => {
@@ -260,6 +278,106 @@ describe('parsing a product record', () => {
     const l = parseProduct({ ...raw, serving_quantity: 0, serving_size: '45 g', quantity: '6 x 50g' })!;
     expect(l.servingGrams).toBe(45);
     expect(l.packGrams).toBe(50);
+  });
+});
+
+describe('an entry that states its energy in kilojoules only', () => {
+  const macros = { proteins_100g: 14, carbohydrates_100g: 20, fat_100g: 12 };
+  const parse = (nutriments: Record<string, unknown>) =>
+    parseProduct({ code: '1', product_name: 'Chicken Fries', nutriments: { ...macros, ...nutriments } });
+
+  it('converts energy-kj_100g to kcal, rounded', () => {
+    // 1084 / 4.184 = 259.08
+    expect(parse({ 'energy-kj_100g': 1084 })?.per100).toEqual({ kcal: 259, protein: 14, carbs: 20, fat: 12 });
+  });
+
+  it('reads energy_100g as kJ when its unit says kJ', () => {
+    expect(parse({ energy_100g: 1084, energy_unit: 'kJ' })?.per100.kcal).toBe(259);
+  });
+
+  it('reads energy_100g as kJ when it carries no unit, because that is what the field is', () => {
+    expect(parse({ energy_100g: 1084 })?.per100.kcal).toBe(259);
+  });
+
+  it('will not guess at energy_100g beside a unit that is not kJ', () => {
+    // Four times out either way; better to leave the figure to be typed.
+    expect(parse({ energy_100g: 1084, energy_unit: 'kcal' })).toBeNull();
+  });
+
+  it('takes a stated kcal in preference to converting', () => {
+    expect(parse({ 'energy-kcal_100g': 250, 'energy-kj_100g': 1084 })?.per100.kcal).toBe(250);
+    expect(parse({ 'energy-kj_100g': 1084, energy_100g: 2000 })?.per100.kcal).toBe(259);
+  });
+
+  it('treats an explicit 0 kJ as zero, but a bare energy_100g of 0 as no figure', () => {
+    expect(parse({ 'energy-kj_100g': 0 })?.per100.kcal).toBe(0);
+    expect(parse({ energy_100g: 0 })).toBeNull();
+  });
+
+  it('still refuses an entry with no energy field at all, and a negative one', () => {
+    expect(parse({})).toBeNull();
+    expect(parse({ 'energy-kj_100g': -5 })).toBeNull();
+  });
+});
+
+describe('a product name from wherever the entry keeps one', () => {
+  const nutriments = { 'energy-kcal_100g': 250 };
+  const name = (over: Record<string, unknown>) => parseProduct({ code: '1', nutriments, ...over })?.name;
+
+  it('falls back through the English, generic and abbreviated names in that order', () => {
+    expect(name({ product_name: '', product_name_en: 'Chicken Fries', generic_name: 'Fries', abbreviated_product_name: 'CF' })).toBe('Chicken Fries');
+    expect(name({ product_name: '', product_name_en: '', generic_name: 'Instant noodles', abbreviated_product_name: 'IN' })).toBe('Instant noodles');
+    expect(name({ generic_name: '  ', abbreviated_product_name: 'MI GORENG' })).toBe('MI GORENG');
+  });
+
+  it('prefers product_name when it has one', () => {
+    expect(name({ product_name: 'Mi Goreng', product_name_en: 'Fried noodles', generic_name: 'Noodles' })).toBe('Mi Goreng');
+  });
+
+  it('is empty when the entry carries no name of any kind', () => {
+    expect(name({})).toBe('');
+  });
+
+  it('is asked for from the barcode endpoint, or the fallbacks would never arrive', () => {
+    const asked = OFF_FIELDS.split(',');
+    for (const f of ['product_name', 'product_name_en', 'generic_name', 'abbreviated_product_name', 'nutriments']) {
+      expect(asked).toContain(f);
+    }
+  });
+});
+
+describe('the identity of an entry with no usable figures', () => {
+  it('gives the name and the first brand', () => {
+    expect(productIdentity({ product_name: 'Mi Goreng', brands: 'Indomie, Salim Ivomas', nutriments: {} })).toEqual({ name: 'Mi Goreng', brand: 'Indomie' });
+  });
+
+  it('omits an absent brand rather than carrying an empty one', () => {
+    expect(productIdentity({ generic_name: 'Instant noodles' })).toEqual({ name: 'Instant noodles' });
+  });
+
+  it('is null when there is no name, however good the brand', () => {
+    expect(productIdentity({ brands: 'Indomie', nutriments: { 'energy-kcal_100g': 400 } })).toBeNull();
+  });
+
+  it('is null for anything that is not a product', () => {
+    expect(productIdentity(null)).toBeNull();
+    expect(productIdentity('nope')).toBeNull();
+  });
+});
+
+describe('barcode digits', () => {
+  it('keeps the digits of a code of a plausible length', () => {
+    expect(barcodeDigits('5060088709054')).toBe('5060088709054');
+    expect(barcodeDigits(' 5060 0887 09054 ')).toBe('5060088709054');
+    expect(barcodeDigits('12345678')).toBe('12345678');
+    expect(barcodeDigits('12345678901234')).toBe('12345678901234');
+  });
+
+  it('is null for one that is too short or too long', () => {
+    expect(barcodeDigits('1234567')).toBeNull();
+    expect(barcodeDigits('123456789012345')).toBeNull();
+    expect(barcodeDigits('abc')).toBeNull();
+    expect(barcodeDigits('')).toBeNull();
   });
 });
 
@@ -333,5 +451,9 @@ describe('display name', () => {
   it('copes with a missing brand', () => {
     expect(displayName(label({ brand: '' }))).toBe('Protein Flapjack');
     expect(displayName(label({ brand: '', name: '' }))).toBe('');
+  });
+
+  it('falls back to the brand for a nameless label', () => {
+    expect(displayName(label({ brand: 'Trek', name: '' }))).toBe('Trek');
   });
 });

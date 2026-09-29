@@ -274,7 +274,7 @@ function ExistingMeal({ id }: { id: string }) {
             // was silently dropped, and applying Trek's label to a row that still said brand
             // "Aldi" left the wrong identity on the row for ever — Dexie's update merges, so
             // nothing ever cleared it — and keyed the food memory off the stale pair.
-            if (row) await updateItem(row.id, itemPatch(item));
+            if (row) await updateItem(row.id, itemPatch(item), item.barcode ? { barcode: item.barcode } : undefined);
           } else {
             await addItem(id, item);
           }

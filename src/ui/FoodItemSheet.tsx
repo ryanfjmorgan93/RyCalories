@@ -12,7 +12,7 @@ import { fmtGrams, fmtKcal } from '@/domain/format';
 import { useFoodSuggestions, useSettings } from './hooks';
 import { lookupBarcode, lookupName } from '@/db/productRepo';
 import { forgetFood } from '@/db/foodRepo';
-import { displayName, portionGrams, portionLabel, type LabelNutrition } from '@/domain/products';
+import { barcodeDigits, displayName, portionGrams, portionLabel, type LabelNutrition } from '@/domain/products';
 import { normalise } from '@/domain/foodMemory';
 import type { FoodMemory } from '@/domain/types';
 import type { NewMealItem } from '@/db/foodRepo';
@@ -107,10 +107,19 @@ export function FoodItemSheet({
   // button — hidden until three letters are typed and again once a label is applied, which is
   // exactly the state a second scan starts from — so a scan in flight showed nothing at all.
   const [lookup, setLookup] = useState<
-    'idle' | 'searching' | 'scanning' | 'none' | 'offline' | 'unavailable' | 'notfound' | 'invalid'
+    'idle' | 'searching' | 'scanning' | 'none' | 'offline' | 'unavailable' | 'notfound' | 'nofigures' | 'invalid'
   >('idle');
   const busy = lookup === 'searching' || lookup === 'scanning';
   const [scannerOpen, setScannerOpen] = useState(false);
+  // The barcode of the last scan the database could not fill. Kept until Save, or until a later
+  // scan replaces it, and handed to the save so the food is remembered against that pack: the next
+  // scan of it then fills from memory. Never set for a code that was not a barcode, and never
+  // for a scan that filled the sheet — that pack is the database's, not the user's to type in.
+  const [scannedCode, setScannedCode] = useState<string | undefined>(undefined);
+  // The reasons Save can be grey, said where the eye is (see `needsName`): the user has done
+  // something to the sheet by hand, so an empty name is no longer just a sheet that has not been used.
+  const [typedFigure, setTypedFigure] = useState(false);
+  const [nameEdited, setNameEdited] = useState(false);
   // Bumped by anything that changes what a lookup would be for. A response whose ticket is stale
   // is discarded rather than applied to a food nobody asked about.
   const requestRef = useRef(0);
@@ -127,13 +136,16 @@ export function FoodItemSheet({
    * designed, then let the next label lookup overwrite the correction with the figures the user
    * had gone back and fixed.
    */
-  const setOwn = <K extends keyof Draft>(k: K, v: Draft[K]) =>
+  const setOwn = <K extends keyof Draft>(k: K, v: Draft[K]) => {
+    setTypedFigure(true);
     setD((p) => ({ ...p, [k]: v, source: 'user', fromLabel: k === 'grams' ? p.fromLabel : false }));
+  };
 
   /** Changing what is being searched for invalidates whatever the last search said about it. */
   const setSearchable = <K extends 'name' | 'brand'>(k: K, v: string) => {
     requestRef.current += 1;
     setLookup('idle');
+    if (k === 'name') setNameEdited(true);
     setD((p) => ({ ...p, [k]: v, ...(k === 'name' ? { fromLabel: false } : {}) }));
   };
 
@@ -206,21 +218,62 @@ export function FoodItemSheet({
     setD((p) => (p.fromLabel ? draftFrom() : p));
   };
 
+  /**
+   * A scan of a pack the database knows by name only. The name (and brand) go in when the sheet
+   * has none of its own — a name the user typed is theirs and stays — and the figures are left to
+   * be typed.
+   */
+  const scanPartial = (partial: { name: string; brand?: string }) => {
+    setLookup('nofigures');
+    setD((p) => {
+      const base = p.fromLabel ? draftFrom() : p;
+      if (base.name.trim()) return base;
+      const brand = partial.brand ?? '';
+      return {
+        ...base,
+        name: displayName({ brand, name: partial.name }),
+        product: partial.name,
+        ...(brand ? { brand } : {}),
+      };
+    });
+  };
+
   /** A code from the camera or typed by hand. Scanning is a lookup, so it shares the same ticket. */
   const onScanCode = async (code: string) => {
     setScannerOpen(false);
     const ticket = (requestRef.current += 1);
     setLookup('scanning');
+    // Only a barcode can be remembered against; a code of the wrong length is answered 'invalid'
+    // below and leaves whatever was already being typed in for an earlier scan alone.
+    const digits = barcodeDigits(code) ?? undefined;
     try {
       const result = await lookupBarcode(code);
       if (ticket !== requestRef.current) return;
-      if (result.label) applyLabel(result.label, { fromScan: true });
-      else if (result.from === 'offline') scanMissed('offline');
-      else if (result.from === 'invalid') scanMissed('invalid');
-      else if (result.from === 'network' || result.from === 'cache') scanMissed('notfound');
-      else scanMissed('unavailable');
+      if (result.from === 'memory' && result.memory) {
+        // Typed in against this pack before. It is the user's own entry, so it goes in as one
+        // (see usePrevious) and there is nothing to remember a second time.
+        setScannedCode(undefined);
+        setLookup('idle');
+        usePrevious(result.memory);
+      } else if (result.label) {
+        setScannedCode(undefined);
+        applyLabel(result.label, { fromScan: true });
+      } else if (result.from === 'invalid') {
+        scanMissed('invalid');
+      } else {
+        // Nothing came back to fill the sheet, for whatever reason: whatever the user types next
+        // is this pack.
+        setScannedCode(digits);
+        if (result.partial) scanPartial(result.partial);
+        else if (result.from === 'offline') scanMissed('offline');
+        else if (result.from === 'network' || result.from === 'cache') scanMissed('notfound');
+        else scanMissed('unavailable');
+      }
     } catch {
-      if (ticket === requestRef.current) scanMissed('unavailable');
+      if (ticket === requestRef.current) {
+        setScannedCode(digits);
+        scanMissed('unavailable');
+      }
     }
   };
 
@@ -245,6 +298,12 @@ export function FoodItemSheet({
   const eaten = macrosOf(nutritionFrom(d));
   const check = checkAtwater(macrosFrom(d));
   const canSave = d.name.trim().length > 0;
+  // Save is grey for want of a name, and nothing else on the sheet says so. Shown once there is
+  // something for it to be the reason for: a lookup has answered (or filled the figures without a
+  // name), or the user has typed a figure or emptied the name themselves. A sheet nobody has touched
+  // stays quiet, and one still waiting on an answer says nothing until it has one.
+  const needsName =
+    d.name.trim().length === 0 && !busy && (lookup !== 'idle' || typedFigure || nameEdited || d.source === 'label');
   // Looking up needs something to look up, and is pointless once a label has supplied the numbers.
   const canLookUp = lookupEnabled && d.name.trim().length >= 3 && d.source !== 'label';
   const per = d.basis === 'weighed' ? 'per 100 g' : 'for the serving';
@@ -279,6 +338,7 @@ export function FoodItemSheet({
                   source: d.source ?? 'user',
                   ...(d.brand ? { brand: d.brand } : {}),
                   ...(d.product ? { product: d.product } : {}),
+                  ...(scannedCode ? { barcode: scannedCode } : {}),
                 })
               }
             >
@@ -290,6 +350,11 @@ export function FoodItemSheet({
         <div className="grid gap-4">
           <Field label="Food">
             <TextInput value={d.name} onChange={(v) => setSearchable('name', v)} placeholder="Chicken thigh" testId="food-name" autoFocus={!item} />
+            {needsName && (
+              <div className="mt-1 px-1 text-xs text-muted" data-testid="food-needs-name">
+                Needs a name
+              </div>
+            )}
           </Field>
 
           {lookupEnabled && (
@@ -326,17 +391,22 @@ export function FoodItemSheet({
               )}
               {lookup === 'notfound' && (
                 <div className="px-1 text-xs text-muted" data-testid="lookup-notfound">
-                  Not in the database.
+                  Not in the database. Type the name and figures from the pack.
+                </div>
+              )}
+              {lookup === 'nofigures' && (
+                <div className="px-1 text-xs text-muted" data-testid="lookup-nofigures">
+                  No figures in the database. Type them from the pack.
                 </div>
               )}
               {lookup === 'offline' && (
                 <div className="px-1 text-xs text-muted" data-testid="lookup-offline">
-                  No connection.
+                  No connection. Type the figures from the pack.
                 </div>
               )}
               {lookup === 'unavailable' && (
                 <div className="px-1 text-xs text-muted" data-testid="lookup-unavailable">
-                  Lookup unavailable.
+                  Lookup unavailable. Try again, or type the figures from the pack.
                 </div>
               )}
               {lookup === 'invalid' && (

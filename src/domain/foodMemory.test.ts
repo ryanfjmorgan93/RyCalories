@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { memoryFrom, memoryKey, mergeMemory, normalise, rankMemories } from './foodMemory';
+import { labelFromMemory, memoryFrom, memoryKey, mergeMemory, normalise, rankMemories } from './foodMemory';
 import { fromPer100, fromPortion, weigh, type Macros } from './food';
 import type { FoodMemory, MealItem } from './types';
 
@@ -285,3 +285,47 @@ describe('unit names travel with a learned unit weight', () => {
   });
 });
 
+
+describe('the barcode a food was typed in against', () => {
+  const at = '2026-04-01T08:00:00.000Z';
+  const chickenFries = { name: 'Chicken fries', source: 'user' as const, nutrition: fromPer100({ kcal: 250, protein: 14, carbs: 20, fat: 12 }, 100) };
+
+  it('memoryFrom carries the barcode of the pack, and nothing when there was none', () => {
+    expect(memoryFrom({ ...chickenFries, barcode: '5099999999994' })!.barcode).toBe('5099999999994');
+    expect(memoryFrom(chickenFries)).not.toHaveProperty('barcode');
+    expect(memoryFrom({ ...chickenFries, barcode: '' })).not.toHaveProperty('barcode');
+  });
+
+  it('mergeMemory keeps the barcode it had when this logging names none', () => {
+    const existing = memory({ key: 'n:chicken fries', name: 'Chicken fries', barcode: '5099999999994' });
+    const merged = mergeMemory(existing, memoryFrom(chickenFries)!, at);
+    expect(merged.barcode).toBe('5099999999994');
+  });
+
+  it('mergeMemory takes a barcode from a logging that names one', () => {
+    const existing = memory({ key: 'n:chicken fries', name: 'Chicken fries' });
+    expect(mergeMemory(existing, memoryFrom({ ...chickenFries, barcode: '5099999999994' })!, at).barcode).toBe('5099999999994');
+    const other = mergeMemory({ ...existing, barcode: '5099999999994' }, memoryFrom({ ...chickenFries, barcode: '5012345678900' })!, at);
+    expect(other.barcode).toBe('5012345678900');
+  });
+
+  it('mergeMemory takes the barcode even from a logging whose numbers it will not take', () => {
+    // A barcode is a fact about the pack, not a figure: the trust hierarchy is about the numbers.
+    const corrected = memory({ key: 'n:chicken fries', name: 'Chicken fries', source: 'user' });
+    const merged = mergeMemory(corrected, memoryFrom({ ...chickenFries, source: 'model', barcode: '5099999999994' })!, at);
+    expect(merged.source).toBe('user');
+    expect(merged.barcode).toBe('5099999999994');
+  });
+
+  it('labelFromMemory reads a remembered food back as the label a scan would have given', () => {
+    const l = labelFromMemory(memory({ name: 'Chicken fries', brand: 'Iceland', product: 'Chicken Fries 500g', barcode: '5099999999994', typicalGrams: 120, per100: { kcal: 250, protein: 14, carbs: 20, fat: 12 } }));
+    expect(l).toEqual({ code: '5099999999994', brand: 'Iceland', name: 'Chicken Fries 500g', per100: { kcal: 250, protein: 14, carbs: 20, fat: 12 }, servingGrams: 120 });
+  });
+
+  it('labelFromMemory falls back to the food name, an empty brand and no serving', () => {
+    const l = labelFromMemory(memory({ name: 'Chicken fries', barcode: '5099999999994' }));
+    expect(l.name).toBe('Chicken fries');
+    expect(l.brand).toBe('');
+    expect(l).not.toHaveProperty('servingGrams');
+  });
+});

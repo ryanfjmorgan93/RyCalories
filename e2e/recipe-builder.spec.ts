@@ -255,6 +255,50 @@ test.describe('recipe builder', () => {
     await expect(page.getByTestId('share-kcal')).toContainText('120 kcal');
   });
 
+  test('a pack typed in once comes back in a recipe as your food, not as a label', async ({ page, browser, context }) => {
+    const UNKNOWN_CODE = '5099999999994';
+    await page.route('**/world.openfoodfacts.org/**', (route) =>
+      route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ status: 0, status_verbose: 'product not found' }) }),
+    );
+
+    await fresh(page);
+    await denyCamera(browser, context, page);
+
+    // Log the pack the long way, once: scanned, not in the database, typed in.
+    await page.goto('/food/new');
+    await page.getByTestId('meal-name').fill('Snack');
+    await page.getByTestId('empty-add-food').click();
+    await page.getByTestId('scan-barcode').click();
+    await expect(page.getByText('Camera not available.')).toBeVisible();
+    await page.getByTestId('barcode-input').fill(UNKNOWN_CODE);
+    await page.getByTestId('barcode-submit').click();
+    await expect(page.getByTestId('lookup-notfound')).toBeVisible();
+    await page.getByTestId('food-name').fill('Chicken fries');
+    await page.getByTestId('food-kcal').fill('250');
+    await page.getByTestId('food-protein').fill('14');
+    await page.getByTestId('food-carbs').fill('20');
+    await page.getByTestId('food-fat').fill('12');
+    await page.getByTestId('save-food').click();
+    await page.getByTestId('save-meal').click();
+    await page.waitForURL(/\/food\/[0-9a-f-]+$/);
+
+    await page.goto('/food/recipes/new');
+    await page.getByTestId('recipe-type-it').click();
+    // A food no table or memory has, so it comes up with no figures — and does not depend on the
+    // bundled UK table having finished its lazy load when "Use this" is pressed.
+    await page.getByTestId('recipe-typed-text').fill('zzqx sauce');
+    await page.getByTestId('recipe-use-typed').click();
+    await expect(page.getByTestId('question-source')).toHaveText('Not found');
+
+    await page.getByTestId('question-scan').click();
+    await expect(page.getByText('Camera not available.')).toBeVisible();
+    await page.getByTestId('barcode-input').fill(UNKNOWN_CODE);
+    await page.getByTestId('barcode-submit').click();
+
+    // The figures are the ones typed by hand, so the line says so: it is not a label's.
+    await expect(page.getByTestId('question-source')).toHaveText('Your food');
+  });
+
   test('Nano unavailable: Take a photo is disabled with the state shown, but typing still works end to end', async ({ page }) => {
     await page.addInitScript(() => {
       (window as unknown as { __ironNanoFake?: unknown }).__ironNanoFake = {

@@ -12,13 +12,15 @@ import { db } from './db';
 import { nowIso } from '@/domain/dates';
 import {
   OFF_FIELDS,
+  barcodeDigits,
   bestMatch,
   parseProduct,
+  productIdentity,
   type LabelNutrition,
   type MatchQuery,
 } from '@/domain/products';
-import { normalise } from '@/domain/foodMemory';
-import type { ProductCacheEntry } from '@/domain/types';
+import { labelFromMemory, normalise } from '@/domain/foodMemory';
+import type { FoodMemory, ProductCacheEntry } from '@/domain/types';
 
 const BARCODE_URL = 'https://world.openfoodfacts.org/api/v2/product';
 /**
@@ -47,6 +49,7 @@ export interface Lookup {
   label: LabelNutrition | null;
   /**
    * Where the answer came from.
+   *   memory       - a food the user typed in against this barcode before (`memory` carries it)
    *   cache        - answered from what we already had
    *   network      - asked, and this is the answer (a null label means a genuine miss)
    *   offline      - the device is offline, so it was never asked
@@ -55,7 +58,18 @@ export interface Lookup {
    * The last three are deliberately distinct: telling a user "no connection" when the query was
    * empty, or when a service returned 503, is a lie that sends them to check their wifi.
    */
-  from: 'cache' | 'network' | 'offline' | 'unavailable' | 'invalid';
+  from: 'memory' | 'cache' | 'network' | 'offline' | 'unavailable' | 'invalid';
+  /**
+   * With `from: 'memory'`: the remembered food itself. `label` is that food dressed as a label so
+   * a caller that only knows labels still works, but its figures are the user's, not a label's —
+   * a caller that badges its result must take the badge from `memory.source`.
+   */
+  memory?: FoodMemory;
+  /**
+   * With `from: 'network'` and no label: the database has this pack, with a name, but no usable
+   * figures. Never cached — see `lookupBarcode`.
+   */
+  partial?: { name: string; brand?: string };
 }
 
 function barcodeKey(code: string): string {
@@ -154,11 +168,26 @@ function offline(): boolean {
   return typeof navigator !== 'undefined' && navigator.onLine === false;
 }
 
-/** A product by its barcode. */
+/**
+ * A product by its barcode.
+ *
+ * Asked in this order: a food the user typed in against this barcode; the local cache; the
+ * network. The user's own entry goes first because it is the one answer that is certainly about
+ * this pack, and because it must beat a cached miss — that miss is exactly what made them type the
+ * food in — and a 30-day-old fact about the database.
+ */
 export async function lookupBarcode(code: string): Promise<Lookup> {
-  const digits = code.replace(/\D/g, '');
-  if (digits.length < 8 || digits.length > 14) return { label: null, from: 'invalid' };
+  const digits = barcodeDigits(code);
+  if (!digits) return { label: null, from: 'invalid' };
   const key = barcodeKey(digits);
+
+  // Unindexed on purpose: `foods` holds what one person has eaten, and a filter over it is cheaper
+  // than a schema version. Never throws, like `cached`.
+  const remembered = await db.foods
+    .filter((f) => f.barcode === digits)
+    .first()
+    .catch(() => undefined);
+  if (remembered) return { label: labelFromMemory(remembered), from: 'memory', memory: remembered };
 
   const hit = await cached(key);
   if (hit) return hit;
@@ -179,6 +208,13 @@ export async function lookupBarcode(code: string): Promise<Lookup> {
   // proxy, a captive portal, an outage page that happens to be JSON — says nothing about the food.
   if (body.status !== 1 && body.status !== 0) return { label: null, from: 'unavailable' };
   const label = body.status === 1 ? parseProduct(body.product) : null;
+  if (body.status === 1 && !label) {
+    // The pack is in the database with a name, but no figures anyone can use. Not remembered, not
+    // even as a miss: the name is worth keeping for the next scan, and a cached miss would hide it
+    // for 30 days — and the entry may well gain its figures long before that.
+    const partial = productIdentity(body.product);
+    if (partial) return { label: null, from: 'network', partial };
+  }
   await remember(key, label);
   return { label, from: 'network' };
 }

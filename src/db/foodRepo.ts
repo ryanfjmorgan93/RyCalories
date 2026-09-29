@@ -35,6 +35,13 @@ export interface NewMealItem {
    * `unitLabel`/`unitPlural` and a later recipe or quick-add can offer "how many?" next time.
    */
   unit?: { count: number; unitGrams: number; label: string; plural: string };
+  /**
+   * The pack's barcode (digits), when this food was typed in after a scan the database could not
+   * fill. Like `unit`, NOT persisted on the row (`MealItem` carries no `barcode` field): it exists
+   * only so `rememberFood` can hand it to `memoryFrom`, and the next scan of that pack then fills
+   * from the food memory instead of asking again.
+   */
+  barcode?: string;
 }
 
 export interface NewMeal {
@@ -175,8 +182,9 @@ export async function addMeal(meal: NewMeal, items: NewMealItem[]): Promise<stri
 export async function rememberFood(item: NewMealItem | MealItem, opts?: { portion?: boolean }): Promise<void> {
   // NewMealItem's source is optional and defaults the same way toItemRow does, so a food added
   // without one is remembered as the user's own rather than falling through to the least trusted.
-  // `unit` only ever exists on a NewMealItem (never persisted on the MealItem row — see the field's
-  // doc comment), so a remembered row and a freshly logged one both flow through the same call.
+  // `unit` and `barcode` only ever exist on a NewMealItem (never persisted on the MealItem row —
+  // see the fields' doc comments), so a remembered row and a freshly logged one both flow through
+  // the same call; `barcode` rides in on the spread below.
   const unit = 'unit' in item ? item.unit : undefined;
   const next = memoryFrom({ ...item, source: item.source ?? 'user' }, unit, opts);
   if (!next) return;
@@ -243,12 +251,17 @@ export async function addItem(mealId: string, item: NewMealItem): Promise<string
  * them are stored — this is the "edit anything, before or after saving" both handovers
  * asked for, and it needs no recalculation step.
  */
-export async function updateItem(id: string, patch: Partial<Omit<MealItem, 'id' | 'mealId' | 'index'>>): Promise<void> {
+export async function updateItem(
+  id: string,
+  patch: Partial<Omit<MealItem, 'id' | 'mealId' | 'index'>>,
+  /** `barcode`: see `NewMealItem.barcode`. Remembered with the food, never written to the row. */
+  opts?: { barcode?: string },
+): Promise<void> {
   await db.mealItems.update(id, patch);
   // A correction is the most valuable thing to remember: it is the number the user went back and
   // fixed, and the trust hierarchy will let it overwrite a guess.
   const row = await db.mealItems.get(id);
-  if (row) await rememberFood(row);
+  if (row) await rememberFood(opts?.barcode ? { ...row, barcode: opts.barcode } : row);
 }
 
 /** Remove one food. Removing the last one leaves an empty meal rather than deleting it. */
