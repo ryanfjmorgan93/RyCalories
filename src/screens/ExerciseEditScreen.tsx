@@ -3,7 +3,6 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/db';
 import { useNavigate, useParams } from 'react-router-dom';
 import { createExercise, deleteExercise, exerciseUsage, updateExercise, type ExerciseInput } from '@/db/repo';
-import { demoFrameUrl, searchDemos } from '@/data/exerciseDemos';
 import { EQUIPMENT_KINDS, MUSCLE_GROUPS, type Equipment, type Exercise, type ExerciseKind, type MuscleGroup } from '@/domain/types';
 import { STRENGTH_STANDARDS, type StrengthStandard } from '@/domain/standards';
 import { Button } from '@/ui/components/Button';
@@ -13,6 +12,8 @@ import { NumberInput, TextInput } from '@/ui/components/NumberField';
 import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { TopBar } from '@/ui/components/TopBar';
+import { DemoThumb } from '@/ui/DemoThumb';
+import { useLibrarySearch } from '@/ui/useLibrarySearch';
 
 
 const KIND_OPTIONS: { value: ExerciseKind; label: ReactNode }[] = [
@@ -111,6 +112,7 @@ export function ExerciseEditScreen() {
   const [busy, setBusy] = useState(false);
   const [diagramOpen, setDiagramOpen] = useState(false);
   const [diagramQuery, setDiagramQuery] = useState('');
+  const { rows: diagramRows, settled: diagramSettled } = useLibrarySearch(diagramOpen, diagramQuery);
 
   useEffect(() => {
     if (!isNew && existing && !loaded) {
@@ -265,9 +267,7 @@ export function ExerciseEditScreen() {
             <Card className="mt-3 px-4 py-1">
               <Field label="Diagram">
                 <div className="flex items-center gap-3">
-                  {form.demo && (
-                    <img src={demoFrameUrl(form.demo, 1)} alt="" className="h-14 w-14 rounded-lg border border-line bg-surface-2 object-contain" />
-                  )}
+                  <DemoThumb demo={form.demo} size="lg" className="border border-line" />
                   <Button variant="outline" onClick={() => setDiagramOpen(true)} data-testid="pick-diagram">
                     {form.demo ? 'Change diagram' : 'Pick a diagram'}
                   </Button>
@@ -359,26 +359,26 @@ export function ExerciseEditScreen() {
       >
         <TextInput value={diagramQuery} onChange={setDiagramQuery} placeholder="Search" testId="diagram-search" />
         <div className="mt-3 grid max-h-[55dvh] gap-2 overflow-y-auto">
-          {searchDemos(diagramQuery).map((d) => (
+          {diagramRows.map((row) => (
             <button
-              key={d.slug}
+              key={row.key}
               type="button"
               onClick={() => {
-                patch({ demo: d.slug });
+                patch({ demo: row.key });
                 setDiagramOpen(false);
                 setDiagramQuery('');
               }}
-              className="flex items-center gap-3 rounded-xl border border-line px-3 py-2 text-left active:bg-surface-2"
-              data-testid={`diagram-${d.slug}`}
+              className="flex min-h-14 items-center gap-3 rounded-xl border border-line px-3 py-2 text-left active:bg-surface-2"
+              data-testid={`diagram-${row.key}`}
             >
-              <img src={demoFrameUrl(d.slug, 1)} alt="" className="h-12 w-12 shrink-0 rounded-lg bg-surface-2 object-contain" />
+              <DemoThumb demo={row.key} size="md" />
               <div className="min-w-0">
-                <div className="truncate font-semibold">{d.name}</div>
-                <div className="text-xs text-muted">{d.equipment}</div>
+                <div className="truncate font-semibold">{row.name}</div>
+                <div className="text-xs text-muted">{row.detail}</div>
               </div>
             </button>
           ))}
-          {diagramQuery.trim() && searchDemos(diagramQuery).length === 0 && <div className="py-6 text-center text-sm text-muted">No matches</div>}
+          {diagramSettled && diagramQuery.trim() && diagramRows.length === 0 && <div className="py-6 text-center text-sm text-muted">No matches</div>}
         </div>
       </Sheet>
     </div>

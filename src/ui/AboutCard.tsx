@@ -2,9 +2,17 @@ import { ATTRIBUTIONS } from '@/data/exerciseDemos';
 import { UK_FOOD_TABLE_ATTRIBUTION } from '@/data/ukFoodTable';
 import { Card, Divider } from './components/Card';
 
-/** The generated exercise-media attributions, plus the bundled UK food table's — appended, never
- * hand-edited into `exerciseDemos.ts` itself (see `src/data/ukFoodTable.ts`'s doc comment). */
-const ALL_ATTRIBUTIONS = [...ATTRIBUTIONS, UK_FOOD_TABLE_ATTRIBUTION];
+/** The exercise catalogue (src/domain/catalogue.ts): its entries, steps and photographs. Facts as recorded in docs/ATTRIBUTION.md. */
+const EXERCISE_CATALOGUE_ATTRIBUTION = {
+  name: 'Exercise library: free-exercise-db (public domain)',
+  url: 'https://github.com/yuhonas/free-exercise-db',
+  licence: 'Unlicense — https://unlicense.org/. The original source of the photographs is not stated.',
+};
+
+/** The generated exercise-media attributions, plus the exercise catalogue's and the bundled UK food
+ * table's — appended, never hand-edited into `exerciseDemos.ts` itself (see `src/data/ukFoodTable.ts`'s
+ * doc comment). */
+const ALL_ATTRIBUTIONS = [...ATTRIBUTIONS, EXERCISE_CATALOGUE_ATTRIBUTION, UK_FOOD_TABLE_ATTRIBUTION];
 
 /** Third-party attribution and the one fact about what this app sends off the device. */
 export function AboutCard() {

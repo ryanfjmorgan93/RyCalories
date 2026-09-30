@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { demoFrameUrl } from '@/data/exerciseDemos';
 import { MUSCLE_GROUPS, type Exercise, type MuscleGroup } from '@/domain/types';
 import { Button } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row, SectionTitle } from '@/ui/components/Card';
 import { Chip } from '@/ui/components/Chip';
 import { TextInput } from '@/ui/components/NumberField';
 import { ChevronIcon, TopBar } from '@/ui/components/TopBar';
+import { DemoThumb } from '@/ui/DemoThumb';
 import { useExercises } from '@/ui/hooks';
+import { LibrarySheet } from '@/ui/LibrarySheet';
 
 type Filter = 'all' | MuscleGroup;
 
@@ -31,6 +32,7 @@ export function ExercisesScreen() {
   const exercises = useExercises();
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
+  const [libraryOpen, setLibraryOpen] = useState(false);
 
   const groups = useMemo(() => {
     const present = new Set((exercises ?? []).map((e) => e.muscleGroup));
@@ -58,6 +60,9 @@ export function ExercisesScreen() {
       />
       <div className="px-4">
         <TextInput value={q} onChange={setQ} placeholder="Search" testId="exercise-search" />
+        <Button full variant="outline" className="mt-3" onClick={() => setLibraryOpen(true)} data-testid="add-from-library">
+          Add from library
+        </Button>
 
         <div className="no-scrollbar -mx-4 mt-3 flex gap-2 overflow-x-auto px-4">
           <Chip className="min-h-11" active={filter === 'all'} onClick={() => setFilter('all')}>
@@ -82,7 +87,7 @@ export function ExercisesScreen() {
                 {i > 0 && <Divider />}
                 <Row
                   onClick={() => nav(`/exercises/${e.id}`)}
-                  left={e.demo ? <img src={demoFrameUrl(e.demo, 1)} alt="" className="h-10 w-10 shrink-0 rounded-lg bg-surface-2 object-contain" /> : undefined}
+                  left={<DemoThumb demo={e.demo} size="sm" />}
                   title={e.name}
                   subtitle={exerciseSubtitle(e)}
                   right={<ChevronIcon />}
@@ -93,6 +98,15 @@ export function ExercisesScreen() {
         )}
         <div className="h-6" />
       </div>
+
+      <LibrarySheet
+        open={libraryOpen}
+        onClose={() => setLibraryOpen(false)}
+        onPick={(e) => {
+          setLibraryOpen(false);
+          nav(`/exercises/${e.id}`);
+        }}
+      />
     </div>
   );
 }

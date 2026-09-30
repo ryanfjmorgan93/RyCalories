@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
-import { demoFrameUrl, findDemo } from '@/data/exerciseDemos';
+import { useEffect, useMemo, useState } from 'react';
+import { findDemo } from '@/data/exerciseDemos';
+import { loadCatalogueSteps } from '@/data/catalogue';
+import { demoFrameSrc, demoPicture } from './demoPicture';
 
 /** YouTube search results URL for an exercise's form, used as the default "Video" link target. */
 export function youtubeSearchUrl(name: string): string {
@@ -9,26 +11,51 @@ export function youtubeSearchUrl(name: string): string {
 const FRAME_MS = 600;
 
 /**
- * A looping demonstration for one exercise (frame count varies by demo — most are 3, some are
- * fewer), with its instructions (when matched) and a link to search for video of it. Renders
- * nothing when the slug has no demo.
+ * A looping demonstration for one exercise, with its instructions (when there are any) and a link to
+ * search for video of it. `slug` is the exercise's `demo` value: a bundled diagram (square, frame
+ * count varies — most are 3, some are fewer) or a catalogue key (3:2 photographs, two frames; its
+ * steps are fetched here, the first time the demo is shown, and an entry without any shows none).
+ * Renders nothing when the value names no picture.
  */
 export function ExerciseDemo({ slug, name, videoUrl, size = 'lg' }: { slug: string; name: string; videoUrl?: string; size?: 'sm' | 'lg' }) {
-  const demo = findDemo(slug);
+  const pic = useMemo(() => demoPicture(slug), [slug]);
   const [frame, setFrame] = useState(1);
   const [paused, setPaused] = useState(false);
+  const [loaded, setLoaded] = useState<{ slug: string; steps: string[] } | null>(null);
 
+  const frames = pic?.frames ?? 0;
   useEffect(() => {
-    if (!demo || paused) return;
+    if (frames === 0 || paused) return;
     const id = window.setInterval(() => {
-      setFrame((f) => (f % demo.frames) + 1);
+      setFrame((f) => (f % frames) + 1);
     }, FRAME_MS);
     return () => window.clearInterval(id);
-  }, [demo, paused]);
+  }, [frames, paused]);
 
-  if (!demo) return null;
+  const catalogueSlug = pic?.kind === 'catalogue' ? pic.slug : null;
+  useEffect(() => {
+    if (catalogueSlug === null) return;
+    let live = true;
+    loadCatalogueSteps(catalogueSlug).then(
+      (steps) => {
+        if (live) setLoaded({ slug: catalogueSlug, steps: steps ?? [] });
+      },
+      () => {
+        // The steps are an extra: the pictures stand without them.
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [catalogueSlug]);
 
-  const imgSize = size === 'sm' ? 'w-32 h-32' : 'w-full max-w-xs aspect-square';
+  // A key that changes under a mounted demo can leave `frame` past the new picture's last one.
+  const src = demoFrameSrc(slug, Math.min(frame, Math.max(frames, 1)));
+  if (!pic || !src) return null;
+
+  const instructions = pic.kind === 'catalogue' ? (loaded?.slug === pic.slug ? loaded.steps : []) : (findDemo(pic.slug)?.instructions ?? []);
+  const wide = pic.shape === 'wide';
+  const imgSize = wide ? (size === 'sm' ? 'w-36 h-24' : 'w-full max-w-sm aspect-[3/2]') : size === 'sm' ? 'w-32 h-32' : 'w-full max-w-xs aspect-square';
 
   return (
     <div className="flex flex-col items-center gap-3">
@@ -40,21 +67,22 @@ export function ExerciseDemo({ slug, name, videoUrl, size = 'lg' }: { slug: stri
         className={`relative overflow-hidden rounded-2xl bg-surface-2 border border-line ${imgSize}`}
       >
         <img
-          src={demoFrameUrl(slug, frame)}
+          src={src}
           alt={name}
-          className={demo.photo ? 'h-full w-full object-cover' : 'demo-frame h-full w-full object-contain'}
+          data-testid="demo-frame"
+          className={pic.photo ? 'h-full w-full object-cover' : 'demo-frame h-full w-full object-contain'}
         />
       </button>
 
       <div className="flex items-center gap-1.5" aria-hidden="true">
-        {Array.from({ length: demo.frames }, (_, i) => i + 1).map((i) => (
+        {Array.from({ length: pic.frames }, (_, i) => i + 1).map((i) => (
           <span key={i} className={`h-1.5 w-1.5 rounded-full ${i === frame ? 'bg-fg' : 'bg-line'}`} />
         ))}
       </div>
 
-      {demo.instructions.length > 0 && (
-        <ol className="w-full list-decimal space-y-1.5 pl-5 text-sm text-muted marker:text-dim">
-          {demo.instructions.map((step, i) => (
+      {instructions.length > 0 && (
+        <ol className="w-full list-decimal space-y-1.5 pl-5 text-sm text-muted marker:text-dim" data-testid="demo-steps">
+          {instructions.map((step, i) => (
             <li key={i} className="pl-1">
               {step}
             </li>

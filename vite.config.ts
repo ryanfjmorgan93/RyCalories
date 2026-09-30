@@ -45,6 +45,25 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,webp,ico,woff2,wasm}'],
+        // The exercise catalogue's photographs (about 6.6 MB, a thousand files) stay out of the
+        // precache: the install would fetch all of them for the few an owner ever opens. The
+        // Android shell never registers this worker (src/main.tsx), so it carries them on disk.
+        // On the web a frame is cached the first time it is shown (the route below).
+        globIgnores: ['catalogue/**'],
+        runtimeCaching: [
+          {
+            // A regular expression only matches a cross-origin URL from its first character, so this is same-origin only.
+            urlPattern: /\/catalogue\/[^/]+\/\d+\.webp$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'iron-catalogue',
+              // Every frame the catalogue has (two each for about 540 entries) fits: the cache is
+              // bounded by what is on disk, never by how long the app has been installed.
+              expiration: { maxEntries: 1200 },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
+        ],
         navigateFallback: '/index.html',
         // Capacitor rewrites cross-origin GETs to a same-origin proxy path and lets its own
         // WebViewLocalServer answer them, which is how the label lookup gets past CORS on Android.
