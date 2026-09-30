@@ -19,11 +19,32 @@ import {
 import { MACRO_MUSCLES, type QuickOptions } from './quickRequest';
 
 const typed = (text: string, from: QuickDraft = EMPTY_DRAFT): QuickDraft => typeText(from, text);
+/** `more` typed on after what is there, a key at a time. */
+function typedOn(more: string, from: QuickDraft): QuickDraft {
+  let d = from;
+  for (const ch of more) d = typeText(d, d.text + ch);
+  return d;
+}
 /** Keystroke by keystroke, as the sheet receives it. */
 function typedByKey(text: string, from: QuickDraft = EMPTY_DRAFT): QuickDraft {
   let d = from;
   for (let i = 1; i <= text.length; i++) d = typeText(d, text.slice(0, i));
   return d;
+}
+
+const LEGS = MACRO_MUSCLES.legs;
+
+/** Nothing is ever both asked for and ruled out, in the options the generator gets and on the chips the owner sees. */
+function expectNoOverlap(d: QuickDraft, label = ''): void {
+  const o = quickOptions(d);
+  const chips = quickChips(d);
+  const excluded = chips.excluded.flatMap((c) => c.muscles);
+  for (const m of o.focus) {
+    expect(o.exclude ?? [], `${label}: ${m} is in the options' focus and exclusion`).not.toContain(m);
+    expect(excluded, `${label}: ${m} is in the focus and on an Exclude chip`).not.toContain(m);
+  }
+  const lit = chips.focus.macros.filter((m) => m.lit).flatMap((m) => MACRO_MUSCLES[m.name]);
+  for (const m of [...lit, ...chips.focus.muscles]) expect(excluded, `${label}: ${m} is lit and excluded`).not.toContain(m);
 }
 
 describe('typing sets the chips', () => {
@@ -33,7 +54,9 @@ describe('typing sets the chips', () => {
     expect(chips.count.selected).toBe(4);
     expect(chips.count.auto).toBe(false);
     expect(chips.effort).toBe('light');
-    expect(chips.minutes.selected).toBe(30);
+    // Thirty minutes is what was typed and what the options carry, but with four exercises asked for
+    // the minutes size nothing, so no Time chip is lit.
+    expect(chips.minutes.selected).toBeNull();
     expect(quickOptions(d)).toMatchObject({ count: 4, effort: 'light', minutes: 30, focus: [], includeNew: false });
   });
 
@@ -101,6 +124,129 @@ describe('the last action wins, field by field', () => {
     expect(quickOptions(d).effort).toBe('light');
   });
 
+  describe('a tap survives the half-typed words on the way to a phrase about something else', () => {
+    // Every prefix of these parses as something ("4", "3", "four", "ten") that the finished text does not say.
+    it.each([
+      ['45 min', { minutes: 45 }],
+      ['30 min', { minutes: 30 }],
+      ['45min', { minutes: 45 }],
+      ['legs 30 mins', { minutes: 30 }],
+      ['for 45 minutes', { minutes: 45 }],
+      ['fourteen exercises', {}],
+      ['tender legs', {}],
+      ['10 reps of legs', {}],
+    ])('tap 6, then "%s" one key at a time: still 6', (text, also) => {
+      const d = tapCount(EMPTY_DRAFT, 6);
+      const byKey = typedByKey(text, d);
+      expect(quickOptions(byKey).count).toBe(6);
+      expect(quickOptions(byKey)).toMatchObject(also);
+      if (text.includes('legs')) expect(new Set(quickOptions(byKey).focus)).toEqual(new Set(LEGS));
+      expect(quickChips(byKey).count.selected).toBe(6);
+      // And it is what pasting the same text says.
+      expect(quickOptions(byKey)).toEqual(quickOptions(typed(text, d)));
+    });
+
+    it('a tap on Auto survives the same way', () => {
+      const d = tapCount(EMPTY_DRAFT, null);
+      for (const text of ['45 min', 'legs 30 mins', 'fourteen']) {
+        expect(quickOptions(typedByKey(text, d)).count, text).toBeUndefined();
+        expect(quickChips(typedByKey(text, d)).count.auto, text).toBe(true);
+      }
+    });
+
+    it('five tapped and "30 min" typed is five exercises and thirty minutes', () => {
+      const d = typedByKey('30 min', tapCount(EMPTY_DRAFT, 5));
+      expect(quickOptions(d)).toMatchObject({ count: 5, minutes: 30 });
+    });
+
+    it('while the half-word is on screen it is what the text says, and the tap is back when it is not', () => {
+      let d = tapCount(EMPTY_DRAFT, 6);
+      d = typeText(d, '4');
+      expect(quickOptions(d).count).toBe(4);
+      expect(d.dropped).toEqual({ count: 6 });
+      d = typeText(d, '45');
+      expect(quickOptions(d).count).toBe(6);
+      // Nothing is left waiting once the tap is back.
+      expect(d.dropped).toBeUndefined();
+      d = typeText(d, '45 min');
+      expect(quickOptions(d)).toMatchObject({ count: 6, minutes: 45 });
+    });
+
+    it('a count that is really said still takes over from the tap, however it is typed', () => {
+      for (const type of [typed, typedByKey]) {
+        const d = type('three exercises', tapCount(EMPTY_DRAFT, 5));
+        expect(quickOptions(d).count).toBe(3);
+        expect(quickChips(d).count.selected).toBe(3);
+        expect(type('4 exercises please', tapCount(typed('light'), 6)).taps.count).toBeUndefined();
+      }
+    });
+
+    it('a time that is really said takes over at once, and not a key later', () => {
+      // "4" and "45" are not times without a unit, so the tap stands until "45 m".
+
+      let d = tapMinutes(EMPTY_DRAFT, 30);
+      const seen: number[] = [];
+      for (const prefix of ['4', '45', '45 ', '45 m', '45 mi', '45 min']) {
+        d = typeText(d, prefix);
+        seen.push(quickOptions(d).minutes!);
+      }
+      // "45 mi" is not a time yet, so for that one key the tap stands; "45 min" is 45 again.
+      expect(seen).toEqual([30, 30, 30, 45, 30, 45]);
+    });
+
+    it('a muscle, an effort and an equipment tap are kept behind what displaces them, and come back with the text gone', () => {
+      let focus = toggleFocus(EMPTY_DRAFT, MACRO_MUSCLES.push);
+      focus = typedByKey('legs', focus);
+      expect(new Set(quickOptions(focus).focus)).toEqual(new Set(LEGS));
+      expect(new Set(quickOptions(typed('', focus)).focus)).toEqual(new Set(MACRO_MUSCLES.push));
+
+      let effort = tapEffort(EMPTY_DRAFT, 'normal');
+      effort = typedByKey('light', effort);
+      expect(quickOptions(effort).effort).toBe('light');
+      expect(quickOptions(typed('', effort)).effort).toBe('normal');
+
+      const from = typed('dumbbells and cables');
+      let equipment = tapEquipment(from, quickChips(from).equipment[0]);
+      expect(quickOptions(equipment).equipment).toEqual(['cable']);
+      equipment = typedByKey('machines', equipment);
+      expect(quickOptions(equipment).equipment).toEqual(['machine']);
+      expect(quickOptions(typed('', equipment)).equipment).toEqual(['cable']);
+    });
+
+    it('deleting what displaced a tap, one key at a time, brings it back', () => {
+      let d = typedByKey('three exercises', tapCount(EMPTY_DRAFT, 5));
+      expect(quickOptions(d).count).toBe(3);
+      for (let n = 'three exercises'.length - 1; n >= 0; n--) d = typeText(d, 'three exercises'.slice(0, n));
+      expect(quickOptions(d).count).toBe(5);
+    });
+
+    it('a tap made after the text displaced one is the later word, and the old one is gone for good', () => {
+      let d = typed('three exercises', tapCount(EMPTY_DRAFT, 5));
+      d = tapCount(d, 6);
+      expect(quickOptions(typed('', d)).count).toBe(6);
+      // Auto, too: a tap on Auto since then is not undone by the text going.
+      const auto = tapCount(typed('three exercises', tapCount(EMPTY_DRAFT, 5)), null);
+      expect(quickOptions(typed('', auto)).count).toBeUndefined();
+    });
+
+    it('typed key by key, pasted whole, or pasted over a selection: the same options', () => {
+      const starts: [string, QuickDraft][] = [
+        ['count 6', tapCount(EMPTY_DRAFT, 6)],
+        ['Auto', tapCount(EMPTY_DRAFT, null)],
+        ['minutes 30', tapMinutes(EMPTY_DRAFT, 30)],
+        ['light', tapEffort(EMPTY_DRAFT, 'light')],
+        ['push', toggleFocus(EMPTY_DRAFT, MACRO_MUSCLES.push)],
+        ['count 4 typed, 5 tapped', tapCount(typed('four exercises'), 5)],
+      ];
+      const texts = ['45 min', 'legs 30 mins', 'fourteen', 'for 45 minutes', 'tender legs', 'six exercises', 'easy, three light exercises', 'no legs or arms', 'half an hour of chest', '10 reps of arms'];
+      for (const [label, start] of starts) {
+        for (const text of texts) {
+          expect(quickOptions(typedByKey(text, start)), `${label} + ${text}`).toEqual(quickOptions(typed(text, start)));
+        }
+      }
+    });
+  });
+
   it('deleting the phrase keeps what was tapped, and deleting it with nothing tapped goes back to Auto', () => {
     let d = tapCount(typed('four exercises'), 5);
     d = typed('', d);
@@ -146,6 +292,33 @@ describe('the last action wins, field by field', () => {
     typeText(d, 'six');
     tapIncludeNew(d);
     expect(JSON.stringify(d)).toBe(snapshot);
+  });
+});
+
+describe('the Time chip is lit only while the minutes size the plan', () => {
+  it('is lit with no count, and not once a count is typed, tapped or read by the assistant', () => {
+    expect(quickChips(EMPTY_DRAFT).minutes.selected).toBe(40);
+    expect(quickChips(typed('35 min')).minutes.selected).toBe(35);
+    expect(quickChips(typed('four exercises, 35 min')).minutes.selected).toBeNull();
+    expect(quickChips(tapCount(EMPTY_DRAFT, 6)).minutes.selected).toBeNull();
+    expect(quickChips(setAi(typed('my fancy bits'), { count: 5 })).minutes.selected).toBeNull();
+  });
+
+  it('is lit again on Auto, on the minutes that were typed or tapped meanwhile', () => {
+    let d = tapCount(typed('35 min'), 5);
+    expect(quickChips(d).minutes.selected).toBeNull();
+    d = tapCount(d, null);
+    expect(quickChips(d).minutes.selected).toBe(35);
+    // A Time tap with a count set is remembered, and takes effect when Auto hands the sizing back.
+    d = tapMinutes(tapCount(d, 5), 45);
+    expect(quickChips(d).minutes.selected).toBeNull();
+    expect(quickChips(tapCount(d, null)).minutes.selected).toBe(45);
+  });
+
+  it('still offers the typed minutes as a chip, and still hands the generator the minutes', () => {
+    const d = typed('4 exercises, 35 min');
+    expect(quickChips(d).minutes.values).toEqual([30, 35, 40, 45]);
+    expect(quickOptions(d)).toMatchObject({ count: 4, minutes: 35 });
   });
 });
 
@@ -283,6 +456,122 @@ describe('exclusions are carried', () => {
     expect(new Set(quickOptions(d).exclude)).toEqual(new Set(legs));
   });
 
+  describe('a muscle is never both asked for and ruled out', () => {
+    it.each([
+      ['typed whole', (d: QuickDraft) => typed('no legs, no arms', d)],
+      ['typed on a key at a time', (d: QuickDraft) => typedOn(', no arms', d)],
+    ])('Legs tapped over "no legs" stays lifted while the exclusion is edited, %s', (_label, edit) => {
+      let d = toggleFocus(typed('no legs'), LEGS);
+      expect(quickChips(d).excluded).toEqual([]);
+      d = edit(d);
+      const o = quickOptions(d);
+      expect(new Set(o.focus)).toEqual(new Set(LEGS));
+      expect(new Set(o.exclude)).toEqual(new Set(MACRO_MUSCLES.arms));
+      const chips = quickChips(d);
+      expect(chips.excluded.map((c) => c.key)).toEqual(['arms']);
+      expect(chips.focus.macros.filter((m) => m.lit).map((m) => m.name)).toEqual(['legs']);
+      expectNoOverlap(d);
+    });
+
+    it.each([
+      ['typed whole', typed],
+      ['typed key by key', typedByKey],
+    ])('Legs tapped and then "no legs" typed: the later word wins, Legs is not lit and the exclusion stands, %s', (_label, type) => {
+      const d = type('no legs', toggleFocus(EMPTY_DRAFT, LEGS));
+      const chips = quickChips(d);
+      expect(chips.focus.macros.filter((m) => m.lit)).toEqual([]);
+      expect(chips.focus.auto).toBe(true);
+      expect(chips.excluded.map((c) => c.key)).toEqual(['legs']);
+      expect(quickOptions(d).focus).toEqual([]);
+      expect(new Set(quickOptions(d).exclude)).toEqual(new Set(LEGS));
+      expectNoOverlap(d);
+    });
+
+    it('a muscle the edit newly rules out is not lifted with the one the tap lifted: Legs and Chest tapped, then "no chest"', () => {
+      let d = toggleFocus(typed('no legs'), LEGS);
+      d = toggleFocus(d, ['chest']);
+      expect(quickOptions(d).exclude).toBeUndefined();
+      d = typedOn(', no chest, no arms', d);
+      expect(new Set(quickOptions(d).focus)).toEqual(new Set(LEGS));
+      expect(new Set(quickOptions(d).exclude)).toEqual(new Set(['chest', ...MACRO_MUSCLES.arms]));
+      expectNoOverlap(d);
+    });
+
+    it('an exclusion that comes back from behind the text is older than a focus tapped since', () => {
+      // "No core" from the chips is displaced by a new phrase; Core is tapped; the phrase goes.
+      let d = removeExcluded(typed('no legs, no core'), 'legs');
+      d = typed('no arms', d);
+      expect(new Set(quickOptions(d).exclude)).toEqual(new Set(MACRO_MUSCLES.arms));
+      d = toggleFocus(d, MACRO_MUSCLES.core);
+      d = typed('', d);
+      expect(new Set(quickOptions(d).focus)).toEqual(new Set(MACRO_MUSCLES.core));
+      expect(quickOptions(d).exclude).toBeUndefined();
+      expectNoOverlap(d);
+    });
+
+    it('only the muscles the text rules out give way: Push tapped, "no triceps" typed, is chest and shoulders', () => {
+      const d = typedByKey('no triceps', toggleFocus(EMPTY_DRAFT, MACRO_MUSCLES.push));
+      expect(quickOptions(d).focus).toEqual(['chest', 'shoulders']);
+      expect(quickOptions(d).exclude).toEqual(['triceps']);
+      expectNoOverlap(d);
+    });
+
+    it('a tap outranked on the way through a longer phrase is back once the text is finished: Legs, then "no lower back"', () => {
+      // "no lower" is the legs and the lower back; "no lower back" is the lower back alone.
+      const d = typedByKey('no lower back', toggleFocus(EMPTY_DRAFT, LEGS));
+      expect(new Set(quickOptions(d).focus)).toEqual(new Set(LEGS));
+      expect(quickOptions(d).exclude).toEqual(['lower back']);
+      expect(quickChips(d).focus.macros.filter((m) => m.lit).map((m) => m.name)).toEqual(['legs']);
+      expectNoOverlap(d);
+    });
+
+    it('taking the exclusion chip away lets the muscles be chosen, and does not light up a tap it outranked', () => {
+      const d = removeExcluded(typed('no legs', toggleFocus(EMPTY_DRAFT, LEGS)), 'legs');
+      expect(quickOptions(d).exclude).toBeUndefined();
+      expect(quickOptions(d).focus).toEqual([]);
+      expect(quickChips(d).focus.auto).toBe(true);
+    });
+
+    it('a focus typed after the exclusion was edited by its chips is the later word: "no legs, no core", Legs off, then "core"', () => {
+      let d = removeExcluded(typed('no legs, no core'), 'legs');
+      expect(new Set(quickOptions(d).exclude)).toEqual(new Set(MACRO_MUSCLES.core));
+      d = typed('core', d);
+      expect(new Set(quickOptions(d).focus)).toEqual(new Set(MACRO_MUSCLES.core));
+      expect(quickOptions(d).exclude).toBeUndefined();
+      expectNoOverlap(d);
+    });
+
+    it('holds over a long run of taps and typing, a key at a time', () => {
+      // A small seeded generator of its own: the domain has none to borrow, and the run must repeat.
+      let state = 20260930;
+      const next = (n: number): number => {
+        state = (Math.imul(state, 1664525) + 1013904223) | 0;
+        return (state >>> 8) % n;
+      };
+      const phrases = ['no legs', 'legs', 'no legs or arms', 'push', 'no triceps', 'lower back', 'no lower back', 'core', 'no core, legs', 'arms and no biceps', 'upper', 'no upper', 'chest, no legs', '4 exercises', 'light', '45 min', 'no barbell', 'dumbbells'];
+      const macros = Object.values(MACRO_MUSCLES);
+      let steps = 0;
+      for (let run = 0; run < 300; run++) {
+        let d: QuickDraft = EMPTY_DRAFT;
+        for (let step = 0; step < 14; step++) {
+          const pick = next(9);
+          if (pick <= 2) d = typedByKey(phrases[next(phrases.length)], pick === 0 ? typeText(d, '') : d);
+          else if (pick === 3) d = typeText(d, phrases[next(phrases.length)]);
+          else if (pick === 4) d = toggleFocus(d, macros[next(macros.length)]);
+          else if (pick === 5) d = tapFocusAuto(d);
+          else if (pick === 6) d = tapCount(d, [null, 3, 5][next(3)]);
+          else if (pick === 7) {
+            const chips = quickChips(d).excluded;
+            if (chips.length) d = removeExcluded(d, chips[next(chips.length)].key);
+          } else d = typeText(d, d.text.slice(0, next(d.text.length + 1)));
+          expectNoOverlap(d, `run ${run} step ${step} "${d.text}"`);
+          steps++;
+        }
+      }
+      expect(steps).toBe(4200);
+    });
+  });
+
   it('typing a new exclusion replaces a tap that removed the old one', () => {
     let d = removeExcluded(typed('no legs'), 'legs');
     expect(quickOptions(d).exclude).toBeUndefined();
@@ -303,6 +592,15 @@ describe('equipment chips', () => {
     d = tapEquipment(d, quickChips(d).equipment[0]);
     expect(quickOptions(d).equipment).toBeUndefined();
     expect(quickChips(d).equipment).toEqual([]);
+  });
+
+  it('three allowed kinds still read as themselves, and four read as what they leave out', () => {
+    const three = typed('dumbbells, cables and machines');
+    expect(quickChips(three).equipment.map((c) => [c.label, c.allowed])).toEqual([['dumbbell', true], ['machine', true], ['cable', true]]);
+    const four = typed('dumbbells, cables, machines and barbells');
+    const chips = quickChips(four).equipment;
+    expect(chips.every((c) => !c.allowed)).toBe(true);
+    expect(chips.map((c) => c.label)).toEqual(['No bodyweight', 'No kettlebell', 'No other']);
   });
 
   it('two allowed kinds are two chips, and removing one leaves the other', () => {
@@ -358,7 +656,9 @@ describe("the assistant's reading", () => {
     const d = read({ count: 5, minutes: 30, effort: 'light', focus: ['chest', 'triceps'] }, typed('my fancy bits'));
     expect(quickOptions(d)).toMatchObject({ count: 5, minutes: 30, effort: 'light', focus: ['chest', 'triceps'] });
     expect(quickChips(d).count.selected).toBe(5);
-    expect(quickChips(d).minutes.selected).toBe(30);
+    // The assistant's count is a count like any other: the minutes it read size nothing.
+    expect(quickChips(d).minutes.selected).toBeNull();
+    expect(quickOptions(d).minutes).toBe(30);
   });
 
   it('leaves the rules\' minutes alone when "tired" already said 30', () => {
