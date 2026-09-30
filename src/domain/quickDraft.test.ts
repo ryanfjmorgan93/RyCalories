@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  aiFills,
   EMPTY_DRAFT,
   quickChips,
   quickOptions,
   removeExcluded,
+  setAi,
   tapCount,
   tapEffort,
   tapEquipment,
@@ -14,7 +16,7 @@ import {
   typeText,
   type QuickDraft,
 } from './quickDraft';
-import { MACRO_MUSCLES } from './quickRequest';
+import { MACRO_MUSCLES, type QuickOptions } from './quickRequest';
 
 const typed = (text: string, from: QuickDraft = EMPTY_DRAFT): QuickDraft => typeText(from, text);
 /** Keystroke by keystroke, as the sheet receives it. */
@@ -335,5 +337,158 @@ describe('include new', () => {
     expect(quickChips(on).includeNew).toBe(true);
     expect(quickOptions(typed('four exercises', on)).includeNew).toBe(true);
     expect(quickOptions(tapIncludeNew(on)).includeNew).toBe(false);
+  });
+});
+
+describe("the assistant's reading", () => {
+  /** The words the rules cannot read are "fancy bits"; the rules read four and light. */
+  const RULED = 'four light exercises for my fancy bits';
+  const ruled = (): QuickDraft => typed(RULED);
+  const read = (ai: Partial<QuickOptions> | null, from: QuickDraft = ruled()): QuickDraft => setAi(from, ai);
+
+  it('fills only what the typed line left unset', () => {
+    const d = read({ count: 6, minutes: 45, effort: 'normal', focus: ['biceps'], equipment: ['dumbbell'] });
+    expect(quickOptions(d)).toEqual({ count: 4, effort: 'light', minutes: 45, focus: ['biceps'], equipment: ['dumbbell'], includeNew: false });
+    expect(quickChips(d).count.selected).toBe(4);
+    expect(quickChips(d).effort).toBe('light');
+    expect(quickChips(d).focus.muscles).toEqual(['biceps']);
+  });
+
+  it('sets every field when the typed line said nothing', () => {
+    const d = read({ count: 5, minutes: 30, effort: 'light', focus: ['chest', 'triceps'] }, typed('my fancy bits'));
+    expect(quickOptions(d)).toMatchObject({ count: 5, minutes: 30, effort: 'light', focus: ['chest', 'triceps'] });
+    expect(quickChips(d).count.selected).toBe(5);
+    expect(quickChips(d).minutes.selected).toBe(30);
+  });
+
+  it('leaves the rules\' minutes alone when "tired" already said 30', () => {
+    expect(quickOptions(read({ minutes: 45 }, typed('tired, fancy bits'))).minutes).toBe(30);
+  });
+
+  it('a muscle the rules ruled out is not brought back by the assistant', () => {
+    const d = read({ focus: ['quads', 'chest'] }, typed('no legs, fancy bits'));
+    expect(quickOptions(d).focus).toEqual(['chest']);
+    expect([...quickOptions(d).exclude!].sort()).toEqual([...MACRO_MUSCLES.legs].sort());
+    expect(quickOptions(read({ focus: ['calves'] }, typed('no calves, fancy bits'))).focus).toEqual([]);
+  });
+
+  it('takes nothing from a model that read nothing', () => {
+    expect(quickOptions(read(null))).toEqual(quickOptions(ruled()));
+    expect(quickOptions(read({}))).toEqual(quickOptions(ruled()));
+  });
+
+  describe('a tap wins over it, field by field', () => {
+    const asked = (): QuickDraft => read({ count: 5, minutes: 30, effort: 'normal', focus: ['biceps'], equipment: ['dumbbell'] }, typed('my fancy bits'));
+
+    it('a chosen value stands', () => {
+      const o = quickOptions(tapEffort(tapMinutes(tapCount(asked(), 3), 45), 'light'));
+      expect(o).toMatchObject({ count: 3, minutes: 45, effort: 'light' });
+    });
+
+    it('Auto is a choice: a count or a focus tapped to Auto is not filled back in', () => {
+      const d = tapFocusAuto(tapCount(asked(), null));
+      expect(quickOptions(d).count).toBeUndefined();
+      expect(quickOptions(d).focus).toEqual([]);
+      expect(quickChips(d).count.auto).toBe(true);
+      expect(quickChips(d).focus.auto).toBe(true);
+      // The fields nobody tapped are still the assistant's.
+      expect(quickOptions(d)).toMatchObject({ minutes: 30, effort: 'normal', equipment: ['dumbbell'] });
+    });
+
+    it('the last chip of a list taken away leaves that list empty, not the assistant\'s', () => {
+      const d = asked();
+      const chip = quickChips(d).equipment[0]!;
+      expect(quickOptions(tapEquipment(d, chip)).equipment).toBeUndefined();
+      expect(quickOptions(toggleFocus(d, ['biceps'])).focus).toEqual([]);
+    });
+
+    it('a focus chip the assistant lit is tapped like any other: off, and on again', () => {
+      const off = toggleFocus(asked(), ['biceps']);
+      expect(quickChips(off).focus.auto).toBe(true);
+      expect(quickOptions(toggleFocus(off, ['biceps'])).focus).toEqual(['biceps']);
+    });
+  });
+
+  describe('it is tied to the text it read', () => {
+    it('any change to the text drops it', () => {
+      const d = read({ count: 5, focus: ['biceps'] }, typed('my fancy bits'));
+      const more = typeText(d, 'my fancy bits please');
+      expect(more.ai).toBeNull();
+      expect(quickOptions(more)).toEqual(quickOptions(typed('my fancy bits please')));
+      // Typing the old words back does not bring the reading back.
+      expect(quickOptions(typeText(more, 'my fancy bits'))).toEqual(quickOptions(typed('my fancy bits')));
+    });
+
+    it('text that comes out the same leaves it be', () => {
+      const d = read({ count: 5 }, typed('my fancy bits'));
+      expect(typeText(d, 'my fancy bits').ai).toEqual({ count: 5 });
+      expect(quickOptions(typeText(d, 'my fancy bits')).count).toBe(5);
+    });
+
+    it('a reading of nothing takes the layer away', () => {
+      const d = read({ count: 5 }, typed('my fancy bits'));
+      expect(quickOptions(d).count).toBe(5);
+      expect(setAi(d, null).ai).toBeNull();
+      expect(quickOptions(setAi(d, null)).count).toBeUndefined();
+    });
+
+    it('a tap does not drop it', () => {
+      const d = tapEffort(read({ count: 5, focus: ['biceps'] }, typed('my fancy bits')), 'light');
+      expect(quickOptions(d)).toMatchObject({ count: 5, focus: ['biceps'], effort: 'light' });
+    });
+
+    it('is gone from the very first keystroke after it', () => {
+      let d = read({ count: 5 }, typed('my fancy bits'));
+      d = typeText(d, 'my fancy bit');
+      expect(quickOptions(d).count).toBeUndefined();
+    });
+  });
+
+  describe('it can only ever set options', () => {
+    it('never switches Include new on, and never excludes a muscle', () => {
+      const d = read({ includeNew: true, exclude: ['legs'], count: 5 } as unknown as Partial<QuickOptions>, typed('my fancy bits'));
+      expect(Object.keys(d.ai ?? {})).toEqual(['count']);
+      expect(quickOptions(d).includeNew).toBe(false);
+      expect(quickOptions(d).exclude).toBeUndefined();
+      expect(quickChips(d).excluded).toEqual([]);
+      expect(quickChips(d).includeNew).toBe(false);
+    });
+
+    it('an Include new the owner tapped stands, and an exclusion they typed is kept', () => {
+      const d = read({ focus: ['chest'], includeNew: false } as Partial<QuickOptions>, tapIncludeNew(typed('no calves, fancy bits')));
+      expect(quickOptions(d)).toMatchObject({ includeNew: true, exclude: ['calves'], focus: ['chest'] });
+    });
+
+    it('carries no exercise and no weight, whatever the reply held', () => {
+      const d = read({ exercises: ['Bench Press (Barbell)'], weights: [100], count: 5 } as unknown as Partial<QuickOptions>, typed('my fancy bits'));
+      expect(d.ai).toEqual({ count: 5 });
+      expect(Object.keys(quickOptions(d)).sort()).toEqual(['count', 'effort', 'focus', 'includeNew', 'minutes']);
+      expect(JSON.stringify(quickOptions(d))).not.toMatch(/Bench|100/);
+    });
+
+    it('keeps its own copy of the lists it was given', () => {
+      const focus: QuickOptions['focus'] = ['biceps'];
+      const d = read({ focus }, typed('my fancy bits'));
+      focus.push('chest');
+      expect(quickOptions(d).focus).toEqual(['biceps']);
+    });
+  });
+
+  describe('what it added', () => {
+    it('names the fields that the typed line and the taps left open', () => {
+      expect(aiFills(read({ count: 6, focus: ['biceps'], minutes: 45 }))).toEqual(['minutes', 'focus']);
+    });
+
+    it('is empty when everything it read was already decided, or there is no reading', () => {
+      expect(aiFills(read({ count: 6, effort: 'normal' }))).toEqual([]);
+      expect(aiFills(read({}))).toEqual([]);
+      expect(aiFills(ruled())).toEqual([]);
+      expect(aiFills(read(null))).toEqual([]);
+    });
+
+    it('does not count a field a tap has decided', () => {
+      expect(aiFills(tapFocusAuto(read({ focus: ['biceps'] })))).toEqual([]);
+      expect(aiFills(tapMinutes(read({ minutes: 45 }), 30))).toEqual([]);
+    });
   });
 });

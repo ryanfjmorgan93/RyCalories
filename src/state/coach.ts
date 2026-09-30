@@ -24,10 +24,10 @@ export const REPLY_TOKENS: Record<CoachMode, number> = { ask: 600, routine: 800 
 export const COUNT_TIMEOUT_MS = 20_000;
 export const QUIET_TIMEOUT_MS = 120_000;
 
-const NO_ANSWER = 'The model did not answer.';
+export const NO_ANSWER = 'The model did not answer.';
 
 /** `start`'s promise, rejected if `touch` is not called for `ms` — measured from the start and from each touch. */
-function untilQuiet<T>(ms: number, start: (touch: () => void) => Promise<T>): Promise<T> {
+export function untilQuiet<T>(ms: number, start: (touch: () => void) => Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     let timer = setTimeout(() => reject(new Error(NO_ANSWER)), ms);
     const touch = () => {
