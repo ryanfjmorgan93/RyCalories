@@ -87,6 +87,8 @@ const MAX_CATALOGUE = 2;
 const TIME_CEILING_MIN = 45;
 const RECOVERY_DAYS = 2;
 const NEED_DAYS_CAP = 14;
+/** Up to this many days' worth of seeded wobble on a muscle's need, so Shuffle can swap near-equal muscles but never a rested one for a badly overdue one. */
+const NEED_WOBBLE_DAYS = 3;
 const DEFICIT_WEIGHT = 2;
 /** With a catalogue and an own exercise for the same muscle, catalogue ones share this fraction of the own weight. */
 const CATALOGUE_SHARE = 0.5;
@@ -284,8 +286,8 @@ export function generateQuickSession(input: QuickInput, options: QuickOptions, s
     else byGroup.set(c.muscleGroup, [c]);
   }
 
-  // One draw per muscle group in a fixed order, so ties between equally needy groups fall out of
-  // the seed and not out of the order anything was handed in.
+  // One draw per muscle group in a fixed order, so the wobble below (and any tie) falls out of the
+  // seed and not out of the order anything was handed in.
   const jitter = new Map<MuscleGroup, number>(MUSCLE_GROUPS.map((m) => [m, rng()]));
 
   const needOf = (m: MuscleGroup): number => {
@@ -294,7 +296,7 @@ export function generateQuickSession(input: QuickInput, options: QuickOptions, s
     const target = input.weeklyTargets?.[m];
     const done = weeklySets[m];
     const deficit = finite(target) && target > 0 ? Math.max(0, target - (finite(done) ? done : 0)) : 0;
-    return since + DEFICIT_WEIGHT * deficit;
+    return since + DEFICIT_WEIGHT * deficit + NEED_WOBBLE_DAYS * jitter.get(m)!;
   };
   const rank = (groups: MuscleGroup[]): MuscleGroup[] =>
     [...groups].sort((a, b) => needOf(b) - needOf(a) || jitter.get(b)! - jitter.get(a)! || MUSCLE_GROUPS.indexOf(a) - MUSCLE_GROUPS.indexOf(b));
@@ -324,6 +326,9 @@ export function generateQuickSession(input: QuickInput, options: QuickOptions, s
   const windowSize = Math.max(2, Math.ceil(provisional / 2));
   const active: MuscleGroup[] = isTyped ? [...ordered] : ordered.slice(0, windowSize);
   let nextGroup = active.length;
+  // A muscle named on its own can fill the whole plan ("four bicep exercises"); otherwise no
+  // muscle takes more than two, so a plan is not one muscle by accident.
+  const perMuscleCap = isTyped ? Math.max(MAX_PER_MUSCLE, Math.ceil((explicit ?? provisional) / Math.max(1, ordered.length))) : MAX_PER_MUSCLE;
 
   const chosen: Candidate[] = [];
   const chosenIds = new Set<string>();
@@ -334,7 +339,7 @@ export function generateQuickSession(input: QuickInput, options: QuickOptions, s
   const minutesAt = (sec: number): number => Math.round((sec / 60) * pace);
   const costOf = (c: Candidate): number => rowSeconds(rowOf.get(c.id)!);
   const available = (g: MuscleGroup): Candidate[] => {
-    if ((perMuscle.get(g) ?? 0) >= MAX_PER_MUSCLE) return [];
+    if ((perMuscle.get(g) ?? 0) >= perMuscleCap) return [];
     return (byGroup.get(g) ?? []).filter((c) => !chosenIds.has(c.id) && (c.origin !== 'catalogue' || catalogueCount < MAX_CATALOGUE));
   };
 

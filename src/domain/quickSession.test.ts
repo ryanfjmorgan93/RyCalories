@@ -398,7 +398,8 @@ describe('generateQuickSession: focus chosen by need', () => {
   const pool = groupPool(muscles);
 
   it('takes the muscles left longest, two exercises each, for a count of four', () => {
-    const recency = { chest: 5, lats: 6, quads: 7, biceps: 8, abs: 9, calves: 3 };
+    // Spaced wider than the seeded wobble on need (3 days), so the order is the same for every seed.
+    const recency = { chest: 2, lats: 3, quads: 6, biceps: 10, abs: 14, calves: 2 };
     for (const seed of seeds(40)) {
       const plan = generateQuickSession(input(pool, { recency }), opts({ count: 4 }), seed);
       expect([...new Set(rowMuscles(plan))].sort()).toEqual(['abs', 'biceps']);
@@ -409,7 +410,8 @@ describe('generateQuickSession: focus chosen by need', () => {
   });
 
   it('takes ceil(count / 2) groups, and at least two', () => {
-    const recency = { chest: 5, lats: 6, quads: 7, biceps: 8, abs: 9, calves: 10 };
+    // chest and lats were trained under two days ago, so they sit out; the rest are spaced past the wobble.
+    const recency = { chest: 0, lats: 1, quads: 2, biceps: 6, abs: 10, calves: 14 };
     const groupsFor = (count: number) => new Set(rowMuscles(generateQuickSession(input(pool, { recency }), opts({ count }), 3)));
     expect(groupsFor(1).size).toBe(1);
     expect(groupsFor(2)).toEqual(new Set(['calves', 'abs']));
@@ -420,7 +422,7 @@ describe('generateQuickSession: focus chosen by need', () => {
   });
 
   it('reports as its focus the muscles that got an exercise, not the ones it was ready to use', () => {
-    const recency = { chest: 5, lats: 6, quads: 7, biceps: 8, abs: 9, calves: 10 };
+    const recency = { chest: 0, lats: 1, quads: 2, biceps: 6, abs: 10, calves: 14 };
     for (const count of [1, 3, 5]) {
       const plan = generateQuickSession(input(pool, { recency }), opts({ count }), 3);
       expect([...plan.focus].sort()).toEqual([...new Set(rowMuscles(plan))].sort());
@@ -429,11 +431,29 @@ describe('generateQuickSession: focus chosen by need', () => {
     expect(generateQuickSession(input(pool, { recency }), opts({ count: 5 }), 3).focus).toEqual(['calves', 'abs', 'biceps']);
   });
 
+  it('Shuffle can swap muscles that are about equally due, but never a rested one for an overdue one', () => {
+    const many: MuscleGroup[] = ['chest', 'lats', 'quads', 'biceps', 'abs', 'calves', 'glutes', 'triceps'];
+    // Two muscles far overdue, four about equally due (6 to 8 days), two trained yesterday.
+    const recency = { abs: 14, calves: 13, chest: 8, lats: 7, quads: 6, biceps: 7, glutes: 1, triceps: 0 };
+    const focusSets = new Set<string>();
+    for (const seed of seeds(80)) {
+      const plan = generateQuickSession(input(groupPool(many, 3), { recency }), opts({ count: 6 }), seed);
+      const used = new Set(rowMuscles(plan));
+      expect(used.has('abs'), `seed ${seed}`).toBe(true);
+      expect(used.has('calves'), `seed ${seed}`).toBe(true);
+      expect(used.has('glutes'), `seed ${seed}`).toBe(false);
+      expect(used.has('triceps'), `seed ${seed}`).toBe(false);
+      focusSets.add([...used].sort().join('+'));
+    }
+    // The middle muscle of the three slots is not always the same one.
+    expect(focusSets.size).toBeGreaterThan(2);
+  });
+
   it('a muscle never trained counts as fourteen days, the most any muscle is worth', () => {
-    // chest was 13 days ago, so it always loses to the two never trained; and neither of those beats the other.
+    // chest was 9 days ago, so it always loses to the two never trained (more than the wobble apart); and neither of those beats the other.
     const seen = new Set<string>();
     for (const seed of seeds(60)) {
-      const plan = generateQuickSession(input(groupPool(['chest', 'lats', 'quads'], 2), { recency: { chest: 13 } }), opts({ count: 2 }), seed);
+      const plan = generateQuickSession(input(groupPool(['chest', 'lats', 'quads'], 2), { recency: { chest: 9 } }), opts({ count: 2 }), seed);
       for (const m of rowMuscles(plan)) seen.add(m);
     }
     expect(seen).toEqual(new Set(['lats', 'quads']));
@@ -558,8 +578,10 @@ describe('generateQuickSession: a typed focus', () => {
     for (const seed of seeds(30)) {
       const plan = generateQuickSession(input(pool), opts({ focus: ['calves', 'chest'], count: 3 }), seed);
       expect(plan.unmet).toEqual(['calves']);
-      expect(rowMuscles(plan)).toEqual(['chest', 'chest']);
-      expect(plan.shortfall).toBe(1);
+      // Only the muscles that were named are trained: chest, which was named, takes the count.
+      expect(new Set(rowMuscles(plan))).toEqual(new Set(['chest']));
+      expect(plan.rows).toHaveLength(3);
+      expect(plan.shortfall).toBe(0);
     }
   });
 
@@ -586,10 +608,40 @@ describe('generateQuickSession: a typed focus', () => {
     expect(rowIds(on)).toEqual(['cat-calf']);
   });
 
-  it('a focus is not widened to make up a count: two per muscle is the most', () => {
-    const plan = generateQuickSession(input(groupPool(['biceps'], 5)), opts({ focus: ['biceps'], count: 4 }), 1);
-    expect(plan.rows).toHaveLength(2);
-    expect(plan.shortfall).toBe(2);
+  it('a muscle named on its own can fill the whole count', () => {
+    for (const seed of seeds(20)) {
+      const plan = generateQuickSession(input(groupPool(['biceps'], 5)), opts({ focus: ['biceps'], count: 4 }), seed);
+      expect(rowMuscles(plan)).toEqual(['biceps', 'biceps', 'biceps', 'biceps']);
+      expect(plan.shortfall).toBe(0);
+    }
+  });
+
+  it('a muscle named on its own takes only what it has, and the rest is a shortfall', () => {
+    const plan = generateQuickSession(input(groupPool(['biceps'], 3)), opts({ focus: ['biceps'], count: 4 }), 1);
+    expect(plan.rows).toHaveLength(3);
+    expect(plan.shortfall).toBe(1);
+  });
+
+  it('a focus is not widened to make up a count: with two muscles named, two each is the most', () => {
+    for (const seed of seeds(20)) {
+      const plan = generateQuickSession(input(groupPool(['biceps', 'triceps'], 5)), opts({ focus: ['biceps', 'triceps'], count: 4 }), seed);
+      expect(rowMuscles(plan).filter((m) => m === 'biceps')).toHaveLength(2);
+      expect(rowMuscles(plan).filter((m) => m === 'triceps')).toHaveLength(2);
+    }
+    // ...and a focus of three muscles asked for four gives no muscle a third exercise.
+    const three = generateQuickSession(input(groupPool(['biceps', 'triceps', 'forearms'], 5)), opts({ focus: ['biceps', 'triceps', 'forearms'], count: 4 }), 1);
+    const per = new Map<MuscleGroup, number>();
+    for (const m of rowMuscles(three)) per.set(m, (per.get(m) ?? 0) + 1);
+    for (const n of per.values()) expect(n).toBeLessThanOrEqual(2);
+    expect(three.rows).toHaveLength(4);
+  });
+
+  it('with no muscle named, no muscle takes more than two however few muscles have exercises', () => {
+    for (const seed of seeds(20)) {
+      const plan = generateQuickSession(input(groupPool(['biceps'], 6)), opts({ count: 4 }), seed);
+      expect(plan.rows).toHaveLength(2);
+      expect(plan.shortfall).toBe(2);
+    }
   });
 
   it('a muscle ruled out is removed from the focus and from the pool', () => {
@@ -760,9 +812,11 @@ describe('generateQuickSession: deriving the count from the minutes', () => {
     const order: MuscleGroup[] = ['chest', 'lats', 'quads', 'biceps', 'abs', 'calves', 'glutes', 'triceps'];
     const kinds = [short, short, short, short, long, long, long, short];
     const scripted = order.map((m, i) => cand({ id: m, muscleGroup: m, isCompound: kinds[i] === long, defaultRestSec: kinds[i] === long ? 150 : 75, base: kinds[i] }));
-    const recency = Object.fromEntries(order.map((m, i) => [m, 14 - i]));
+    // A fixed order of need that the seeded wobble on need (3 days) cannot upset: every muscle equally
+    // rested, and a shortfall against the weekly target that steps down by two sets (four days of need).
+    const weeklyTargets = Object.fromEntries(order.map((m, i) => [m, 30 - 2 * i]));
     for (const seed of seeds(20)) {
-      const plan = generateQuickSession(input(scripted, { recency }), opts({ focus: order, minutes: 45 }), seed);
+      const plan = generateQuickSession(input(scripted, { weeklyTargets }), opts({ focus: order, minutes: 45 }), seed);
       expect(rowIds(plan).sort(), `seed ${seed}`).toEqual(['abs', 'biceps', 'calves', 'chest', 'lats', 'quads', 'triceps']);
       expect(plan.estimateMin, `seed ${seed}`).toBe(50);
     }
@@ -1135,8 +1189,8 @@ describe('generateQuickSession: what a light session leaves out', () => {
       cand({ id: 'cable-fly', muscleGroup: 'chest', equipment: 'cable' }),
     ];
     const plan = generateQuickSession(input(keep), opts({ effort: 'light', focus: ['chest'], count: 4 }), 1);
-    // Two per muscle is the cap, so this only checks that none was ruled out: every row is one of them.
-    expect(plan.rows).toHaveLength(2);
+    // Chest is named on its own, so it can take all four: none of the four was ruled out.
+    expect(plan.rows).toHaveLength(4);
     for (const id of rowIds(plan)) expect(keep.map((k) => k.id)).toContain(id);
   });
 
