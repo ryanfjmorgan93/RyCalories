@@ -139,6 +139,30 @@ export function entryKeys(name, equipment) {
 }
 
 /**
+ * Pairs of catalogue entries that answer to one name key: the same exercise listed twice. The
+ * script refuses to write a catalogue that has any, and the test reads the committed one with the
+ * same function, so a second spelling of one exercise has to go on the reviewed list.
+ * `entries` is `{ name, equipment }` (the app's `Equipment` value). Each pair is reported once.
+ * @returns {{ key: string, names: [string, string] }[]}
+ */
+export function catalogueRepeats(entries) {
+  const first = new Map();
+  const reported = new Set();
+  const repeats = [];
+  for (const { name, equipment } of entries) {
+    for (const key of entryKeys(name, equipment)) {
+      const other = first.get(key);
+      if (other === undefined) first.set(key, name);
+      else if (other !== name && !reported.has(`${other}\u0000${name}`)) {
+        reported.add(`${other}\u0000${name}`);
+        repeats.push({ key, names: [other, name] });
+      }
+    }
+  }
+  return repeats;
+}
+
+/**
  * Every key the app's own exercises answer to, each pointing at a readable "Name (Equipment)".
  * `demos` is the workout-guide manifest plus the bespoke demos (name, equipment); `seeds` is
  * `seedNamesFromSource`.

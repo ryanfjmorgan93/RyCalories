@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { EXERCISE_DEMOS, findDemo } from '@/data/exerciseDemos';
-import { demoFrameSrc, demoPicture } from './demoPicture';
+import { demoFrameSrc, demoPicture, pictureFitClass } from './demoPicture';
+
+describe('pictureFitClass', () => {
+  it('shows a catalogue photograph whole, whatever its shape, and does not invert it for the light theme', () => {
+    // Not every photograph is 3:2 (about one in ten is portrait or 16:9), so a fixed box must letterbox, not crop.
+    expect(pictureFitClass(demoPicture('cat:cable-crossover')!)).toBe('object-contain');
+  });
+
+  it('keeps line art whole and inverted for the light theme, and a bundled photograph filling its square', () => {
+    expect(pictureFitClass(demoPicture('bench-press')!)).toBe('demo-frame object-contain');
+    expect(pictureFitClass(demoPicture('neck')!)).toBe('object-cover');
+  });
+});
 
 describe('demoPicture', () => {
   it('reads a bundled diagram slug as a square picture with that demo\'s own frame count', () => {

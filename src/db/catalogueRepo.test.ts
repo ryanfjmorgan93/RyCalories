@@ -13,9 +13,10 @@ let other: CatalogueEntry;
 beforeEach(async () => {
   await resetToSeed();
   const all = await loadCatalogue();
-  crossover = all.find((e) => e.slug === 'cable-crossover')!;
+  // Two real entries with nothing in common but a word. (Plain "Cable Crossover" is not one: it repeats the bundled Cable Fly and is left out.)
+  crossover = all.find((e) => e.slug === 'single-arm-cable-crossover')!;
   other = all.find((e) => e.slug === 'low-cable-crossover')!;
-  expect(crossover, 'the catalogue has cable-crossover').toBeDefined();
+  expect(crossover, 'the catalogue has single-arm-cable-crossover').toBeDefined();
   expect(other, 'the catalogue has low-cable-crossover').toBeDefined();
 });
 
@@ -27,7 +28,7 @@ describe('addCatalogueExercise', () => {
     expect(await db.exercises.count()).toBe(before + 1);
     const stored = (await db.exercises.get(e.id))!;
     expect(stored).toEqual(e);
-    expect(stored).toMatchObject({ ...exerciseFromCatalogue(crossover), demo: 'cat:cable-crossover' });
+    expect(stored).toMatchObject({ ...exerciseFromCatalogue(crossover), demo: 'cat:single-arm-cable-crossover' });
     // The increment and rest are the ones the mapping chose, not the form's blanks.
     expect(stored.defaultIncrement).toBe(exerciseFromCatalogue(crossover).defaultIncrement);
     expect(stored.defaultRestSec).toBe(exerciseFromCatalogue(crossover).defaultRestSec);
@@ -56,7 +57,7 @@ describe('addCatalogueExercise', () => {
 
   it('returns an exercise the owner already has under the same name, without touching it', async () => {
     const mine = await createExercise({
-      name: '  CABLE   crossover ',
+      name: '  SINGLE-ARM   cable crossover ',
       kind: 'reps',
       muscleGroup: 'chest',
       isCompound: false,
@@ -79,7 +80,7 @@ describe('addCatalogueExercise', () => {
   it('returns an exercise that has the entry\'s name as an alias', async () => {
     const mine = await createExercise({
       name: 'Standing Cable Fly',
-      aliases: ['Cable Crossover'],
+      aliases: ['Single-Arm Cable Crossover'],
       kind: 'reps',
       muscleGroup: 'chest',
       isCompound: false,

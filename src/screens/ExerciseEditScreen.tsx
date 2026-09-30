@@ -112,7 +112,7 @@ export function ExerciseEditScreen() {
   const [busy, setBusy] = useState(false);
   const [diagramOpen, setDiagramOpen] = useState(false);
   const [diagramQuery, setDiagramQuery] = useState('');
-  const { rows: diagramRows, settled: diagramSettled } = useLibrarySearch(diagramOpen, diagramQuery);
+  const { rows: diagramRows, settled: diagramSettled, failed: diagramFailed } = useLibrarySearch(diagramOpen, diagramQuery);
 
   useEffect(() => {
     if (!isNew && existing && !loaded) {
@@ -378,7 +378,9 @@ export function ExerciseEditScreen() {
               </div>
             </button>
           ))}
-          {diagramSettled && diagramQuery.trim() && diagramRows.length === 0 && <div className="py-6 text-center text-sm text-muted">No matches</div>}
+          {diagramSettled && diagramQuery.trim() && diagramRows.length === 0 && (
+            <div className="py-6 text-center text-sm text-muted">{diagramFailed ? 'Library unavailable' : 'No matches'}</div>
+          )}
         </div>
       </Sheet>
     </div>
