@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { findDemo } from '@/data/exerciseDemos';
 import { loadCatalogueSteps } from '@/data/catalogue';
-import { demoFrameSrc, demoPicture } from './demoPicture';
+import { demoFrameSrc, demoPicture, pictureFitClass } from './demoPicture';
 
 /** YouTube search results URL for an exercise's form, used as the default "Video" link target. */
 export function youtubeSearchUrl(name: string): string {
@@ -13,14 +13,18 @@ const FRAME_MS = 600;
 /**
  * A looping demonstration for one exercise, with its instructions (when there are any) and a link to
  * search for video of it. `slug` is the exercise's `demo` value: a bundled diagram (square, frame
- * count varies — most are 3, some are fewer) or a catalogue key (3:2 photographs, two frames; its
+ * count varies — most are 3, some are fewer) or a catalogue key (photographs in a 3:2 box, two frames; its
  * steps are fetched here, the first time the demo is shown, and an entry without any shows none).
- * Renders nothing when the value names no picture.
+ * Renders nothing when the value names no picture. A catalogue key whose pictures are not there
+ * (see DemoThumb) drops the picture and keeps the rest: the steps, where there are any, and the
+ * Video link.
  */
 export function ExerciseDemo({ slug, name, videoUrl, size = 'lg' }: { slug: string; name: string; videoUrl?: string; size?: 'sm' | 'lg' }) {
   const pic = useMemo(() => demoPicture(slug), [slug]);
   const [frame, setFrame] = useState(1);
   const [paused, setPaused] = useState(false);
+  /** The key whose picture failed to load: every frame of a missing entry is missing, so the key is what is remembered, not the frame. */
+  const [failed, setFailed] = useState<string | null>(null);
   const [loaded, setLoaded] = useState<{ slug: string; steps: string[] } | null>(null);
 
   const frames = pic?.frames ?? 0;
@@ -59,26 +63,27 @@ export function ExerciseDemo({ slug, name, videoUrl, size = 'lg' }: { slug: stri
 
   return (
     <div className="flex flex-col items-center gap-3">
-      <button
-        type="button"
-        aria-pressed={paused}
-        aria-label={paused ? 'Play' : 'Pause'}
-        onClick={() => setPaused((p) => !p)}
-        className={`relative overflow-hidden rounded-2xl bg-surface-2 border border-line ${imgSize}`}
-      >
-        <img
-          src={src}
-          alt={name}
-          data-testid="demo-frame"
-          className={pic.photo ? 'h-full w-full object-cover' : 'demo-frame h-full w-full object-contain'}
-        />
-      </button>
+      {failed === slug ? (
+        <span hidden data-testid="demo-missing" />
+      ) : (
+        <>
+          <button
+            type="button"
+            aria-pressed={paused}
+            aria-label={paused ? 'Play' : 'Pause'}
+            onClick={() => setPaused((p) => !p)}
+            className={`relative overflow-hidden rounded-2xl bg-surface-2 border border-line ${imgSize}`}
+          >
+            <img src={src} alt={name} data-testid="demo-frame" onError={() => setFailed(slug)} className={`h-full w-full ${pictureFitClass(pic)}`} />
+          </button>
 
-      <div className="flex items-center gap-1.5" aria-hidden="true">
-        {Array.from({ length: pic.frames }, (_, i) => i + 1).map((i) => (
-          <span key={i} className={`h-1.5 w-1.5 rounded-full ${i === frame ? 'bg-fg' : 'bg-line'}`} />
-        ))}
-      </div>
+          <div className="flex items-center gap-1.5" aria-hidden="true">
+            {Array.from({ length: pic.frames }, (_, i) => i + 1).map((i) => (
+              <span key={i} className={`h-1.5 w-1.5 rounded-full ${i === frame ? 'bg-fg' : 'bg-line'}`} />
+            ))}
+          </div>
+        </>
+      )}
 
       {instructions.length > 0 && (
         <ol className="w-full list-decimal space-y-1.5 pl-5 text-sm text-muted marker:text-dim" data-testid="demo-steps">

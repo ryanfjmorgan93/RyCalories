@@ -29,7 +29,7 @@ export function LibrarySheet({
   const exercises = useExercises();
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
-  const { rows, settled } = useLibrarySearch(open, q);
+  const { rows, settled, failed } = useLibrarySearch(open, q);
 
   const close = () => {
     setQ('');
@@ -73,7 +73,7 @@ export function LibrarySheet({
             </button>
           );
         })}
-        {settled && q.trim() && rows.length === 0 && <div className="py-6 text-center text-sm text-muted">No matches</div>}
+        {settled && q.trim() && rows.length === 0 && <div className="py-6 text-center text-sm text-muted">{failed ? 'Library unavailable' : 'No matches'}</div>}
       </div>
     </Sheet>
   );
