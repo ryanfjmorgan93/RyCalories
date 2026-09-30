@@ -3,6 +3,12 @@ import type { Routine } from './types';
 export interface ScheduleOptions {
   /** §8 — never suggest two lower-body days in a row. */
   avoidConsecutiveLower?: boolean;
+  /**
+   * Whether the last session was a lower-body day, when that is not the routine `lastRoutineId`
+   * names: a quick session runs on a hidden routine that is in no list, and does not move the
+   * rotation, but two lower-body days in a row are still two. Unset reads it from the list.
+   */
+  lastWasLower?: boolean;
 }
 
 function activeSorted(routines: Routine[]): Routine[] {
@@ -26,7 +32,7 @@ export function suggestNextRoutine(
   const last = lastIdx >= 0 ? list[lastIdx] : null;
   const start = lastIdx >= 0 ? (lastIdx + 1) % list.length : 0;
 
-  if (opts.avoidConsecutiveLower && last?.isLowerBody) {
+  if (opts.avoidConsecutiveLower && (opts.lastWasLower ?? last?.isLowerBody)) {
     for (let i = 0; i < list.length; i++) {
       const candidate = list[(start + i) % list.length];
       if (!candidate.isLowerBody) return candidate;
@@ -35,16 +41,19 @@ export function suggestNextRoutine(
   return list[start];
 }
 
-/** True when picking `pickedId` straight after `lastRoutineId` would be two lower-body days in a row. */
+/**
+ * True when picking `pickedId` straight after `lastRoutineId` would be two lower-body days in a row.
+ * `opts.lastWasLower`, when given, answers for the last session instead of the list lookup.
+ */
 export function isConsecutiveLower(
   routines: Routine[],
   lastRoutineId: string | null | undefined,
   pickedId: string,
+  opts: Pick<ScheduleOptions, 'lastWasLower'> = {},
 ): boolean {
-  if (!lastRoutineId) return false;
-  const last = routines.find((r) => r.id === lastRoutineId);
+  const lastLower = opts.lastWasLower ?? (lastRoutineId ? routines.find((r) => r.id === lastRoutineId)?.isLowerBody : false);
   const picked = routines.find((r) => r.id === pickedId);
-  return Boolean(last?.isLowerBody && picked?.isLowerBody);
+  return Boolean(lastLower && picked?.isLowerBody);
 }
 
 /**

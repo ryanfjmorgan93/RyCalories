@@ -5,6 +5,7 @@
 import { db } from './db';
 import { isoToDateKey } from '@/domain/dates';
 import { bestsFor, newRecords, type Bests, type PersonalRecord, type RecordSession, type RecordSet } from '@/domain/records';
+import { sessionCountsForRecords } from '@/domain/sets';
 import { bestE1rm } from '@/domain/strength';
 import { sessionVolume } from '@/domain/volume';
 import type { Exercise, Session, SetLog } from '@/domain/types';
@@ -37,7 +38,8 @@ async function latestBodyweightKg(): Promise<number | undefined> {
 /**
  * Completed sessions' sets for an exercise (other than `excludeSessionId`), as `RecordSession`s.
  * `before`, when given, also excludes sessions that started on or after it — so a finished
- * session's records can be judged against only what stood at the time it was logged.
+ * session's records can be judged against only what stood at the time it was logged. A light quick
+ * session is left out (`sessionCountsForRecords`): its weights are a fraction of a working weight.
  */
 async function priorRecordSessions(exerciseId: string, excludeSessionId: string, before?: string): Promise<RecordSession[]> {
   const sets = await db.setLogs.where('exerciseId').equals(exerciseId).toArray();
@@ -49,7 +51,7 @@ async function priorRecordSessions(exerciseId: string, excludeSessionId: string,
     bySession.set(s.sessionId, arr);
   }
   const sessions = (await db.sessions.bulkGet([...bySession.keys()])).filter(
-    (s): s is Session => !!s && !!s.endedAt && (before === undefined || s.startedAt < before),
+    (s): s is Session => !!s && !!s.endedAt && sessionCountsForRecords(s) && (before === undefined || s.startedAt < before),
   );
   return sessions.map((session) => ({
     sessionId: session.id,
@@ -74,7 +76,7 @@ export async function recordsForNewSets(
 ): Promise<PersonalRecord[]> {
   if (newSets.length === 0) return [];
   const [exercise, session] = await Promise.all([db.exercises.get(exerciseId), db.sessions.get(sessionId)]);
-  if (!exercise || !session) return [];
+  if (!exercise || !session || !sessionCountsForRecords(session)) return [];
   const bodyweightKg = exercise.kind === 'bodyweight_plus' ? await bodyweightKgFor(session) : undefined;
   const priorSessions = await priorRecordSessions(exerciseId, sessionId, opts?.before);
   // Computed ONCE, here, from the real completed prior sessions only — before the same-session
@@ -122,7 +124,7 @@ export async function recentRecords(
     db.decisions.toArray(),
   ]);
   const sessionById = new Map(sessions.map((s) => [s.id, s]));
-  const completedIds = new Set(sessions.filter((s) => s.endedAt).map((s) => s.id));
+  const completedIds = new Set(sessions.filter((s) => s.endedAt && sessionCountsForRecords(s)).map((s) => s.id));
   // A set logged while its routine-exercise was calibrating is never a record, here as in the live
   // session and on Summary. The finished session's decision row is the lasting record of that:
   // one per (session, routine-exercise). Extras have no routine-exercise and never calibrate.
@@ -163,7 +165,7 @@ export async function recentRecords(
   return out.slice(0, limit);
 }
 
-/** Best e1RM per completed session, oldest first. */
+/** Best e1RM per completed session, oldest first. A light quick session has none: it is submaximal by design. */
 export async function e1rmSeries(exerciseId: string): Promise<ChartPoint[]> {
   const exercise = await db.exercises.get(exerciseId);
   if (!exercise) return [];
@@ -174,7 +176,7 @@ export async function e1rmSeries(exerciseId: string): Promise<ChartPoint[]> {
     arr.push(s);
     bySession.set(s.sessionId, arr);
   }
-  const sessions = (await db.sessions.bulkGet([...bySession.keys()])).filter((s): s is Session => !!s && !!s.endedAt);
+  const sessions = (await db.sessions.bulkGet([...bySession.keys()])).filter((s): s is Session => !!s && !!s.endedAt && sessionCountsForRecords(s));
   const points: ChartPoint[] = [];
   for (const session of sessions) {
     const t = Date.parse(session.startedAt);

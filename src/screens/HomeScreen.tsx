@@ -26,6 +26,7 @@ import {
   useActiveSession,
   useCalendar,
   useLastCompletedSession,
+  useNextRoutineContext,
   useNextSessionPlan,
   useRecentSessions,
   useRoutines,
@@ -46,6 +47,7 @@ export function HomeScreen() {
   const routines = useRoutines();
   const active = useActiveSession();
   const last = useLastCompletedSession();
+  const rotation = useNextRoutineContext();
   const recent = useRecentSessions(3);
   const settings = useSettings();
   const [pickOpen, setPickOpen] = useState(false);
@@ -58,7 +60,12 @@ export function HomeScreen() {
     return m;
   }, []);
 
-  const suggested = routines && last !== undefined ? suggestNextRoutine(routines, last?.routineId ?? null, { avoidConsecutiveLower: true }) : null;
+  // The rotation follows the last session that was not a quick one; the two-lower-days guard looks
+  // at the true last one. The Food screen's leg-day protein target reads the same context.
+  const suggested =
+    routines && rotation
+      ? suggestNextRoutine(routines, rotation.lastRoutineId, { avoidConsecutiveLower: true, lastWasLower: rotation.lastWasLower })
+      : null;
   // From the hook, never a bare toDateKey(): nothing on this screen is time-driven, so a plain
   // render-time read freezes on the day the screen mounted. Left open overnight it would show
   // yesterday's calories as today's progress, against yesterday's target.
@@ -73,7 +80,7 @@ export function HomeScreen() {
   const starting = useRef(false);
   const start = async (r: Routine) => {
     if (starting.current || empty(r)) return;
-    if (last?.routineId && isConsecutiveLower(routines ?? [], last.routineId, r.id) && pending?.id !== r.id) {
+    if (rotation && isConsecutiveLower(routines ?? [], rotation.lastRoutineId, r.id, { lastWasLower: rotation.lastWasLower }) && pending?.id !== r.id) {
       setPending(r);
       return;
     }

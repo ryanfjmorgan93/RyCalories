@@ -93,6 +93,12 @@ export interface Routine {
   targetMinutes?: number;
   /** Soft-deleted routines stay so that historic sessions keep their name. */
   archived?: boolean;
+  /**
+   * The hidden one-off routine a quick session runs on (`src/db/quickRepo.ts`). Always archived,
+   * so every list of routines skips it; it is never restored, edited or started from a list, and
+   * it goes with its session.
+   */
+  quick?: boolean;
 }
 
 export interface RoutineExercise {
@@ -179,6 +185,13 @@ export interface Session {
    * rides on the session row as-is, including through backups.
    */
   lockIns?: Record<string, number>;
+  /**
+   * Set on a session started by "Short session": how hard it was asked to be. A light session's
+   * weights are a fraction of the working weight, so it counts for volume, weekly sets, the streak
+   * and History but never for a record or an e1RM; a normal one counts for everything. Neither
+   * decides a weight (`finishSession`). Not indexed.
+   */
+  quick?: 'light' | 'normal';
 }
 
 export interface SetLog {

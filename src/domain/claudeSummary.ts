@@ -32,7 +32,14 @@ export interface SummarySession {
   title: string;
   minutes: number | null;
   deload?: boolean;
+  /** Set on a session started by "Short session"; a light one's weights are a fraction of a working weight. */
+  quick?: 'light' | 'normal';
   exercises: SummaryExercise[];
+}
+
+/** How a quick session is named in the text, so a light weight is never read as a working weight. */
+export function quickSessionLabel(quick: 'light' | 'normal'): string {
+  return quick === 'light' ? 'quick session (light)' : 'quick session';
 }
 
 export interface SummaryFoodDay {
@@ -129,7 +136,7 @@ export function buildTrainingBlock(input: ClaudeSummaryInput, heading = 'TRAININ
     return lines.join('\n');
   }
   for (const s of training.sessions) {
-    const head = [fmtDayHeading(s.date), s.title];
+    const head = [fmtDayHeading(s.date), s.quick ? quickSessionLabel(s.quick) : s.title];
     if (s.minutes !== null) head.push(`${s.minutes} min`);
     if (s.deload) head.push('deload');
     lines.push(head.join(' · '));

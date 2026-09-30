@@ -179,6 +179,35 @@ describe('buildWorkingWeightsBlock', () => {
   });
 });
 
+describe('buildWorkingWeightsBlock and quick sessions', () => {
+  it('skips a light session, whose weights are a fraction of a working weight, and reads the session before it', () => {
+    const base = input();
+    const light = {
+      date: '2026-09-25',
+      title: 'Quick session · light',
+      minutes: 24,
+      quick: 'light' as const,
+      exercises: [{ name: 'Bench Press (Barbell)', kind: 'reps' as const, sets: [{ type: 'working' as const, weight: 55, reps: 12 }] }],
+    };
+    const block = buildWorkingWeightsBlock({ ...base, training: { ...base.training, sessions: [light, ...base.training.sessions] } });
+    expect(block).toContain('Bench Press (Barbell): 85 × 8 (Thu 24 Sep)');
+    expect(block).not.toContain('55');
+  });
+
+  it('reads a normal quick session like any other', () => {
+    const base = input();
+    const normal = {
+      date: '2026-09-25',
+      title: 'Quick session · normal',
+      minutes: 24,
+      quick: 'normal' as const,
+      exercises: [{ name: 'Bench Press (Barbell)', kind: 'reps' as const, sets: [{ type: 'working' as const, weight: 87.5, reps: 6 }] }],
+    };
+    const block = buildWorkingWeightsBlock({ ...base, training: { ...base.training, sessions: [normal, ...base.training.sessions] } });
+    expect(block).toContain('Bench Press (Barbell): 87.5 × 6 (Fri 25 Sep)');
+  });
+});
+
 describe('prompts', () => {
   it('the routine prompt asks for exactly the lines Paste a routine reads', () => {
     const system = buildCoachSystemPrompt('routine');

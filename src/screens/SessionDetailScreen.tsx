@@ -93,21 +93,24 @@ export function SessionDetailScreen() {
 
         <SessionExtras session={session} />
 
-        {/* A session with no sets builds a routine with no exercises — a button that leads nowhere. */}
-        <Button
-          className="mt-4"
-          full
-          size="lg"
-          disabled={groups.length === 0}
-          data-testid="save-as-routine"
-          onClick={async () => {
-            const routine = await createRoutineFromSession(session.id);
-            toast('Routine saved', 'ok');
-            nav(`/routines/${routine.id}`);
-          }}
-        >
-          Save as routine
-        </Button>
+        {/* A session with no sets builds a routine with no exercises — a button that leads nowhere.
+            A quick session is left out: it would save its light weights as working weights. */}
+        {!session.quick && (
+          <Button
+            className="mt-4"
+            full
+            size="lg"
+            disabled={groups.length === 0}
+            data-testid="save-as-routine"
+            onClick={async () => {
+              const routine = await createRoutineFromSession(session.id);
+              toast('Routine saved', 'ok');
+              nav(`/routines/${routine.id}`);
+            }}
+          >
+            Save as routine
+          </Button>
+        )}
         <div className="h-6" />
       </div>
 

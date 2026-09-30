@@ -141,12 +141,14 @@ function topSet(sets: SummarySet[]): SummarySet | undefined {
 
 /**
  * The heaviest counted set of each exercise's most recent session: what a drafted routine should
- * start from. One line per exercise, newest session first.
+ * start from. One line per exercise, newest session first. A light quick session is skipped: its
+ * weights are a fraction of a working weight by design.
  */
 export function buildWorkingWeightsBlock(input: ClaudeSummaryInput): string {
   const seen = new Set<string>();
   const lines: string[] = [];
   for (const s of input.training.sessions) {
+    if (s.quick === 'light') continue;
     for (const ex of s.exercises) {
       if (seen.has(ex.name)) continue;
       const top = topSet(ex.sets);

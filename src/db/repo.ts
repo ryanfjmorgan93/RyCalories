@@ -160,19 +160,33 @@ export async function updateExercise(id: string, patch: Partial<ExerciseInput>):
   await db.exercises.update(id, patch);
 }
 
+/**
+ * Routine-exercises that belong to a real routine. The hidden routine a quick session runs on
+ * (`Routine.quick`) is not one the owner made, so what it holds is never "in a routine": it would
+ * inflate usage counts, and the "shares weight with N other copies" line on the routine editor.
+ */
+export async function excludeQuickRoutineExercises(rxs: RoutineExercise[]): Promise<RoutineExercise[]> {
+  if (rxs.length === 0) return rxs;
+  const routines = await db.routines.bulkGet([...new Set(rxs.map((rx) => rx.routineId))]);
+  const quick = new Set(routines.filter((r): r is Routine => !!r && r.quick === true).map((r) => r.id));
+  return quick.size === 0 ? rxs : rxs.filter((rx) => !quick.has(rx.routineId));
+}
+
 export async function exerciseUsage(id: string): Promise<{ routines: number; sets: number }> {
-  const [routines, sets] = await Promise.all([
-    db.routineExercises.where('exerciseId').equals(id).count(),
-    db.setLogs.where('exerciseId').equals(id).count(),
-  ]);
-  return { routines, sets };
+  const [rxs, sets] = await Promise.all([db.routineExercises.where('exerciseId').equals(id).toArray(), db.setLogs.where('exerciseId').equals(id).count()]);
+  return { routines: (await excludeQuickRoutineExercises(rxs)).length, sets };
 }
 
 /** Deletes only when unused; returns false if the exercise is referenced by a routine or a set. */
 export async function deleteExercise(id: string): Promise<boolean> {
   const u = await exerciseUsage(id);
   if (u.routines > 0 || u.sets > 0) return false;
-  await db.exercises.delete(id);
+  await db.transaction('rw', [db.exercises, db.routineExercises], async () => {
+    // Whatever still points here can only be the hidden rows of a finished quick session that
+    // never logged a set on it: nothing else may be left dangling.
+    await db.routineExercises.where('exerciseId').equals(id).delete();
+    await db.exercises.delete(id);
+  });
   return true;
 }
 
@@ -192,6 +206,15 @@ export { normaliseName };
 
 export async function listRoutines(): Promise<Routine[]> {
   return (await db.routines.toArray()).filter((r) => !r.archived).sort((a, b) => a.order - b.order);
+}
+
+/**
+ * Routines the owner deleted that kept sessions, by name: an archived routine has no place in the
+ * week to order it by. The hidden routine a quick session runs on is archived too, but was never
+ * one of the owner's, so it is neither listed nor counted.
+ */
+export async function listArchivedRoutines(): Promise<Routine[]> {
+  return (await db.routines.filter((r) => !!r.archived && !r.quick).toArray()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export async function createRoutine(input: { name: string; isLowerBody: boolean; targetMinutes?: number }): Promise<Routine> {
@@ -235,7 +258,9 @@ export async function deleteRoutine(id: string): Promise<'deleted' | 'archived'>
 export async function restoreRoutine(id: string): Promise<void> {
   await db.transaction('rw', db.routines, async () => {
     const routine = await db.routines.get(id);
-    if (!routine?.archived) return;
+    // A quick session's hidden routine is archived for good: restoring it would put a one-off
+    // "Quick session" into the weekly order.
+    if (!routine?.archived || routine.quick) return;
     const active = (await db.routines.toArray()).filter((r) => !r.archived);
     const order = active.length ? Math.max(...active.map((r) => r.order)) + 1 : 0;
     await db.routines.update(id, { archived: false, order });
@@ -470,12 +495,27 @@ export async function startSession(routineId: string, opts?: { deload?: boolean 
   });
 }
 
-/** Delete a session together with its sets and decisions. Stored weights are left as they are. */
+/**
+ * Delete a session together with its sets and decisions. Stored weights are left as they are. A
+ * quick session also takes its hidden routine and that routine's rows: nothing else can ever point
+ * at them, and left behind they would count as routines the owner never made. Every route to a
+ * delete (live discard, Summary discard, History) comes through here.
+ */
 export async function deleteSession(id: string): Promise<void> {
-  await db.transaction('rw', [db.sessions, db.setLogs, db.decisions], async () => {
+  await db.transaction('rw', [db.sessions, db.setLogs, db.decisions, db.routines, db.routineExercises], async () => {
+    const session = await db.sessions.get(id);
     await db.setLogs.where('sessionId').equals(id).delete();
     await db.decisions.where('sessionId').equals(id).delete();
     await db.sessions.delete(id);
+    if (session?.quick && session.routineId) {
+      // Only the hidden routine, and only once no other session runs on it: a real routine is
+      // never removed through here, whatever a session row claims.
+      const routine = await db.routines.get(session.routineId);
+      if (routine?.quick && (await db.sessions.where('routineId').equals(routine.id).count()) === 0) {
+        await db.routineExercises.where('routineId').equals(routine.id).delete();
+        await db.routines.delete(routine.id);
+      }
+    }
   });
 }
 
@@ -671,6 +711,8 @@ export interface PreviousSets {
 /**
  * The most recent earlier session's sets for a slot. Prefers sets logged against the same
  * routine-exercise; falls back to any session containing the exercise (other routines, imports).
+ * A quick session is never one of them: a light session's weight is a fraction of the working
+ * weight, and offered as "last time" it would become the ghost value of a real routine.
  */
 export async function previousSets(
   routineExerciseId: string | null,
@@ -681,7 +723,7 @@ export async function previousSets(
     const candidates = sets.filter((s) => s.sessionId !== excludeSessionId);
     if (candidates.length === 0) return null;
     const sessionIds = [...new Set(candidates.map((s) => s.sessionId))];
-    const sessions = (await db.sessions.bulkGet(sessionIds)).filter((s): s is Session => !!s && !!s.endedAt);
+    const sessions = (await db.sessions.bulkGet(sessionIds)).filter((s): s is Session => !!s && !!s.endedAt && !s.quick);
     if (sessions.length === 0) return null;
     sessions.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
     const latest = sessions[0];
@@ -755,6 +797,12 @@ export interface SessionSummary {
   durationSec: number;
 }
 
+/**
+ * A summary of the session as it stands. For a quick session no weight is decided: the only
+ * decision that exists is `calibrating`, for a slot the owner has no working weight for, so the
+ * places that read "calibrating means no records" (records queries, session detail, the live card)
+ * agree about it; there are no suggestions, no lock-in and no `lockIn` offer.
+ */
 export async function buildSummary(sessionId: string, now = nowIso()): Promise<SessionSummary> {
   const session = await db.sessions.get(sessionId);
   if (!session) throw new Error('Session not found');
@@ -771,6 +819,12 @@ export async function buildSummary(sessionId: string, now = nowIso()): Promise<S
         continue;
       }
       const engineRx = toEngine(rx, exercise);
+      if (session.quick) {
+        const decision = rx.mode === 'calibrating' ? decide(engineRx, sets) : null;
+        const records = await recordsForNewSets(exercise.id, sessionId, sets, { calibrating: rx.mode === 'calibrating' });
+        items.push({ rx, exercise, sets, status: 'done', decision, suggestions: [], lockIn: null, records });
+        continue;
+      }
       const decision = decide(engineRx, sets, { deload: !!session.deload });
       const suggestions: Suggestion[] = [];
       const dbl = suggestDoubleIncrement(engineRx, decision, sets);
@@ -834,6 +888,7 @@ export async function finishSession(sessionId: string, input: FinishInput): Prom
   const byRx = new Map(input.choices.map((c) => [c.routineExerciseId, c]));
 
   if (summary.session.endedAt) return summary;
+  const quick = !!summary.session.quick;
   await db.transaction('rw', [db.sessions, db.routineExercises, db.decisions], async () => {
     const current = await db.sessions.get(sessionId);
     if (!current || current.endedAt) return; // already finished (double tap / retry)
@@ -846,8 +901,9 @@ export async function finishSession(sessionId: string, input: FinishInput): Prom
       if (d.rule === 'not_applicable') continue;
       if (d.rule === 'calibrating') {
         // The commit boundary re-applies the one lock-in floor rather than trusting every caller
-        // to have filtered already; a blocked weight keeps the lift calibrating.
-        const w = choice?.lockInAt !== undefined && Number.isFinite(choice.lockInAt) ? roundKg(choice.lockInAt) : null;
+        // to have filtered already; a blocked weight keeps the lift calibrating. A quick session
+        // decides no weight, whatever the caller passed: it never locks a lift in.
+        const w = !quick && choice?.lockInAt !== undefined && Number.isFinite(choice.lockInAt) ? roundKg(choice.lockInAt) : null;
         if (w !== null && !lockInBlocked(w, item.exercise.kind)) {
           await db.routineExercises.update(rx.id, { mode: 'normal', currentWeight: w });
           await propagateLinked(rx, { mode: 'normal', currentWeight: w });
@@ -908,10 +964,33 @@ export async function finishSession(sessionId: string, input: FinishInput): Prom
 // ---------------------------------------------------------------------------
 // History queries
 
-export async function lastCompletedSession(): Promise<Session | undefined> {
-  const done = await db.sessions.filter((s) => !!s.endedAt).toArray();
+/**
+ * The most recent completed session. `excludeQuick` skips quick sessions: they are not a step in the
+ * weekly rotation, so "the last session" for choosing what is next is the last one that was.
+ */
+export async function lastCompletedSession(opts: { excludeQuick?: boolean } = {}): Promise<Session | undefined> {
+  const done = await db.sessions.filter((s) => !!s.endedAt && !(opts.excludeQuick && s.quick)).toArray();
   done.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   return done[0];
+}
+
+export interface NextRoutineContext {
+  /** Routine of the last completed session that was not a quick one; null when there is none. */
+  lastRoutineId: string | null;
+  /** Whether the very last completed session, quick or not, was on a lower-body routine. */
+  lastWasLower: boolean;
+}
+
+/**
+ * What choosing the next routine reads, in one place so Home and the Food screen's leg-day
+ * protein target cannot disagree. The rotation follows the last session that was not a quick one,
+ * but the two-lower-days-in-a-row guard looks at the true last session, and the hidden routine a
+ * quick session ran on is not in any list to be found by id.
+ */
+export async function nextRoutineContext(): Promise<NextRoutineContext> {
+  const [lastAny, lastRotation] = await Promise.all([lastCompletedSession(), lastCompletedSession({ excludeQuick: true })]);
+  const lastRoutine = lastAny?.routineId ? await db.routines.get(lastAny.routineId) : undefined;
+  return { lastRoutineId: lastRotation?.routineId || null, lastWasLower: lastRoutine?.isLowerBody === true };
 }
 
 export async function recentSessions(limit = 3): Promise<Session[]> {
@@ -955,6 +1034,15 @@ export async function exerciseHistory(exerciseId: string): Promise<HistoryEntry[
       volume: volumeSets.reduce((sum, x) => sum + x.weight * (x.reps ?? 0), 0),
     };
   });
+}
+
+/**
+ * The heaviest counted weight of the latest session in `history` (most recent first) that was not a
+ * quick one; 0 when there is none. What a lock-in sheet offers as a starting point: a light quick
+ * session's weight is a fraction of the working weight and must not become one.
+ */
+export function lastWorkingTopWeight(history: Pick<HistoryEntry, 'session' | 'topWeight'>[]): number {
+  return history.find((h) => !h.session.quick)?.topWeight ?? 0;
 }
 
 export interface SessionGroup {

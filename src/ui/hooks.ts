@@ -7,7 +7,16 @@ import { getMeal, loggedDays, mealsOnDay, recentMeals, suggestFoods, type MealWi
 import { nextSessionPlan, type SessionPlan } from '@/db/planQueries';
 import { e1rmSeries, recentRecords, volumeSeries } from '@/db/recordsQueries';
 import { getRecipe, listRecipes } from '@/db/recipeRepo';
-import { exerciseHistory, getActiveSession, lastCompletedSession, recentSessions, routineItems, type RoutineItem } from '@/db/repo';
+import {
+  exerciseHistory,
+  getActiveSession,
+  lastCompletedSession,
+  nextRoutineContext,
+  recentSessions,
+  routineItems,
+  type NextRoutineContext,
+  type RoutineItem,
+} from '@/db/repo';
 import { muscleRecency, weeklySetsTable, type WeeklySetsRow } from '@/db/volumeQueries';
 import { toDateKey } from '@/domain/dates';
 import type { Exercise, FoodMemory, MuscleGroup, Recipe, Routine, Session, Settings } from '@/domain/types';
@@ -64,6 +73,11 @@ export function useSession(id: string | undefined): Session | undefined {
 
 export function useLastCompletedSession(): Session | null | undefined {
   return useLiveQuery(async () => (await lastCompletedSession()) ?? null, []);
+}
+
+/** What choosing the next routine reads (see `nextRoutineContext`); undefined while loading. */
+export function useNextRoutineContext(): NextRoutineContext | undefined {
+  return useLiveQuery(() => nextRoutineContext(), []);
 }
 
 export function useRecentSessions(limit = 3): Session[] | undefined {

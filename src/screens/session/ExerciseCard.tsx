@@ -304,7 +304,12 @@ export function ExerciseCard({
   const swappedExercise = useLiveQuery(() => (swappedToId ? db.exercises.get(swappedToId) : undefined), [swappedToId]);
 
   const engineRx = useMemo(() => (rx ? toEngine(rx, exercise) : null), [rx, exercise]);
-  const verdict = useMemo(() => (engineRx ? liveVerdict(engineRx, sets, { deload: !!session.deload }) : null), [engineRx, sets, session.deload]);
+  // A quick session decides no weight, so there is no verdict to show and nothing to lock in.
+  const quick = !!session.quick;
+  const verdict = useMemo(
+    () => (engineRx && !quick ? liveVerdict(engineRx, sets, { deload: !!session.deload }) : null),
+    [engineRx, sets, session.deload, quick],
+  );
   const doneLine = sets.length ? fmtSetsLine(sets, kind) : '';
 
   const selectedFeel = kind === 'reps' || kind === 'bodyweight_plus' ? feelOf(sets) : null;
@@ -314,7 +319,7 @@ export function ExerciseCard({
 
   const pendingLockIn = rx ? session.lockIns?.[rx.id] : undefined;
   const lockInSuggested = rx?.mode === 'calibrating' ? suggestedLockInWeight(sets) : null;
-  const showLockIn = !!rx && rx.mode === 'calibrating' && !lockInBlocked(lockInSuggested, kind);
+  const showLockIn = !quick && !!rx && rx.mode === 'calibrating' && !lockInBlocked(lockInSuggested, kind);
   const handleLockIn = async () => {
     if (!rx || lockInSuggested === null || lockingIn) return;
     setLockingIn(true);

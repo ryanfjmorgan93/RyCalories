@@ -12,6 +12,7 @@ import {
   formatEffort,
   rirFromRpe,
   rpeFromRir,
+  sessionCountsForRecords,
   setBadges,
 } from './sets';
 
@@ -138,5 +139,16 @@ describe('feel', () => {
   it('feelOf is null with no sets at all, or only sets that never count', () => {
     expect(feelOf([])).toBeNull();
     expect(feelOf([{ type: 'warmup' as const, rir: 3 }, { type: 'drop' as const, rir: 3 }])).toBeNull();
+  });
+});
+
+describe('sessionCountsForRecords', () => {
+  it('a light quick session is submaximal by design and feeds no record or strength figure', () => {
+    expect(sessionCountsForRecords({ quick: 'light' })).toBe(false);
+  });
+
+  it('a normal quick session, and every other session, counts in full', () => {
+    expect(sessionCountsForRecords({ quick: 'normal' })).toBe(true);
+    expect(sessionCountsForRecords({})).toBe(true);
   });
 });

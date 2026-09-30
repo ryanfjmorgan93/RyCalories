@@ -34,6 +34,16 @@ export function countsForRecords(type: SetType): boolean {
   return countsForProgression(type);
 }
 
+/**
+ * Whether a session's sets may feed a record, an e1RM or a strength figure. A light quick session
+ * is submaximal by design (its weights are a fraction of the working weight), so none of it does;
+ * it still counts for volume, weekly sets, the streak and History. A normal quick session, and every
+ * other session, counts fully.
+ */
+export function sessionCountsForRecords(session: { quick?: 'light' | 'normal' }): boolean {
+  return session.quick !== 'light';
+}
+
 /** The RIR a set stands for: what was logged, else 0 for a failure set, else unknown. */
 export function effortRir(set: { type: SetType; rir?: number }): number | undefined {
   if (typeof set.rir === 'number' && Number.isFinite(set.rir)) return set.rir;

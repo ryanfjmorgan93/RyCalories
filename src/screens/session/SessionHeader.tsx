@@ -86,9 +86,12 @@ export function SessionHeader({
               >
                 Ask
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setSessionMenuOpen(true)} data-testid="session-options">
-                More
-              </Button>
+              {/* The menu holds the deload switch only, and a quick session decides no weight. */}
+              {!session.quick && (
+                <Button size="sm" variant="ghost" onClick={() => setSessionMenuOpen(true)} data-testid="session-options">
+                  More
+                </Button>
+              )}
             </div>
             <Button variant="primary" size="md" onClick={onFinish} data-testid="finish-session" className="mr-2">
               Finish
