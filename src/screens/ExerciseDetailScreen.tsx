@@ -5,7 +5,7 @@ import { db } from '@/db/db';
 import { gatherContext } from '@/db/assistantQueries';
 import { routineUsageForExercise, type RoutineUsage } from '@/db/exerciseDetailQueries';
 import { bestsForExercise } from '@/db/recordsQueries';
-import { lockInRoutineExercise, unlockRoutineExercise, type HistoryEntry } from '@/db/repo';
+import { lastWorkingTopWeight, lockInRoutineExercise, unlockRoutineExercise, type HistoryEntry } from '@/db/repo';
 import { lockInBlocked } from '@/domain/engine';
 import { fmtDate, fmtDateLong, fmtKg, fmtNum, fmtSetsLine, fmtWeight, targetLine } from '@/domain/format';
 import type { Bests } from '@/domain/records';
@@ -193,7 +193,7 @@ export function ExerciseDetailScreen() {
         <LockInSheet
           rx={lockRx}
           kind={kind}
-          suggested={history[0]?.topWeight ?? 0}
+          suggested={lastWorkingTopWeight(history)}
           onClose={() => setLockRx(null)}
           onSave={async (w) => {
             await lockInRoutineExercise(lockRx.id, w);

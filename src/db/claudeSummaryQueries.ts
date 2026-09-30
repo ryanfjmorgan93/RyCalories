@@ -64,6 +64,7 @@ async function loadSessions(asOf: string, days: number): Promise<SummarySession[
       // session, so it reads as unknown rather than a suspiciously instant workout.
       minutes: seconds > 0 ? Math.round(seconds / 60) : null,
       deload: s.deload,
+      quick: s.quick,
       exercises,
     });
   }

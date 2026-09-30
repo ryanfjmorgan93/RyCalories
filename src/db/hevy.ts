@@ -693,7 +693,9 @@ export async function reconcileWeights(): Promise<WeightReconcileRow[]> {
       const sets = await db.setLogs.where('exerciseId').equals(exercise.id).toArray();
       if (sets.length === 0) continue;
       const sessionIds = [...new Set(sets.map((s) => s.sessionId))];
-      const sessions = (await db.sessions.bulkGet(sessionIds)).filter((s): s is Session => !!s && !!s.endedAt);
+      // A quick session is never the one a weight is reconciled to: its weights are a fraction of,
+      // or a one-off against, the working weight.
+      const sessions = (await db.sessions.bulkGet(sessionIds)).filter((s): s is Session => !!s && !!s.endedAt && !s.quick);
       sessions.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
       const latest = sessions[0];
       if (!latest) continue;

@@ -4,7 +4,7 @@
 import { db } from './db';
 import { nextSessionPlan } from './planQueries';
 import { bestsForExercise } from './recordsQueries';
-import { exerciseHistory, outcomesForRoutineExercise, routineItems, sessionDetail, stallStatus } from './repo';
+import { excludeQuickRoutineExercises, exerciseHistory, outcomesForRoutineExercise, routineItems, sessionDetail, stallStatus } from './repo';
 import { dayView } from './todayQueries';
 import { weeklyDelta } from '@/domain/bodyweight';
 import { fmtDate, fmtKg, fmtSetsLine } from '@/domain/format';
@@ -30,8 +30,12 @@ export async function gatherContext(opts: GatherContextOpts): Promise<AssistantC
   if (exerciseId) {
     const exercise = await db.exercises.get(exerciseId);
     if (exercise) {
-      const inRoutine = routineId ? (await routineItems(routineId)).find((i) => i.exercise.id === exerciseId)?.rx : undefined;
-      const rx: RoutineExercise | undefined = inRoutine ?? (await db.routineExercises.where('exerciseId').equals(exerciseId).first());
+      // A quick session's hidden routine holds a light or one-off prescription: Ask never quotes it.
+      const inRoutine = routineId
+        ? (await excludeQuickRoutineExercises((await routineItems(routineId)).map((i) => i.rx))).find((r) => r.exerciseId === exerciseId)
+        : undefined;
+      const rx: RoutineExercise | undefined =
+        inRoutine ?? (await excludeQuickRoutineExercises(await db.routineExercises.where('exerciseId').equals(exerciseId).toArray()))[0];
 
       const stall = rx ? await stallStatus(rx.id) : null;
       const stallLine = stall?.kind === 'stalled' ? `stalled ${stall.sessions} sessions at ${fmtKg(stall.weight)}` : undefined;
@@ -89,7 +93,7 @@ export async function gatherContext(opts: GatherContextOpts): Promise<AssistantC
   }
 
   if (routineId) {
-    const plan = await nextSessionPlan(routineId, settings);
+    const plan = (await db.routines.get(routineId))?.quick ? null : await nextSessionPlan(routineId, settings);
     if (plan) {
       ctx.plan = {
         routine: plan.routine.name,

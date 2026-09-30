@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { backupAfterSessionFinish } from '@/db/historySafety';
 import { buildSummary, discardSession, finishSession, type SessionSummary, type SummaryItem } from '@/db/repo';
-import { decisionLine, fmtDate, fmtDuration, fmtKg, fmtNum, fmtWeight, legDayProteinLabel } from '@/domain/format';
+import { decisionLine, fmtDate, fmtDuration, fmtKg, fmtNum, fmtWeight, legDayProteinLabel, plural } from '@/domain/format';
 import { lockInBlocked, type Suggestion } from '@/domain/engine';
 import type { PersonalRecord } from '@/domain/records';
 import { NIGGLE_TAGS, type Niggle, type NiggleTag } from '@/domain/types';
@@ -123,7 +123,8 @@ export function SummaryScreen() {
       setSummary(s);
       const init: Record<string, Choice> = {};
       for (const item of s.items) {
-        if (!item.rx || !item.decision) continue;
+        // A quick session decides nothing: there is no choice to seed.
+        if (!item.rx || !item.decision || s.session.quick) continue;
         // A lock-in chosen mid-session (§2: the pending lock-in) takes precedence over
         // buildSummary's own suggestion — the user already decided; this only redisplays it. It
         // can still be switched off in favour of "Keep calibrating" below.
@@ -144,7 +145,10 @@ export function SummaryScreen() {
     };
   }, [id, nav]);
 
-  const decided = useMemo(() => (summary?.items ?? []).filter((i) => i.status === 'done' && i.decision), [summary]);
+  // A quick session decides no weight, so nothing is listed under "Next time": every item is
+  // read as "no progression" below, whatever its (calibrating-only) decision row says.
+  const quick = !!summary?.session.quick;
+  const decided = useMemo(() => (quick ? [] : (summary?.items ?? []).filter((i) => i.status === 'done' && i.decision)), [summary, quick]);
   // Every Override / Lock in needs a number before the session can be saved — and for a weighted
   // lift that number cannot be 0. 0 is only meaningful for bodyweight_plus, where it means
   // bodyweight alone. `lockInBlocked` in engine.ts is the one floor, shared with
@@ -156,7 +160,7 @@ export function SummaryScreen() {
     if (!c.lockIn) return false;
     return lockInBlocked(c.lockInAt, item.exercise.kind);
   });
-  const others = useMemo(() => (summary?.items ?? []).filter((i) => !(i.status === 'done' && i.decision)), [summary]);
+  const others = useMemo(() => (summary?.items ?? []).filter((i) => quick || !(i.status === 'done' && i.decision)), [summary, quick]);
 
   // The finish moment's three honest figures. kg lifted is computed here from the sets exactly as
   // logged — the same countsForVolume universe `summary.workingSetsDone` already counts sets over
@@ -304,7 +308,13 @@ export function SummaryScreen() {
                   <div className="min-w-0">
                     <div className="truncate font-semibold">{item.exercise.name}</div>
                     <div className="text-sm text-muted">
-                      {item.status === 'skipped' ? 'Skipped' : item.status === 'not_done' ? 'Not done' : item.status === 'extra' ? `${item.sets.length} sets · no progression (extra)` : ''}
+                      {item.status === 'skipped'
+                        ? 'Skipped'
+                        : item.status === 'not_done'
+                          ? 'Not done'
+                          : item.status === 'extra'
+                            ? `${item.sets.length} sets · no progression (extra)`
+                            : `${plural(item.sets.length, 'set')} · no progression`}
                     </div>
                     {item.records.length > 0 && (
                       <div className="mt-1.5 flex flex-wrap gap-1.5">

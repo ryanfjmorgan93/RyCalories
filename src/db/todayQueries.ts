@@ -8,7 +8,7 @@
  */
 import { db } from './db';
 import { dayTotals } from './foodRepo';
-import { lastCompletedSession } from './repo';
+import { nextRoutineContext } from './repo';
 import { suggestNextRoutine } from '@/domain/schedule';
 import { addDays, isoToDateKey } from '@/domain/dates';
 import { calorieTargetOn, proteinTarget, type CalorieTarget } from '@/domain/nutrition';
@@ -70,8 +70,9 @@ export async function legDayFor(date: string, today?: string): Promise<LegDayRes
   if (await trainedOn(date)) return { legDay: false, basis: 'trained' };
   if (date !== today) return { legDay: false, basis: 'none' };
 
-  const [routines, last] = await Promise.all([db.routines.toArray(), lastCompletedSession()]);
-  const next = suggestNextRoutine(routines, last?.routineId ?? null, { avoidConsecutiveLower: true });
+  // The same context Home reads, so the two cannot disagree about which routine is next.
+  const [routines, context] = await Promise.all([db.routines.toArray(), nextRoutineContext()]);
+  const next = suggestNextRoutine(routines, context.lastRoutineId, { avoidConsecutiveLower: true, lastWasLower: context.lastWasLower });
   return next ? { legDay: next.isLowerBody, basis: 'planned' } : { legDay: false, basis: 'none' };
 }
 

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/db';
 import { flushSync } from 'react-dom';
-import { removeRoutineExercise, updateRoutineExercise, type RoutineItem } from '@/db/repo';
+import { excludeQuickRoutineExercises, removeRoutineExercise, updateRoutineExercise, type RoutineItem } from '@/db/repo';
 import { restSecondsFor } from '@/domain/rest';
 import { DEFAULT_SETTINGS, type Exercise, type ProgressionMode, type RoutineExercise, type Settings } from '@/domain/types';
 import { Button } from './components/Button';
@@ -53,7 +53,8 @@ export function RoutineExerciseEditor({
   const [link, setLink] = useState(rx?.linkProgression ?? false);
   // Other routines that also contain this exercise (the §4.8 link only means something then).
   const others = useLiveQuery(
-    async () => (rx ? (await db.routineExercises.where('exerciseId').equals(rx.exerciseId).toArray()).filter((r) => r.id !== rx.id) : []),
+    async () =>
+      rx ? (await excludeQuickRoutineExercises(await db.routineExercises.where('exerciseId').equals(rx.exerciseId).toArray())).filter((r) => r.id !== rx.id) : [],
     [rx?.id, rx?.exerciseId],
   );
 

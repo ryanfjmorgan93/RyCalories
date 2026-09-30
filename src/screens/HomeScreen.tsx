@@ -21,11 +21,13 @@ import { NumberInput } from '@/ui/components/NumberField';
 import { Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { ChevronIcon, TopBar } from '@/ui/components/TopBar';
+import { QuickSessionSheet } from '@/ui/QuickSessionSheet';
 import { RestoreSheet } from '@/ui/RestoreSheet';
 import {
   useActiveSession,
   useCalendar,
   useLastCompletedSession,
+  useNextRoutineContext,
   useNextSessionPlan,
   useRecentSessions,
   useRoutines,
@@ -46,10 +48,12 @@ export function HomeScreen() {
   const routines = useRoutines();
   const active = useActiveSession();
   const last = useLastCompletedSession();
+  const rotation = useNextRoutineContext();
   const recent = useRecentSessions(3);
   const settings = useSettings();
   const [pickOpen, setPickOpen] = useState(false);
   const [pending, setPending] = useState<Routine | null>(null);
+  const [quickOpen, setQuickOpen] = useState(false);
 
   const rxCounts = useLiveQuery(async () => {
     const all = await db.routineExercises.toArray();
@@ -58,7 +62,12 @@ export function HomeScreen() {
     return m;
   }, []);
 
-  const suggested = routines && last !== undefined ? suggestNextRoutine(routines, last?.routineId ?? null, { avoidConsecutiveLower: true }) : null;
+  // The rotation follows the last session that was not a quick one; the two-lower-days guard looks
+  // at the true last one. The Food screen's leg-day protein target reads the same context.
+  const suggested =
+    routines && rotation
+      ? suggestNextRoutine(routines, rotation.lastRoutineId, { avoidConsecutiveLower: true, lastWasLower: rotation.lastWasLower })
+      : null;
   // From the hook, never a bare toDateKey(): nothing on this screen is time-driven, so a plain
   // render-time read freezes on the day the screen mounted. Left open overnight it would show
   // yesterday's calories as today's progress, against yesterday's target.
@@ -73,7 +82,7 @@ export function HomeScreen() {
   const starting = useRef(false);
   const start = async (r: Routine) => {
     if (starting.current || empty(r)) return;
-    if (last?.routineId && isConsecutiveLower(routines ?? [], last.routineId, r.id) && pending?.id !== r.id) {
+    if (rotation && isConsecutiveLower(routines ?? [], rotation.lastRoutineId, r.id, { lastWasLower: rotation.lastWasLower }) && pending?.id !== r.id) {
       setPending(r);
       return;
     }
@@ -183,21 +192,27 @@ export function HomeScreen() {
               <div className="mt-3 text-xs font-semibold text-warn">Deload suggested · {plan.stalledCount} stalled</div>
             )}
 
-            {suggested && (
-              <div className="mt-4 grid gap-2">
-                {empty(suggested) && (
-                  <div className="text-sm font-semibold text-warn" data-testid="next-up-empty">
-                    No exercises
-                  </div>
-                )}
-                <Button size="xl" variant="primary" full disabled={empty(suggested)} onClick={() => void start(suggested)} data-testid="start-session">
-                  Start
-                </Button>
-                <Button size="lg" variant="outline" full disabled={empty(suggested)} onClick={() => void startDeload(suggested)} data-testid="start-deload">
-                  Start as deload
-                </Button>
-              </div>
-            )}
+            <div className="mt-4 grid gap-2">
+              {suggested && (
+                <>
+                  {empty(suggested) && (
+                    <div className="text-sm font-semibold text-warn" data-testid="next-up-empty">
+                      No exercises
+                    </div>
+                  )}
+                  <Button size="xl" variant="primary" full disabled={empty(suggested)} onClick={() => void start(suggested)} data-testid="start-session">
+                    Start
+                  </Button>
+                  <Button size="lg" variant="outline" full disabled={empty(suggested)} onClick={() => void startDeload(suggested)} data-testid="start-deload">
+                    Start as deload
+                  </Button>
+                </>
+              )}
+              {/* Outside the suggestion: a short session needs no routine, so it is there with none. */}
+              <Button size="lg" variant="outline" full onClick={() => setQuickOpen(true)} data-testid="short-session">
+                Short session
+              </Button>
+            </div>
           </Card>
         )}
 
@@ -279,6 +294,8 @@ export function HomeScreen() {
         <BodyweightQuickAdd />
         <div className="h-6" />
       </div>
+
+      <QuickSessionSheet open={quickOpen} onClose={() => setQuickOpen(false)} />
 
       <Sheet open={pickOpen} onClose={() => setPickOpen(false)} title="Start which routine?">
         <div className="overflow-hidden rounded-xl border border-line">

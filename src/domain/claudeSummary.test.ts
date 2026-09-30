@@ -381,3 +381,25 @@ describe('routine lines', () => {
     expect(text).not.toContain('Pull A: Face Pull 3 × 12–15 @ 20 kg;');
   });
 });
+
+describe('quick sessions', () => {
+  const sets = (weight: number): SummaryExercise[] => [{ name: 'Incline DB Press', kind: 'reps', sets: [{ type: 'working', weight, reps: 12 }] }];
+  const light: SummarySession = { date: '2026-09-25', title: 'Quick session · light', minutes: 24, quick: 'light', exercises: sets(19.5) };
+  const normal: SummarySession = { date: '2026-09-24', title: 'Quick session · normal', minutes: 31, quick: 'normal', exercises: sets(30) };
+  const real: SummarySession = { date: '2026-09-23', title: 'Upper (Push)', minutes: 50, exercises: sets(30) };
+
+  it('labels a light session so its weights are never read as working weights', () => {
+    const { text } = buildClaudeSummary(makeInput({ training: { days: 7, sessions: [light, normal, real] } }));
+    expect(text).toContain('Fri 25 Sep · quick session (light) · 24 min');
+    expect(text).toContain('Thu 24 Sep · quick session · 31 min');
+    expect(text).toContain('Wed 23 Sep · Upper (Push) · 50 min');
+    // The label stands in for the stored title; it is not said twice.
+    expect(text).not.toContain('Quick session ·');
+  });
+
+  it('says nothing more about it than the label', () => {
+    const { text } = buildClaudeSummary(makeInput({ training: { days: 7, sessions: [light] } }));
+    expect(text).toContain('  Incline DB Press: 19.5 × 12');
+    expect(text).not.toMatch(/light(?!\))/);
+  });
+});

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
 import { db } from '@/db/db';
-import { createRoutine, deleteRoutine, duplicateRoutine, reorderRoutines, restoreRoutine } from '@/db/repo';
+import { createRoutine, deleteRoutine, duplicateRoutine, listArchivedRoutines, reorderRoutines, restoreRoutine } from '@/db/repo';
 import type { Routine } from '@/domain/types';
 import { Button, IconButton } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row } from '@/ui/components/Card';
@@ -24,12 +24,8 @@ export function RoutinesScreen() {
 
   const exerciseCount = useLiveQuery(() => db.exercises.count(), []);
 
-  // A routine with sessions is archived rather than deleted, and nothing else lists it. By name:
-  // an archived routine has no place in the week to order it by.
-  const archived = useLiveQuery(
-    async () => (await db.routines.filter((r) => !!r.archived).toArray()).sort((a, b) => a.name.localeCompare(b.name)),
-    [],
-  );
+  // A routine with sessions is archived rather than deleted, and nothing else lists it.
+  const archived = useLiveQuery(() => listArchivedRoutines(), []);
   const [archivedOpen, setArchivedOpen] = useState(false);
   const [restoring, setRestoring] = useState<string | null>(null);
 

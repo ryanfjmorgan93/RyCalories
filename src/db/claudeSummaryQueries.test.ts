@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from './db';
 import { addMeal } from './foodRepo';
-import { getSettings, logBodyweight, resetToSeed, saveSettings } from './repo';
+import { startQuickSession } from './quickRepo';
+import { getSettings, logBodyweight, logSet, resetToSeed, routineItems, saveSettings, updateSession } from './repo';
 import { SEED_EXERCISE_IDS, SEED_ROUTINE_IDS } from './seed';
 import { loadClaudeSummaryInput } from './claudeSummaryQueries';
 import { buildClaudeSummary, type ClaudeSummaryInclude } from '@/domain/claudeSummary';
 import { fromPortion, type Macros } from '@/domain/food';
+import type { Candidate, QuickPlan } from '@/domain/quickSession';
 import type { Session, SetLog } from '@/domain/types';
 
 const RDL = SEED_EXERCISE_IDS['Romanian Deadlift (Barbell)'];
@@ -162,3 +164,56 @@ describe('loadClaudeSummaryInput + buildClaudeSummary, end to end', () => {
     expect(text).not.toContain('FOOD');
   });
 });
+
+describe('a quick session in the export', () => {
+  const RDL_ROW = (): QuickPlan => {
+    const candidate: Candidate = {
+      id: RDL,
+      name: 'Romanian Deadlift (Barbell)',
+      muscleGroup: 'hamstrings',
+      equipment: 'barbell',
+      kind: 'reps',
+      isCompound: true,
+      isLowerBody: true,
+      unilateral: false,
+      defaultIncrement: 5,
+      defaultRestSec: 150,
+      origin: 'own',
+    };
+    return {
+      rows: [{ candidate, sets: 2, repMin: 10, repMax: 15, weightKg: 71.5, mode: 'normal', restSec: 150, daysSince: null }],
+      estimateMin: 10,
+      shortfall: 0,
+      unmet: [],
+      relaxed: false,
+      focus: [],
+      seed: 1,
+    };
+  };
+
+  async function finishedQuick(effort: 'light' | 'normal', startedAt: string): Promise<void> {
+    const session = await startQuickSession(RDL_ROW(), [], effort);
+    const [item] = await routineItems(session.routineId);
+    await logSet({ sessionId: session.id, routineExerciseId: item.rx.id, exerciseId: RDL, type: 'working', weight: 71.5, reps: 12 });
+    await updateSession(session.id, { startedAt, endedAt: ts('2026-09-24', 18, 30), durationSec: 30 * 60 });
+  }
+
+  it('is named for what it was, so a light weight is not read as a working weight', async () => {
+    await finishedQuick('light', ts('2026-09-24', 18, 0));
+    const input = await loadClaudeSummaryInput(ASOF, INCLUDE_ALL, await getSettings(), WINDOWS);
+    expect(input.training.sessions[0]).toMatchObject({ title: 'Quick session · light', quick: 'light' });
+
+    const { text } = buildClaudeSummary(input);
+    expect(text).toContain('Thu 24 Sep · quick session (light) · 30 min');
+    expect(text).toContain('  Romanian Deadlift (Barbell): 71.5 × 12');
+    // The hidden routine is not one of the owner's routines.
+    expect(input.routines.map((r) => r.name)).not.toContain('Quick session');
+  });
+
+  it('a normal one reads as a quick session, without the qualifier', async () => {
+    await finishedQuick('normal', ts('2026-09-24', 18, 0));
+    const input = await loadClaudeSummaryInput(ASOF, INCLUDE_ALL, await getSettings(), WINDOWS);
+    expect(buildClaudeSummary(input).text).toContain('Thu 24 Sep · quick session · 30 min');
+  });
+});
+
