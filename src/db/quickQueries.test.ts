@@ -1,11 +1,13 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from './db';
 import { loadQuickInput } from './quickQueries';
 import { startQuickSession } from './quickRepo';
 import { createExercise, exerciseHistory, logSet, resetToSeed, saveSettings, startSession, updateSession } from './repo';
 import { SEED_EXERCISE_IDS, SEED_EXERCISES, SEED_ROUTINE_IDS } from './seed';
+import { muscleRecency, weeklySetsByMuscle } from './volumeQueries';
 import { loadCatalogue } from '@/data/catalogue';
 import { exerciseFromCatalogue, type CatalogueEntry } from '@/domain/catalogue';
+import { mondayOf } from '@/domain/dates';
 import type { Candidate, QuickPlan, QuickRow } from '@/domain/quickSession';
 import type { Exercise, Session, Settings } from '@/domain/types';
 
@@ -239,6 +241,42 @@ describe('loadQuickInput: days since, recency, weekly sets, targets, pace', () =
     await realSession(PUSH, 3, three, 600);
     // Three sets with 150 s rest model as 60 + 3 x 40 + 2 x 150 = 480 s; it took 600.
     expect((await load()).input.pace).toBeCloseTo(600 / 480, 10);
+  });
+});
+
+describe('loadQuickInput: each table is read once', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('reads the set logs, sessions and exercises once each, not once more for each figure drawn from them', async () => {
+    await realSession(PUSH, 1, [{ exerciseId: BENCH, weight: 65, reps: 8 }]);
+    // Spies call through: the real tables are read, and counted.
+    const reads = [db.setLogs, db.sessions, db.exercises].map((table) => vi.spyOn(table, 'toArray'));
+
+    await load();
+
+    expect(reads.map((r) => r.mock.calls.length)).toEqual([1, 1, 1]);
+  });
+
+  it('gives the recency and weekly sets the standalone readers give, counting a quick session and not a live, deleted or unknown one', async () => {
+    const press = await customExercise({ muscleGroup: 'shoulders' });
+    const ghost = await customExercise({ name: 'Ghost Raise', muscleGroup: 'calves' });
+    await realSession(PUSH, 1, [{ exerciseId: BENCH, weight: 65, reps: 8 }, { exerciseId: BENCH, weight: 65, reps: 8 }]);
+    await realSession(PULL, 9, [{ exerciseId: DB_CURL, weight: 14, reps: 10 }]);
+    await realSession(PUSH, 3, [{ exerciseId: ghost.id, weight: 10, reps: 10 }]);
+    await db.exercises.delete(ghost.id);
+    await quickSession([rowOf(press)], 'light', 2, [{ row: 0, weight: 20, reps: 12 }]);
+    const live = await startSession(ARMS);
+    await logSet({ sessionId: live.id, routineExerciseId: null, exerciseId: CABLE_CRUNCH, type: 'working', weight: 30, reps: 12 });
+
+    const { input } = await load();
+
+    expect(input.recency).toEqual(await muscleRecency(TODAY));
+    expect(input.weeklySets).toEqual(await weeklySetsByMuscle(mondayOf(TODAY)));
+    // Not vacuous: the figures are there to be compared.
+    expect(input.weeklySets).toEqual({ chest: 2, shoulders: 1 });
+    expect(input.recency).toMatchObject({ chest: 1, shoulders: 2, biceps: 9 });
+    expect(input.recency.calves).toBeUndefined();
+    expect(input.recency.abs).toBeUndefined();
   });
 });
 

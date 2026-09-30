@@ -1,7 +1,9 @@
+import Papa from 'papaparse';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { gatherContext } from './assistantQueries';
-import { exportBackup, importBackup, type Backup } from './backup';
+import { exportBackup, exportCsv, importBackup, type Backup } from './backup';
 import { calendarData } from './calendarQueries';
+import { addCatalogueExercise } from './catalogueRepo';
 import { db } from './db';
 import { reconcileWeights } from './hevy';
 import { startQuickSession } from './quickRepo';
@@ -16,6 +18,7 @@ import {
   excludeQuickRoutineExercises,
   exerciseUsage,
   finishSession,
+  getActiveSession,
   lastCompletedSession,
   lastWorkingTopWeight,
   listArchivedRoutines,
@@ -36,7 +39,8 @@ import {
 import { SEED_EXERCISE_IDS, SEED_EXERCISES, SEED_ROUTINE_IDS } from './seed';
 import { legDayFor, wasLegDay } from './todayQueries';
 import { weeklySetsByMuscle } from './volumeQueries';
-import { exerciseFromCatalogue, type CatalogueEntry } from '@/domain/catalogue';
+import { buildContextBlock } from '@/domain/assistant';
+import { exerciseFromCatalogue, isCatalogueDemo, type CatalogueEntry } from '@/domain/catalogue';
 import { addDays, toDateKey } from '@/domain/dates';
 import type { Candidate, QuickPlan, QuickRow } from '@/domain/quickSession';
 import { isConsecutiveLower, suggestNextRoutine } from '@/domain/schedule';
@@ -287,10 +291,16 @@ describe('startQuickSession: catalogue rows', () => {
   it('reuses the exercise it made the last time, however many sessions use it', async () => {
     const entry = entryOf('cable-woodchop');
     const first = await startQuickSession(planOf([catalogueRowOf(entry)]), [entry], 'normal');
-    await deleteSession(first.id);
-    await startQuickSession(planOf([catalogueRowOf(entry)]), [entry], 'normal');
+    const [made] = await db.exercises.filter((e) => e.demo === 'cat:cable-woodchop').toArray();
+    // Finished, not deleted: deleting a session takes the exercises its Start made, so a delete here
+    // would leave the second Start nothing to reuse and this would pass having reused nothing.
+    await updateSession(first.id, { endedAt: first.startedAt, durationSec: 60 });
+    const second = await startQuickSession(planOf([catalogueRowOf(entry)]), [entry], 'normal');
 
-    expect((await db.exercises.toArray()).filter((e) => e.demo === 'cat:cable-woodchop')).toHaveLength(1);
+    expect(second.id).not.toBe(first.id);
+    const all = (await db.exercises.toArray()).filter((e) => e.demo === 'cat:cable-woodchop');
+    expect(all.map((e) => e.id)).toEqual([made.id]);
+    expect((await db.routineExercises.where('routineId').equals(second.routineId).toArray())[0].exerciseId).toBe(made.id);
   });
 
   it('an exercise the owner already has under that demo key, or that name, wins', async () => {
@@ -645,6 +655,109 @@ describe('deleting a quick session', () => {
   });
 });
 
+describe('deleting a quick session: the catalogue exercises its Start made', () => {
+  const woodchop = entryOf('cable-woodchop');
+  const kneeling = entryOf('kneeling-crunch', { name: 'Kneeling Crunch' });
+  const exerciseOf = async (session: Session, order: number) => (await routineItems(session.routineId))[order].exercise;
+  /** A live session ends. Nothing here is about what finishing decides. */
+  const end = (s: Session) => updateSession(s.id, { endedAt: s.startedAt, durationSec: 60 });
+
+  it('a discarded session takes the exercises its Start made, and only those', async () => {
+    const before = await counts();
+    const session = await startQuickSession(planOf([rowOf(BENCH), catalogueRowOf(woodchop), catalogueRowOf(kneeling)]), [woodchop, kneeling], 'normal');
+    // They exist now, so their absence below is the delete's doing.
+    expect((await counts()).exercises).toBe(before.exercises + 2);
+
+    await deleteSession(session.id);
+
+    expect(await counts()).toEqual(before);
+    expect(await db.exercises.get(BENCH.id)).toBeDefined();
+    expect(await db.exercises.filter((e) => isCatalogueDemo(e.demo)).count()).toBe(0);
+  });
+
+  it('a finished session deleted from History takes them too, once its own sets are gone', async () => {
+    const session = await startQuickSession(planOf([catalogueRowOf(woodchop)]), [woodchop], 'normal');
+    const made = await exerciseOf(session, 0);
+    const [item] = await routineItems(session.routineId);
+    await logSet({ sessionId: session.id, routineExerciseId: item.rx.id, exerciseId: made.id, type: 'working', weight: 0, reps: 12 });
+    await finishSession(session.id, { choices: [] });
+    expect(await db.exercises.get(made.id)).toBeDefined();
+
+    await deleteSession(session.id);
+
+    expect(await db.exercises.get(made.id)).toBeUndefined();
+  });
+
+  it('an exercise the owner added from the library first is theirs, and stays', async () => {
+    const added = await addCatalogueExercise(woodchop);
+    // A tap on Add is well before Start: state the gap rather than hope two clocks read different milliseconds.
+    await db.exercises.update(added.id, { createdAt: '2026-09-01T10:00:00.000Z' });
+    const session = await startQuickSession(planOf([catalogueRowOf(woodchop)]), [woodchop], 'normal');
+    expect((await exerciseOf(session, 0)).id).toBe(added.id);
+
+    await deleteSession(session.id);
+
+    expect(await db.exercises.get(added.id)).toMatchObject({ demo: 'cat:cable-woodchop' });
+  });
+
+  it('one that any session logged a set on stays', async () => {
+    const session = await startQuickSession(planOf([catalogueRowOf(woodchop)]), [woodchop], 'normal');
+    const made = await exerciseOf(session, 0);
+    await end(session);
+    // Added to a real session as an extra: a set, and no routine row anywhere.
+    const real = await startSession(HINGE);
+    await logSet({ sessionId: real.id, routineExerciseId: null, exerciseId: made.id, type: 'working', weight: 0, reps: 10 });
+
+    await deleteSession(session.id);
+
+    expect(await db.exercises.get(made.id)).toBeDefined();
+    expect(await db.setLogs.where('exerciseId').equals(made.id).count()).toBe(1);
+  });
+
+  it('one that a routine lists stays', async () => {
+    const session = await startQuickSession(planOf([catalogueRowOf(woodchop)]), [woodchop], 'normal');
+    const made = await exerciseOf(session, 0);
+    await addRoutineExercise(PUSH, made.id);
+
+    await deleteSession(session.id);
+
+    expect(await db.exercises.get(made.id)).toBeDefined();
+    expect(await db.routineExercises.where('exerciseId').equals(made.id).count()).toBe(1);
+  });
+
+  it("one that a later quick session lists stays, with that session's row", async () => {
+    const first = await startQuickSession(planOf([catalogueRowOf(woodchop)]), [woodchop], 'normal');
+    const made = await exerciseOf(first, 0);
+    await end(first);
+    const second = await startQuickSession(planOf([catalogueRowOf(woodchop)]), [woodchop], 'normal');
+    expect((await exerciseOf(second, 0)).id).toBe(made.id);
+
+    await deleteSession(first.id);
+
+    expect(await db.exercises.get(made.id)).toBeDefined();
+    expect(await routineItems(second.routineId)).toHaveLength(1);
+  });
+
+  it('an exercise with no catalogue picture key is never taken, even one made at the same instant', async () => {
+    const custom = await createExercise({ ...exerciseFromCatalogue(entryOf('q')), demo: undefined, name: 'Custom move five' });
+    const session = await startQuickSession(planOf([rowOf(custom, { weightKg: 10 })]), [], 'light');
+    await updateSession(session.id, { startedAt: custom.createdAt });
+
+    await deleteSession(session.id);
+
+    expect(await db.exercises.get(custom.id)).toBeDefined();
+  });
+
+  it('a session that is not quick never takes an exercise, even a catalogue one made at the same instant', async () => {
+    const real = await startSession(HINGE);
+    await db.exercises.put({ ...exerciseFromCatalogue(woodchop), id: 'cat-made-for-real', createdAt: real.startedAt });
+
+    await deleteSession(real.id);
+
+    expect(await db.exercises.get('cat-made-for-real')).toBeDefined();
+  });
+});
+
 describe('exercise usage and the routine editor ignore quick rows', () => {
   it('counts only real routines, and keeps counting sets', async () => {
     const custom = await createExercise({ ...exerciseFromCatalogue(entryOf('x')), demo: undefined, name: 'Custom move' });
@@ -663,12 +776,37 @@ describe('exercise usage and the routine editor ignore quick rows', () => {
   it('an exercise only a finished quick session listed can be deleted, and its hidden row goes with it', async () => {
     const custom = await createExercise({ ...exerciseFromCatalogue(entryOf('y')), demo: undefined, name: 'Custom move two' });
     const session = await startQuickSession(planOf([rowOf(custom, { weightKg: 10 }), rowOf(BENCH)]), [], 'light');
+    // Finished: a live session is another matter, below.
+    await updateSession(session.id, { endedAt: session.startedAt, durationSec: 60 });
 
     expect(await deleteExercise(custom.id)).toBe(true);
     expect(await db.exercises.get(custom.id)).toBeUndefined();
     expect(await db.routineExercises.where('exerciseId').equals(custom.id).count()).toBe(0);
     // The session's other row is still there.
     expect(await db.routineExercises.where('routineId').equals(session.routineId).count()).toBe(1);
+  });
+
+  it('an exercise the LIVE quick session lists cannot be deleted, however few sets it has; finished, it can', async () => {
+    const custom = await createExercise({ ...exerciseFromCatalogue(entryOf('v')), demo: undefined, name: 'Custom move six' });
+    const session = await startQuickSession(planOf([rowOf(custom, { weightKg: 10 }), rowOf(BENCH)]), [], 'light');
+    expect((await getActiveSession())?.id).toBe(session.id);
+
+    expect(await deleteExercise(custom.id)).toBe(false);
+    expect(await db.exercises.get(custom.id)).toBeDefined();
+    expect(await routineItems(session.routineId)).toHaveLength(2);
+
+    await updateSession(session.id, { endedAt: session.startedAt, durationSec: 60 });
+    expect(await deleteExercise(custom.id)).toBe(true);
+    expect(await routineItems(session.routineId)).toHaveLength(1);
+  });
+
+  it('an exercise only some OTHER quick session listed can be deleted while a quick session is live', async () => {
+    const custom = await createExercise({ ...exerciseFromCatalogue(entryOf('u')), demo: undefined, name: 'Custom move seven' });
+    await quickSession([rowOf(custom, { weightKg: 10 })], 'light', '2026-09-01T18:00:00.000Z');
+    const live = await startQuickSession(planOf([rowOf(BENCH)]), [], 'light');
+
+    expect(await deleteExercise(custom.id)).toBe(true);
+    expect(await routineItems(live.routineId)).toHaveLength(1);
   });
 
   it('an exercise with a set in a quick session cannot be deleted', async () => {
@@ -718,6 +856,63 @@ describe('Ask never quotes a quick prescription', () => {
     expect(inside.exercise!.prescription).toBeUndefined();
     const outside = await gatherContext({ today, settings, exerciseId: custom.id });
     expect(outside.exercise!.prescription).toBeUndefined();
+  });
+});
+
+describe('Ask labels a quick session among the last sessions', () => {
+  const today = '2026-09-30';
+
+  it('a light and a normal quick session carry their label, and a real session none', async () => {
+    const settings = (await db.settings.get('settings'))!;
+    await realSession(HINGE, '2026-09-01T18:00:00.000Z', [{ exerciseId: RDL.id, weight: 110, reps: 8 }]);
+    await quickSession([rowOf(RDL, { weightKg: 71.5 })], 'light', '2026-09-02T18:00:00.000Z', [{ row: 0, weight: 70, reps: 12 }]);
+    await quickSession([rowOf(RDL, { weightKg: 100 })], 'normal', '2026-09-03T18:00:00.000Z', [{ row: 0, weight: 100, reps: 8 }]);
+
+    const ctx = await gatherContext({ today, settings, exerciseId: RDL.id });
+
+    // Newest first.
+    expect(ctx.exercise!.lastSessions.map((s) => s.sets)).toEqual(['quick session: 100 × 8', 'quick session (light): 70 × 12', '110 × 8']);
+    // And that is what the model is given, beside the real prescription.
+    const block = buildContextBlock(ctx);
+    expect(block).toContain('Prescription: 110 kg × 6–8 × 4');
+    expect(block).toMatch(/Last sessions: .*quick session: 100 × 8; .*quick session \(light\): 70 × 12; .* 110 × 8/);
+  });
+
+  it('a light session with nothing counted still says what it was', async () => {
+    const settings = (await db.settings.get('settings'))!;
+    const s = await quickSession([rowOf(RDL, { weightKg: 70 })], 'light', '2026-09-02T18:00:00.000Z', []);
+    await logSet({ sessionId: s.id, routineExerciseId: null, exerciseId: RDL.id, type: 'warmup', weight: 40, reps: 10 });
+
+    const ctx = await gatherContext({ today, settings, exerciseId: RDL.id });
+
+    expect(ctx.exercise!.lastSessions.map((x) => x.sets)).toEqual(['quick session (light): no working sets']);
+  });
+});
+
+describe('the CSV export says whether a session was quick', () => {
+  it('ends on a quick column: light, normal, or empty for a real session, with every earlier column where it was', async () => {
+    await realSession(HINGE, '2026-09-01T18:00:00.000Z', [{ exerciseId: RDL.id, weight: 110, reps: 8 }]);
+    await quickSession([rowOf(BENCH)], 'light', '2026-09-02T18:00:00.000Z', [{ row: 0, weight: 40, reps: 12 }]);
+    await quickSession([rowOf(BENCH)], 'normal', '2026-09-03T18:00:00.000Z', [{ row: 0, weight: 40, reps: 12 }]);
+
+    const csv = await exportCsv();
+    const parsed = Papa.parse<Record<string, string>>(csv, { header: true, skipEmptyLines: true });
+
+    expect(parsed.meta.fields).toEqual([
+      'session_id', 'session_start', 'session_end', 'session_duration_sec', 'routine', 'exercise', 'exercise_kind', 'set_index', 'set_type',
+      'weight_kg', 'reps', 'distance_m', 'seconds', 'rir', 'rep_min', 'rep_max', 'completed_at', 'source', 'quick',
+    ]);
+    expect(csv.split('\n')[0]).toMatch(/^session_id,session_start,/);
+    // By start time: the real session, the light one, the normal one.
+    expect(parsed.data.map((r) => [r.session_start.slice(0, 10), r.quick])).toEqual([
+      ['2026-09-01', ''],
+      ['2026-09-02', 'light'],
+      ['2026-09-03', 'normal'],
+    ]);
+    // Two sets that would otherwise read as the same working set now differ in the file.
+    const [, light, normal] = parsed.data;
+    expect([light.set_type, light.weight_kg, light.reps]).toEqual([normal.set_type, normal.weight_kg, normal.reps]);
+    expect(light.quick).not.toBe(normal.quick);
   });
 });
 

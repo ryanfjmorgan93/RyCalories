@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from './db';
 import { logSet, resetToSeed, saveSettings, startSession } from './repo';
-import { SEED_EXERCISE_IDS, SEED_ROUTINE_IDS } from './seed';
-import { muscleRecency, weeklySetsByMuscle, weeklySetsTable } from './volumeQueries';
+import { SEED_EXERCISE_IDS, SEED_EXERCISES, SEED_ROUTINE_IDS } from './seed';
+import { muscleRecency, muscleSetRowsFrom, weeklySetsByMuscle, weeklySetsTable } from './volumeQueries';
 import { mondayOf } from '@/domain/dates';
-import type { RoutineExercise } from '@/domain/types';
+import type { Exercise, RoutineExercise, Session, SetLog } from '@/domain/types';
+import { muscleRecency as muscleRecencyFromRows, weeklySetsByMuscle as weeklySetsFromRows } from '@/domain/volume';
 
 const HINGE = SEED_ROUTINE_IDS['Lower (Hinge)'];
 const RDL = SEED_EXERCISE_IDS['Romanian Deadlift (Barbell)']; // hamstrings
@@ -80,5 +81,49 @@ describe('weeklySetsTable', () => {
     expect(biceps).toMatchObject({ sets: 0, target: 8 });
     // Sorted by sets desc.
     expect(table[0].muscleGroup).toBe('hamstrings');
+  });
+});
+
+describe('muscleSetRowsFrom', () => {
+  const exercise = (id: string, muscleGroup: Exercise['muscleGroup']): Exercise => ({ ...SEED_EXERCISES[0], id, muscleGroup, createdAt: '' });
+  const set = (id: string, sessionId: string, exerciseId: string, type: SetLog['type'] = 'working'): SetLog => ({
+    id,
+    sessionId,
+    routineExerciseId: null,
+    exerciseId,
+    index: 0,
+    type,
+    weight: 50,
+    reps: 8,
+    completedAt: `2026-09-08T18:${id.padStart(2, '0')}:00.000Z`,
+  });
+  const session = (id: string, endedAt?: string): Session => ({ id, routineId: HINGE, title: id, startedAt: '2026-09-08T18:00:00.000Z', ...(endedAt ? { endedAt } : {}) });
+
+  it('joins each set of a finished session to its exercise’s muscle group, and drops the rest', () => {
+    const rows = muscleSetRowsFrom(
+      [set('1', 'done', 'chest-ex'), set('2', 'done', 'legs-ex', 'warmup'), set('3', 'live', 'chest-ex'), set('4', 'done', 'deleted-ex'), set('5', 'gone', 'chest-ex')],
+      [session('done', '2026-09-08T19:00:00.000Z'), session('live')],
+      [exercise('chest-ex', 'chest'), exercise('legs-ex', 'quads')],
+    );
+
+    // A set of an unfinished session, of an exercise since deleted, or of a session no longer there is not a row.
+    expect(rows).toEqual([
+      { muscleGroup: 'chest', type: 'working', completedAt: '2026-09-08T18:01:00.000Z' },
+      { muscleGroup: 'quads', type: 'warmup', completedAt: '2026-09-08T18:02:00.000Z' },
+    ]);
+  });
+
+  it('gives the rows the table readers are built on', async () => {
+    const rx = await rxFor(HINGE, RDL);
+    const s = await startSession(HINGE);
+    await logSet({ sessionId: s.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 100, reps: 8 });
+    await backdateSets(s.id, '2026-09-08T18:30:00.000Z');
+    await db.sessions.update(s.id, { startedAt: '2026-09-08T18:00:00.000Z', endedAt: '2026-09-08T19:00:00.000Z' });
+
+    const rows = muscleSetRowsFrom(await db.setLogs.toArray(), await db.sessions.toArray(), await db.exercises.toArray());
+
+    expect(rows).toHaveLength(1);
+    expect(weeklySetsFromRows(rows, mondayOf('2026-09-08'))).toEqual(await weeklySetsByMuscle(mondayOf('2026-09-08')));
+    expect(muscleRecencyFromRows(rows, '2026-09-10')).toEqual(await muscleRecency('2026-09-10'));
   });
 });
