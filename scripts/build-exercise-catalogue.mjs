@@ -11,7 +11,10 @@
  * Only exercises the app does not already have are kept: the workout-guide demos, the bespoke demos
  * under assets/custom-demos/ and the seeded exercises with their aliases are matched by name (see
  * scripts/lib/normalise.mjs), plus a reviewed list of repeats the names cannot show
- * (scripts/lib/catalogueRules.mjs). Every exclusion is printed so it can be reviewed.
+ * (scripts/lib/catalogueRules.mjs). Every exclusion is printed so it can be reviewed. The kept
+ * entries are also held against each other: two that answer to one name key stop the run.
+ * The same file holds the reviewed muscle-group and isolation overrides (by dataset name); a name
+ * there that is no longer in the dataset stops the run too.
  *
  * Frames already on disk are skipped, so a re-run without --force changes nothing.
  *
@@ -26,9 +29,9 @@ import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { appNameKeys, entryKeys, seedNamesFromSource } from './lib/normalise.mjs';
+import { appNameKeys, catalogueRepeats, entryKeys, seedNamesFromSource } from './lib/normalise.mjs';
 import { mapEntry } from './lib/mapEntry.mjs';
-import { FRAME_BUDGET_BYTES, FRAME_WIDTH, NOT_LIFTING, REVIEWED_DUPLICATES } from './lib/catalogueRules.mjs';
+import { FRAME_BUDGET_BYTES, FRAME_WIDTH, ISOLATION_OVERRIDES, MUSCLE_OVERRIDES, NOT_LIFTING, REVIEWED_DUPLICATES } from './lib/catalogueRules.mjs';
 
 const DATASET_URL = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/dist/exercises.json';
 const PHOTO_BASE = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/';
@@ -119,7 +122,7 @@ console.log(`Downloaded ${dataset.length} dataset entries.`);
 const reviewed = new Map(REVIEWED_DUPLICATES);
 const notLifting = new Set(NOT_LIFTING);
 const names = new Set(dataset.map((e) => e.name));
-for (const n of [...reviewed.keys(), ...notLifting]) {
+for (const n of [...reviewed.keys(), ...notLifting, ...Object.keys(MUSCLE_OVERRIDES), ...ISOLATION_OVERRIDES]) {
   if (!names.has(n)) throw new Error(`scripts/lib/catalogueRules.mjs names "${n}", which is not in the dataset.`);
 }
 
@@ -156,6 +159,13 @@ console.log(`\nDropped ${dropped.category} entries outside strength / powerlifti
 console.log(`Excluded ${excluded.length} the app already has:`);
 for (const e of excluded.sort((a, b) => byCodepoint(a.how, b.how) || byCodepoint(a.name, b.name))) {
   console.log(`  ${e.how.padEnd(11)} ${e.name}${e.other ? `  <=>  ${e.other}` : ''}`);
+}
+
+// The catalogue is also held against itself: the same exercise under two dataset names is one too many.
+const repeats = catalogueRepeats(kept.map((k) => ({ name: k.mapped.name, equipment: k.mapped.equipment })));
+if (repeats.length > 0) {
+  const lines = repeats.map((r) => `  "${r.names[0]}"  and  "${r.names[1]}"  (${r.key})`).join('\n');
+  throw new Error(`The catalogue would list the same exercise twice. Add one of each pair to REVIEWED_DUPLICATES in scripts/lib/catalogueRules.mjs:\n${lines}`);
 }
 
 kept.sort((a, b) => byCodepoint(a.mapped.slug, b.mapped.slug));

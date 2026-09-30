@@ -10,8 +10,8 @@ import { describe, expect, it } from 'vitest';
 import { SEED_EXERCISES } from '@/db/seed';
 import { CATALOGUE_FRAME_COUNT, catalogueDemoKey, exerciseFromCatalogue, LOWER_BODY_GROUPS, type CatalogueEntry } from '@/domain/catalogue';
 import { EQUIPMENT_KINDS, MUSCLE_GROUPS } from '@/domain/types';
-import { appNameKeys, entryKeys, seedNamesFromSource } from '../../scripts/lib/normalise.mjs';
-import { FRAME_BUDGET_BYTES, FRAME_WIDTH, NOT_LIFTING, REVIEWED_DUPLICATES } from '../../scripts/lib/catalogueRules.mjs';
+import { appNameKeys, catalogueRepeats, entryKeys, seedNamesFromSource } from '../../scripts/lib/normalise.mjs';
+import { FRAME_BUDGET_BYTES, FRAME_WIDTH, MUSCLE_OVERRIDES, NOT_LIFTING, REVIEWED_DUPLICATES } from '../../scripts/lib/catalogueRules.mjs';
 import { loadCatalogue, loadCatalogueSteps } from './catalogue';
 
 const FRAMES_DIR = fileURLToPath(new URL('../../assets/catalogue-frames/', import.meta.url));
@@ -24,9 +24,12 @@ const slugs = entries.map((e) => e.slug);
 /** Entries the dataset has no instructions for. Pinned so a lost steps file cannot pass as "the dataset had none". */
 const WITHOUT_STEPS = ['iron-cross', 'one-arm-kettlebell-swings', 'side-jackknife'];
 
-/** The count, stated: about 540 once the 876 dataset entries are cut to the four lifting categories and the ones the app has. */
+/**
+ * The count, stated: 518 once the 876 dataset entries are cut to the four lifting categories, the
+ * ones the app has and the 21 reviewed repeats of it or of each other (539 before those).
+ */
 const MIN_ENTRIES = 500;
-const MAX_ENTRIES = 580;
+const MAX_ENTRIES = 540;
 
 /** Width and height of a WebP, read from its header (lossy, extended or lossless). */
 function webpSize(b: Buffer): { width: number; height: number } {
@@ -83,6 +86,101 @@ describe('exerciseCatalogue.json', () => {
       keys.add(x.demo!);
     }
     expect(keys.size).toBe(entries.length);
+  });
+});
+
+/**
+ * What a review of the committed data found, pinned by real entry names so a regeneration that
+ * loses a rule shows up here. The rules themselves are in scripts/lib (and tested in
+ * catalogueMapping.test.ts); these read the output.
+ */
+describe('exerciseCatalogue.json, reviewed', () => {
+  const byName = new Map(entries.map((e) => [e.name, e]));
+  const entry = (name: string): CatalogueEntry => {
+    const e = byName.get(name);
+    if (!e) throw new Error(`The catalogue has no entry named "${name}".`);
+    return e;
+  };
+  const named = (re: RegExp) => entries.filter((e) => re.test(e.name));
+
+  it('files the powerlifting bench variants as chest work and leaves the triceps presses as triceps', () => {
+    for (const n of ['Bench Press - Powerlifting', 'Bench Press with Chains', 'Reverse Band Bench Press', 'Board Press', 'Pin Presses', 'Floor Press', 'Floor Press with Chains', 'One Arm Floor Press', 'Dumbbell Floor Press']) {
+      expect(entry(n).muscleGroup, n).toBe('chest');
+    }
+    for (const n of ['Smith Machine Close-Grip Bench Press', 'Reverse Triceps Bench Press', 'Weighted Bench Dip']) expect(entry(n).muscleGroup, n).toBe('triceps');
+  });
+
+  it('files every deadlift as lower back, except the Romanian, stiff-legged and one-legged hinges, which are hamstrings', () => {
+    const deadlifts = named(/dead ?lift/i);
+    expect(deadlifts.length).toBeGreaterThan(15);
+    const hinges = /romanian|stiff|one-legged/i;
+    for (const e of deadlifts) expect(e.muscleGroup, e.name).toBe(hinges.test(e.name) ? 'hamstrings' : 'lower back');
+  });
+
+  it('files every pullover as lats', () => {
+    const pullovers = named(/pullover/i);
+    expect(pullovers.length).toBeGreaterThanOrEqual(4);
+    for (const e of pullovers) expect(e.muscleGroup, e.name).toBe('lats');
+  });
+
+  it('files the clean, snatch and jerk families as full body, bar the deadlifts, the shrugs and a forearm drill', () => {
+    const family = named(/\b(clean|snatch|jerk)\b/i).filter((e) => !/dead ?lift|shrug|bottoms-up/i.test(e.name));
+    expect(family.length).toBeGreaterThan(40);
+    for (const e of family) expect(e.muscleGroup, e.name).toBe('full body');
+    expect(entry('Clean Shrug').muscleGroup).toBe('traps');
+    expect(entry('Snatch Shrug').muscleGroup).toBe('traps');
+    expect(entry('Clean Deadlift').muscleGroup).toBe('lower back');
+    expect(entry('Snatch Deadlift').muscleGroup).toBe('lower back');
+  });
+
+  it('files an override exactly where scripts/lib says, for every entry that is one', () => {
+    let applied = 0;
+    for (const [name, group] of Object.entries(MUSCLE_OVERRIDES)) {
+      const e = byName.get(name);
+      if (!e) continue;
+      applied++;
+      expect(e.muscleGroup, name).toBe(group);
+    }
+    expect(applied).toBeGreaterThan(50);
+  });
+
+  it('files hip adduction as adductors where the catalogue has it', () => {
+    for (const e of named(/hip adduction/i)) expect(e.muscleGroup, e.name).toBe('adductors');
+  });
+
+  it('gives the pulling and dipping work the dataset calls "other" the bodyweight-plus kind, and assisted work the reps kind', () => {
+    for (const n of ['Muscle Up', 'Kipping Muscle Up', 'One Arm Chin-Up', 'Ring Dips', 'Rocky Pull-Ups/Pulldowns', 'Weighted Bench Dip', 'Suspended Push-Up', 'Mixed Grip Chin', 'Gironda Sternum Chins', 'Side To Side Chins', 'Rope Climb', 'V-Bar Pullup']) {
+      expect(entry(n).kind, n).toBe('bodyweight_plus');
+    }
+    expect(entry('Band Assisted Pull-Up').kind).toBe('reps');
+    expect(entry('Dip Machine').kind).toBe('reps');
+    // What the kind is for: a 0 kg working weight is allowed, so the lift can start at bodyweight.
+    expect(exerciseFromCatalogue(entry('Muscle Up')).kind).toBe('bodyweight_plus');
+  });
+
+  it('never gives an EZ-bar movement the barbell equipment', () => {
+    const ez = named(/\bE-?Z\b/i);
+    expect(ez.length).toBeGreaterThanOrEqual(2);
+    for (const e of ez) expect(e.equipment, e.name).not.toBe('barbell');
+    expect(entry('Close-Grip EZ Bar Curl').equipment).toBe('other');
+    expect(entry('Decline EZ Bar Triceps Extension').equipment).toBe('other');
+  });
+
+  it('files body-only abdominal work as isolation, so a crunch gets an isolation rest', () => {
+    const bodyOnlyAbs = entries.filter((e) => e.muscleGroup === 'abs' && e.equipment === 'bodyweight');
+    expect(bodyOnlyAbs.length).toBeGreaterThan(20);
+    for (const e of bodyOnlyAbs) {
+      expect(e.isCompound, e.name).toBe(false);
+      expect(exerciseFromCatalogue(e).defaultRestSec, e.name).toBe(75);
+    }
+    // Loaded ab work is left as the dataset has it.
+    expect(entry('Barbell Ab Rollout').isCompound).toBe(true);
+    expect(entry('Kettlebell Windmill').isCompound).toBe(true);
+  });
+
+  it('files the named isolation moves as isolation', () => {
+    for (const n of ['Dumbbell Raise', 'External Rotation with Band', 'Cable Internal Rotation', 'High Cable Curls']) expect(entry(n).isCompound, n).toBe(false);
+    expect(entry('Cable Shoulder Press').isCompound).toBe(true);
   });
 });
 
@@ -182,6 +280,79 @@ describe('what the app already has', () => {
     const names = new Set(entries.map((e) => e.name));
     for (const [name] of REVIEWED_DUPLICATES) expect(names.has(name), name).toBe(false);
     for (const name of NOT_LIFTING) expect(names.has(name), name).toBe(false);
+  });
+
+  /**
+   * Written by hand from the dataset's and the app's own names, not from the script's lists or its
+   * normaliser: a repeat that only a person can see (a synonym such as "Wood Chop" and "Woodchop",
+   * or "Crossover" and "Fly") is exactly what the name matcher cannot. Each pair is the catalogue
+   * entry and what the app already had under another name.
+   */
+  const REPEATS_OF_THE_APP: [catalogue: string, app: string][] = [
+    ['Alternate Hammer Curl', 'Hammer Curl'],
+    ['Alternate Incline Dumbbell Curl', 'Incline DB Curl'],
+    ['Standing One-Arm Dumbbell Triceps Extension', 'Single Arm Dumbbell Tricep Extension'],
+    ['Standing Cable Wood Chop', 'Cable Woodchop'],
+    ['Cable Hip Adduction', 'Cable Standing Hip Adduction'],
+    ['Monster Walk', 'Banded Monster Walk'],
+    ['Flat Bench Lying Leg Raise', 'Lying Leg Raise'],
+    ['Ball Leg Curl', 'Stability Ball Hamstring Curl'],
+    ['Plie Dumbbell Squat', 'Dumbbell Sumo Squat'],
+    ['Alternate Heel Touchers', 'Heel Tap'],
+    ['Seated Leg Tucks', 'Seated Knee Tuck'],
+    ['Knee/Hip Raise On Parallel Bars', "Captain's Chair Knee Raise"],
+    ['Cable Crossover', 'Cable Fly'],
+    ['Incline Push-Up Medium', 'Incline Push-up'],
+    ['Push-Ups With Feet Elevated', 'Decline Push-up'],
+    ['Lying Dumbbell Tricep Extension', 'Two Dumbbell Skullcrusher'],
+    ['Lying Triceps Press', 'Skull Crusher'],
+    ['Smith Machine Calf Raise', 'Standing Calf Raise (Smith Machine)'],
+    ['Smith Single-Leg Split Squat', 'Smith Machine Split Squat'],
+  ];
+  /** Two dataset entries for one exercise: `[the one left out, the one kept]`. */
+  const REPEATS_WITHIN_THE_CATALOGUE: [dropped: string, kept: string][] = [
+    ['Decline Smith Press', 'Smith Machine Decline Press'],
+    ['Squat with Bands', 'Squats - With Bands'],
+  ];
+
+  it('names, for each known repeat, something the app really has', () => {
+    const appNames = new Set([...manifest.map((d) => d.name), ...custom.map((d) => d.name), ...seeds.flatMap((s) => [s.name, ...s.aliases])].map((n) => n.toLowerCase()));
+    for (const [, app] of REPEATS_OF_THE_APP) expect(appNames.has(app.toLowerCase()), app).toBe(true);
+  });
+
+  it('holds none of the repeats a person found that the name matcher could not', () => {
+    const names = new Set(entries.map((e) => e.name));
+    for (const [name] of REPEATS_OF_THE_APP) expect(names.has(name), name).toBe(false);
+    for (const [dropped, kept] of REPEATS_WITHIN_THE_CATALOGUE) {
+      expect(names.has(dropped), dropped).toBe(false);
+      expect(names.has(kept), kept).toBe(true);
+    }
+  });
+
+  it('keeps each of those repeats on the reviewed list, which the script checks against the dataset on every run', () => {
+    const reviewed = new Set(REVIEWED_DUPLICATES.map(([name]) => name));
+    for (const [name] of REPEATS_OF_THE_APP) expect(reviewed.has(name), name).toBe(true);
+    for (const [dropped] of REPEATS_WITHIN_THE_CATALOGUE) expect(reviewed.has(dropped), dropped).toBe(true);
+  });
+
+  it('lists no exercise twice: no two entries answer to the same name key', () => {
+    expect(catalogueRepeats(entries)).toEqual([]);
+  });
+
+  it('would notice two entries that are one exercise', () => {
+    const twins = [
+      { name: 'Decline Smith Press', equipment: 'machine' },
+      { name: 'Smith Machine Decline Press', equipment: 'machine' },
+      { name: 'Squat with Bands', equipment: 'other' },
+      { name: 'Squats - With Bands', equipment: 'other' },
+      { name: 'Barbell Curl', equipment: 'barbell' },
+    ];
+    expect(catalogueRepeats(twins).map((r) => r.names)).toEqual([
+      ['Decline Smith Press', 'Smith Machine Decline Press'],
+      ['Squat with Bands', 'Squats - With Bands'],
+    ]);
+    // The same name twice is a slug collision the script already refuses, not a pair to report.
+    expect(catalogueRepeats([twins[4]!, twins[4]!])).toEqual([]);
   });
 });
 

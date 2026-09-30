@@ -25,7 +25,9 @@ export interface MappedEntry {
 
 export function slugOf(id: string): string;
 export function muscleGroupOf(raw: Pick<DatasetEntry, 'name' | 'primaryMuscles'>): string;
-export function equipmentOf(raw: Pick<DatasetEntry, 'equipment'>): string;
+/** `name` is optional: only an EZ bar filed under barbell needs it. */
+export function equipmentOf(raw: Pick<DatasetEntry, 'equipment'> & Partial<Pick<DatasetEntry, 'name'>>): string;
 export function kindOf(raw: Pick<DatasetEntry, 'name' | 'equipment' | 'category'>): string;
-export function isCompoundOf(raw: Pick<DatasetEntry, 'mechanic' | 'secondaryMuscles'>): boolean;
+/** `name`, `equipment` and `primaryMuscles` are optional: body-only abdominal work and the named isolation moves need them. */
+export function isCompoundOf(raw: Pick<DatasetEntry, 'mechanic' | 'secondaryMuscles'> & Partial<Pick<DatasetEntry, 'name' | 'equipment' | 'primaryMuscles'>>): boolean;
 export function mapEntry(raw: DatasetEntry): MappedEntry;

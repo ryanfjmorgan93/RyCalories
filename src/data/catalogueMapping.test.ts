@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { entryKeys, nameKeys, normaliseName, seedNamesFromSource, splitEquipmentSuffix } from '../../scripts/lib/normalise.mjs';
 import { equipmentOf, isCompoundOf, kindOf, mapEntry, muscleGroupOf, slugOf, type DatasetEntry } from '../../scripts/lib/mapEntry.mjs';
+import { ISOLATION_OVERRIDES, MUSCLE_OVERRIDES } from '../../scripts/lib/catalogueRules.mjs';
+import { MUSCLE_GROUPS } from '@/domain/types';
 
 /** A dataset record with sensible defaults; each test overrides what it is about. */
 function raw(over: Partial<DatasetEntry> & { name: string }): DatasetEntry {
@@ -76,6 +78,66 @@ describe('muscleGroupOf', () => {
     expect(muscleGroupOf({ name: 'Reverse Flyes', primaryMuscles: ['middle back'] })).toBe('upper back');
   });
 
+  // Real dataset records: the name and first primary muscle free-exercise-db gives them.
+  it.each([
+    ['Bench Press - Powerlifting', 'triceps', 'chest'],
+    ['Bench Press with Chains', 'triceps', 'chest'],
+    ['Reverse Band Bench Press', 'triceps', 'chest'],
+    ['Board Press', 'triceps', 'chest'],
+    ['Pin Presses', 'triceps', 'chest'],
+    ['Floor Press', 'triceps', 'chest'],
+    ['Floor Press with Chains', 'triceps', 'chest'],
+    ['One Arm Floor Press', 'triceps', 'chest'],
+    ['Dumbbell Floor Press', 'triceps', 'chest'],
+    ['Cable Hip Adduction', 'quadriceps', 'adductors'],
+    ['Car Deadlift', 'quadriceps', 'lower back'],
+    ['Rickshaw Deadlift', 'quadriceps', 'lower back'],
+    ['Sumo Deadlift with Chains', 'hamstrings', 'lower back'],
+    ['Clean Deadlift', 'hamstrings', 'lower back'],
+    ['Bent-Arm Dumbbell Pullover', 'chest', 'lats'],
+    ['Wide-Grip Decline Barbell Pullover', 'chest', 'lats'],
+    ['Clean', 'hamstrings', 'full body'],
+    ['Hang Clean', 'quadriceps', 'full body'],
+    ['Power Snatch', 'hamstrings', 'full body'],
+    ['Snatch from Blocks', 'quadriceps', 'full body'],
+    ['Split Jerk', 'quadriceps', 'full body'],
+    ['Clean and Jerk', 'shoulders', 'full body'],
+    ['Jerk Balance', 'shoulders', 'full body'],
+    ['One-Arm Kettlebell Snatch', 'shoulders', 'full body'],
+  ])('files %s (the dataset says %s) under %s', (name, primary, group) => {
+    expect(muscleGroupOf({ name, primaryMuscles: [primary] })).toBe(group);
+  });
+
+  it('leaves the lifts next to the overridden ones as the dataset has them', () => {
+    // Triceps work beside the bench variants, the Romanian and stiff-legged hinges, the shrugs and a chest floor press.
+    expect(muscleGroupOf({ name: 'Smith Machine Close-Grip Bench Press', primaryMuscles: ['triceps'] })).toBe('triceps');
+    expect(muscleGroupOf({ name: 'Reverse Triceps Bench Press', primaryMuscles: ['triceps'] })).toBe('triceps');
+    expect(muscleGroupOf({ name: 'Weighted Bench Dip', primaryMuscles: ['triceps'] })).toBe('triceps');
+    expect(muscleGroupOf({ name: 'Stiff-Legged Barbell Deadlift', primaryMuscles: ['hamstrings'] })).toBe('hamstrings');
+    expect(muscleGroupOf({ name: 'Romanian Deadlift from Deficit', primaryMuscles: ['hamstrings'] })).toBe('hamstrings');
+    expect(muscleGroupOf({ name: 'Clean Shrug', primaryMuscles: ['traps'] })).toBe('traps');
+    expect(muscleGroupOf({ name: 'Snatch Shrug', primaryMuscles: ['traps'] })).toBe('traps');
+    expect(muscleGroupOf({ name: 'Leg-Over Floor Press', primaryMuscles: ['chest'] })).toBe('chest');
+    expect(muscleGroupOf({ name: 'Barbell Bench Press - Medium Grip', primaryMuscles: ['chest'] })).toBe('chest');
+  });
+
+  it('keeps every override to a real group, a name spelt as mapEntry reads it, and a group that wins over the dataset muscle', () => {
+    const overrides = Object.entries(MUSCLE_OVERRIDES);
+    expect(overrides.length).toBeGreaterThan(50);
+    for (const [name, group] of overrides) {
+      expect(MUSCLE_GROUPS, name).toContain(group);
+      // mapEntry tidies a name before it looks anything up, so a key that tidying would change could never match.
+      expect(name, name).toBe(name.replace(/_/g, ' ').trim());
+      expect(mapEntry(raw({ name, primaryMuscles: ['calves'] })).muscleGroup, name).toBe(group);
+    }
+  });
+
+  it('does not read an override off the object prototype', () => {
+    for (const name of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+      expect(muscleGroupOf({ name, primaryMuscles: ['chest'] }), name).toBe('chest');
+    }
+  });
+
   it('refuses a muscle it does not know rather than guess', () => {
     expect(() => muscleGroupOf({ name: 'Mystery', primaryMuscles: ['pinky toe'] })).toThrow(/pinky toe/);
     expect(() => muscleGroupOf({ name: 'Mystery', primaryMuscles: [] })).toThrow();
@@ -102,6 +164,26 @@ describe('equipmentOf', () => {
 
   it('never calls an EZ bar a barbell (a barbell gets a 20 kg warm-up ramp)', () => {
     expect(equipmentOf({ equipment: 'e-z curl bar' })).toBe('other');
+  });
+
+  it('does not take an EZ-bar movement the dataset files under barbell for one', () => {
+    // The two real records: free-exercise-db says barbell for both, and names the bar in the title.
+    expect(equipmentOf({ name: 'Close-Grip EZ Bar Curl', equipment: 'barbell' })).toBe('other');
+    expect(equipmentOf({ name: 'Decline EZ Bar Triceps Extension', equipment: 'barbell' })).toBe('other');
+    expect(equipmentOf({ name: 'EZ-Bar Curl', equipment: 'barbell' })).toBe('other');
+    expect(equipmentOf({ name: 'Standing Ez Bar Curl', equipment: 'barbell' })).toBe('other');
+  });
+
+  it('leaves a barbell a barbell when the name does not say EZ, and copes with no name', () => {
+    expect(equipmentOf({ name: 'Barbell Curl', equipment: 'barbell' })).toBe('barbell');
+    expect(equipmentOf({ name: 'Breeze Bar Curl', equipment: 'barbell' })).toBe('barbell');
+    expect(equipmentOf({ name: 'Zercher Squat', equipment: 'barbell' })).toBe('barbell');
+    expect(equipmentOf({ equipment: 'barbell' })).toBe('barbell');
+    expect(equipmentOf({ name: undefined, equipment: 'barbell' })).toBe('barbell');
+  });
+
+  it('reads an EZ bar on a cable as the cable', () => {
+    expect(equipmentOf({ name: 'Cable EZ-Bar Curl', equipment: 'cable' })).toBe('cable');
   });
 });
 
@@ -152,14 +234,45 @@ describe('kindOf', () => {
     expect(kind('Bodyweight Walking Lunge', null)).toBe('reps');
   });
 
-  it('marks added-weight bodyweight lifts only for body-only work', () => {
-    for (const name of ['Pullups', 'Chin-Up', 'V-Bar Pullup', 'Wide-Grip Rear Pull-Up', 'Dips - Triceps Version', 'Muscle Up', 'Pushups', 'Incline Push-Up Wide', 'Hyperextensions With No Hyperextension Bench', 'Back Extension']) {
+  it('marks added-weight bodyweight lifts for body-only work', () => {
+    for (const name of ['Pullups', 'Chin-Up', 'V-Bar Pullup', 'Wide-Grip Rear Pull-Up', 'Dips - Triceps Version', 'Pushups', 'Incline Push-Up Wide', 'Hyperextensions With No Hyperextension Bench', 'Back Extension']) {
       expect(kind(name, 'body only'), name).toBe('bodyweight_plus');
     }
     expect(kind('Weighted Sit-Ups', 'body only')).toBe('reps');
     expect(kind('Crunch', 'body only')).toBe('reps');
-    expect(kind('Ring Dips', 'other')).toBe('reps');
     expect(kind('Machine Dip', 'machine')).toBe('reps');
+  });
+
+  // The dataset files most hanging and dipping work under equipment "other", or none: these are its real pairs.
+  it('marks the pulling and dipping work the dataset files under "other" as added-weight bodyweight lifts', () => {
+    for (const name of ['Muscle Up', 'Kipping Muscle Up', 'One Arm Chin-Up', 'Ring Dips', 'Rocky Pull-Ups/Pulldowns', 'Weighted Bench Dip', 'Suspended Push-Up', 'Mixed Grip Chin', 'Gironda Sternum Chins', 'Side To Side Chins', 'Rope Climb']) {
+      expect(kind(name, 'other'), name).toBe('bodyweight_plus');
+    }
+  });
+
+  it('marks the same work with no equipment at all the same way', () => {
+    expect(kind('Muscle Up', null)).toBe('bodyweight_plus');
+    expect(kind('Ring Dips', null)).toBe('bodyweight_plus');
+  });
+
+  it('keeps assisted work as reps: the assistance is a negative load, not added weight', () => {
+    expect(kind('Band Assisted Pull-Up', 'other')).toBe('reps');
+    expect(kind('Assisted Chin-Up', 'body only')).toBe('reps');
+  });
+
+  it('keeps a pull-up or dip that kit does the loading for as reps', () => {
+    expect(kind('Dip Machine', 'machine')).toBe('reps');
+    expect(kind('Jerk Dip Squat', 'barbell')).toBe('reps');
+    expect(kind('Plyo Kettlebell Pushups', 'kettlebells')).toBe('reps');
+    expect(kind('Push-Ups With Feet On An Exercise Ball', 'exercise ball')).toBe('reps');
+    expect(kind('Weighted Ball Hyperextension', 'exercise ball')).toBe('reps');
+    expect(kind('Lying Close-Grip Barbell Triceps Press To Chin', 'e-z curl bar')).toBe('reps');
+    expect(kind('Lat Pull-Up Machine', 'machine')).toBe('reps');
+  });
+
+  it('does not read every chin as a chin-up', () => {
+    expect(kind('Gorilla Chin/Crunch', 'body only')).toBe('reps');
+    expect(kind('Lying Close-Grip Barbell Triceps Press To Chin', 'other')).toBe('reps');
   });
 
   it('keeps everything else as reps', () => {
@@ -172,6 +285,32 @@ describe('isCompoundOf', () => {
   it('follows the dataset mechanic', () => {
     expect(isCompoundOf({ mechanic: 'compound', secondaryMuscles: [] })).toBe(true);
     expect(isCompoundOf({ mechanic: 'isolation', secondaryMuscles: ['a', 'b', 'c'] })).toBe(false);
+  });
+
+  const abs = (name: string, over: Record<string, unknown> = {}) => ({ name, mechanic: 'compound', equipment: 'body only', primaryMuscles: ['abdominals'], secondaryMuscles: [] as string[], ...over });
+
+  it('files body-only abdominal work as isolation, whatever the dataset mechanic says', () => {
+    for (const name of ['3/4 Sit-Up', 'Cross-Body Crunch', 'Decline Oblique Crunch', 'Jackknife Sit-Up', 'Air Bike', 'Cocoons', 'Leg Pull-In', 'Bent-Knee Hip Raise', 'Elbow to Knee']) {
+      expect(isCompoundOf(abs(name)), name).toBe(false);
+    }
+    // Two secondary muscles would make it compound through the fallback; the rule comes first.
+    expect(isCompoundOf(abs('Air Bike', { mechanic: null, secondaryMuscles: ['a', 'b'] }))).toBe(false);
+  });
+
+  it('keeps loaded abdominal work, and body-only work elsewhere, as the dataset has it', () => {
+    expect(isCompoundOf(abs('Barbell Ab Rollout', { equipment: 'barbell' }))).toBe(true);
+    expect(isCompoundOf(abs('Kettlebell Windmill', { equipment: 'kettlebells' }))).toBe(true);
+    expect(isCompoundOf(abs('Standing Cable Lift', { equipment: 'cable' }))).toBe(true);
+    expect(isCompoundOf(abs('Push-Ups With Feet Elevated', { primaryMuscles: ['chest'] }))).toBe(true);
+    expect(isCompoundOf(abs('Chin-Up', { primaryMuscles: ['lats'] }))).toBe(true);
+  });
+
+  it('files the named misfiles as isolation and leaves a real press alone', () => {
+    expect(ISOLATION_OVERRIDES).toEqual(['Cable Internal Rotation', 'Dumbbell Raise', 'External Rotation with Band', 'High Cable Curls']);
+    for (const name of ISOLATION_OVERRIDES) {
+      expect(isCompoundOf({ name, mechanic: 'compound', equipment: 'cable', primaryMuscles: ['shoulders'], secondaryMuscles: ['biceps'] }), name).toBe(false);
+    }
+    expect(isCompoundOf({ name: 'Arnold Dumbbell Press', mechanic: 'compound', equipment: 'dumbbell', primaryMuscles: ['shoulders'], secondaryMuscles: ['triceps'] })).toBe(true);
   });
 
   it('falls back to two or more secondary muscles when the mechanic is missing', () => {
@@ -196,6 +335,13 @@ describe('mapEntry', () => {
       unilateral: false,
       level: 'expert',
     });
+  });
+
+  it('runs every rule on the real record of a lift that needed one', () => {
+    expect(mapEntry(raw({ id: 'Bench_Press_-_Powerlifting', name: 'Bench Press - Powerlifting', category: 'powerlifting', primaryMuscles: ['triceps'], secondaryMuscles: ['chest', 'lats'] }))).toMatchObject({ muscleGroup: 'chest', equipment: 'barbell', kind: 'reps', isCompound: true });
+    expect(mapEntry(raw({ id: 'Close-Grip_EZ_Bar_Curl', name: 'Close-Grip EZ Bar Curl', primaryMuscles: ['biceps'], mechanic: 'isolation' }))).toMatchObject({ muscleGroup: 'biceps', equipment: 'other', isCompound: false });
+    expect(mapEntry(raw({ id: 'Muscle_Up', name: 'Muscle Up', equipment: 'other', primaryMuscles: ['lats'] }))).toMatchObject({ kind: 'bodyweight_plus', equipment: 'other' });
+    expect(mapEntry(raw({ id: '3_4_Sit-Up', name: '3/4 Sit-Up', equipment: 'body only', primaryMuscles: ['abdominals'] }))).toMatchObject({ muscleGroup: 'abs', equipment: 'bodyweight', isCompound: false });
   });
 
   it('flags one-sided work from the name', () => {
