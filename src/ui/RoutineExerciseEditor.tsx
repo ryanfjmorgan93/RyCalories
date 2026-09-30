@@ -3,7 +3,8 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/db';
 import { flushSync } from 'react-dom';
 import { removeRoutineExercise, updateRoutineExercise, type RoutineItem } from '@/db/repo';
-import type { Exercise, ProgressionMode, RoutineExercise, Settings } from '@/domain/types';
+import { restSecondsFor } from '@/domain/rest';
+import { DEFAULT_SETTINGS, type Exercise, type ProgressionMode, type RoutineExercise, type Settings } from '@/domain/types';
 import { Button } from './components/Button';
 import { Segmented, Toggle } from './components/Chip';
 import { NumberField, NumberInput, TextInput } from './components/NumberField';
@@ -13,10 +14,7 @@ import { useSettings } from './hooks';
 
 /** Rest seconds used when a routine-exercise has no override (mirrors the live-session rule). */
 export function defaultRestSec(exercise: Exercise, settings: Settings | undefined): number {
-  if (exercise.defaultRestSec) return exercise.defaultRestSec;
-  if (!settings) return exercise.kind === 'carry' ? 90 : exercise.isCompound ? 150 : 75;
-  if (exercise.kind === 'carry') return settings.restCarrySec;
-  return exercise.isCompound ? settings.restCompoundSec : settings.restIsolationSec;
+  return restSecondsFor(null, exercise, settings ?? DEFAULT_SETTINGS);
 }
 
 /**
