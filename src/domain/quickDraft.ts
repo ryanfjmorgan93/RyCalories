@@ -9,11 +9,17 @@
  * and tapping it adds or removes those muscles, so "Push, then Pull" is both and tapping Push again
  * leaves Pull.
  *
+ * A third layer sits behind both: what the on-device assistant read from the typed line, on the
+ * owner's tap (`ai`). It fills only the fields the typed text and the taps both leave unset — a tap
+ * on Auto, or on the last chip of a list, is a choice and is left alone too — and only the five
+ * fields `mergeIntent` lets it set: never an exclusion, never `includeNew`, never an exercise or a
+ * weight. It is tied to the text it read, so any change to the text drops it.
+ *
  * `quickOptions` is what the generator is given: the typed options and the taps merged, through
  * `resolveOptions`, so what was typed but not tapped (an exclusion, an equipment limit) is carried
  * and never dropped on the way.
  */
-import { DEFAULT_MINUTES, MACRO_MUSCLES, parseQuickRequest, resolveOptions, type Effort, type QuickOptions } from './quickRequest';
+import { DEFAULT_MINUTES, MACRO_MUSCLES, mergeIntent, parseQuickRequest, resolveOptions, type Effort, type QuickOptions } from './quickRequest';
 import { EQUIPMENT_KINDS, MUSCLE_GROUPS, type Equipment, type MuscleGroup } from './types';
 
 export type MacroName = keyof typeof MACRO_MUSCLES;
@@ -43,11 +49,16 @@ export interface QuickDraft {
   taps: QuickTaps;
   /** Only ever a tap: neither the typed line nor the assistant can switch it on. */
   includeNew: boolean;
+  /** What the assistant read from `text`; absent or null until it has been asked, and dropped when the text changes. */
+  ai?: Partial<QuickOptions> | null;
 }
 
 export const EMPTY_DRAFT: QuickDraft = { text: '', taps: {}, includeNew: false };
 
 const TAPPABLE = ['count', 'minutes', 'effort', 'focus', 'exclude', 'equipment'] as const;
+
+/** The only fields the assistant may set: the ones `parseIntentReply` reads and `mergeIntent` fills. */
+const AI_FIELDS = ['count', 'minutes', 'effort', 'focus', 'equipment'] as const;
 
 function same(a: unknown, b: unknown): boolean {
   if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((x) => b.includes(x));
@@ -69,22 +80,27 @@ function canonicalEquipment(list: readonly Equipment[]): Equipment[] {
 /**
  * The text changed. A field the new text says something different about takes the typed value back
  * from any tap on it; a field it says nothing about, or says the same about, keeps its tap. Deleting
- * the phrase that set a field leaves whatever was tapped, else Auto.
+ * the phrase that set a field leaves whatever was tapped, else Auto. What the assistant read from the
+ * old text goes with it: the words it read are gone.
  */
 export function typeText(draft: QuickDraft, text: string): QuickDraft {
+  if (text === draft.text) return draft;
   const before = parseQuickRequest(draft.text).options;
   const after = parseQuickRequest(text).options;
   const taps: QuickTaps = { ...draft.taps };
   for (const field of TAPPABLE) {
     if (after[field] !== undefined && !same(before[field], after[field])) delete taps[field];
   }
-  return { ...draft, text, taps };
+  return { ...draft, text, taps, ai: null };
 }
 
 // ---------------------------------------------------------------------------
 // What the taps and the text add up to
 
-/** The typed options with the taps laid over them. Empty lists are left out: an option is either set or absent. */
+/**
+ * The typed options with the taps laid over them, and the assistant's reading filling what both left
+ * open. Empty lists are left out: an option is either set or absent.
+ */
 export function effectiveOptions(draft: QuickDraft): Partial<QuickOptions> {
   const parsed = parseQuickRequest(draft.text).options;
   const taps = draft.taps;
@@ -102,12 +118,53 @@ export function effectiveOptions(draft: QuickDraft): Partial<QuickOptions> {
   if (exclude.length) out.exclude = exclude;
   const equipment = canonicalEquipment(taps.equipment ?? parsed.equipment ?? []);
   if (equipment.length) out.equipment = equipment;
+
+  return draft.ai ? mergeIntent(out, unTapped(draft.ai, taps)) : out;
+}
+
+/**
+ * The assistant's fields that no tap has spoken for. A tap on a value sets the field itself, so it
+ * is already ahead of the assistant; a tap on Auto, or on the last chip of a list, leaves the field
+ * empty but is still the owner's choice, and the assistant does not reopen it.
+ */
+function unTapped(ai: Partial<QuickOptions>, taps: QuickTaps): Partial<QuickOptions> {
+  const out: Partial<QuickOptions> = { ...ai };
+  if ('count' in taps) delete out.count;
+  if (taps.focus !== undefined) delete out.focus;
+  if (taps.equipment !== undefined) delete out.equipment;
   return out;
 }
 
 /** What the generator is given. */
 export function quickOptions(draft: QuickDraft): QuickOptions {
   return resolveOptions(effectiveOptions(draft));
+}
+
+// ---------------------------------------------------------------------------
+// The assistant's reading
+
+/**
+ * Put what the assistant read into the draft, for the text now in it. Only its five fields are
+ * kept, whatever the object holds, so nothing else can reach the generator through here; null
+ * takes the layer away. Whether it then changes anything is `aiFills`: the typed line and the taps
+ * come first.
+ */
+export function setAi(draft: QuickDraft, ai: Partial<QuickOptions> | null): QuickDraft {
+  if (!ai) return { ...draft, ai: null };
+  const kept: Partial<QuickOptions> = {};
+  for (const field of AI_FIELDS) {
+    const value = ai[field];
+    if (value === undefined) continue;
+    (kept as Record<string, unknown>)[field] = Array.isArray(value) ? [...value] : value;
+  }
+  return { ...draft, ai: kept };
+}
+
+/** The fields the assistant's reading sets that the typed line and the taps left open. Empty when it adds nothing. */
+export function aiFills(draft: QuickDraft): (keyof QuickOptions)[] {
+  const before = effectiveOptions({ ...draft, ai: null });
+  const after = effectiveOptions(draft);
+  return (Object.keys(after) as (keyof QuickOptions)[]).filter((field) => before[field] === undefined);
 }
 
 // ---------------------------------------------------------------------------
