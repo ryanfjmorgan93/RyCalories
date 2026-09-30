@@ -9,7 +9,31 @@
  * still owed a turn when it hasn't hit its own target AND has fewer counted sets than the member
  * that was just logged now has.
  */
-import type { SetType, Settings } from './types';
+import type { Exercise, RoutineExercise, SetType, Settings } from './types';
+
+/** The three Settings defaults a rest lookup reads. */
+export type RestDefaults = Pick<Settings, 'restCompoundSec' | 'restIsolationSec' | 'restCarrySec'>;
+
+/** Rest seconds an exercise gets from the settings defaults, by its tags alone: carry, else compound or isolation. */
+export function restDefaultFor(e: Pick<Exercise, 'kind' | 'isCompound'>, s: RestDefaults): number {
+  if (e.kind === 'carry') return s.restCarrySec;
+  return e.isCompound ? s.restCompoundSec : s.restIsolationSec;
+}
+
+/**
+ * Rest seconds after a set of this exercise, in the order the live session has always applied: the
+ * routine-exercise's own override, then the exercise's default, then the settings default for its
+ * tags. A zero override or default is "not set", not zero seconds of rest.
+ */
+export function restSecondsFor(
+  rx: Pick<RoutineExercise, 'restSecOverride'> | null,
+  exercise: Pick<Exercise, 'defaultRestSec' | 'kind' | 'isCompound'>,
+  settings: RestDefaults,
+): number {
+  if (rx?.restSecOverride) return rx.restSecOverride;
+  if (exercise.defaultRestSec) return exercise.defaultRestSec;
+  return restDefaultFor(exercise, settings);
+}
 
 export interface RestGroupMember {
   key: string;

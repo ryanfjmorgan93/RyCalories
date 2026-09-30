@@ -24,10 +24,10 @@ import { DEFAULT_PLATES, plateLabel, platesPerSide } from '@/domain/plates';
 import { prescribe } from '@/domain/prescription';
 import type { PersonalRecord } from '@/domain/records';
 import type { RestGroupMember } from '@/domain/rest';
-import { shouldStartRest } from '@/domain/rest';
+import { restSecondsFor, shouldStartRest } from '@/domain/rest';
 import { completionOf, justCompleted, planRows, type PendingRow, type SetTableRx, type WarmupGhostRow } from '@/domain/setTable';
 import { countsForProgression, feelOf } from '@/domain/sets';
-import type { Exercise, RoutineExercise, Session, SetLog, Settings } from '@/domain/types';
+import type { Exercise, Session, SetLog, Settings } from '@/domain/types';
 import { liveVerdict } from '@/domain/verdict';
 import { flashAmbient } from '@/state/ambient';
 import { success, tap, warning } from '@/state/haptics';
@@ -49,13 +49,6 @@ import { DoneCard } from './DoneCard';
 import { ChevronIcon, PencilIcon } from './icons';
 import { SetTable } from './SetTable';
 import type { Draft, Slot } from './types';
-
-function restSecondsFor(rx: RoutineExercise | null, exercise: Exercise, settings: Settings): number {
-  if (rx?.restSecOverride) return rx.restSecOverride;
-  if (exercise.defaultRestSec) return exercise.defaultRestSec;
-  if (exercise.kind === 'carry') return settings.restCarrySec;
-  return exercise.isCompound ? settings.restCompoundSec : settings.restIsolationSec;
-}
 
 /** "4 × 6–8 @ 110 kg" → "4 sets of 6–8 · 110 kg" — the card's own phrasing (§5), built from the
  * already-tested `targetLine`, never a second copy of its rules. */

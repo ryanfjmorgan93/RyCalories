@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { mapPermissionState, shouldNotifyRestEnd, shouldStartRest, type RestGroupMember } from './rest';
+import { mapPermissionState, restDefaultFor, restSecondsFor, shouldNotifyRestEnd, shouldStartRest, type RestDefaults, type RestGroupMember } from './rest';
+import { DEFAULT_SETTINGS } from './types';
 
 /**
  * Plays out a whole session against `shouldStartRest`, following the same rotation `currentKey`
@@ -121,5 +122,54 @@ describe('mapPermissionState', () => {
   it('reads a state it does not know as unsupported rather than guessing', () => {
     expect(mapPermissionState('limited')).toBe('unsupported');
     expect(mapPermissionState('')).toBe('unsupported');
+  });
+});
+
+describe('restSecondsFor', () => {
+  // Deliberately not the app's defaults, so a result that came from the wrong layer is visible.
+  const settings: RestDefaults = { restCompoundSec: 200, restIsolationSec: 50, restCarrySec: 120 };
+  const compound = { defaultRestSec: 0, kind: 'reps', isCompound: true } as const;
+  const isolation = { defaultRestSec: 0, kind: 'reps', isCompound: false } as const;
+  const carry = { defaultRestSec: 0, kind: 'carry', isCompound: false } as const;
+
+  it('the routine-exercise override wins over everything', () => {
+    expect(restSecondsFor({ restSecOverride: 45 }, { ...compound, defaultRestSec: 150 }, settings)).toBe(45);
+  });
+
+  it("the exercise's own default comes next, ahead of the settings for its tags", () => {
+    expect(restSecondsFor(null, { ...compound, defaultRestSec: 150 }, settings)).toBe(150);
+    expect(restSecondsFor({ restSecOverride: undefined }, { ...isolation, defaultRestSec: 90 }, settings)).toBe(90);
+  });
+
+  it('with neither, carry reads restCarrySec and reps read compound or isolation', () => {
+    expect(restSecondsFor(null, carry, settings)).toBe(120);
+    expect(restSecondsFor(null, compound, settings)).toBe(200);
+    expect(restSecondsFor(null, isolation, settings)).toBe(50);
+  });
+
+  it('a carry that is also flagged compound still reads the carry rest', () => {
+    expect(restSecondsFor(null, { ...carry, isCompound: true }, settings)).toBe(120);
+  });
+
+  it('zero is "not set" at both layers, never zero seconds of rest', () => {
+    expect(restSecondsFor({ restSecOverride: 0 }, { ...compound, defaultRestSec: 150 }, settings)).toBe(150);
+    expect(restSecondsFor({ restSecOverride: 0 }, isolation, settings)).toBe(50);
+  });
+
+  it("agrees with the figures the routine editor hard-coded before it shared this: DEFAULT_SETTINGS gives 90 / 150 / 75", () => {
+    expect(restSecondsFor(null, carry, DEFAULT_SETTINGS)).toBe(90);
+    expect(restSecondsFor(null, compound, DEFAULT_SETTINGS)).toBe(150);
+    expect(restSecondsFor(null, isolation, DEFAULT_SETTINGS)).toBe(75);
+  });
+});
+
+describe('restDefaultFor', () => {
+  const settings: RestDefaults = { restCompoundSec: 200, restIsolationSec: 50, restCarrySec: 120 };
+
+  it('reads the settings by tags alone and never the exercise default', () => {
+    expect(restDefaultFor({ kind: 'carry', isCompound: false }, settings)).toBe(120);
+    expect(restDefaultFor({ kind: 'reps', isCompound: true }, settings)).toBe(200);
+    expect(restDefaultFor({ kind: 'bodyweight_plus', isCompound: false }, settings)).toBe(50);
+    expect(restDefaultFor({ kind: 'timed', isCompound: false }, settings)).toBe(50);
   });
 });
