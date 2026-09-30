@@ -7,6 +7,8 @@ export function Chip({
   tone = 'neutral',
   size = 'md',
   className = '',
+  pressed,
+  testId,
 }: {
   active?: boolean;
   onClick?: () => void;
@@ -14,6 +16,9 @@ export function Chip({
   tone?: 'neutral' | 'accent' | 'ok' | 'warn' | 'danger' | 'info';
   size?: 'sm' | 'md' | 'lg';
   className?: string;
+  /** For a chip that is a switch: announces whether it is on. Only a chip with an `onClick` is a button to announce it on. */
+  pressed?: boolean;
+  testId?: string;
 }) {
   const tones: Record<string, string> = {
     neutral: active ? 'bg-fg text-bg border-fg' : 'bg-surface-2 text-muted border-line',
@@ -29,6 +34,8 @@ export function Chip({
     <Comp
       type={onClick ? 'button' : undefined}
       onClick={onClick}
+      aria-pressed={onClick ? pressed : undefined}
+      data-testid={testId}
       className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border font-bold ${s} ${tones[tone]} ${className}`}
     >
       {children}
@@ -65,9 +72,9 @@ export function Segmented<T extends string>({
   );
 }
 
-export function Toggle({ checked, onChange, label, sub }: { checked: boolean; onChange: (v: boolean) => void; label: ReactNode; sub?: ReactNode }) {
+export function Toggle({ checked, onChange, label, sub, testId }: { checked: boolean; onChange: (v: boolean) => void; label: ReactNode; sub?: ReactNode; testId?: string }) {
   return (
-    <button type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)} className="flex w-full items-center gap-3 py-3 text-left min-h-14">
+    <button type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)} data-testid={testId} className="flex w-full items-center gap-3 py-3 text-left min-h-14">
       <div className="min-w-0 flex-1">
         <div className="font-semibold">{label}</div>
         {sub && <div className="text-sm text-muted">{sub}</div>}
