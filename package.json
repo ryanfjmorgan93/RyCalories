@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "e2e": "playwright test",
     "lint": "eslint .",
-    "media": "node scripts/exercise-media.mjs"
+    "media": "node scripts/exercise-media.mjs",
+    "catalogue": "node scripts/build-exercise-catalogue.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^7.6.9",
