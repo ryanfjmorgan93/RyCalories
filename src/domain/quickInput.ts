@@ -121,11 +121,13 @@ function catalogueCandidate(entry: CatalogueEntry): Candidate {
 
 /**
  * Equipment the owner has used: that of every exercise they have logged a set on, plus bodyweight,
- * which needs none. An exercise with no equipment recorded says nothing either way.
+ * which needs none. An exercise with no equipment recorded says nothing either way, and neither
+ * does 'other': it is the catch-all for bands, balls, EZ bars and strongman implements, so one
+ * logged 'other' exercise (the seeded Neck row) is no evidence of owning any of them.
  */
 export function ownedEquipment(exercises: readonly Exercise[], loggedExerciseIds: ReadonlySet<string>): Set<Equipment> {
   const owned = new Set<Equipment>(['bodyweight']);
-  for (const e of exercises) if (e.equipment && loggedExerciseIds.has(e.id)) owned.add(e.equipment);
+  for (const e of exercises) if (e.equipment && e.equipment !== 'other' && loggedExerciseIds.has(e.id)) owned.add(e.equipment);
   return owned;
 }
 
