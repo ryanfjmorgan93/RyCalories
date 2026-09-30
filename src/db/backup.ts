@@ -183,6 +183,10 @@ export async function exportCsv(): Promise<string> {
       rep_max: rx?.repMax ?? '',
       completed_at: s.completedAt,
       source: session?.source ?? 'iron',
+      // Last, so every earlier column stays where it was. A quick session's hidden routine is named
+      // "Quick session" whichever it was, so the routine column cannot say; a light one's sets are
+      // a fraction of a working weight and must not read as one in the owner's own charts.
+      quick: session?.quick ?? '',
     };
   });
   return Papa.unparse(rows, { newline: '\n' });

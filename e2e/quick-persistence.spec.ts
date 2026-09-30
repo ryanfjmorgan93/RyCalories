@@ -315,6 +315,65 @@ test('a finished quick session cannot be saved as a routine, and a real one can'
   await expect(page.getByTestId('save-as-routine')).toHaveCount(0);
 });
 
+test('the sets CSV says which sessions were quick: light, normal, and empty for a real one', async ({ page }) => {
+  await seed(page, {
+    routines: [...ROUTINES, quickRoutine('r-quick', false), quickRoutine('r-quick-n', false)],
+    routineExercises: [...REAL_RXS, ...QUICK_RXS, routineExercise('qrx-n-bench', 'r-quick-n', 'ex-bench', { order: 0, currentWeight: 40 })],
+    sessions: [
+      finished('s-push', 'r-push', 'Upper (Push)', 3 * DAY),
+      finished('s-light', 'r-quick', 'Quick session · light', 2 * DAY, { quick: 'light' }),
+      finished('s-normal', 'r-quick-n', 'Quick session · normal', 1 * DAY, { quick: 'normal' }),
+    ],
+    setLogs: [
+      setLog('l-push', 's-push', 'rx-push', 'ex-bench', 0, 60, 8, ago(3 * DAY - 10)),
+      setLog('l-light', 's-light', 'qrx-bench', 'ex-bench', 0, 40, 12, ago(2 * DAY - 10)),
+      setLog('l-normal', 's-normal', 'qrx-n-bench', 'ex-bench', 0, 40, 12, ago(1 * DAY - 10)),
+    ],
+  });
+  await page.goto('/settings');
+
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export sets CSV' }).click();
+  const csv = Buffer.concat((await (await (await download).createReadStream()).toArray()) as Buffer[]).toString('utf8');
+
+  const [header, ...lines] = csv.trim().split('\n').map((l) => l.split(','));
+  expect(header.slice(0, 3)).toEqual(['session_id', 'session_start', 'session_end']);
+  expect(header.at(-2)).toBe('source');
+  expect(header.at(-1)).toBe('quick');
+  // Each row's last cell, by session: the file says what the routine column cannot.
+  expect(Object.fromEntries(lines.map((cells) => [cells[0], cells.at(-1)]))).toEqual({ 's-push': '', 's-light': 'light', 's-normal': 'normal' });
+  // Both quick sessions ran on a routine called the same thing.
+  expect(lines.filter((cells) => cells[4] === 'Quick session')).toHaveLength(2);
+});
+
+test('an exercise only the live quick session lists cannot be deleted from Exercises, and its card stays', async ({ page }) => {
+  const ONLY = 'Test Only Move';
+  await seed(page, {
+    exercises: [...EXERCISES, exercise('ex-only', ONLY, { muscleGroup: 'biceps' })],
+    routines: [...ROUTINES, quickRoutine('r-quick', false)],
+    routineExercises: [...REAL_RXS, ...QUICK_RXS, routineExercise('qrx-only', 'r-quick', 'ex-only', { order: 2, currentWeight: 10 })],
+    sessions: [{ id: 's-live', routineId: 'r-quick', title: 'Quick session · light', startedAt: ago(10), quick: 'light' }],
+  });
+
+  // It is in no real routine and has no set: the screen says so, and offers Delete.
+  await page.goto('/exercises/ex-only/edit');
+  await expect(page.getByText('In 0 routines · 0 logged sets')).toBeVisible();
+  await page.getByTestId('delete-exercise').click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
+
+  // This page has shown no toast before this one, and only the refusal shows it. A deletion would
+  // leave the screen for the list instead, and this would never appear.
+  await expect(page.getByText('In use by a routine or history')).toBeVisible();
+  await expect(page).toHaveURL(/\/exercises\/ex-only\/edit$/);
+  const raw = await readRawIron(page);
+  expect(raw.tables.exercises.map((e: Row) => e.id)).toContain('ex-only');
+  expect(raw.tables.routineExercises.map((r: Row) => r.id)).toContain('qrx-only');
+
+  // And the session it belongs to still has the card.
+  await page.goto('/session/s-live');
+  await expect(page.getByTestId(`exercise-card-${ONLY}`)).toBeVisible();
+});
+
 /** The hidden routine, its rows, the session and its sets are all gone; every real row is as seeded. */
 async function expectNoQuickRows(page: Page): Promise<void> {
   const raw = await readRawIron(page);

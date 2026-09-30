@@ -7,6 +7,7 @@ import { bestsForExercise } from './recordsQueries';
 import { excludeQuickRoutineExercises, exerciseHistory, outcomesForRoutineExercise, routineItems, sessionDetail, stallStatus } from './repo';
 import { dayView } from './todayQueries';
 import { weeklyDelta } from '@/domain/bodyweight';
+import { quickSessionLabel } from '@/domain/claudeSummary';
 import { fmtDate, fmtKg, fmtSetsLine } from '@/domain/format';
 import { prescribe } from '@/domain/prescription';
 import { countsForProgression } from '@/domain/sets';
@@ -55,9 +56,12 @@ export async function gatherContext(opts: GatherContextOpts): Promise<AssistantC
       }
 
       const history = await exerciseHistory(exerciseId);
+      // History counts a quick session, so it is listed, and labelled as the summary labels it: a
+      // light session's weights are a fraction of a working weight, and must not read as one.
       const lastSessions = history.slice(0, LAST_SESSIONS_CAP).map((h) => {
         const counted = h.sets.filter((s) => countsForProgression(s.type));
-        return { date: fmtDate(h.session.startedAt), sets: counted.length ? fmtSetsLine(counted, exercise.kind) : 'no working sets' };
+        const sets = counted.length ? fmtSetsLine(counted, exercise.kind) : 'no working sets';
+        return { date: fmtDate(h.session.startedAt), sets: h.session.quick ? `${quickSessionLabel(h.session.quick)}: ${sets}` : sets };
       });
 
       const bests = await bestsForExercise(exerciseId);

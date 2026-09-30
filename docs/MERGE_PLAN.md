@@ -838,6 +838,11 @@ counts drop below a baseline without an in-app delete, and a Backups card in Set
   leader that real routines adopt. Quick rows are built field by field.
 - **Orphans.** Deleting a quick session deletes its hidden routine and rows; `exerciseUsage`, the
   "other copies" line, Ask's prescription lookup and the Archived list all ignore quick routines.
+  It also deletes the catalogue exercises its own Start made (`createdAt` equals the session's
+  `startedAt`, a `cat:` picture key) once no set log and no routine row uses them; one left
+  behind is an ordinary owned exercise, outside the Include new switch and the two-new cap. One
+  the owner added from the library first has an earlier `createdAt` and is never touched.
+  `deleteExercise` refuses an exercise on the live session's hidden routine.
 - **Never await a non-Dexie promise inside a transaction** (the catalogue `import()` is resolved
   before `startQuickSession` opens it).
 - **`toBeVisible` passes on a broken image.** The catalogue specs poll `naturalWidth > 0` per

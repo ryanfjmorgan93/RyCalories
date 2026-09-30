@@ -5,6 +5,7 @@
 import { backupBeforeDestructiveOp } from './autoBackup';
 import { db } from './db';
 import { SEED_BODYWEIGHT_KG, SEED_EXERCISES, SEED_ROUTINES, SEED_ROUTINE_EXERCISES } from './seed';
+import { isCatalogueDemo } from '@/domain/catalogue';
 import { nowIso, toDateKey } from '@/domain/dates';
 import {
   decide,
@@ -177,17 +178,24 @@ export async function exerciseUsage(id: string): Promise<{ routines: number; set
   return { routines: (await excludeQuickRoutineExercises(rxs)).length, sets };
 }
 
-/** Deletes only when unused; returns false if the exercise is referenced by a routine or a set. */
+/**
+ * Deletes only when unused; returns false if the exercise is referenced by a routine or a set, or
+ * sits on the hidden routine of the session that is running (a live quick session lists it without
+ * any set yet, and would lose the card from under the owner).
+ */
 export async function deleteExercise(id: string): Promise<boolean> {
   const u = await exerciseUsage(id);
   if (u.routines > 0 || u.sets > 0) return false;
-  await db.transaction('rw', [db.exercises, db.routineExercises], async () => {
-    // Whatever still points here can only be the hidden rows of a finished quick session that
-    // never logged a set on it: nothing else may be left dangling.
+  return db.transaction('rw', [db.exercises, db.routineExercises, db.sessions], async () => {
+    const live = await getActiveSession();
+    const rows = await db.routineExercises.where('exerciseId').equals(id).toArray();
+    if (live && rows.some((rx) => rx.routineId === live.routineId)) return false;
+    // Whatever still points here can only be the hidden rows of finished quick sessions that never
+    // logged a set on it: nothing else may be left dangling.
     await db.routineExercises.where('exerciseId').equals(id).delete();
     await db.exercises.delete(id);
+    return true;
   });
-  return true;
 }
 
 /** Case/whitespace-insensitive lookup by name or alias. */
@@ -498,11 +506,14 @@ export async function startSession(routineId: string, opts?: { deload?: boolean 
 /**
  * Delete a session together with its sets and decisions. Stored weights are left as they are. A
  * quick session also takes its hidden routine and that routine's rows: nothing else can ever point
- * at them, and left behind they would count as routines the owner never made. Every route to a
- * delete (live discard, Summary discard, History) comes through here.
+ * at them, and left behind they would count as routines the owner never made. It takes the
+ * catalogue exercises its own Start made, too, once nothing else uses them: the owner never chose
+ * those, and left behind they would sit in the library as their own, outside the Include new
+ * switch and its two-new cap. Every route to a delete (live discard, Summary discard, History)
+ * comes through here.
  */
 export async function deleteSession(id: string): Promise<void> {
-  await db.transaction('rw', [db.sessions, db.setLogs, db.decisions, db.routines, db.routineExercises], async () => {
+  await db.transaction('rw', [db.sessions, db.setLogs, db.decisions, db.routines, db.routineExercises, db.exercises], async () => {
     const session = await db.sessions.get(id);
     await db.setLogs.where('sessionId').equals(id).delete();
     await db.decisions.where('sessionId').equals(id).delete();
@@ -514,6 +525,15 @@ export async function deleteSession(id: string): Promise<void> {
       if (routine?.quick && (await db.sessions.where('routineId').equals(routine.id).count()) === 0) {
         await db.routineExercises.where('routineId').equals(routine.id).delete();
         await db.routines.delete(routine.id);
+      }
+    }
+    if (session?.quick) {
+      // Start stamps the exercises it creates with the session's own startedAt (one `now`), which
+      // is what tells them from one the owner added from the library, however recently.
+      const made = await db.exercises.where('createdAt').equals(session.startedAt).filter((e) => isCatalogueDemo(e.demo)).toArray();
+      for (const e of made) {
+        const used = (await db.setLogs.where('exerciseId').equals(e.id).count()) + (await db.routineExercises.where('exerciseId').equals(e.id).count());
+        if (used === 0) await db.exercises.delete(e.id);
       }
     }
   });

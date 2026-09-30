@@ -8,10 +8,15 @@ import {
   weeklySetsByMuscle as weeklySetsByMuscleFromRows,
   type MuscleSetRow,
 } from '@/domain/volume';
-import type { MuscleGroup, Settings } from '@/domain/types';
+import type { Exercise, MuscleGroup, Session, SetLog, Settings } from '@/domain/types';
 
-async function muscleSetRows(): Promise<MuscleSetRow[]> {
-  const [sets, sessions, exercises] = await Promise.all([db.setLogs.toArray(), db.sessions.toArray(), db.exercises.toArray()]);
+/**
+ * Each set of a finished session, with its exercise's muscle group. A set of a session still
+ * running, of an exercise since deleted, or of a session no longer there is not a row. Pure: a
+ * caller that already holds the three tables (the Short session loader, inside its one read
+ * transaction) joins them here instead of reading them again.
+ */
+export function muscleSetRowsFrom(sets: readonly SetLog[], sessions: readonly Session[], exercises: readonly Exercise[]): MuscleSetRow[] {
   const completedIds = new Set(sessions.filter((s) => s.endedAt).map((s) => s.id));
   const exerciseById = new Map(exercises.map((e) => [e.id, e]));
   const rows: MuscleSetRow[] = [];
@@ -22,6 +27,11 @@ async function muscleSetRows(): Promise<MuscleSetRow[]> {
     rows.push({ muscleGroup: ex.muscleGroup, type: s.type, completedAt: s.completedAt });
   }
   return rows;
+}
+
+async function muscleSetRows(): Promise<MuscleSetRow[]> {
+  const [sets, sessions, exercises] = await Promise.all([db.setLogs.toArray(), db.sessions.toArray(), db.exercises.toArray()]);
+  return muscleSetRowsFrom(sets, sessions, exercises);
 }
 
 /** Sets per muscle group in the local week (Monday–Sunday) containing `weekStart`, completed sessions only. */

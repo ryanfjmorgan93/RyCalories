@@ -494,6 +494,33 @@ test('Include new adds exercises from the catalogue, marks them New, and Start m
   expect(made.every((e) => e.equipment === 'bodyweight')).toBe(true);
 });
 
+test('discarding a session that used Include new takes the exercises Start made from the catalogue, and nothing else', async ({ page }) => {
+  await fresh(page);
+  const seeded = await seededRows(page);
+  const exercisesBefore = (await table(page, 'exercises')).length;
+  const made = async (): Promise<Row[]> => (await table(page, 'exercises')).filter((e) => String(e.demo ?? '').startsWith('cat:'));
+
+  await openSheet(page);
+  await page.getByTestId('quick-request').fill('four abs');
+  await expectPressed(page, 'quick-count-4');
+  await page.getByTestId('quick-include-new').click();
+  await expect(page.getByTestId('quick-short')).toHaveText('Only 3 available');
+  expect((await readPreview(page)).filter((r) => r.isNew)).toHaveLength(2);
+  await page.getByTestId('quick-start').click();
+  await expect(page).toHaveURL(/\/session\//);
+  // They are exercises now, so their absence below is the discard's doing.
+  await expect.poll(async () => (await made()).length).toBe(2);
+
+  await page.getByRole('button', { name: 'Discard session' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Discard' }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect.poll(async () => (await table(page, 'sessions')).length).toBe(0);
+
+  await expect.poll(async () => (await table(page, 'exercises')).length).toBe(exercisesBefore);
+  expect(await made()).toEqual([]);
+  await expectNoQuickRows(page, seeded);
+});
+
 test('with no routines at all, Short session is still there and starts a session', async ({ page }) => {
   // The owner has exercises and settings and no routine: raw rows, before the app ever boots.
   await page.goto('/icons/icon-192.png');
