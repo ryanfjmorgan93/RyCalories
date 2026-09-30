@@ -97,8 +97,13 @@ const LIGHT_SETS_ISOLATION = 2;
 const LIGHT_REPS: [number, number] = [10, 15];
 const COMPOUND_DEFAULT: { sets: number; repMin: number; repMax: number } = { sets: 3, repMin: 8, repMax: 10 };
 const ISOLATION_DEFAULT: { sets: number; repMin: number; repMax: number } = { sets: 3, repMin: 10, repMax: 15 };
-/** Hinge patterns load the lower back too heavily for a session the owner did not want to do. */
-const HINGE_PATTERN = /deadlift|good.?morning|romanian|rdl|hyperextension|back extension/i;
+/**
+ * Hinge patterns load the lower back too heavily for a session the owner did not want to do: the
+ * deadlift family and good mornings, extensions, and the hip-driven swings, cleans and snatches,
+ * glute-ham raises, rack pulls and pull-throughs. Jerks and thrusters drive through the legs and
+ * shoulders rather than hinge, so they stay.
+ */
+const HINGE_PATTERN = /deadlift|good.?morning|romanian|rdl|hyperextension|back extension|swing|clean|snatch|glute.?ham|rack pull|pull.?through/i;
 
 const TRAINABLE = new Set<MuscleGroup>(MUSCLE_GROUPS.filter((m) => m !== 'full body' && m !== 'other'));
 
@@ -217,8 +222,10 @@ function prescribeRow(c: Candidate, light: boolean, barKg: number, plates: numbe
     if (known !== null) {
       weightKg = deloadLoad(known, LIGHT_FRACTION, c.defaultIncrement, c.equipment === 'barbell' ? { barKg, plates } : undefined);
       // A bar cannot be loaded below its own weight, so a barbell load that lands above the light
-      // load has no honest number: the owner picks it, rather than being handed a heavier one.
-      if (weightKg > known * LIGHT_FRACTION + 1e-6) weightKg = null;
+      // load has no honest number: the owner picks it, rather than being handed a heavier one. Nor
+      // has a load that floors to nothing on the increment grid ("0 kg" for a 5 kg cable): only an
+      // added weight can honestly be nothing, which is bodyweight alone.
+      if (weightKg > known * LIGHT_FRACTION + 1e-6 || (weightKg <= 0 && known > 0 && c.kind !== 'bodyweight_plus')) weightKg = null;
     }
     return { sets, repMin: LIGHT_REPS[0], repMax: LIGHT_REPS[1], weightKg, mode: weightKg === null ? 'calibrating' : 'normal' };
   }

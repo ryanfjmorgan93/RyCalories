@@ -240,7 +240,8 @@ test('a reply holding exercises, weights, an exclusion and Include new changes n
   // Nothing else moved: the rules' "light", no muscle chosen or ruled out, Include new as it was.
   await expectPressed(page, 'quick-effort-light');
   await expectPressed(page, 'quick-focus-auto');
-  await expectPressed(page, 'quick-minutes-40');
+  // Five exercises are read, so the minutes size nothing and no Time chip is lit (checked below, on Auto).
+  await expectPressed(page, 'quick-minutes-40', false);
   await expect(page.getByTestId('quick-include-new')).toHaveAttribute('aria-checked', 'false');
   await expect(page.locator('[data-testid^="quick-exclude-"]')).toHaveCount(0);
   await expect(page.getByTestId('quick-request')).toHaveValue(typed);
@@ -254,6 +255,10 @@ test('a reply holding exercises, weights, an exclusion and Include new changes n
   }
   expect(await rowNames(page)).not.toContain('Bench');
   await expect(page.locator('[data-testid^="quick-new-"]')).toHaveCount(0);
+  // Auto hands the sizing back to the minutes, which the reply left at the forty it started with.
+  await page.getByTestId('quick-count-auto').click();
+  await expectPressed(page, 'quick-count-auto');
+  await expectPressed(page, 'quick-minutes-40');
   expect((await quickLog(page)).generated).toHaveLength(1);
 });
 

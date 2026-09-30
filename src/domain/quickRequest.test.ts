@@ -85,6 +85,80 @@ describe('parseQuickRequest: count', () => {
   });
 });
 
+describe('parseQuickRequest: a number that counts something else is not an exercise count', () => {
+  it.each([
+    ['3 sets', ['3', 'sets']],
+    ['10 reps', ['10', 'reps']],
+    ['three sets', ['three', 'sets']],
+    ['ten reps', ['ten', 'reps']],
+    ['4 x 10', ['4', 'x', '10']],
+    ['4x10', ['4', 'x', '10']],
+    ['3x10', ['3', 'x', '10']],
+    ['5 x 5', ['5', 'x', '5']],
+    ['4 by 10', ['4', '10']],
+    ['3 times 10', ['3', 'times', '10']],
+    ['4 sets of 10', ['4', 'sets', '10']],
+    ['three sets of eight', ['three', 'sets', 'eight']],
+    ['3 days a week', ['3', 'days', 'week']],
+    ['three times a week', ['three', 'times', 'week']],
+    ['2 rounds', ['2', 'rounds']],
+    ['5 kg', ['5', 'kg']],
+    ['4 weeks ago', ['4', 'weeks', 'ago']],
+    ['3 day split', ['3', 'split']],
+  ])('"%s" is no count, and what it says is left as residue', (text, residue) => {
+    const p = parse(text);
+    expect(p.options.count, text).toBeUndefined();
+    expect(p.residue, text).toEqual(residue);
+  });
+
+  it.each([
+    'set', 'sets', 'rep', 'reps', 'x', 'by', 'time', 'times', 'day', 'days', 'week', 'weeks', 'month', 'months', 'year', 'years',
+    'round', 'rounds', 'kg', 'kgs', 'kilo', 'kilos', 'lb', 'lbs', 'ago',
+  ])('a number right before "%s" is not a count, typed as a digit or as a word', (word) => {
+    for (const number of ['3', 'three']) {
+      const p = parse(`${number} ${word}`);
+      expect(p.options.count, `${number} ${word}`).toBeUndefined();
+      expect(p.residue, `${number} ${word}`).toContain(number);
+    }
+  });
+
+  it('keeps the rest of the request: "3 sets of 10 legs" is legs, and "legs 3 days ago" is legs', () => {
+    const sets = parse('3 sets of 10 legs');
+    expect(sets.options.count).toBeUndefined();
+    expect(sets.options.focus).toEqual(MACRO_MUSCLES.legs);
+    expect(sets.residue).toEqual(['3', 'sets', '10']);
+    const ago = parse('legs 3 days ago');
+    expect(ago.options.count).toBeUndefined();
+    expect(ago.options.focus).toEqual(MACRO_MUSCLES.legs);
+    expect(parse('5 reps of squats').options.count).toBeUndefined();
+  });
+
+  it('a count beside one of those is still a count: "4 exercises, 3 sets each" is four', () => {
+    const p = parse('4 exercises, 3 sets each');
+    expect(p.options.count).toBe(4);
+    expect(p.residue).toEqual(['3', 'sets', 'each']);
+    expect(parse('3 sets of 10, give me 5 exercises').options.count).toBe(5);
+  });
+
+  it('a count with a word between it and the noun is still a count', () => {
+    expect(parse('5 leg exercises').options.count).toBe(5);
+    expect(parse('four bicep exercises').options.count).toBe(4);
+    expect(parse('4 light exercises').options.count).toBe(4);
+    expect(parse('give me 4').options.count).toBe(4);
+    expect(parse('4').options.count).toBe(4);
+    expect(parse('four').options.count).toBe(4);
+  });
+
+  it('is the same key by key as whole', () => {
+    // Every prefix reads without throwing, and the last one is what the whole text says.
+    for (const text of ['3 sets of 10 legs', '4x10', '10 reps']) {
+      let last = parse('');
+      for (let n = 1; n <= text.length; n++) last = parse(text.slice(0, n));
+      expect(last).toEqual(parse(text));
+    }
+  });
+});
+
 describe('parseQuickRequest: effort', () => {
   it.each(['light', 'lightweight', 'easy', 'gentle'])('"%s" is light and does not shorten the session', (w) => {
     expect(parse(`something ${w}`).options).toEqual({ effort: 'light' });
@@ -356,6 +430,144 @@ describe('parseQuickRequest: negation', () => {
     const p = parse('not light');
     expect(p.options.exclude).toBeUndefined();
     expect(p.options.focus).toBeUndefined();
+  });
+
+  describe('carries across "or", "and" and "nor"', () => {
+    const legsAndArms = [...MACRO_MUSCLES.legs, ...MACRO_MUSCLES.arms];
+
+    it.each(['no legs or arms', 'no legs and arms', 'no legs nor arms', 'without legs or arms', 'skip legs and arms', 'not legs or arms', 'no legs or the arms', 'no legs, or arms'])(
+      '"%s" rules out both, and trains neither',
+      (text) => {
+        const p = parse(text);
+        expect(p.options.exclude, text).toEqual(legsAndArms);
+        expect(p.options.focus, text).toBeUndefined();
+        expect(p.residue, text).toEqual([]);
+      },
+    );
+
+    it('goes on down a list: "no legs or arms or core"', () => {
+      const p = parse('no legs or arms or core');
+      expect(p.options.exclude).toEqual([...legsAndArms, 'abs', 'lower back']);
+      expect(p.options.focus).toBeUndefined();
+      expect(p.read).toEqual(['no legs', 'or arms', 'or core']);
+    });
+
+    it('"without legs or core" rules out the legs and the core', () => {
+      const p = parse('without legs or core');
+      expect(p.options.exclude).toEqual([...MACRO_MUSCLES.legs, 'abs', 'lower back']);
+      expect(p.options.focus).toBeUndefined();
+    });
+
+    it('"no legs and no arms" was already both, and still is', () => {
+      expect(parse('no legs and no arms').options.exclude).toEqual(legsAndArms);
+    });
+
+    it('a muscle before the negation is still asked for: "chest, no legs or arms"', () => {
+      const p = parse('chest, no legs or arms');
+      expect(p.options.focus).toEqual(['chest']);
+      expect(p.options.exclude).toEqual(legsAndArms);
+    });
+
+    it('a comma ends the negation, so "no calves, legs" and "no legs, arms" train the second', () => {
+      expect(parse('no legs, arms').options.focus).toEqual(MACRO_MUSCLES.arms);
+      expect(parse('no legs, arms').options.exclude).toEqual(MACRO_MUSCLES.legs);
+    });
+
+    it('a new clause after the joiner is not negated: "no legs and do arms", "no legs or 4 exercises"', () => {
+      const arms = parse('no legs and do arms');
+      expect(arms.options.focus).toEqual(MACRO_MUSCLES.arms);
+      expect(arms.options.exclude).toEqual(MACRO_MUSCLES.legs);
+      const four = parse('no legs or 4 exercises');
+      expect(four.options.count).toBe(4);
+      expect(four.options.exclude).toEqual(MACRO_MUSCLES.legs);
+    });
+
+    it('only a negation carries: a list of muscles asked for stays asked for', () => {
+      expect(parse('legs or arms').options.focus).toEqual(legsAndArms);
+      expect(parse('legs or arms').options.exclude).toBeUndefined();
+      expect(parse('dumbbells and cables').options.equipment).toEqual(['dumbbell', 'cable']);
+    });
+
+    it('nothing carries past another word: "no legs today or arms" asks for arms', () => {
+      const p = parse('no legs today or arms');
+      expect(p.options.focus).toEqual(MACRO_MUSCLES.arms);
+      expect(p.options.exclude).toEqual(MACRO_MUSCLES.legs);
+    });
+
+    it('carries across a muscle into equipment', () => {
+      const p = parse('no legs or dumbbells');
+      expect(p.options.exclude).toEqual(MACRO_MUSCLES.legs);
+      expect(p.options.equipment).toEqual(EQUIPMENT_KINDS.filter((e) => e !== 'dumbbell'));
+    });
+
+    it('is the same key by key as whole, and every prefix reads', () => {
+      for (const text of ['no legs or arms', 'no legs and arms or core', "I don't have a barbell or dumbbells"]) {
+        let last = parse('');
+        for (let n = 1; n <= text.length; n++) last = parse(text.slice(0, n));
+        expect(last).toEqual(parse(text));
+      }
+    });
+  });
+
+  describe('equipment that is negated is left out, however the negation is worded', () => {
+    const allBut = (...out: string[]) => EQUIPMENT_KINDS.filter((e) => !out.includes(e));
+
+    it.each([
+      ["I don't have a barbell", ['barbell']],
+      ["I don't have dumbbells", ['dumbbell']],
+      ['i dont have a barbell', ['barbell']],
+      ["can't use the barbell", ['barbell']],
+      ["I haven't got a barbell", ['barbell']],
+      ['I havent got dumbbells', ['dumbbell']],
+      ["I don't need a barbell", ['barbell']],
+      ["don't have any machines", ['machine']],
+      ["I don't have a barbell or dumbbells", ['barbell', 'dumbbell']],
+      ["I don't have a barbell and no cables", ['barbell', 'cable']],
+      ['no barbell or dumbbells', ['barbell', 'dumbbell']],
+      ['no barbell and dumbbells', ['barbell', 'dumbbell']],
+      ['without a barbell or cables', ['barbell', 'cable']],
+    ])('"%s" allows every other kind', (text, out) => {
+      const p = parse(text);
+      expect(p.options.equipment, text).toEqual(allBut(...out));
+      expect(p.options.exclude, text).toBeUndefined();
+      expect(p.residue, text).toEqual([]);
+    });
+
+    it('a kind asked for and another ruled out is an allow-list of the first', () => {
+      expect(parse('dumbbells, no barbell').options.equipment).toEqual(['dumbbell']);
+    });
+  });
+
+  describe('muscles that are negated are ruled out, however the negation is worded', () => {
+    it.each([
+      ["I don't feel like legs", MACRO_MUSCLES.legs],
+      ["can't face legs", MACRO_MUSCLES.legs],
+      ["I can't do legs or arms", [...MACRO_MUSCLES.legs, ...MACRO_MUSCLES.arms]],
+      ["I don't want to do legs", MACRO_MUSCLES.legs],
+      ["I won't do legs today", MACRO_MUSCLES.legs],
+      ["I don't need to train arms", MACRO_MUSCLES.arms],
+    ])('"%s"', (text, muscles) => {
+      const p = parse(text);
+      expect(p.options.exclude, text).toEqual(muscles);
+      expect(p.options.focus, text).toBeUndefined();
+    });
+
+    it('"can\'t be bothered" is still only mood, and "can\'t be bothered with legs" still asks for them', () => {
+      expect(parse("can't be bothered").options).toEqual({ effort: 'light', minutes: 30 });
+      expect(parse("can't be bothered with legs").options.focus).toEqual(MACRO_MUSCLES.legs);
+    });
+  });
+
+  describe('curly apostrophes read as straight ones', () => {
+    const quotes = [0x2019, 0x2018, 0x02bc, 0x0060, 0x00b4].map((c) => String.fromCharCode(c));
+
+    it.each(quotes)('%s in "don\'t have", "can\'t use", "haven\'t got" and "don\'t feel like"', (q) => {
+      expect(parse(`I don${q}t have a barbell`).options.equipment).toEqual(EQUIPMENT_KINDS.filter((e) => e !== 'barbell'));
+      expect(parse(`can${q}t use the barbell or dumbbells`).options.equipment).toEqual(EQUIPMENT_KINDS.filter((e) => e !== 'barbell' && e !== 'dumbbell'));
+      expect(parse(`I haven${q}t got dumbbells`).options.equipment).toEqual(EQUIPMENT_KINDS.filter((e) => e !== 'dumbbell'));
+      expect(parse(`I don${q}t feel like legs or arms`).options.exclude).toEqual([...MACRO_MUSCLES.legs, ...MACRO_MUSCLES.arms]);
+      expect(parse(`I don${q}t have a barbell`).residue).toEqual([]);
+    });
   });
 });
 

@@ -174,8 +174,11 @@ test('what the sheet previews is what starts: the same exercises and weights, no
   await expect(cardsOf(page)).toHaveCount(preview.length);
   expect(await cardNames(page)).toEqual(preview.map((r) => r.name));
 
-  // Each card, as it comes up, starts on the previewed weight (only the card being done has a box);
-  // then every target set at the top of the range, which a real routine would put the weight up for.
+  // Each card, as it comes up, starts on the previewed weight (only the card being done has a box),
+  // for a row that has a number. A row that says "no weight yet" starts empty only because this
+  // database has no history for it: with history it starts on the exercise's last real set (see the
+  // last-time test below), which is a ghost and not a prescription. Then every target set at the top
+  // of the range, which a real routine would put the weight up for.
   for (const [i, row] of preview.entries()) {
     const card = cardsOf(page).nth(i);
     await expect(card.getByTestId('weight-input').first()).toHaveValue(ghostOf(row.weight));
@@ -218,9 +221,10 @@ test('a typed request sets the chips and the plan, and a tap or another phrase r
   await page.getByTestId('quick-request').pressSequentially("can't be bothered today, give me four exercises that are lightweight");
   await expectPressed(page, 'quick-count-4');
   await expectPressed(page, 'quick-effort-light');
-  await expectPressed(page, 'quick-minutes-30');
   await expectPressed(page, 'quick-count-auto', false);
   await expectPressed(page, 'quick-effort-normal', false);
+  // Four exercises are asked for, so the thirty minutes size nothing and no Time chip is lit.
+  await expectPressed(page, 'quick-minutes-30', false);
 
   // The plan is for those options: four rows, each a light prescription, none of the barbell lifts.
   await expect(rowsOf(page)).toHaveCount(4);
@@ -232,6 +236,11 @@ test('a typed request sets the chips and the plan, and a tap or another phrase r
     expect(LIGHT_EXCLUDED).not.toContain(row.name);
   }
   await expect(page.getByTestId('quick-estimate')).toHaveText(/^about \d+ min · 4 exercises$/);
+
+  // Auto hands the sizing back to the minutes, which are the thirty that "can't be bothered" said.
+  await page.getByTestId('quick-count-auto').click();
+  await expectPressed(page, 'quick-count-auto');
+  await expectPressed(page, 'quick-minutes-30');
 
   // A tap beats what was typed.
   await page.getByTestId('quick-count-6').click();
@@ -249,8 +258,61 @@ test('a typed request sets the chips and the plan, and a tap or another phrase r
   await page.getByTestId('quick-request').fill('two exercises');
   await expectPressed(page, 'quick-count-2');
   await expect(rowsOf(page)).toHaveCount(2);
+
+  // A time outside the fixed chips is one more chip too. It is lit only while the minutes size the
+  // plan, so the count goes to Auto first: the 6 tapped earlier waits behind the text and would come
+  // back the moment the typed count goes, which is a count again.
+  await page.getByTestId('quick-count-auto').click();
+  await expectPressed(page, 'quick-count-auto');
   await page.getByTestId('quick-request').fill('35 min');
   await expectPressed(page, 'quick-minutes-35');
+});
+
+test('a count tapped survives typing a time one key at a time: the "4" of "45" is not a count', async ({ page }) => {
+  await fresh(page);
+  await openSheet(page);
+  await page.getByTestId('quick-count-5').click();
+  await expectPressed(page, 'quick-count-5');
+
+  // "light" is the last word typed, so its chip lighting means every key before it has been read: the
+  // tap is asserted only after that, and cannot be satisfied by the state before the typing.
+  await page.getByTestId('quick-request').pressSequentially('45 min light');
+  await expectPressed(page, 'quick-effort-light');
+  await expectPressed(page, 'quick-count-5');
+  await expectPressed(page, 'quick-count-auto', false);
+  await expectPressed(page, 'quick-count-4', false);
+  await expect(rowsOf(page)).toHaveCount(5);
+  // With five exercises asked for the minutes size nothing, so no Time chip is lit; Auto gives the
+  // sizing back to them, and the 45 that was typed is what lights.
+  await expectPressed(page, 'quick-minutes-45', false);
+  await page.getByTestId('quick-count-auto').click();
+  await expectPressed(page, 'quick-count-auto');
+  await expectPressed(page, 'quick-minutes-45');
+  await expectPressed(page, 'quick-minutes-40', false);
+});
+
+test('"no legs or arms" rules out both: two No chips, and no plan row is a leg or an arm however it is shuffled', async ({ page }) => {
+  await fresh(page);
+  await openSheet(page);
+  const ARMS = ['biceps', 'triceps', 'forearms'];
+
+  await page.getByTestId('quick-request').fill('no legs or arms');
+  await expect(page.getByTestId('quick-exclude-legs')).toBeVisible();
+  await expect(page.getByTestId('quick-exclude-arms')).toBeVisible();
+  // Neither is asked for: the arms are not lit as a focus.
+  await expectPressed(page, 'quick-focus-arms', false);
+  await expectPressed(page, 'quick-focus-auto');
+  await expect(page.locator('[data-testid^="quick-exclude-"]')).toHaveCount(2);
+
+  for (let i = 0; i < 15; i++) {
+    const rows = await readPreview(page);
+    expect(rows.length, 'a plan with the legs and arms left out still has rows').toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(LEGS, row.text).not.toContain(row.muscle);
+      expect(ARMS, row.text).not.toContain(row.muscle);
+    }
+    await shuffle(page);
+  }
 });
 
 test('Shuffle draws another plan from the same options, and never writes anything', async ({ page }) => {
@@ -396,7 +458,9 @@ test('a muscle ruled out is never in the plan, however often it is shuffled', as
   await expectPressed(page, 'quick-count-6');
   await expect(page.getByTestId('quick-exclude-legs')).toBeVisible();
   await expect(rowsOf(page)).toHaveCount(6);
-  for (const row of await readPreview(page)) expect(LEGS, row.text).not.toContain(row.muscle);
+  const six = await readPreview(page);
+  expect(six.length).toBeGreaterThan(0);
+  for (const row of six) expect(LEGS, row.text).not.toContain(row.muscle);
   await page.getByTestId('quick-exclude-legs').click();
   await expect(page.getByTestId('quick-exclude-legs')).toHaveCount(0);
 });
@@ -410,17 +474,36 @@ test('Push then Pull asks for both, tapping Push again leaves Pull, and Auto cle
   await page.getByTestId('quick-focus-push').click();
   await expectPressed(page, 'quick-focus-push');
   await expectPressed(page, 'quick-focus-auto', false);
-  for (const row of await readPreview(page)) expect(PUSH, row.text).toContain(row.muscle);
+  const push = await readPreview(page);
+  expect(push.length, 'a Push plan has rows').toBeGreaterThan(0);
+  for (const row of push) expect(PUSH, row.text).toContain(row.muscle);
 
   await page.getByTestId('quick-focus-pull').click();
   await expectPressed(page, 'quick-focus-pull');
   await expectPressed(page, 'quick-focus-push');
-  for (const row of await readPreview(page)) expect([...PUSH, ...PULL], row.text).toContain(row.muscle);
+  const both = await readPreview(page);
+  expect(both.length, 'a Push and Pull plan has rows').toBeGreaterThan(0);
+  for (const row of both) expect([...PUSH, ...PULL], row.text).toContain(row.muscle);
+  // Both were asked for, so across a few shuffles the plans draw on both.
+  let sawPush = both.some((r) => PUSH.includes(r.muscle) && !PULL.includes(r.muscle));
+  let sawPull = both.some((r) => PULL.includes(r.muscle) && !PUSH.includes(r.muscle));
+  for (let i = 0; i < 12 && !(sawPush && sawPull); i++) {
+    await shuffle(page);
+    const rows = await readPreview(page);
+    expect(rows.length, 'a shuffled Push and Pull plan has rows').toBeGreaterThan(0);
+    for (const row of rows) expect([...PUSH, ...PULL], row.text).toContain(row.muscle);
+    sawPush ||= rows.some((r) => PUSH.includes(r.muscle) && !PULL.includes(r.muscle));
+    sawPull ||= rows.some((r) => PULL.includes(r.muscle) && !PUSH.includes(r.muscle));
+  }
+  expect(sawPush, 'a plan with a push muscle only').toBe(true);
+  expect(sawPull, 'a plan with a pull muscle only').toBe(true);
 
   await page.getByTestId('quick-focus-push').click();
   await expectPressed(page, 'quick-focus-push', false);
   await expectPressed(page, 'quick-focus-pull');
-  for (const row of await readPreview(page)) expect(PULL, row.text).toContain(row.muscle);
+  const pull = await readPreview(page);
+  expect(pull.length, 'a Pull plan has rows').toBeGreaterThan(0);
+  for (const row of pull) expect(PULL, row.text).toContain(row.muscle);
 
   await page.getByTestId('quick-focus-auto').click();
   await expectPressed(page, 'quick-focus-auto');
@@ -521,51 +604,54 @@ test('discarding a session that used Include new takes the exercises Start made 
   await expectNoQuickRows(page, seeded);
 });
 
+/** Raw rows for a database made before the app ever boots: an exercise, and the settings it needs. */
+const rawExercise = (day: string, id: string, name: string, muscleGroup: string, over: Row = {}): Row => ({
+  id,
+  name,
+  kind: 'reps',
+  muscleGroup,
+  isCompound: false,
+  isLowerBody: false,
+  defaultRestSec: 75,
+  defaultIncrement: 2.5,
+  unilateral: false,
+  equipment: 'dumbbell',
+  createdAt: day,
+  ...over,
+});
+
+const rawSettings = (day: string): Row => ({
+  id: 'settings',
+  units: 'kg',
+  theme: 'dark',
+  calorieStart: 1900,
+  calorieStep: 200,
+  calorieStepDays: 14,
+  calorieCeiling: 3000,
+  proteinTarget: 170,
+  proteinTargetLegDay: 200,
+  weeklyGainTargetMin: 0.25,
+  weeklyGainTargetMax: 0.5,
+  bodyweightTargetMin: 80,
+  bodyweightTargetMax: 82,
+  restCompoundSec: 150,
+  restIsolationSec: 75,
+  restCarrySec: 90,
+  restVibrate: true,
+  restNotify: true,
+  productLookup: true,
+  seedVersion: 3,
+  createdAt: day,
+});
+
 test('with no routines at all, Short session is still there and starts a session', async ({ page }) => {
   // The owner has exercises and settings and no routine: raw rows, before the app ever boots.
   await page.goto('/icons/icon-192.png');
   const day = new Date().toISOString();
-  const exercise = (id: string, name: string, muscleGroup: string, over: Row = {}): Row => ({
-    id,
-    name,
-    kind: 'reps',
-    muscleGroup,
-    isCompound: false,
-    isLowerBody: false,
-    defaultRestSec: 75,
-    defaultIncrement: 2.5,
-    unilateral: false,
-    equipment: 'dumbbell',
-    createdAt: day,
-    ...over,
-  });
+  const exercise = (id: string, name: string, muscleGroup: string): Row => rawExercise(day, id, name, muscleGroup);
   await createRawIronDb(page, 30, IRON_SCHEMA_V3, {
     exercises: [exercise('e-press', 'Test Press', 'chest'), exercise('e-row', 'Test Row', 'lats'), exercise('e-curl', 'Test Curl', 'biceps'), exercise('e-ext', 'Test Extension', 'triceps')],
-    settings: [
-      {
-        id: 'settings',
-        units: 'kg',
-        theme: 'dark',
-        calorieStart: 1900,
-        calorieStep: 200,
-        calorieStepDays: 14,
-        calorieCeiling: 3000,
-        proteinTarget: 170,
-        proteinTargetLegDay: 200,
-        weeklyGainTargetMin: 0.25,
-        weeklyGainTargetMax: 0.5,
-        bodyweightTargetMin: 80,
-        bodyweightTargetMax: 82,
-        restCompoundSec: 150,
-        restIsolationSec: 75,
-        restCarrySec: 90,
-        restVibrate: true,
-        restNotify: true,
-        productLookup: true,
-        seedVersion: 3,
-        createdAt: day,
-      },
-    ],
+    settings: [rawSettings(day)],
   });
   await page.goto('/');
   await expect(page.getByText('No routines yet')).toBeVisible();
@@ -580,6 +666,46 @@ test('with no routines at all, Short session is still there and starts a session
   await expect(page).toHaveURL(/\/session\//);
   await expect(cardsOf(page)).toHaveCount(preview.length);
   expect(await cardNames(page)).toEqual(preview.map((r) => r.name));
+});
+
+test('a row with no weight yet starts the live card on the last real set: a last-time ghost, not a prescription', async ({ page }) => {
+  // One exercise, in a real routine that still has it calibrating, with one real finished set of
+  // 25 x 8: raw rows, before the app ever boots. Nothing quick has ever run.
+  await page.goto('/icons/icon-192.png');
+  const day = new Date().toISOString();
+  const lastTime = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
+  await createRawIronDb(page, 30, IRON_SCHEMA_V3, {
+    exercises: [rawExercise(day, 'e-press', 'Test Press', 'chest')],
+    settings: [rawSettings(day)],
+    routines: [{ id: 'r-day', name: 'Test Day', order: 0, isLowerBody: false }],
+    routineExercises: [
+      { id: 'rx-press', routineId: 'r-day', exerciseId: 'e-press', order: 0, targetSets: 3, repMin: 8, repMax: 10, currentWeight: 0, increment: 2.5, mode: 'calibrating', optional: false },
+    ],
+    sessions: [{ id: 's-last', routineId: 'r-day', title: 'Test Day', startedAt: lastTime, endedAt: lastTime, durationSec: 2400 }],
+    setLogs: [{ id: 'set-last', sessionId: 's-last', routineExerciseId: 'rx-press', exerciseId: 'e-press', index: 0, type: 'working', weight: 25, reps: 8, completedAt: lastTime }],
+  });
+  await page.goto('/');
+  await openSheet(page);
+  await page.getByTestId('quick-effort-light').click();
+  await expectPressed(page, 'quick-effort-light');
+
+  // The preview offers no weight, because the exercise is calibrating: its history is not borrowed.
+  const preview = await readPreview(page);
+  expect(preview.map((r) => [r.name, r.weight, r.repMin, r.repMax])).toEqual([['Test Press', 'no weight yet', 10, 15]]);
+  await page.getByTestId('quick-start').click();
+  await expect(page).toHaveURL(/\/session\//);
+
+  // The live card, as any card is, is pre-filled from the exercise's last real set: 25 kg for 8, which
+  // is the last time it was done and neither the light range nor a prescribed weight.
+  const card = cardsOf(page).first();
+  await expect(card.getByTestId('weight-input').first()).toHaveValue('25');
+  await expect(card.getByTestId('reps-input').first()).toHaveValue('8');
+
+  // What Start wrote is still the preview: a calibrating row with no weight and the light range.
+  const raw = await readRawIron(page);
+  const hidden = (raw.tables.routines as Row[]).find((r) => r.quick === true)!;
+  const quickRows = (raw.tables.routineExercises as Row[]).filter((r) => r.routineId === hidden.id);
+  expect(quickRows).toEqual([expect.objectContaining({ exerciseId: 'e-press', mode: 'calibrating', currentWeight: 0, repMin: 10, repMax: 15 })]);
 });
 
 test('with a session running, Home has no Short session button', async ({ page }) => {

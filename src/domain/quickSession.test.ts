@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SEED_EXERCISES, SEED_ROUTINES, SEED_ROUTINE_EXERCISES } from '../db/seed';
+import realCatalogueJson from '../data/exerciseCatalogue.json';
+import type { CatalogueEntry } from './catalogue';
+import { catalogueCandidates } from './quickInput';
 import { resolveOptions, type QuickOptions } from './quickRequest';
 import { restSecondsFor } from './rest';
 import {
@@ -11,7 +14,7 @@ import {
   type QuickPlan,
   type QuickRow,
 } from './quickSession';
-import type { MuscleGroup, RoutineExercise } from './types';
+import type { Equipment, MuscleGroup, RoutineExercise } from './types';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -131,6 +134,8 @@ function bigPool(): Candidate[] {
   return [...own, ...extras, ...catalogue];
 }
 
+const realCatalogue = realCatalogueJson as CatalogueEntry[];
+
 afterEach(() => vi.restoreAllMocks());
 
 // ---------------------------------------------------------------------------
@@ -176,17 +181,60 @@ describe('generateQuickSession: determinism', () => {
     }
   });
 
-  it('reads no clock and no random source: with both made to throw, everything still runs', () => {
-    vi.spyOn(Math, 'random').mockImplementation(() => {
-      throw new Error('Math.random was read');
-    });
-    vi.spyOn(Date, 'now').mockImplementation(() => {
-      throw new Error('Date.now was read');
-    });
-    const plan = generateQuickSession(input(pool), options, 7);
-    expect(plan.rows.length).toBeGreaterThan(0);
-    expect(estimateMinutes(plan.rows, 1.2)).toBeGreaterThan(0);
-    expect(paceFactor([{ durationSec: 3000, modelledSec: 2500 }])).toBe(1);
+  it('reads no clock and no random source: with every way of reading one made to throw, everything still runs', () => {
+    const reads = (what: string) => () => {
+      throw new Error(`${what} was read`);
+    };
+    const RealDate = Date;
+    let outcome: { plan: QuickPlan; minutes: number; pace: number } | undefined;
+    let armed: string[] = [];
+    vi.spyOn(Math, 'random').mockImplementation(reads('Math.random'));
+    vi.spyOn(Date, 'now').mockImplementation(reads('Date.now'));
+    vi.spyOn(performance, 'now').mockImplementation(reads('performance.now'));
+    vi.spyOn(crypto, 'getRandomValues').mockImplementation(reads('crypto.getRandomValues'));
+    vi.spyOn(crypto, 'randomUUID').mockImplementation(reads('crypto.randomUUID'));
+    // `new Date()` and `Date()` are the clock; `new Date(someNumber)` is only arithmetic, and stays.
+    vi.stubGlobal(
+      'Date',
+      new Proxy(RealDate, {
+        construct(target, args, newTarget) {
+          if (args.length === 0) throw new Error('new Date() was read');
+          return Reflect.construct(target, args, newTarget);
+        },
+        apply() {
+          throw new Error('Date() was read');
+        },
+      }),
+    );
+    try {
+      // The stubs are live: every one of these throws now, so a clean run below is not a stub that never took.
+      const probes: [string, () => unknown][] = [
+        ['Math.random', () => Math.random()],
+        ['Date.now', () => Date.now()],
+        ['new Date()', () => new Date()],
+        ['Date()', () => (Date as unknown as () => string)()],
+        ['performance.now', () => performance.now()],
+        ['crypto.getRandomValues', () => crypto.getRandomValues(new Uint8Array(1))],
+        ['crypto.randomUUID', () => crypto.randomUUID()],
+      ];
+      armed = probes.filter(([, read]) => {
+        try {
+          read();
+          return false;
+        } catch {
+          return true;
+        }
+      }).map(([name]) => name);
+      const plan = generateQuickSession(input(pool), options, 7);
+      outcome = { plan, minutes: estimateMinutes(plan.rows, 1.2), pace: paceFactor([{ durationSec: 3000, modelledSec: 2500 }]) };
+    } finally {
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    }
+    expect(armed).toEqual(['Math.random', 'Date.now', 'new Date()', 'Date()', 'performance.now', 'crypto.getRandomValues', 'crypto.randomUUID']);
+    expect(outcome!.plan.rows.length).toBeGreaterThan(0);
+    expect(outcome!.minutes).toBeGreaterThan(0);
+    expect(outcome!.pace).toBe(1);
   });
 
   it('does not change the input it is given', () => {
@@ -341,7 +389,7 @@ describe('generateQuickSession: 500 seeds', () => {
           rows++;
           const c = r.candidate;
           expect(c.equipment === 'barbell' && c.isCompound, c.name).toBe(false);
-          expect(c.name, c.name).not.toMatch(/deadlift|good.?morning|romanian|rdl|hyperextension|back extension/i);
+          expect(c.name, c.name).not.toMatch(/deadlift|good.?morning|romanian|rdl|hyperextension|back extension|swing|clean|snatch|glute.?ham|rack pull|pull.?through/i);
           expect(c.standard, c.name).toBeUndefined();
         }
       }
@@ -364,6 +412,8 @@ describe('generateQuickSession: 500 seeds', () => {
         weighed++;
         expect(base, r.candidate.name).toBeDefined();
         expect(r.weightKg, r.candidate.name).toBeGreaterThanOrEqual(0);
+        // Nothing on the grid is no number at all, never "0 kg": only added weight can be nothing.
+        if (base! > 0 && r.candidate.kind !== 'bodyweight_plus') expect(r.weightKg, r.candidate.name).toBeGreaterThan(0);
         expect(r.weightKg, r.candidate.name).toBeLessThanOrEqual(base! * 0.65 + 1e-9);
         const steps = r.weightKg / r.candidate.defaultIncrement;
         expect(Math.abs(steps - Math.round(steps)), `${r.candidate.name} ${r.weightKg} on a ${r.candidate.defaultIncrement} kg grid`).toBeLessThan(1e-9);
@@ -1059,6 +1109,34 @@ describe('generateQuickSession: prescription', () => {
     it('a base of zero stays zero', () => {
       const r = only(cand({ id: 'a', kind: 'bodyweight_plus', equipment: 'bodyweight', base: { sets: 3, repMin: 10, repMax: 15, weightKg: 0, mode: 'normal' } }), { effort: 'light' });
       expect(r).toMatchObject({ weightKg: 0, mode: 'normal' });
+      // A base of nothing on any other kind is still the owner's own number, and 65% of it is itself.
+      const reps = only(cand({ id: 'b', kind: 'reps', equipment: 'bodyweight', base: { sets: 3, repMin: 10, repMax: 15, weightKg: 0, mode: 'normal' } }), { effort: 'light' });
+      expect(reps).toMatchObject({ weightKg: 0, mode: 'normal' });
+    });
+
+    it.each([
+      ['a cable at 5 kg on a 5 kg step', 'cable', 5, 5],
+      ['a dumbbell at 2.5 kg on a 2.5 kg step', 'dumbbell', 2.5, 2.5],
+      ['a dumbbell at 3 kg on a 2.5 kg step', 'dumbbell', 3, 2.5],
+      ['a dumbbell at 1.5 kg on a 2.5 kg step', 'dumbbell', 1.5, 2.5],
+      ['a machine at 7.5 kg on a 5 kg step', 'machine', 7.5, 5],
+    ] as const)('%s floors to nothing, so it has no weight to give: calibrating, never "0 kg"', (_label, equipment, weightKg, defaultIncrement) => {
+      const r = only(cand({ id: 'a', equipment, defaultIncrement, base: { sets: 3, repMin: 10, repMax: 12, weightKg, mode: 'normal' } }), { effort: 'light' });
+      expect(r.weightKg).toBeNull();
+      expect(r.mode).toBe('calibrating');
+      expect(r).toMatchObject({ sets: 2, repMin: 10, repMax: 15 });
+    });
+
+    it('the first weight that does come to something on the grid is still a weight', () => {
+      // 10 x 0.65 = 6.5 → 5 on a 5 kg grid; 20 x 0.65 = 13 → 12.5 on a 2.5 kg grid.
+      const w = (base: number, increment: number) => only(cand({ id: 'a', equipment: 'cable', defaultIncrement: increment, base: { sets: 3, repMin: 10, repMax: 12, weightKg: base, mode: 'normal' } }), { effort: 'light' });
+      expect(w(10, 5)).toMatchObject({ weightKg: 5, mode: 'normal' });
+      expect(w(20, 2.5)).toMatchObject({ weightKg: 12.5, mode: 'normal' });
+    });
+
+    it('an added weight that floors to nothing is bodyweight only, which is a real prescription', () => {
+      const r = only(cand({ id: 'a', kind: 'bodyweight_plus', equipment: 'bodyweight', defaultIncrement: 2.5, base: { sets: 3, repMin: 10, repMax: 15, weightKg: 2.5, mode: 'normal' } }), { effort: 'light' });
+      expect(r).toMatchObject({ weightKg: 0, mode: 'normal' });
     });
 
     it('with no known weight, is calibrating with none', () => {
@@ -1144,8 +1222,11 @@ describe('generateQuickSession: choosing between exercises for a muscle', () => 
       cat += plan.rows.filter((r) => r.candidate.origin === 'catalogue').length;
     }
     // Thirty new exercises against two own would be 90% catalogue if every exercise weighed the same.
-    expect(cat / total).toBeGreaterThan(0.15);
-    expect(cat / total).toBeLessThan(0.5);
+    // Together the new ones weigh half of what the two own do (CATALOGUE_SHARE), so each pick is a new
+    // one a third of the time: S / (1 + S) with S = 0.5. Bounds that tight hold the share to about
+    // 0.4-0.6 of the own weight, so neither "half the plan" nor "hardly ever" gets through.
+    expect(cat / total).toBeGreaterThan(0.27);
+    expect(cat / total).toBeLessThan(0.38);
   });
 
   it('a muscle with only catalogue exercises still gets them, up to two', () => {
@@ -1171,6 +1252,14 @@ describe('generateQuickSession: what a light session leaves out', () => {
     ['a good-morning with a hyphen', { equipment: 'barbell', name: 'Good-Morning' }],
     ['a hyperextension', { equipment: 'bodyweight', name: 'Hyperextension' }],
     ['a back extension', { equipment: 'bodyweight', name: 'Back Extension' }],
+    ['a kettlebell swing', { equipment: 'kettlebell', name: 'One-Arm Kettlebell Swings' }],
+    ['a dumbbell clean', { equipment: 'dumbbell', name: 'Dumbbell Clean' }],
+    ['a machine power clean', { equipment: 'machine', name: 'Smith Machine Hang Power Clean' }],
+    ['a kettlebell snatch', { equipment: 'kettlebell', name: 'One-Arm Kettlebell Snatch' }],
+    ['a glute-ham raise', { equipment: 'machine', name: 'Glute Ham Raise' }],
+    ['a glute-ham raise on the floor', { equipment: 'other', name: 'Floor Glute-Ham Raise' }],
+    ['a rack pull', { equipment: 'dumbbell', name: 'Rack Pull with Bands' }],
+    ['a cable pull-through', { equipment: 'cable', name: 'Pull Through' }],
   ];
 
   it.each(excluded)('leaves out %s, and keeps it on a normal day', (_label, over) => {
@@ -1198,6 +1287,23 @@ describe('generateQuickSession: what a light session leaves out', () => {
     const plan = generateQuickSession(input([cand({ id: 'x', equipment: 'barbell', isCompound: true })]), opts({ effort: 'light', count: 3 }), 1);
     expect(plan.rows).toEqual([]);
     expect(plan.shortfall).toBe(3);
+  });
+
+  it('over the real catalogue, no light plan holds a swing, clean, snatch, glute-ham raise, rack pull or pull-through', () => {
+    const owned = new Set<Equipment>(['bodyweight', 'dumbbell', 'kettlebell', 'machine', 'cable', 'barbell', 'other']);
+    const { candidates } = catalogueCandidates(realCatalogue, [], owned);
+    const hinge = /swing|clean|snatch|glute.?ham|rack pull|pull.?through/i;
+    // The pool has plenty of them, so an empty result below is the exclusion's doing.
+    expect(candidates.filter((c) => hinge.test(c.name)).length).toBeGreaterThan(30);
+    let rows = 0;
+    for (const focus of [['hamstrings'], ['quads'], ['lower back'], ['shoulders'], ['forearms'], ['traps']] as MuscleGroup[][]) {
+      for (const seed of seeds(40)) {
+        const plan = generateQuickSession(input(candidates), opts({ effort: 'light', includeNew: true, focus, count: 4 }), seed);
+        rows += plan.rows.length;
+        for (const r of plan.rows) expect(r.candidate.name).not.toMatch(hinge);
+      }
+    }
+    expect(rows).toBeGreaterThan(200);
   });
 });
 

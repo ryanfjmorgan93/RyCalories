@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CatalogueEntry } from './catalogue';
 import {
-  PACE_SESSIONS,
   buildQuickInput,
   catalogueCandidates,
   historyBase,
@@ -351,6 +350,26 @@ describe('the catalogue', () => {
     expect(build(src).catalogueEntries.map((e) => e.slug)).toEqual(['a-kettlebell']);
   });
 
+  it("a catch-all 'other' is not kit the owner owns: logging the seeded Neck row never makes bands, balls or strongman lifts candidates", () => {
+    // 'other' holds bands, exercise balls, EZ bars, a medicine ball, strongman implements and entries with
+    // no equipment at all: one logged 'other' exercise must not stand for every one of them.
+    const neck = exercise('neck', { muscleGroup: 'neck', equipment: 'other' });
+    const entries = [
+      entry('car-deadlift', { name: 'Car Deadlift', equipment: 'other' }),
+      entry('tire-flip', { name: 'Tire Flip', equipment: 'other', muscleGroup: 'quads' }),
+      entry('band-curl', { name: 'Band Curl', equipment: 'other' }),
+      entry('ball-crunch', { name: 'Ball Crunch', equipment: 'other', muscleGroup: 'abs' }),
+      entry('push-up', { name: 'Push Up', equipment: 'bodyweight', muscleGroup: 'chest' }),
+    ];
+    const src = source({ exercises: [neck], sessions: [session('s', 4)], setLogs: sets('s', 'neck', 4, [[10, 12]]), catalogue: entries });
+    // Bodyweight still needs nothing, so it is the only kit the owner has here.
+    expect(build(src).catalogueEntries.map((e) => e.slug)).toEqual(['push-up']);
+    expect([...ownedEquipment([neck], new Set(['neck']))]).toEqual(['bodyweight']);
+    // Real kit beside it still counts, and 'other' is never added to it.
+    const both = ownedEquipment([neck, cable], new Set(['neck', 'cable-curl']));
+    expect([...both].sort()).toEqual(['bodyweight', 'cable']);
+  });
+
   it('leaves out an entry that is already one of the owner\'s exercises, by picture key, name or alias', () => {
     const byDemo = exercise('mine-1', { name: 'Something Else', equipment: 'cable', demo: 'cat:by-demo' });
     const byName = exercise('mine-2', { name: 'Cable  Fly', equipment: 'cable' });
@@ -448,15 +467,26 @@ describe('pace', () => {
   });
 
   it('reads only the most recent sessions', () => {
-    const recent = Array.from({ length: PACE_SESSIONS }, (_, i) => finished(`r${i}`, 1 + i, 480));
+    // The window is the twelve latest finished sessions, written out here rather than read from
+    // PACE_SESSIONS: a test built from the constant would follow it to any size.
+    const recent = Array.from({ length: 12 }, (_, i) => finished(`r${i}`, 1 + i, 480));
     // Older than all of them, and wildly slow: it must not move the median.
-    const old = Array.from({ length: PACE_SESSIONS }, (_, i) => finished(`o${i}`, 100 + i, 4800));
+    const old = Array.from({ length: 12 }, (_, i) => finished(`o${i}`, 100 + i, 4800));
     const src = source({
       exercises: [squat],
       sessions: [...recent, ...old],
       setLogs: [...recent, ...old].flatMap((s) => threeSets(s.id, 0)),
     });
     expect(build(src).input.pace).toBe(1);
+  });
+
+  it('the window is exactly twelve sessions: the twelfth counts and the thirteenth does not', () => {
+    // Newest first: six at the modelled pace, six at 1.4 times it, then eight more at the modelled pace.
+    // Twelve of them have a median of 1.2; eleven would say 1, thirteen or more would say 1.
+    const durations = [...Array(6).fill(480), ...Array(6).fill(672), ...Array(8).fill(480)] as number[];
+    const all = durations.map((d, i) => finished(`w${i}`, 1 + i, d));
+    const src = source({ exercises: [squat], sessions: all, setLogs: all.flatMap((s) => threeSets(s.id, 0)) });
+    expect(build(src).input.pace).toBeCloseTo(1.2, 10);
   });
 
   it('drops a session with no modelled time rather than dividing by zero', () => {

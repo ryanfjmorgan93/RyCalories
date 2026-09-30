@@ -9,6 +9,14 @@
  * and tapping it adds or removes those muscles, so "Push, then Pull" is both and tapping Push again
  * leaves Pull.
  *
+ * Typing a phrase that says something different about a field replaces the tap on it, but only for
+ * as long as it says it. The sheet hears every keystroke, and a half-typed word ("4" on the way to
+ * "45 min", "four" on the way to "fourteen") says things the finished phrase does not: a tap a
+ * keystroke displaced is kept behind the text (`dropped`) and comes back the moment the text stops
+ * saying anything about that field, so the tap is the same whether the words were typed or pasted.
+ * A muscle is never both asked for and ruled out: the later word wins, and a muscle the owner lifted
+ * from an exclusion by tapping its chip stays lifted while the exclusion is edited around it.
+ *
  * A third layer sits behind both: what the on-device assistant read from the typed line, on the
  * owner's tap (`ai`). It fills only the fields the typed text and the taps both leave unset — a tap
  * on Auto, or on the last chip of a list, is a choice and is left alone too — and only the five
@@ -47,6 +55,8 @@ export interface QuickTaps {
 export interface QuickDraft {
   text: string;
   taps: QuickTaps;
+  /** Taps the text displaced, per field, each waiting for the text to stop saying anything about its field. Absent when there are none. */
+  dropped?: QuickTaps;
   /** Only ever a tap: neither the typed line nor the assistant can switch it on. */
   includeNew: boolean;
   /** What the assistant read from `text`; absent or null until it has been asked, and dropped when the text changes. */
@@ -79,19 +89,53 @@ function canonicalEquipment(list: readonly Equipment[]): Equipment[] {
 
 /**
  * The text changed. A field the new text says something different about takes the typed value back
- * from any tap on it; a field it says nothing about, or says the same about, keeps its tap. Deleting
- * the phrase that set a field leaves whatever was tapped, else Auto. What the assistant read from the
- * old text goes with it: the words it read are gone.
+ * from any tap on it, and the tap waits in `dropped`; a field it says nothing about, or says the same
+ * about, keeps its tap, and a tap that is waiting comes back. Deleting the phrase that set a field
+ * leaves whatever was tapped, else Auto. What the assistant read from the old text goes with it: the
+ * words it read are gone.
  */
 export function typeText(draft: QuickDraft, text: string): QuickDraft {
   if (text === draft.text) return draft;
   const before = parseQuickRequest(draft.text).options;
   const after = parseQuickRequest(text).options;
   const taps: QuickTaps = { ...draft.taps };
+  const dropped: QuickTaps = { ...draft.dropped };
+  const mutableTaps = taps as Record<string, unknown>;
+  const mutableDropped = dropped as Record<string, unknown>;
+
   for (const field of TAPPABLE) {
-    if (after[field] !== undefined && !same(before[field], after[field])) delete taps[field];
+    if (after[field] !== undefined) {
+      if (field in taps && !same(before[field], after[field])) {
+        mutableDropped[field] = taps[field];
+        delete taps[field];
+      }
+    } else if (field in dropped && !(field in taps)) {
+      mutableTaps[field] = dropped[field];
+      delete dropped[field];
+      // An exclusion that comes back is older than a focus tapped since: Legs tapped after "No legs"
+      // was displaced does not give way to it.
+      if (field === 'exclude' && taps.focus) taps.exclude = taps.exclude!.filter((m) => !taps.focus!.includes(m));
+    }
   }
-  return { ...draft, text, taps, ai: null };
+
+  // A tap that lifted an exclusion ("no legs", then Legs) holds when the exclusion is edited around
+  // it: "no legs, no arms" is still no arms and not no legs. What the displaced exclusion tap lifted is
+  // what the text excluded and it did not; one the edit newly rules out has no tap behind it, and the
+  // reading of the two lists (`effectiveOptions`) lets the exclusion win.
+  const displaced = draft.taps.exclude;
+  if (displaced && !('exclude' in taps) && taps.focus && after.exclude) {
+    const liftedByTap = (before.exclude ?? []).filter((m) => !displaced.includes(m));
+    const lifted = taps.focus.filter((m) => liftedByTap.includes(m) && after.exclude!.includes(m));
+    if (lifted.length) {
+      taps.exclude = after.exclude.filter((m) => !lifted.includes(m));
+      delete dropped.exclude;
+    }
+  }
+
+  const next: QuickDraft = { ...draft, text, taps, ai: null };
+  if (Object.keys(dropped).length) next.dropped = dropped;
+  else delete next.dropped;
+  return next;
 }
 
 // ---------------------------------------------------------------------------
@@ -112,9 +156,17 @@ export function effectiveOptions(draft: QuickDraft): Partial<QuickOptions> {
   if (minutes !== undefined) out.minutes = minutes;
   const effort = taps.effort ?? parsed.effort;
   if (effort !== undefined) out.effort = effort;
-  const focus = canonical(taps.focus ?? parsed.focus ?? []);
+  // A muscle is never both asked for and ruled out, and the later word wins. A typed focus came
+  // after any tap on the exclusion, so it beats it; a tap on Legs followed by "no legs" is a focus tap
+  // the typed exclusion came after, so the exclusion beats that. A lift the owner tapped on purpose
+  // is an exclusion tap (what `toggleFocus` leaves), so it stands. Whatever is left in both, a tap
+  // restored from behind the text, is ruled out, as the generator would have it.
+  const typedFocus = parsed.focus ?? [];
+  let excluded = taps.exclude ?? parsed.exclude ?? [];
+  if (taps.exclude !== undefined && taps.focus === undefined) excluded = excluded.filter((m) => !typedFocus.includes(m));
+  const exclude = canonical(excluded);
+  const focus = canonical((taps.focus ?? typedFocus).filter((m) => !exclude.includes(m)));
   if (focus.length) out.focus = focus;
-  const exclude = canonical(taps.exclude ?? parsed.exclude ?? []);
   if (exclude.length) out.exclude = exclude;
   const equipment = canonicalEquipment(taps.equipment ?? parsed.equipment ?? []);
   if (equipment.length) out.equipment = equipment;
@@ -208,10 +260,18 @@ export function toggleFocus(draft: QuickDraft, muscles: readonly MuscleGroup[]):
   return { ...draft, taps };
 }
 
-/** Remove an exclusion chip (`MuscleChip.key`): what it alone excluded may be chosen again, and what another chip still excludes stays so. */
+/**
+ * Remove an exclusion chip (`MuscleChip.key`): what it alone excluded may be chosen again, and what
+ * another chip still excludes stays so. "May be chosen" is all it does: a tap on Legs that "no legs"
+ * outranked does not light up again with the chip that was taken away.
+ */
 export function removeExcluded(draft: QuickDraft, key: string): QuickDraft {
-  const left = cover(effectiveOptions(draft).exclude ?? []).filter((c) => c.key !== key).flatMap((c) => c.muscles);
-  return { ...draft, taps: { ...draft.taps, exclude: canonical(left) } };
+  const excluded = effectiveOptions(draft).exclude ?? [];
+  const left = cover(excluded).filter((c) => c.key !== key).flatMap((c) => c.muscles);
+  const taps: QuickTaps = { ...draft.taps, exclude: canonical(left) };
+  const freed = excluded.filter((m) => !left.includes(m));
+  if (taps.focus?.some((m) => freed.includes(m))) taps.focus = taps.focus.filter((m) => !freed.includes(m));
+  return { ...draft, taps };
 }
 
 /**
@@ -244,7 +304,8 @@ export interface EquipmentChip {
 
 export interface QuickChips {
   count: { auto: boolean; values: number[]; selected: number | null };
-  minutes: { values: number[]; selected: number };
+  /** `selected` is null while a count is set: the minutes size the plan only when the count is derived, so no Time chip is lit. */
+  minutes: { values: number[]; selected: number | null };
   effort: Effort;
   focus: {
     auto: boolean;
@@ -309,7 +370,7 @@ export function quickChips(draft: QuickDraft): QuickChips {
   return {
     // The typed value stays beside the fixed ones after a tap moves off it, so it can be tapped back.
     count: { auto: options.count === undefined, values: withExtras(COUNT_CHIPS, options.count, parsed.count), selected: options.count ?? null },
-    minutes: { values: withExtras(MINUTES_CHIPS, minutes, parsed.minutes), selected: minutes },
+    minutes: { values: withExtras(MINUTES_CHIPS, minutes, parsed.minutes), selected: options.count === undefined ? minutes : null },
     effort: options.effort,
     focus: { auto: focus.length === 0, macros, muscles: focus.filter((m) => !covered.has(m)) },
     excluded: cover(options.exclude ?? []),

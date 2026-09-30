@@ -96,12 +96,33 @@ const MOOD_PHRASES = [
 /** "Can't do legs" and "don't want arms" rule a muscle out just as "no legs" does. */
 const NEGATIONS = new Set([
   'no', 'not', 'without', 'skip', 'avoid', 'except', 'excluding', 'nothing', 'never',
-  "can't", 'cant', 'cannot', "don't", 'dont',
+  "can't", 'cant', 'cannot', "don't", 'dont', "haven't", 'havent', "won't", 'wont',
 ]);
-/** Words that can sit between a negation and what it negates: "not too heavy", "don't want to do legs". */
+/**
+ * Words that can sit between a negation and what it negates: "not too heavy", "don't want to do
+ * legs", "don't have a barbell", "can't use the barbell", "don't feel like legs", "can't face legs".
+ */
 const NEGATION_FILLER = new Set([
   'the', 'any', 'a', 'an', 'more', 'for', 'on', 'of', 'my', 'too', 'very', 'so', 'that', 'really', 'do', 'doing', 'want', 'to', 'train', 'work',
+  'have', 'got', 'use', 'need', 'feel', 'like', 'face',
 ]);
+/**
+ * What joins a second item to a negation: "no legs or arms" rules out both, as does "no legs and
+ * arms". A comma does not ("no calves, legs" asks for legs), and neither does any other word.
+ */
+const NEGATION_JOINERS = new Set(['or', 'nor', 'and']);
+/** What may sit between a joiner and its item: "no legs or the arms". A verb ("and do arms") starts a clause of its own. */
+const JOINER_ARTICLES = new Set(['the', 'any', 'a', 'an', 'my', 'more']);
+
+/**
+ * What a number can be counting when it is not exercises: "3 sets", "10 reps", "3 days a week", "5 kg",
+ * "3 weeks ago". The same number is not a count when it is the other half of "4 x 10" or "4 by 10".
+ */
+const NOT_A_COUNT = new Set([
+  'set', 'sets', 'rep', 'reps', 'x', 'by', 'time', 'times', 'day', 'days', 'week', 'weeks', 'month', 'months', 'year', 'years',
+  'round', 'rounds', 'kg', 'kgs', 'kilo', 'kilos', 'lb', 'lbs', 'ago',
+]);
+const MULTIPLIERS = new Set(['x', 'by', 'times']);
 
 const MINUTE_UNITS = new Set(['min', 'mins', 'minute', 'minutes', 'm']);
 const HOUR_UNITS = new Set(['hour', 'hours', 'hr', 'hrs']);
@@ -217,6 +238,16 @@ function isNumber(t: string | undefined): t is string {
   return t !== undefined && /^\d/.test(t);
 }
 
+/** Whether the number at `i` is counting something other than exercises, going by the words on either side of it. */
+function countsSomethingElse(tokens: string[], i: number): boolean {
+  const next = tokens[i + 1];
+  if (next !== undefined && NOT_A_COUNT.has(next)) return true;
+  const before = tokens[i - 1];
+  if (before !== undefined && MULTIPLIERS.has(before)) return true;
+  // "3 sets of 10": the 10 is reps, and with the 3 skipped it would otherwise be the count.
+  return before === 'of' && /^(sets?|reps?)$/.test(tokens[i - 2] ?? '');
+}
+
 type Reading =
   | { len: number; kind: 'count'; n: number }
   | { len: number; kind: 'minutes'; n: number }
@@ -292,12 +323,14 @@ function readAt(tokens: string[], i: number): Reading | null {
 
   if (isNumber(t)) {
     const n = Number(t);
+    if (countsSomethingElse(tokens, i)) return null;
     return Number.isInteger(n) && n >= MIN_COUNT && n <= MAX_TYPED_COUNT ? { len: 1, kind: 'count', n } : null;
   }
   const word = NUMBER_WORDS.get(t);
   if (word !== undefined) {
     // "one" is also a pronoun ("an easy one"), so it counts only beside an exercise noun.
     if (t === 'one' && !EXERCISE_NOUNS.has(tokens[i + 1]) && !EXERCISE_NOUNS.has(tokens[i + 2])) return null;
+    if (countsSomethingElse(tokens, i)) return null;
     return { len: 1, kind: 'count', n: word };
   }
 
@@ -307,6 +340,14 @@ function readAt(tokens: string[], i: number): Reading | null {
   if (QUICK_WORDS.has(t)) return { len: 1, kind: 'quick' };
 
   return readVocabulary(tokens, i, false);
+}
+
+/** The item a joiner at `i` adds to a negation, when there is one: "or arms" in "no legs or arms". */
+function readJoined(tokens: string[], i: number): Reading | null {
+  let j = i + 1;
+  while (j < tokens.length && JOINER_ARTICLES.has(tokens[j])) j++;
+  const vocab = readVocabulary(tokens, j, true);
+  return vocab ? { ...vocab, len: j - i + vocab.len } : null;
 }
 
 function pushUnique<T>(list: T[], items: T[]): void {
@@ -328,9 +369,12 @@ export function parseQuickRequest(text: string): ParsedRequest {
   const equipmentAdded: Equipment[] = [];
   const equipmentRemoved: Equipment[] = [];
 
+  // Whether the last thing read was a muscle or equipment that was ruled out: a joiner straight after
+  // it rules out the next one too.
+  let negating = false;
   let i = 0;
   while (i < tokens.length) {
-    const r = readAt(tokens, i);
+    const r: Reading | null = readAt(tokens, i) ?? (negating && NEGATION_JOINERS.has(tokens[i]) ? readJoined(tokens, i) : null);
     let accepted = false;
     if (r) {
       switch (r.kind) {
@@ -373,6 +417,7 @@ export function parseQuickRequest(text: string): ParsedRequest {
       }
     }
 
+    negating = accepted && r !== null && (r.kind === 'muscles' || r.kind === 'equipment') && r.negated;
     if (accepted && r) {
       read.push(tokens.slice(i, i + r.len).join(' '));
       i += r.len;
