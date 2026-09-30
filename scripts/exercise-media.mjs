@@ -11,11 +11,15 @@
  * quantisation that would posterise a photograph (see PHOTO_ note below). Then writes
  * src/data/exerciseDemos.ts deterministically (sorted by slug).
  *
+ * Last, copies the exercise catalogue's committed frames (assets/catalogue-frames/<slug>/{1,2}.webp,
+ * built by scripts/build-exercise-catalogue.mjs) to public/catalogue/<slug>/ as a plain file copy:
+ * no sharp, no network. The two sets of pictures are budgeted separately.
+ *
  * Usage: node scripts/exercise-media.mjs
  */
 
 import sharp from 'sharp';
-import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -24,13 +28,18 @@ const PKG_ROOT = fileURLToPath(new URL('../node_modules/@bryllim/workout-guide/'
 const OUT_DIR = fileURLToPath(new URL('../public/exercises/', import.meta.url));
 const DATA_FILE = fileURLToPath(new URL('../src/data/exerciseDemos.ts', import.meta.url));
 const CUSTOM_ROOT = fileURLToPath(new URL('../assets/custom-demos/', import.meta.url));
+const CATALOGUE_SRC = fileURLToPath(new URL('../assets/catalogue-frames/', import.meta.url));
+const CATALOGUE_OUT = fileURLToPath(new URL('../public/catalogue/', import.meta.url));
 
 const WIDTH = 384;
 // Most frames are monochrome line art on a transparent background. A 4-colour palette PNG keeps
 // them crisp at a quarter of the size of lossy WebP (measured: ~4 KB a frame against ~15 KB).
 // Photo demos (manifest `"photo": true`) skip this — see convertFrame below.
 const COLOURS = 4;
+// Two budgets, one per set of pictures: the diagrams stay at 8 MiB, the catalogue photographs
+// (about 6.6 MB) get their own 8 MiB. One shared budget would warn on every build.
 const TARGET_BYTES = 8 * 1024 * 1024;
+const CATALOGUE_TARGET_BYTES = 8 * 1024 * 1024;
 
 /** @type {{id:string, slug:string, name:string, exerciseType:string, equipment:string, primaryMuscle:string, secondaryMuscles:string[], isStretch:boolean, frames:{index:number,path:string}[]}[]} */
 const manifest = JSON.parse(await readFile(join(PKG_ROOT, 'manifest.json'), 'utf8'));
@@ -336,3 +345,61 @@ export const ATTRIBUTIONS: Attribution[] = [
 mkdirSync(dirname(DATA_FILE), { recursive: true });
 writeFileSync(DATA_FILE, fileContents);
 console.log(`Wrote ${DATA_FILE} (${sorted.length} demos).`);
+
+// ---------------------------------------------------------------------------
+// public/catalogue/
+
+/** Every <slug>/<n>.webp under `root`, as "<slug>/<n>.webp" (forward slashes), sorted. */
+function catalogueFiles(root) {
+  const out = [];
+  for (const dir of readdirSync(root, { withFileTypes: true })) {
+    if (!dir.isDirectory()) continue;
+    for (const f of readdirSync(join(root, dir.name))) {
+      if (/^\d+\.webp$/.test(f)) out.push(`${dir.name}/${f}`);
+    }
+  }
+  return out.sort();
+}
+
+/** A copy is current when it is the same size and no older than its source. */
+function copyIfChanged(srcPath, destPath) {
+  const src = statSync(srcPath);
+  if (existsSync(destPath)) {
+    const dest = statSync(destPath);
+    if (dest.size === src.size && dest.mtimeMs >= src.mtimeMs) return false;
+  }
+  mkdirSync(dirname(destPath), { recursive: true });
+  copyFileSync(srcPath, destPath);
+  return true;
+}
+
+if (!existsSync(CATALOGUE_SRC)) {
+  console.warn('assets/catalogue-frames/ not found — the exercise catalogue will have no pictures.');
+} else {
+  const wanted = catalogueFiles(CATALOGUE_SRC);
+  mkdirSync(CATALOGUE_OUT, { recursive: true });
+  let copied = 0;
+  let current = 0;
+  for (const rel of wanted) {
+    if (copyIfChanged(join(CATALOGUE_SRC, rel), join(CATALOGUE_OUT, rel))) copied++;
+    else current++;
+  }
+  // A frame whose source is gone (an entry dropped or renamed) must not keep shipping.
+  const keep = new Set(wanted);
+  let removed = 0;
+  for (const rel of catalogueFiles(CATALOGUE_OUT)) {
+    if (keep.has(rel)) continue;
+    rmSync(join(CATALOGUE_OUT, rel));
+    removed++;
+    const dir = join(CATALOGUE_OUT, dirname(rel));
+    if (readdirSync(dir).length === 0) rmSync(dir, { recursive: true });
+  }
+  console.log(`Catalogue: copied ${copied} frame(s), ${current} already up to date, removed ${removed} stale.`);
+
+  const catalogueBytes = dirSizeBytes(CATALOGUE_OUT);
+  const catalogueMB = (catalogueBytes / (1024 * 1024)).toFixed(2);
+  console.log(`public/catalogue total size: ${catalogueMB} MB (target <= 8 MB); public/exercises: ${totalMB} MB (target <= 8 MB).`);
+  if (catalogueBytes > CATALOGUE_TARGET_BYTES) {
+    console.warn(`WARNING: public/catalogue exceeds its 8 MB target (${catalogueMB} MB). Lower the frame width or quality in scripts/build-exercise-catalogue.mjs and rebuild.`);
+  }
+}
