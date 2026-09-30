@@ -853,6 +853,26 @@ counts drop below a baseline without an in-app delete, and a Backups card in Set
   abbreviations, and 46 repeats are on a reviewed list.
 - **A per-muscle cap of two blocks "four bicep exercises".** It applies only when no muscle is
   named on its own.
+- **The sheet hears every keystroke.** "4" on the way to "45 min" and "four" on the way to
+  "fourteen" parse as counts, so a tap displaced by one is kept behind the text
+  (`QuickDraft.dropped`) and comes back when the text stops saying anything about that field;
+  typed whole, typed a key at a time and pasted give the same options. Known limit: a typed
+  focus that a half-typed exclusion cancels and then uncancels ("calves" then ", no lower back")
+  reads as a new mention of the focus on the key that uncancels it, and displaces a focus tap.
+- **A muscle is never both asked for and ruled out.** Tapping Legs over "no legs" lifts the
+  exclusion by tap (`toggleFocus`), and that lift holds while the exclusion is edited around it;
+  a muscle the edit newly rules out does not. `effectiveOptions` settles any other overlap:
+  typed focus over a tapped exclusion, else the exclusion.
+- **Negation reaches across "or", "and" and "nor", not across a comma** ("no calves, legs" is
+  still legs minus calves), and over "have", "got", "use", "need", "feel", "like" and "face"
+  ("I don't have a barbell" rules the barbell out). A number before sets, reps, days, kg, "x" and
+  the like, or either side of "4 x 10", is not an exercise count.
+- **Light leaves out the hinge family by name**: deadlifts, good mornings, extensions, swings,
+  cleans, snatches, glute-ham raises, rack pulls and pull-throughs. A light weight that floors to
+  nothing on the increment grid has no number ("pick a weight"); only added weight can be nothing.
+- **'other' is not kit the owner owns.** One logged Neck row (equipment 'other') must not make
+  bands, balls and strongman lifts candidates for Include new.
+- **The Time chip is lit only while the minutes size the plan**, which is when no count is set.
 
 ---
 
