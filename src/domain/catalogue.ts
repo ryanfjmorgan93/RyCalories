@@ -96,6 +96,23 @@ function startsWord(text: string, token: string): boolean {
 }
 
 /**
+ * How well a query's words match one thing: 0 when its name starts with the whole query, 1 when
+ * every word starts a word of the name, 2 when every word is somewhere in the name, 3 when the
+ * words are found only through the rest of `haystack` (muscle group, equipment), and null when a
+ * word is nowhere (or there are no words). `name` and `haystack` are lowercase, and `haystack`
+ * holds the name too. The catalogue search and the exercise list both rank by this, so a word
+ * means the same in each.
+ */
+export function matchTier(tokens: readonly string[], name: string, haystack: string): number | null {
+  if (tokens.length === 0) return null;
+  if (!tokens.every((t) => haystack.includes(t))) return null;
+  if (name.startsWith(tokens.join(' '))) return 0;
+  if (tokens.every((t) => startsWord(name, t))) return 1;
+  if (tokens.every((t) => name.includes(t))) return 2;
+  return 3;
+}
+
+/**
  * Entries whose name, muscle group or equipment contains every word of `query`, best first: the
  * name starts with the query, then every word starts a word of the name, then every word is
  * somewhere in the name, then the ones that matched through muscle group or equipment. Ties go
@@ -104,18 +121,12 @@ function startsWord(text: string, token: string): boolean {
 export function searchCatalogue(entries: readonly CatalogueEntry[], query: string, limit = 30): CatalogueEntry[] {
   const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (tokens.length === 0 || limit <= 0) return [];
-  const whole = tokens.join(' ');
 
   const ranked: { entry: CatalogueEntry; tier: number; name: string }[] = [];
   for (const entry of entries) {
     const name = entry.name.toLowerCase();
-    const haystack = `${name} ${entry.muscleGroup} ${entry.equipment}`;
-    if (!tokens.every((t) => haystack.includes(t))) continue;
-    let tier: number;
-    if (name.startsWith(whole)) tier = 0;
-    else if (tokens.every((t) => startsWord(name, t))) tier = 1;
-    else if (tokens.every((t) => name.includes(t))) tier = 2;
-    else tier = 3;
+    const tier = matchTier(tokens, name, `${name} ${entry.muscleGroup} ${entry.equipment}`);
+    if (tier === null) continue;
     ranked.push({ entry, tier, name });
   }
   ranked.sort((a, b) => a.tier - b.tier || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0) || (a.entry.slug < b.entry.slug ? -1 : 1));

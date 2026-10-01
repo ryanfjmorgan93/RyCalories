@@ -82,7 +82,8 @@ test.describe('Progress', () => {
     // Exercise detail: chart mode switches to e1RM and the records card shows a best.
     await page.goto('/exercises');
     await page.getByTestId('exercise-search').fill('Romanian Deadlift');
-    await page.getByRole('button', { name: /Romanian Deadlift/ }).click();
+    // The list now holds the library too, with other Romanian deadlifts in it; the owner's own is listed first.
+    await page.getByRole('button', { name: /Romanian Deadlift/ }).first().click();
     await expect(page.getByRole('heading', { name: 'Romanian Deadlift (Barbell)' })).toBeVisible();
     await page.getByTestId('chart-mode').getByRole('radio', { name: 'e1RM' }).click();
     await expect(page.getByTestId('chart-mode').getByRole('radio', { name: 'e1RM' })).toHaveAttribute('aria-checked', 'true');

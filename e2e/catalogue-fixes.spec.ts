@@ -1,16 +1,16 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { createRawIronDb, fresh, IRON_SCHEMA_V3 } from './fresh';
+import { createRawIronDb, fresh, IRON_SCHEMA_V3, readRawIron } from './fresh';
 
 /**
  * What the owner sees of the exercise catalogue where a review found it wrong, against the built
  * app and its real pictures and chunks (the catalogue's own behaviour is in catalogue.spec.ts):
  *
- *  - a catalogue photograph that is not 3:2 is shown whole, letterboxed, in the library rows, the
- *    Exercises list and the demo, while a diagram is drawn as it always was;
+ *  - a catalogue photograph that is not 3:2 is shown whole, letterboxed, in the Exercises list's
+ *    library rows and the owner's rows and in the demo, while a diagram is drawn as it always was;
  *  - an exercise whose catalogue key no longer has a picture shows a fallback, not a broken image;
- *  - the library says so when the catalogue could not be fetched, instead of "No matches".
+ *  - the Exercises list says so when the catalogue could not be fetched, instead of "No matches".
  *
  * Every wait is on something only the event under test can produce: the fallback's own test id, the
  * text the failure puts up, a counter on the aborted request. An absence is asserted only after
@@ -49,24 +49,30 @@ if (!odd) throw new Error('The committed catalogue has no entry whose first fram
 const plain = entries.find((e) => isThreeByTwo(e.slug));
 if (!plain) throw new Error('The committed catalogue has no 3:2 entry.');
 
-async function openLibrary(page: Page): Promise<void> {
+async function openExercises(page: Page): Promise<void> {
   await page.goto('/exercises');
-  await page.getByTestId('add-from-library').click();
-  await expect(page.getByTestId('library-search')).toBeVisible();
+  await expect(page.getByTestId('exercise-search')).toBeVisible();
+}
+
+/** The id of one of the owner's exercises, by name, read from the raw IndexedDB. */
+async function ownedId(page: Page, name: string): Promise<string> {
+  const row = ((await readRawIron(page)).tables.exercises as { id: string; name: string }[]).find((e) => e.name === name);
+  if (!row) throw new Error(`No exercise named ${name}`);
+  return row.id;
 }
 
 // ---------------------------------------------------------------------------
 // Pictures that are not 3:2
 
 test.describe('catalogue photographs that are not 3:2', () => {
-  test('the library rows and the Exercises list show the whole photograph, and a diagram is drawn as before', async ({ page }) => {
+  test('the library rows and the owner\'s rows show the whole photograph, and a diagram is drawn as before', async ({ page }) => {
     // Premise: the photograph really is not 3:2, so a fixed 3:2 box can only fit it by cutting it or by letterboxing it.
     expect(Math.abs(webpSize(frameFile(odd.slug, 1)).width / webpSize(frameFile(odd.slug, 1)).height - 1.5)).toBeGreaterThanOrEqual(0.05);
 
     await fresh(page);
-    await openLibrary(page);
-    await page.getByTestId('library-search').fill(odd.name);
-    const row = page.getByTestId(`library-cat:${odd.slug}`);
+    await openExercises(page);
+    await page.getByTestId('exercise-search').fill(odd.name);
+    const row = page.getByTestId(`exercise-row-cat:${odd.slug}`);
     const thumb = row.locator('img');
     // The row for this very entry is on screen, with its own frame, before its fit is read.
     await expect(thumb).toHaveAttribute('src', frameUrl(odd.slug, 1));
@@ -77,19 +83,21 @@ test.describe('catalogue photographs that are not 3:2', () => {
     expect(Math.abs(box!.width / box!.height - 1.5)).toBeLessThan(0.05);
 
     // Controls: line art has always been shown whole, and inverted for the light theme; a bundled square photograph fills its square.
-    await page.getByTestId('library-search').fill('arnold press');
-    const lineArt = page.getByTestId('library-arnold-press').locator('img');
+    // The neck photograph is the seeded Neck exercise's own picture, so it is the owner's row that shows it.
+    await page.getByTestId('exercise-search').fill('arnold press');
+    const lineArt = page.getByTestId('exercise-row-arnold-press').locator('img');
     await expect(lineArt).toHaveAttribute('src', /^\/exercises\/arnold-press\/1\.png$/);
     await expect(lineArt).toHaveCSS('object-fit', 'contain');
     await expect(lineArt).toHaveClass(/(^|\s)demo-frame(\s|$)/);
-    await page.getByTestId('library-search').fill('neck');
-    const neck = page.getByTestId('library-neck').locator('img');
+    await page.getByTestId('exercise-search').fill('neck');
+    const neck = page.getByTestId(`exercise-row-${await ownedId(page, 'Neck')}`).locator('img');
     await expect(neck).toHaveAttribute('src', /^\/exercises\/neck\/1\.png$/);
     await expect(neck).toHaveCSS('object-fit', 'cover');
 
-    // Added, it is in the Exercises list with the same whole-photograph thumbnail.
-    await page.getByTestId('library-search').fill(odd.name);
+    // Added from its preview, it is in the Exercises list with the same whole-photograph thumbnail.
+    await page.getByTestId('exercise-search').fill(odd.name);
     await thumb.click();
+    await page.getByTestId('library-add').click();
     await expect(page).toHaveURL(/\/exercises\/[0-9a-f-]{36}$/);
     await page.goto('/exercises');
     await page.getByTestId('exercise-search').fill(odd.name);
@@ -100,9 +108,13 @@ test.describe('catalogue photographs that are not 3:2', () => {
 
   test('the demo shows the whole photograph in its 3:2 box, and a diagram demo is drawn as before', async ({ page }) => {
     await fresh(page);
-    await openLibrary(page);
-    await page.getByTestId('library-search').fill(odd.name);
-    await page.getByTestId(`library-cat:${odd.slug}`).click();
+    await openExercises(page);
+    await page.getByTestId('exercise-search').fill(odd.name);
+    await page.getByTestId(`exercise-row-cat:${odd.slug}`).click();
+    // The preview is the same demo: the photograph whole, in the same box.
+    const preview = page.getByTestId('library-preview').getByTestId('demo-frame');
+    await expect(preview).toHaveCSS('object-fit', 'contain');
+    await page.getByTestId('library-add').click();
     await expect(page).toHaveURL(/\/exercises\/[0-9a-f-]{36}$/);
 
     const frame = page.getByTestId('demo-frame');
@@ -113,17 +125,17 @@ test.describe('catalogue photographs that are not 3:2', () => {
     const pause = await page.getByRole('button', { name: /^(Pause|Play)$/ }).boundingBox();
     expect(Math.abs(pause!.width / pause!.height - 1.5)).toBeLessThan(0.02);
 
-    // Controls: a bundled line drawing and a bundled square photograph.
-    await openLibrary(page);
-    await page.getByTestId('library-search').fill('bench press');
-    await page.getByTestId('library-bench-press').click();
+    // Controls: a bundled line drawing and a bundled square photograph, each the seeded exercise's own picture.
+    await openExercises(page);
+    await page.getByTestId('exercise-search').fill('bench press');
+    await page.getByTestId(`exercise-row-${await ownedId(page, 'Bench Press (Barbell)')}`).click();
     await expect(page).toHaveURL(/\/exercises\/[0-9a-f-]{36}$/);
     await expect(page.getByTestId('demo-frame')).toHaveAttribute('src', /^\/exercises\/bench-press\/\d\.png$/);
     await expect(page.getByTestId('demo-frame')).toHaveCSS('object-fit', 'contain');
 
-    await openLibrary(page);
-    await page.getByTestId('library-search').fill('neck');
-    await page.getByTestId('library-neck').click();
+    await openExercises(page);
+    await page.getByTestId('exercise-search').fill('neck');
+    await page.getByTestId(`exercise-row-${await ownedId(page, 'Neck')}`).click();
     await expect(page).toHaveURL(/\/exercises\/[0-9a-f-]{36}$/);
     await expect(page.getByTestId('demo-frame')).toHaveAttribute('src', /^\/exercises\/neck\/\d\.png$/);
     await expect(page.getByTestId('demo-frame')).toHaveCSS('object-fit', 'cover');
@@ -244,24 +256,26 @@ test.describe('the library when the catalogue cannot be fetched', () => {
     expect(diagrams.filter((d) => d.name.toLowerCase().includes(CATALOGUE_ONLY))).toEqual([]);
   });
 
-  test('From library says the library is unavailable, not "No matches", and still lists a diagram', async ({ page }) => {
+  test('Exercises says the library is unavailable, not "No matches", and still lists a diagram', async ({ page }) => {
     let aborted = 0;
     await page.route(CATALOGUE_CHUNK, (route) => {
       aborted++;
       return route.abort();
     });
     await fresh(page);
-    await openLibrary(page);
+    await openExercises(page);
 
-    await page.getByTestId('library-search').fill(CATALOGUE_ONLY);
+    // The counts line does not claim a total the catalogue would have made: it says it is not loaded.
+    await expect(page.getByTestId('exercise-counts')).toContainText('catalogue not loaded');
+    await page.getByTestId('exercise-search').fill(CATALOGUE_ONLY);
     await expect(page.getByText('Library unavailable')).toBeVisible();
     // The request really was refused, and the wrong statement is not on screen beside the right one.
     expect(aborted).toBeGreaterThan(0);
     await expect(page.getByText('No matches')).toHaveCount(0);
 
     // What the diagrams can answer is still answered, with nothing said about the library.
-    await page.getByTestId('library-search').fill('arnold press');
-    await expect(page.getByTestId('library-arnold-press')).toBeVisible();
+    await page.getByTestId('exercise-search').fill('arnold press');
+    await expect(page.getByTestId('exercise-row-arnold-press')).toBeVisible();
     await expect(page.getByText('Library unavailable')).toHaveCount(0);
     await expect(page.getByText('No matches')).toHaveCount(0);
   });
@@ -294,9 +308,9 @@ test.describe('the library when the catalogue cannot be fetched', () => {
       return route.continue();
     });
     await fresh(page);
-    await openLibrary(page);
+    await openExercises(page);
 
-    await page.getByTestId('library-search').fill('zzzz no such exercise');
+    await page.getByTestId('exercise-search').fill('zzzz no such exercise');
     await expect(page.getByText('No matches')).toBeVisible();
     expect(requested).toBeGreaterThan(0);
     await expect(page.getByText('Library unavailable')).toHaveCount(0);

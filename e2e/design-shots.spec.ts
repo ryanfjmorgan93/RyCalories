@@ -407,13 +407,12 @@ test('capture every screen for a design session', async ({ page, browser, contex
   await shot(page, 'exercise-editor-diagram');
   await page.keyboard.press('Escape');
 
-  // 29 The library picker's "From library" search open
+  // 29 The exercise picker with a search that reaches into the library
   await page.goto('/routines/144fdfb0-e94c-5661-a373-bf8085237abf');
   await page.getByTestId('add-exercise').click();
-  await page.getByTestId('from-library').click();
-  await expect(page.getByTestId('library-search')).toBeVisible();
-  await page.getByTestId('library-search').fill('curl');
-  await expect(page.locator('[data-testid^="library-"]').first()).toBeVisible();
+  await expect(page.getByTestId('picker-search')).toBeVisible();
+  await page.getByTestId('picker-search').fill('curl');
+  await expect(page.getByTestId('picker-list').getByTestId('library-label').first()).toBeVisible();
   await shot(page, 'library-picker');
 
   // 30 Settings scrolled to Plates / Progression / Assistant / About — the four sections together

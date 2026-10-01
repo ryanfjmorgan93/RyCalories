@@ -8,6 +8,12 @@ export interface MatchCandidate {
   id: string;
   name: string;
   aliases?: string[];
+  /**
+   * The candidate is a library entry the owner has not added yet, not one of their own exercises.
+   * At the same score an exercise of theirs beats a library entry, and a library entry never makes
+   * an answer ambiguous that one of their own settles.
+   */
+  library?: boolean;
 }
 
 export interface ExerciseMatch {
@@ -61,14 +67,23 @@ export function expandAbbreviations(s: string): string {
 
 const PARENTHETICAL_RE = /\([^()]*\)/g;
 
-/** Score `query` against one piece of candidate text, trying with and without parentheses. */
-function scoreAgainst(query: string, text: string): number {
-  const a = tokens(expandAbbreviations(query));
-  const b = tokens(expandAbbreviations(text));
-  const withParens = tokenScore(a, b);
-  const aStripped = tokens(expandAbbreviations(query.replace(PARENTHETICAL_RE, ' ')));
-  const bStripped = tokens(expandAbbreviations(text.replace(PARENTHETICAL_RE, ' ')));
-  const withoutParens = tokenScore(aStripped, bStripped);
+/** A query's words, read once with and without its parenthetical parts, so scoring it against hundreds of names does not re-read it for each. */
+interface QueryForms {
+  withParens: Set<string>;
+  withoutParens: Set<string>;
+}
+
+function queryForms(query: string): QueryForms {
+  return {
+    withParens: tokens(expandAbbreviations(query)),
+    withoutParens: tokens(expandAbbreviations(query.replace(PARENTHETICAL_RE, ' '))),
+  };
+}
+
+/** Score a query against one piece of candidate text, trying with and without parentheses. */
+function scoreAgainst(query: QueryForms, text: string): number {
+  const withParens = tokenScore(query.withParens, tokens(expandAbbreviations(text)));
+  const withoutParens = tokenScore(query.withoutParens, tokens(expandAbbreviations(text.replace(PARENTHETICAL_RE, ' '))));
   return Math.max(withParens, withoutParens);
 }
 
@@ -80,7 +95,7 @@ interface Scored {
 }
 
 /** Best score for a candidate: the best of its name and every alias. */
-function bestCandidateScore(query: string, candidate: MatchCandidate): Scored {
+function bestCandidateScore(query: QueryForms, candidate: MatchCandidate): Scored {
   const own = scoreAgainst(query, candidate.name);
   let best = own;
   for (const alias of candidate.aliases ?? []) {
@@ -93,11 +108,14 @@ function bestCandidateScore(query: string, candidate: MatchCandidate): Scored {
 const SCORE_EPSILON = 1e-9;
 
 /**
- * Higher score first; at the same score, a candidate matched on its own name beats one matched
- * only through an alias ("Curl" is a curl before it is Neck's "Neck Curl" alias).
+ * Higher score first; at the same score, one of the owner's exercises beats a library entry, and
+ * a candidate matched on its own name beats one matched only through an alias ("Curl" is a curl
+ * before it is Neck's "Neck Curl" alias).
  */
 function compare(a: Scored, b: Scored): number {
   if (Math.abs(a.score - b.score) > SCORE_EPSILON) return b.score - a.score;
+  const aLibrary = a.candidate.library === true;
+  if (aLibrary !== (b.candidate.library === true)) return aLibrary ? 1 : -1;
   if (a.ownName !== b.ownName) return a.ownName ? -1 : 1;
   return 0;
 }
@@ -121,7 +139,8 @@ export function matchExercise(name: string, candidates: MatchCandidate[]): Exerc
   // Fuzzy: a guess the owner confirms. When two different exercises are equally good answers
   // ("Calf raise" against Seated and Standing Calf Raise, "Press" against every press), no guess
   // is honest, so the row is left for the owner to choose instead of picking one by name length.
-  const fuzzy = candidates.map((c) => bestCandidateScore(name, c)).filter((s) => s.score > EXERCISE_MATCH_THRESHOLD);
+  const forms = queryForms(name);
+  const fuzzy = candidates.map((c) => bestCandidateScore(forms, c)).filter((s) => s.score > EXERCISE_MATCH_THRESHOLD);
   if (fuzzy.length === 0) return null;
   fuzzy.sort(compare);
   const [best, runnerUp] = fuzzy;

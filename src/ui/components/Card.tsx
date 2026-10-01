@@ -38,6 +38,7 @@ export function Row({
   right,
   className = '',
   dim,
+  testId,
 }: {
   onClick?: () => void;
   left?: ReactNode;
@@ -46,6 +47,8 @@ export function Row({
   right?: ReactNode;
   className?: string;
   dim?: boolean;
+  /** Put on the row's button (or on the row itself when it has no onClick). */
+  testId?: string;
 }) {
   const body = (
     <>
@@ -62,11 +65,11 @@ export function Row({
   return (
     <div className={`flex w-full items-center gap-3 pr-4 min-h-14 ${dim ? 'opacity-60' : ''} ${className}`}>
       {onClick ? (
-        <button type="button" onClick={onClick} className="flex min-h-14 min-w-0 flex-1 items-center gap-3 py-3 pl-4 text-left active:bg-surface-2">
+        <button type="button" onClick={onClick} data-testid={testId} className="flex min-h-14 min-w-0 flex-1 items-center gap-3 py-3 pl-4 text-left active:bg-surface-2">
           {body}
         </button>
       ) : (
-        <div className="flex min-h-14 min-w-0 flex-1 items-center gap-3 py-3 pl-4">{body}</div>
+        <div data-testid={testId} className="flex min-h-14 min-w-0 flex-1 items-center gap-3 py-3 pl-4">{body}</div>
       )}
       {right}
     </div>
