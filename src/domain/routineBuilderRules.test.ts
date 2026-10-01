@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { SEED_EXERCISE_IDS } from '../db/seed';
 import { cand, miniInput, seededInput, seedsFrom } from '../test/routineFixtures';
+import { MACRO_MUSCLES } from './quickRequest';
 import { MAX_NEW_EXERCISES, buildRoutines, type BuiltRoutine, type RoutineRequest } from './routineBuilder';
 import type { ContextRoutine, RoutineContext } from './routineContext';
 import { estimateMinutes } from './quickSession';
@@ -876,6 +877,9 @@ describe('reasons, word for word', () => {
     expect(r.reasonLines).toEqual([
       'Focus: shoulders and rear delts, as asked',
       'One exercise per movement: vertical press, lateral raise, front raise and rear fly',
+      'Order: main lifts, then isolation; the bigger muscle first in each',
+      'rear delts: sets raised from 3 to 4 (at least 9 sets for a muscle in a routine for it)',
+      'From the library, where your own exercises had nothing for the part: Front Raise',
       'Weights are your own working weights; new exercises have none yet',
       `About ${r.estimateMinutes} min at your pace`,
     ]);
@@ -914,5 +918,120 @@ describe('reasons, word for word', () => {
         }
       }
     }
+  });
+});
+
+describe('reasons for the rules that changed a prescription', () => {
+  const POOL = [
+    cand('DB Shoulder Press', 'shoulders', { compound: true, weight: 18 }),
+    cand('Lateral Raise', 'shoulders', { weight: 8 }),
+    cand('Front Raise', 'shoulders', { weight: 6 }),
+    cand('Upright Row (Barbell)', 'shoulders', { compound: true, equipment: 'barbell' }),
+    cand('Reverse Fly (Dumbbell)', 'shoulders'),
+    cand('Face Pull (Cable)', 'shoulders', { equipment: 'cable' }),
+  ];
+
+  it("says which exercises kept the owner's own sets and reps", () => {
+    const own = miniInput(POOL, { context: context({ routines: [routine('Mine', [['Lateral Raise', 'shoulders', 3, 12, 15], ['DB Shoulder Press', 'shoulders', 3, 6, 8]])] }) });
+    const r = one(buildRoutines(own, { focus: ['shoulders'], count: 3 }, 1));
+    const kept = r.rows.filter((x) => ['Lateral Raise', 'DB Shoulder Press'].includes(x.name)).map((x) => x.name);
+    expect(r.reasonLines).toContain(`Sets and reps as in your routines: ${kept.join(' and ')}`);
+    // Control: with no routine to take them from, there is nothing to say.
+    expect(one(buildRoutines(miniInput(POOL), { focus: ['shoulders'], count: 3 }, 1)).reasonLines.some((l) => l.startsWith('Sets and reps as in'))).toBe(false);
+  });
+
+  it('says when sets were cut to keep a muscle to what a routine for it holds, and from what', () => {
+    const r = one(buildRoutines(miniInput(POOL), { focus: ['shoulders'], count: 6 }, 1));
+    expect(r.reasonLines).toContain('shoulders: sets cut from 19 to 15 (at most 15 sets for a muscle in a routine for it)');
+    expect(r.rows.reduce((s, x) => s + x.sets, 0)).toBe(15);
+  });
+
+  it('says when sets were raised, for a day of a split', () => {
+    const pool = miniInput([cand('Bench Press (Barbell)', 'chest', { compound: true, equipment: 'barbell' }), cand('DB Shoulder Press', 'shoulders', { compound: true }), cand('Triceps Pushdown', 'triceps', { equipment: 'cable' })]);
+    const r = one(buildRoutines(pool, { focus: [], split: 'ppl', count: 3 }, 1));
+    expect(r.reasonLines).toContain('triceps: sets raised from 3 to 4 (at least 4 sets for a muscle in a day)');
+  });
+
+  it('says nothing about sets when none were moved', () => {
+    const r = one(buildRoutines(miniInput(POOL), { focus: ['shoulders'], count: 4 }, 1));
+    expect(r.reasonLines.some((l) => l.includes('sets raised') || l.includes('sets cut'))).toBe(false);
+  });
+
+  it('says where the library was used, and not when it was not', () => {
+    const lib = miniInput([...POOL.slice(0, 2), cand('Rear Delt Fly (Dumbbell)', 'shoulders', { library: true })]);
+    const r = one(buildRoutines(lib, { focus: ['shoulders'], count: 3 }, 1));
+    expect(r.reasonLines).toContain('From the library, where your own exercises had nothing for the part: Rear Delt Fly (Dumbbell)');
+    expect(one(buildRoutines(miniInput(POOL), { focus: ['shoulders'], count: 3 }, 1)).reasonLines.some((l) => l.startsWith('From the library'))).toBe(false);
+  });
+
+  it('says the order, from the tiers there are: a routine of isolation work alone has no main lift to name', () => {
+    const iso = miniInput([cand('Lateral Raise', 'shoulders'), cand('Front Raise', 'shoulders'), cand('Reverse Fly (Dumbbell)', 'shoulders')]);
+    expect(one(buildRoutines(iso, { focus: ['shoulders'], count: 3 }, 1)).reasonLines).toContain('Order: isolation');
+    expect(one(buildRoutines(miniInput(POOL), { focus: ['shoulders'], count: 4 }, 1)).reasonLines).toContain('Order: main lifts, then isolation');
+    // One exercise has no order to say.
+    expect(one(buildRoutines(miniInput(POOL), { focus: ['shoulders'], count: 1 }, 1)).reasonLines.some((l) => l.startsWith('Order:'))).toBe(false);
+  });
+});
+
+describe('rule: who has a part of a muscle, and which muscles get a share', () => {
+  it('a row is the upper back\'s before it is the lats\': two exercises for the back are a pulldown and a row, not a pulldown and a face pull', () => {
+    const pool = miniInput([
+      cand('Lat Pulldown (Machine)', 'lats', { compound: true, equipment: 'machine', weight: 80 }),
+      cand('Seated Cable Row', 'upper back', { compound: true, equipment: 'cable', weight: 60 }),
+      cand('Face Pull', 'upper back', { equipment: 'cable', weight: 20 }),
+    ]);
+    for (const seed of SEEDS_100) {
+      const r = one(buildRoutines(pool, { focus: ['lats', 'upper back'], count: 2 }, seed));
+      expect(names(r).sort(), `seed ${seed}`).toEqual(['Lat Pulldown (Machine)', 'Seated Cable Row']);
+    }
+  });
+
+  it('control: with the rear delts in the day the face pull is theirs, and the upper back keeps the row', () => {
+    const pool = miniInput([
+      cand('Lat Pulldown (Machine)', 'lats', { compound: true, equipment: 'machine', weight: 80 }),
+      cand('Seated Cable Row', 'upper back', { compound: true, equipment: 'cable', weight: 60 }),
+      cand('Face Pull', 'rear delts', { equipment: 'cable', weight: 20 }),
+    ]);
+    const r = one(buildRoutines(pool, { focus: ['lats', 'upper back', 'rear delts'], count: 3 }, 1));
+    expect(names(r).sort()).toEqual(['Face Pull', 'Lat Pulldown (Machine)', 'Seated Cable Row']);
+  });
+
+  it('a muscle whose share is too small for one exercise waits: the forearms are not in six exercises for the arms, and are in eight', () => {
+    const pool = miniInput([
+      cand('Incline DB Curl', 'biceps', { weight: 10 }),
+      cand('DB Curl', 'biceps', { weight: 12 }),
+      cand('Hammer Curl', 'biceps', { weight: 10 }),
+      cand('Cable Preacher Curl', 'biceps', { equipment: 'cable' }),
+      cand('Overhead Triceps Extension', 'triceps', { equipment: 'cable', weight: 20 }),
+      cand('Triceps Pushdown', 'triceps', { equipment: 'cable', weight: 25 }),
+      cand('Close-Grip Bench Press', 'triceps', { compound: true, equipment: 'barbell' }),
+      cand('Dip Machine', 'triceps', { compound: true, equipment: 'machine' }),
+      cand('Cable Wrist Curl', 'forearms', { equipment: 'cable' }),
+    ]);
+    for (const seed of SEEDS_100) {
+      const six = one(buildRoutines(pool, { focus: [...MACRO_MUSCLES.arms], count: 6 }, seed));
+      expect(six.rows.map((x) => x.muscleGroup), `seed ${seed}`).not.toContain('forearms');
+      expect(six.rows.filter((x) => x.muscleGroup === 'biceps')).toHaveLength(3);
+      expect(six.rows.filter((x) => x.muscleGroup === 'triceps')).toHaveLength(3);
+    }
+    const eight = one(buildRoutines(pool, { focus: [...MACRO_MUSCLES.arms], count: 8 }, 1));
+    expect(eight.rows.map((x) => x.muscleGroup)).toContain('forearms');
+    // Named on its own, the same muscle gets every exercise.
+    expect(names(one(buildRoutines(pool, { focus: ['forearms'], count: 3 }, 1)))).toEqual(['Cable Wrist Curl']);
+  });
+});
+
+describe('rule: library exercises a routine would not start with are drawn less', () => {
+  it('a neck press is drawn a seventh as often as a dumbbell bench press for the same part of the chest', () => {
+    const pool = miniInput([cand('Neck Press', 'chest', { library: true, compound: true, equipment: 'barbell' }), cand('Dumbbell Bench Press', 'chest', { library: true, compound: true })]);
+    const neck = SEEDS_400.filter((seed) => one(buildRoutines(pool, { focus: ['chest'], count: 1 }, seed)).rows[0]!.name === 'Neck Press').length;
+    expect(neck / SEEDS_400.length).toBeGreaterThan(0.05);
+    expect(neck / SEEDS_400.length).toBeLessThan(0.25);
+  });
+
+  it('control: the owner\'s own exercise is never put down for its name', () => {
+    const pool = miniInput([cand('Neck Press', 'chest', { compound: true, equipment: 'barbell' }), cand('Dumbbell Bench Press', 'chest', { compound: true })]);
+    const neck = SEEDS_400.filter((seed) => one(buildRoutines(pool, { focus: ['chest'], count: 1 }, seed)).rows[0]!.name === 'Neck Press').length;
+    expect(neck / SEEDS_400.length).toBeGreaterThan(0.4);
   });
 });

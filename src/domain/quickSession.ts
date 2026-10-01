@@ -366,10 +366,9 @@ export function generateQuickSession(input: QuickInput, options: QuickOptions, s
   const patternsTaken = new Set<string>();
 
   const weightedPick = (list: Candidate[]): Candidate => {
-    // A movement already in the plan is drawn far less often, but only while the list holds a movement
-    // that is not: when everything left is the same movement it is no use to penalise all of it.
-    const fresh = list.some((c) => !patternsTaken.has(patternOf.get(c.id)!));
-    const weights = list.map((c) => weightOf(c, light) * (fresh && patternsTaken.has(patternOf.get(c.id)!) ? PATTERN_PENALTY : 1));
+    // A movement already in the plan is drawn far less often than one that is not. When every one left
+    // is the same movement they are all scaled alike, so they share the pick as they would have.
+    const weights = list.map((c) => weightOf(c, light) * (patternsTaken.has(patternOf.get(c.id)!) ? PATTERN_PENALTY : 1));
     const own = list.reduce((s, c, i) => (c.origin === 'catalogue' ? s : s + weights[i]), 0);
     const cat = list.reduce((s, c, i) => (c.origin === 'catalogue' ? s + weights[i] : s), 0);
     // Never-done exercises are a garnish, not the meal: beside own ones, they share a fixed fraction.

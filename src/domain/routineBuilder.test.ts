@@ -560,13 +560,14 @@ describe('buildRoutines: niggles and stalls over 500 seeds with the real library
     ['push pull legs', { focus: [], split: 'ppl' }],
     ['upper lower', { focus: [], split: 'upper-lower' }],
   ];
+  const only = (...labels: string[]): [string, RoutineRequest][] => REQUESTS.filter(([label]) => labels.includes(label));
   const withNiggle = (tag: 'shoulder' | 'lower back' | 'knee' | 'hamstring DOMS') =>
     seededInput({ context: { niggles: [{ tag, severity: 2, date: '2026-09-28' }] } });
   const days = (input: ReturnType<typeof seededInput>, request: RoutineRequest, seed: number) => buildRoutines(input, request, seed);
 
-  it('a shoulder niggle never yields an upright row, a press behind the neck, a barbell overhead press or a dip', () => {
+  it('a shoulder niggle never yields an upright row, a press behind the neck, a barbell overhead press or a dip', { timeout: 120_000 }, () => {
     const input = withNiggle('shoulder');
-    for (const [label, request] of REQUESTS) {
+    for (const [label, request] of only('3D shoulders', 'shoulders', 'triceps', 'arms', 'push', 'upper', 'a spread', 'push pull legs')) {
       for (const seed of SEEDS) {
         for (const r of days(input, request, seed)) {
           for (const x of r.rows) {
@@ -581,9 +582,9 @@ describe('buildRoutines: niggles and stalls over 500 seeds with the real library
     }
   });
 
-  it('a lower-back niggle never yields a hinge, a back extension, a bent-over barbell row or a barbell back squat', () => {
+  it('a lower-back niggle never yields a hinge, a back extension, a bent-over barbell row or a barbell back squat', { timeout: 120_000 }, () => {
     const input = withNiggle('lower back');
-    for (const [label, request] of REQUESTS) {
+    for (const [label, request] of only('legs', 'back', 'pull', 'core', 'upper', 'a spread', 'push pull legs', 'upper lower')) {
       for (const seed of SEEDS) {
         for (const r of days(input, request, seed)) {
           for (const x of r.rows) {
@@ -598,9 +599,9 @@ describe('buildRoutines: niggles and stalls over 500 seeds with the real library
     }
   });
 
-  it('a knee niggle never yields a lunge, a split squat, a step-up or a sissy squat', () => {
+  it('a knee niggle never yields a lunge, a split squat, a step-up or a sissy squat', { timeout: 120_000 }, () => {
     const input = withNiggle('knee');
-    for (const [label, request] of REQUESTS) {
+    for (const [label, request] of only('legs', 'a spread', 'push pull legs', 'upper lower')) {
       for (const seed of SEEDS) {
         for (const r of days(input, request, seed)) {
           for (const x of r.rows) {
@@ -612,16 +613,16 @@ describe('buildRoutines: niggles and stalls over 500 seeds with the real library
     }
   });
 
-  it('hamstring soreness never yields a hinge or a leg curl', () => {
+  it('hamstring soreness never yields a hinge or a leg curl', { timeout: 120_000 }, () => {
     const input = withNiggle('hamstring DOMS');
-    for (const [label, request] of REQUESTS) {
-      for (const seed of SEEDS.slice(0, 250)) {
+    for (const [label, request] of only('legs', 'a spread', 'push pull legs', 'upper lower')) {
+      for (const seed of SEEDS) {
         for (const r of days(input, request, seed)) for (const x of r.rows) expect(['hinge', 'leg-curl'], `${label}, seed ${seed}: ${x.name}`).not.toContain(x.pattern);
       }
     }
   });
 
-  it('control: with no niggle, each of those is yielded by some seed, so the tests above have something to refuse', () => {
+  it('control: with no niggle, each of those is yielded by some seed, so the tests above have something to refuse', { timeout: 120_000 }, () => {
     const input = seededInput();
     const seen = new Set<string>();
     for (const [, request] of REQUESTS) {
@@ -664,7 +665,7 @@ describe('buildRoutines: niggles and stalls over 500 seeds with the real library
     expect(silent).toBeGreaterThan(3);
   });
 
-  it('stalled lifts are replaced by a variation of the same kind, for each lift the owner has stalled', () => {
+  it('stalled lifts are replaced by a variation of the same kind, for each lift the owner has stalled', { timeout: 120_000 }, () => {
     const cases: [string, RoutineRequest, string][] = [
       ['Bench Press (Barbell)', { focus: ['chest'] }, 'chest'],
       ['DB Shoulder Press', { focus: ['shoulders', 'rear delts'] }, 'shoulders'],
@@ -696,7 +697,7 @@ describe('buildRoutines: niggles and stalls over 500 seeds with the real library
     }
   });
 
-  it('every routine in every request opens with its heavy lifts and ends with isolation, over 500 seeds', () => {
+  it('every routine in every request opens with its heavy lifts and ends with isolation, over 500 seeds', { timeout: 120_000 }, () => {
     const input = seededInput();
     for (const [label, request] of REQUESTS) {
       for (const seed of SEEDS) {

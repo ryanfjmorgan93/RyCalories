@@ -729,10 +729,14 @@ function buildDay(sh: Shared, day: DaySpec, rng: () => number): BuiltRoutine {
   });
 
   // --- Sets per muscle stay sensible: one or two muscles named give each 9 to 15, a day of a split or a spread 4 to 9.
-  const [lo, hi] = day.kind === 'typed' && (day.asked?.length ?? 0) <= 2 ? NAMED_WINDOW : DAY_WINDOW;
+  const narrow = day.kind === 'typed' && (day.asked?.length ?? 0) <= 2;
+  const [lo, hi] = narrow ? NAMED_WINDOW : DAY_WINDOW;
+  const scope = narrow ? 'a routine for it' : 'a day';
+  const setsLines: string[] = [];
   for (const m of new Set(works.map((w) => w.pick.info.c.muscleGroup))) {
     const mine = works.filter((w) => w.pick.info.c.muscleGroup === m);
     const total = () => mine.reduce((s, w) => s + w.sets, 0);
+    const before = total();
     while (total() < lo) {
       const row = mine.find((w) => !w.own && w.sets < MAX_SETS);
       if (!row) break;
@@ -743,6 +747,9 @@ function buildDay(sh: Shared, day: DaySpec, rng: () => number): BuiltRoutine {
       if (!row) break;
       row.sets--;
     }
+    const after = total();
+    if (after > before) setsLines.push(`${m}: sets raised from ${before} to ${after} (at least ${lo} sets for a muscle in ${scope})`);
+    if (after < before) setsLines.push(`${m}: sets cut from ${before} to ${after} (at most ${hi} sets for a muscle in ${scope})`);
   }
 
   // --- Time: a duration asked for trims finishers first, and never the main lift.
@@ -820,6 +827,10 @@ function buildDay(sh: Shared, day: DaySpec, rng: () => number): BuiltRoutine {
   for (const p of repeats) {
     lines.push(`A second ${patternLabel(p.info.pattern)}, ${p.info.c.name}: nothing else left for ${p.info.c.muscleGroup} in your exercises or the library`);
   }
+  if (rows.length > 1) {
+    const tiers = (['primary', 'secondary', 'isolation'] as const).filter((t) => rows.some((r) => r.tier === t)).map((t) => (t === 'primary' ? 'main lifts' : t === 'secondary' ? 'secondary lifts' : 'isolation'));
+    lines.push(`Order: ${tiers.join(', then ')}${present.length > 1 ? '; the bigger muscle first in each' : ''}`);
+  }
 
   for (const tag of NIGGLE_ORDER) {
     if (!sh.niggleTags.has(tag) || !removedBy.has(tag)) continue;
@@ -851,7 +862,14 @@ function buildDay(sh: Shared, day: DaySpec, rng: () => number): BuiltRoutine {
     );
   }
 
+  const kept = works.filter((w) => w.own).map((w) => w.pick.info.c.name);
+  if (kept.length > 0) lines.push(`Sets and reps as in your routines: ${joinList(kept)}`);
+  lines.push(...setsLines);
+
   if (dropped.length > 0) lines.push(`Dropped ${joinList(dropped.map((w) => w.pick.info.c.name))} to come nearer the ${asked} min asked`);
+
+  const fromLibrary = rows.filter((r) => r.origin === 'catalogue').map((r) => r.name);
+  if (fromLibrary.length > 0) lines.push(`From the library, where your own exercises had nothing for the part: ${joinList(fromLibrary)}`);
 
   if (rows.some((r) => r.origin === 'catalogue')) lines.push('Weights are your own working weights; new exercises have none yet');
   else if (rows.some((r) => r.weightKg === null)) lines.push('Weights are your own working weights; exercises with none logged have none yet');

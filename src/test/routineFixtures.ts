@@ -6,7 +6,7 @@
  * built through the same `buildQuickInput` the app uses. `cand` and `miniInput` make small
  * hand-built pools, for tests where one rule has to be seen changing the outcome.
  */
-import catalogueJson from '../data/exerciseCatalogue.json';
+import { readFileSync } from 'node:fs';
 import { SEED_EXERCISES, SEED_ROUTINES, SEED_ROUTINE_EXERCISES } from '../db/seed';
 import type { CatalogueEntry } from '../domain/catalogue';
 import { buildQuickInput } from '../domain/quickInput';
@@ -18,7 +18,8 @@ import { DEFAULT_SETTINGS, type Equipment, type Exercise, type MuscleGroup, type
 export const TODAY = '2026-10-01';
 const CREATED = '2026-01-01T09:00:00.000Z';
 
-export const CATALOGUE = catalogueJson as CatalogueEntry[];
+/** The real catalogue, read from disk as the data file it is. */
+export const CATALOGUE = JSON.parse(readFileSync(new URL('../data/exerciseCatalogue.json', import.meta.url), 'utf8')) as CatalogueEntry[];
 
 export const SETTINGS: Settings = { ...DEFAULT_SETTINGS, id: 'settings', createdAt: CREATED };
 
