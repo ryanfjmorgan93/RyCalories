@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { expectClass, fresh, readRawIron } from './fresh';
+import { clickIfPresent, expectClass, fresh, readRawIron } from './fresh';
 
 /**
  * The whole exercise library on show (src/screens/ExercisesScreen.tsx, src/ui/ExercisePicker.tsx,
@@ -233,6 +233,14 @@ test.describe('the Exercises screen', () => {
     // Looking is not adding.
     expect((await exercisesInDb(page)).filter((e) => e.demo === key)).toHaveLength(0);
 
+    // Escape (what the Android back gesture sends) closes the preview and nothing else: still on the list, nothing added.
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('library-preview')).toHaveCount(0);
+    await expect(page).toHaveURL(/\/exercises$/);
+    expect((await exercisesInDb(page)).filter((e) => e.demo === key)).toHaveLength(0);
+    await page.getByTestId(`exercise-row-${key}`).click();
+    await expect(page.getByTestId('library-preview')).toBeVisible();
+
     await page.getByTestId('library-add').click();
     await expect(page).toHaveURL(/\/exercises\/[0-9a-f-]{36}$/);
     const id = page.url().split('/').pop()!;
@@ -324,6 +332,27 @@ test.describe("a routine's exercise picker", () => {
     const rx = (raw.tables.routineExercises as { exerciseId: string; routineId: string }[]).filter((r) => r.exerciseId === made[0]!.id);
     expect(rx).toHaveLength(1);
     expect(rx[0]!.routineId).toBe(routine);
+  });
+
+  test("a live session's Add exercise takes a library exercise in one tap", async ({ page }) => {
+    await fresh(page);
+    const owned = await exercisesInDb(page);
+    const entry = libraryEntries(owned, 'rear delts')[0]!;
+    const key = keyOf(entry);
+    await page.getByTestId('start-Upper (Push)').click();
+    await clickIfPresent(page.getByRole('button', { name: 'Start anyway' }));
+    await expect(page).toHaveURL(/\/session\//);
+
+    await page.getByRole('button', { name: 'Add exercise', exact: true }).click();
+    const picker = page.getByRole('dialog');
+    await picker.getByTestId('picker-search').fill(entry.name);
+    await picker.getByTestId(`pick-${key}`).click();
+    // The card is what only this pick can produce.
+    await expect(page.getByTestId(`exercise-card-${entry.name}`)).toBeVisible();
+    const made = (await exercisesInDb(page)).filter((e) => e.demo === key);
+    expect(made).toHaveLength(1);
+    expect(made[0]!.name).toBe(entry.name);
+    expect(await exercisesInDb(page)).toHaveLength(owned.length + 1);
   });
 
   test('lists the owner\'s exercises ahead of the library, unlabelled, and leaves out what the routine already has', async ({ page }) => {

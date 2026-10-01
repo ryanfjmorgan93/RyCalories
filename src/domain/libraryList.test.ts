@@ -176,6 +176,17 @@ describe('filterExerciseList', () => {
     expect(names(filterExerciseList(rows, { query: 'mobility' }))).toEqual(['Cat Cow']);
   });
 
+  it('finds a row through its equipment or its muscle alone, after the rows whose name has the word', () => {
+    const list = buildExerciseList({
+      owned: [owned('o', 'Goblet Squat', { muscleGroup: 'quads', equipment: 'kettlebell' })],
+      demos: [demo('swing', 'Swing', { equipment: 'Kettlebell', muscleGroup: 'glutes' }), demo('rack', 'Kettlebell Row', { equipment: 'Dumbbell', muscleGroup: 'lats' })],
+      entries: [entry('windmill', 'Windmill', { equipment: 'kettlebell', muscleGroup: 'abs' })],
+    });
+    // "Kettlebell Row" has the word in its name, so it is first of the library; the others are found by their equipment.
+    expect(names(filterExerciseList(list, { query: 'kettlebell' }))).toEqual(['Goblet Squat', 'Kettlebell Row', 'Swing', 'Windmill']);
+    expect(names(filterExerciseList(list, { query: 'glutes' }))).toEqual(['Swing']);
+  });
+
   it('finds an owned exercise by one of its aliases', () => {
     expect(names(filterExerciseList(rows, { query: 'flat' }))).toEqual(['Bench Press']);
   });

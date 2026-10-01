@@ -9,7 +9,7 @@ import { catalogueDemoKey, LOWER_BODY_GROUPS, matchTier, type CatalogueEntry } f
 import { normaliseName } from './exerciseMatch';
 import { MUSCLE_GROUPS, type Equipment, type Exercise, type MuscleGroup } from './types';
 
-/** What the library sheet shows at most, diagrams and catalogue together. */
+/** What the exercise form's diagram picker shows at most, diagrams and catalogue together. */
 export const LIBRARY_RESULT_CAP = 30;
 
 /** The parts of a bundled diagram entry that make an Exercise. */
