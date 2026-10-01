@@ -156,6 +156,44 @@ function cleanName(s: string): string {
   return cur;
 }
 
+/**
+ * A parenthetical that is a note about the set ("(each side)", "(3 sec pause)", "(optional)"), not
+ * a qualifier of the exercise ("(Barbell)", "(Machine)", "(Weighted)").
+ */
+const NOTE_PAREN_RE = /\b(?:each|per|every)\b|\brpe\b|\brir\b|\brest\b|\btempo\b|\bamrap\b|\bfailure\b|\boptional\b|\bwarm|\bsuperset\b|\d/i;
+
+/** Stand-ins for a name's own qualifier while the trailing-note patterns run; they hold no character those patterns look for. */
+const PAREN_OPEN = '\u0001';
+const PAREN_CLOSE = '\u0002';
+const DASH_QUALIFIER = '\u0003';
+
+/**
+ * What stands before a line's sets and reps is the exercise's name, and a qualifier at the end of it
+ * is part of the name: "Bench Press (Barbell) 4x6-8" and "Triceps Pushdown - V-Bar Attachment 3x12"
+ * are those exercises, not a bench press with a note. The notes this module strips are the ones that
+ * come after the numbers ("3x12 (each side)", "3x10 - go heavy"), or that read as one: a parenthetical
+ * about a set, or a dash and a lower-case remark. Returns the text with the qualifier set aside and
+ * the way to put it back.
+ */
+function setAsideQualifier(before: string): { text: string; restore: (name: string) => string } {
+  const trimmed = before.replace(/\s+$/, '');
+  const paren = /\s*\(([^()]*)\)$/.exec(trimmed);
+  if (paren && !NOTE_PAREN_RE.test(paren[1]!)) {
+    return { text: `${trimmed.slice(0, paren.index)} ${PAREN_OPEN}${paren[1]}${PAREN_CLOSE}`, restore: restoreQualifier };
+  }
+  const dash = /\s+-\s+([A-Z][^()]*)$/.exec(trimmed);
+  if (dash) return { text: `${trimmed.slice(0, dash.index)} ${DASH_QUALIFIER}${dash[1]}`, restore: restoreQualifier };
+  return { text: before, restore: (name) => name };
+}
+
+function restoreQualifier(name: string): string {
+  return name
+    .replace(new RegExp(`\\s*${PAREN_OPEN}([^${PAREN_CLOSE}]*)${PAREN_CLOSE}`), ' ($1)')
+    .replace(new RegExp(`\\s*${DASH_QUALIFIER}`), ' - ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 interface ExtractedLine {
   hasNumbers: boolean;
   sets?: number;
@@ -197,8 +235,9 @@ function extractLine(normalized: string): ExtractedLine {
     const scale = minutes ? 60 : 1;
     const repMin = Math.round(toNumber(m[2]!) * scale);
     const repMax = m[3] !== undefined ? Math.round(toNumber(m[3]) * scale) : repMin;
-    const rest = s.slice(0, m.index) + ' ' + s.slice(m.index + m[0].length);
-    const result: ExtractedLine = { hasNumbers: true, sets: Number(m[1]), repMin, repMax, name: cleanName(stripLeftoverNumbers(rest)) };
+    const aside = setAsideQualifier(s.slice(0, m.index));
+    const rest = aside.text + ' ' + s.slice(m.index + m[0].length);
+    const result: ExtractedLine = { hasNumbers: true, sets: Number(m[1]), repMin, repMax, name: aside.restore(cleanName(stripLeftoverNumbers(rest))) };
     if (m[4] !== undefined || minutes) result.seconds = true;
     if (weightKg !== undefined) result.weightKg = weightKg;
     return result;
@@ -206,8 +245,9 @@ function extractLine(normalized: string): ExtractedLine {
 
   const open = OPEN_REPS_RE.exec(s);
   if (open) {
-    const rest = s.slice(0, open.index) + ' ' + s.slice(open.index + open[0].length);
-    const result: ExtractedLine = { hasNumbers: true, sets: Number(open[1]), name: cleanName(stripLeftoverNumbers(rest)) };
+    const aside = setAsideQualifier(s.slice(0, open.index));
+    const rest = aside.text + ' ' + s.slice(open.index + open[0].length);
+    const result: ExtractedLine = { hasNumbers: true, sets: Number(open[1]), name: aside.restore(cleanName(stripLeftoverNumbers(rest))) };
     if (weightKg !== undefined) result.weightKg = weightKg;
     return result;
   }
