@@ -79,6 +79,11 @@ export function ExercisePicker({
   return (
     <Sheet open={open} onClose={onClose} title={title}>
       <TextInput value={q} onChange={setQ} placeholder="Search" testId="picker-search" />
+      {status === 'failed' && (
+        <div className="mt-2 px-1 text-sm text-muted" data-testid="picker-status">
+          Catalogue not loaded
+        </div>
+      )}
       <div className="mt-3 max-h-[55dvh] overflow-y-auto rounded-xl border border-line" data-testid="picker-list">
         {visible.map((row) => (
           <button
@@ -98,7 +103,7 @@ export function ExercisePicker({
           </button>
         ))}
         {more && <MoreRows sentinelRef={sentinelRef} onMore={loadMore} />}
-        {list.length === 0 && <div className="px-4 py-6 text-center text-sm text-muted">{status === 'failed' ? 'Library unavailable' : status === 'loading' ? 'Loading…' : 'No matches'}</div>}
+        {list.length === 0 && <div className="px-4 py-6 text-center text-sm text-muted">{status === 'loading' ? 'Loading…' : 'No matches'}</div>}
       </div>
       {onCreate && (
         <div className="mt-3 grid gap-2">

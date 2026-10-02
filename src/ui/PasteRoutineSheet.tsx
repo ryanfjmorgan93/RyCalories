@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { saveParsedRoutines, type ImportChoice, type ImportRow } from '@/db/routineImport';
-import { matchExercise, normaliseName, type ExerciseMatch, type MatchCandidate } from '@/domain/exerciseMatch';
+import { keepsNumbers, kindOfChoice, saveParsedRoutines, type ImportChoice, type ImportRow } from '@/db/routineImport';
+import { matchExercise, normaliseName, type ExerciseMatch } from '@/domain/exerciseMatch';
 import { fmtNum, fmtRange } from '@/domain/format';
-import { findExistingExercise, type ExerciseListRow } from '@/domain/library';
+import { candidatesFromRows, CATALOGUE_NOT_LOADED, findExistingExercise, type ExerciseListRow } from '@/domain/library';
 import { parseRoutineText, type ParsedRoutineLine } from '@/domain/routineText';
 import { Button } from './components/Button';
 import { Card, Divider } from './components/Card';
@@ -68,7 +68,7 @@ export function PasteRoutineSheet({
   title?: string;
 }) {
   const nav = useNavigate();
-  const { rows: listRows, exercises } = useLibrary(open);
+  const { rows: listRows, exercises, status } = useLibrary(open);
   const [text, setText] = useState(initialText ?? '');
   // Each time the sheet opens on a different draft, start from that draft.
   useEffect(() => {
@@ -84,7 +84,7 @@ export function PasteRoutineSheet({
   // Their exercises and every library entry they have not added, as one pool. A name is looked up
   // once per pool, not once per keystroke: the library is some eight hundred names.
   const matcher = useMemo(() => {
-    const candidates: MatchCandidate[] = listRows.map((r) => ({ id: r.key, name: r.name, aliases: r.exercise?.aliases, library: !r.owned }));
+    const candidates = candidatesFromRows(listRows);
     const byKey = new Map(listRows.map((r) => [r.key, r] as const));
     const cache = new Map<string, ExerciseMatch | null>();
     return (name: string): ImportChoice | undefined => {
@@ -125,6 +125,8 @@ export function PasteRoutineSheet({
   }, [parsed, matcher, overrides, preMatched, known]);
   const total = rows.reduce((n, r) => n + r.length, 0);
   const pending = rows.reduce((n, r) => n + r.filter((row) => !row.choice).length, 0);
+  // The names are matched against the library, so a catalogue that did not arrive is said once there is something to match.
+  const catalogueMissing = status === 'failed' && total > 0;
 
   const reset = () => {
     setText('');
@@ -193,9 +195,13 @@ export function PasteRoutineSheet({
       >
         <TextInput multiline value={text} onChange={setText} placeholder={'Upper A\nBench press 4x6-8 @ 80kg\nLat pulldown 3x10-12'} testId="paste-text" />
 
-        {(pending > 0 || parsed.ignored.length > 0) && (
+        {(pending > 0 || parsed.ignored.length > 0 || catalogueMissing) && (
           <div className="mt-2 px-1 text-sm text-muted" data-testid="paste-facts">
-            {[pending > 0 ? `${fmtNum(pending)} to choose` : '', parsed.ignored.length > 0 ? `${fmtNum(parsed.ignored.length)} ${parsed.ignored.length === 1 ? 'line' : 'lines'} not used` : '']
+            {[
+              pending > 0 ? `${fmtNum(pending)} to choose` : '',
+              parsed.ignored.length > 0 ? `${fmtNum(parsed.ignored.length)} ${parsed.ignored.length === 1 ? 'line' : 'lines'} not used` : '',
+              catalogueMissing ? CATALOGUE_NOT_LOADED : '',
+            ]
               .filter(Boolean)
               .join(' · ')}
           </div>
@@ -214,6 +220,9 @@ export function PasteRoutineSheet({
                 const matched = row.choice !== undefined && row.choice.kind !== 'new';
                 const renamed = matched && name.toLowerCase() !== row.line.name.toLowerCase();
                 const fromLibrary = row.choice?.kind === 'catalogue' || row.choice?.kind === 'demo';
+                // Seconds are only kept by a timed exercise: say so when the line's numbers will not be written.
+                const kind = row.choice ? kindOfChoice(row.choice, row.line, byId) : undefined;
+                const notUsed = kind !== undefined && row.line.repMin !== undefined && !keepsNumbers(row.line, kind);
                 return (
                   <div key={row.key}>
                     {ei > 0 && <Divider />}
@@ -227,6 +236,7 @@ export function PasteRoutineSheet({
                         </div>
                         <div className="mt-0.5 truncate text-sm text-muted">
                           {prescription(row.line)}
+                          {notUsed ? ` · ${fmtRange(row.line.repMin!, row.line.repMax ?? row.line.repMin!, 's')} not used` : ''}
                           {renamed ? ` · from “${row.line.name}”` : ''}
                           {row.choice?.kind === 'new' ? ' · new exercise' : ''}
                         </div>

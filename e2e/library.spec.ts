@@ -296,7 +296,186 @@ test.describe('the Exercises screen', () => {
   });
 });
 
+const backButton = (page: Page) => page.getByRole('button', { name: 'Back', exact: true });
+
+/** Scroll the page to its end and report how many rows are drawn: the count can only grow because a page was drawn. */
+async function scrollListToEnd(page: Page): Promise<number> {
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  return rowsOf(page).count();
+}
+
+test.describe('the Exercises screen keeps its place', () => {
+  test('going back to All from Yours starts the list again at its first page, not at the page it had reached', async ({ page }) => {
+    await fresh(page);
+    const owned = await exercisesInDb(page);
+    await openExercises(page, owned);
+    const rows = rowsOf(page);
+
+    // Draw several pages, so the page count to be forgotten is not the first.
+    await expect.poll(() => scrollListToEnd(page), { intervals: [150], timeout: 30_000 }).toBeGreaterThan(180);
+    await page.getByTestId('exercise-scope-yours').click();
+    await expect(rows).toHaveCount(owned.length);
+    await page.getByTestId('exercise-scope-all').click();
+    // Only the first page: the count before the toggle was far above it and the count between was 27.
+    await expect(rows).toHaveCount(60);
+  });
+
+  test('after Add and Back the list is where it was: the same scroll, the same drawn rows', async ({ page }) => {
+    await fresh(page);
+    const owned = await exercisesInDb(page);
+    await openExercises(page, owned);
+    const rows = rowsOf(page);
+    await expect.poll(() => scrollListToEnd(page), { intervals: [150], timeout: 30_000 }).toBeGreaterThan(180);
+
+    // A library row well down the list, scrolled to.
+    const target = rows.nth(150);
+    await target.scrollIntoViewIfNeeded();
+    const before = await page.evaluate(() => window.scrollY);
+    const drawn = await rows.count();
+    // Premise: this is a deep position, so a list that came back at the top is plainly wrong.
+    expect(before).toBeGreaterThan(3000);
+
+    await target.click();
+    await page.getByTestId('library-add').click();
+    await expect(page).toHaveURL(/\/exercises\/[0-9a-f-]{36}$/);
+    await backButton(page).click();
+    await expect(page).toHaveURL(/\/exercises$/);
+
+    // The scroll position comes back (one row moved up into the owner's own rows, so not to the pixel),
+    // and the rows that were drawn are drawn again. Neither can be true before the list has been restored:
+    // a fresh list is at the top with 60 rows.
+    await expect.poll(async () => Math.abs((await page.evaluate(() => window.scrollY)) - before)).toBeLessThan(200);
+    // At least the pages that were drawn when the page was read: more may have been drawn by the time Add was tapped.
+    await expect.poll(() => rows.count()).toBeGreaterThanOrEqual(drawn);
+  });
+
+  test('after Add and Back the search, the muscle chip and the scope are as they were', async ({ page }) => {
+    await fresh(page);
+    const owned = await exercisesInDb(page);
+    const entry = libraryEntries(owned, 'rear delts')[0]!;
+    await openExercises(page, owned);
+
+    const chip = page.getByRole('button', { name: 'rear delts', exact: true });
+    await chip.click();
+    await expectClass(chip, 'bg-fg');
+    await page.getByTestId('exercise-search').fill(entry.name);
+    await page.getByTestId(`exercise-row-${keyOf(entry)}`).click();
+    await page.getByTestId('library-add').click();
+    await expect(page).toHaveURL(/\/exercises\/[0-9a-f-]{36}$/);
+    const id = page.url().split('/').pop()!;
+    await backButton(page).click();
+    await expect(page).toHaveURL(/\/exercises$/);
+
+    // The filters are what was left, and what they show is the exercise just added, now the owner's.
+    await expect(page.getByTestId('exercise-search')).toHaveValue(entry.name);
+    await expectClass(page.getByRole('button', { name: 'rear delts', exact: true }), 'bg-fg');
+    await expectClass(page.getByRole('button', { name: 'All', exact: true }), 'bg-fg', false);
+    await expect(page.getByTestId('exercise-scope-all')).toHaveAttribute('aria-checked', 'true');
+    await expect(page.getByTestId(`exercise-row-${id}`)).toBeVisible();
+  });
+
+  test('Yours, a chip and a search come back after opening one of the owner\'s own exercises and going back', async ({ page }) => {
+    await fresh(page);
+    const owned = await exercisesInDb(page);
+    const curl = owned.find((e) => e.name === 'Hammer Curl')!;
+    await openExercises(page, owned);
+
+    await page.getByTestId('exercise-scope-yours').click();
+    await expect(page.getByTestId('exercise-scope-yours')).toHaveAttribute('aria-checked', 'true');
+    const chip = page.getByRole('button', { name: 'biceps', exact: true });
+    await chip.click();
+    await expectClass(chip, 'bg-fg');
+    await page.getByTestId('exercise-search').fill('curl');
+    const rows = rowsOf(page);
+    await expect(page.getByTestId(`exercise-row-${curl.id}`)).toBeVisible();
+    const listed = await rows.count();
+    expect(listed).toBeGreaterThan(0);
+
+    await page.getByTestId(`exercise-row-${curl.id}`).click();
+    await expect(page).toHaveURL(new RegExp(`/exercises/${curl.id}$`));
+    await backButton(page).click();
+    await expect(page).toHaveURL(/\/exercises$/);
+
+    await expect(page.getByTestId('exercise-scope-yours')).toHaveAttribute('aria-checked', 'true');
+    await expectClass(page.getByRole('button', { name: 'biceps', exact: true }), 'bg-fg');
+    await expect(page.getByTestId('exercise-search')).toHaveValue('curl');
+    await expect(rows).toHaveCount(listed);
+  });
+
+  test('a visit that did not leave through an exercise starts clean, with nothing kept from the last', async ({ page }) => {
+    await fresh(page);
+    await page.goto('/routines');
+    await page.getByText('Exercise library').click();
+    await expect(page).toHaveURL(/\/exercises$/);
+    const chip = page.getByRole('button', { name: 'rear delts', exact: true });
+    await chip.click();
+    await expectClass(chip, 'bg-fg');
+    await page.getByTestId('exercise-search').fill('fly');
+    await page.getByTestId('exercise-scope-yours').click();
+    await expect(page.getByTestId('exercise-scope-yours')).toHaveAttribute('aria-checked', 'true');
+
+    // Out by the top bar, and in again.
+    await backButton(page).click();
+    await expect(page).toHaveURL(/\/routines$/);
+    await page.getByText('Exercise library').click();
+    await expect(page).toHaveURL(/\/exercises$/);
+
+    await expectClass(page.getByRole('button', { name: 'All', exact: true }), 'bg-fg');
+    await expectClass(page.getByRole('button', { name: 'rear delts', exact: true }), 'bg-fg', false);
+    await expect(page.getByTestId('exercise-search')).toHaveValue('');
+    await expect(page.getByTestId('exercise-scope-all')).toHaveAttribute('aria-checked', 'true');
+  });
+});
+
 test.describe("a routine's exercise picker", () => {
+  test('is drawn a page at a time as it is scrolled, from the first page, with no tap on More', async ({ page }) => {
+    await fresh(page);
+    const routine = await routineId(page, 'Upper (Push)');
+    await page.goto(`/routines/${routine}`);
+    await page.getByTestId('add-exercise').click();
+    const picker = page.getByRole('dialog');
+    const rows = picker.locator('[data-testid^="pick-"]');
+    // The first page, and a list longer than it: the owner's 27 and every diagram come to more than 60.
+    await expect(rows).toHaveCount(60);
+    await expect(picker.getByTestId('exercise-more')).toBeVisible();
+
+    // Scrolling the list to its end brings the next page, and the next. Each poll scrolls first and then
+    // counts, so the count can only pass 60 because a page was drawn; nothing taps More.
+    const list = picker.getByTestId('picker-list');
+    const scrollToEnd = async () => {
+      await list.evaluate((el) => {
+        el.scrollTop = el.scrollHeight;
+      });
+      return rows.count();
+    };
+    await expect.poll(scrollToEnd, { intervals: [150], timeout: 20_000 }).toBeGreaterThan(60);
+    await expect.poll(scrollToEnd, { intervals: [150], timeout: 20_000 }).toBeGreaterThan(120);
+    // Nothing is drawn twice.
+    const keys = await rows.evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  test('draws the next page before the end of the list is reached, not when the last row is already on screen', async ({ page }) => {
+    await fresh(page);
+    const routine = await routineId(page, 'Upper (Push)');
+    await page.goto(`/routines/${routine}`);
+    await page.getByTestId('add-exercise').click();
+    const picker = page.getByRole('dialog');
+    const rows = picker.locator('[data-testid^="pick-"]');
+    await expect(rows).toHaveCount(60);
+
+    // Each poll stops 400px short of the end of the list as it is then, so the sentinel after the last
+    // row is never in the list's own view: only the margin the observer looks ahead by can bring a page.
+    const list = picker.getByTestId('picker-list');
+    const scrollNearEnd = async () => {
+      await list.evaluate((el) => {
+        el.scrollTop = el.scrollHeight - el.clientHeight - 400;
+      });
+      return rows.count();
+    };
+    await expect.poll(scrollNearEnd, { intervals: [150], timeout: 20_000 }).toBeGreaterThan(60);
+  });
+
   test('adds a library exercise to the routine in one tap, as a new exercise of the owner\'s', async ({ page }) => {
     await fresh(page);
     const owned = await exercisesInDb(page);
@@ -449,6 +628,141 @@ test.describe('Paste a routine', () => {
     await expect(page.getByTestId(`rx-card-${entry!.name}`)).toBeVisible();
   });
 
+  test('a timed or bodyweight line keeps its kind and its numbers: Plank 3x45s, Pull-ups 3x8, Dips 3xAMRAP, Walking 1x20 min', async ({ page }) => {
+    await fresh(page);
+    const owned = await exercisesInDb(page);
+    const diagram = (slug: string) => diagrams.find((d) => d.slug === slug)!;
+    for (const slug of ['plank', 'pull-up', 'dip', 'walking']) {
+      expect(diagram(slug), slug).toBeDefined();
+      // Premise: the owner has none of these, so each line can only be matched to a bundled diagram.
+      expect(owned.some((e) => e.demo === slug)).toBe(false);
+    }
+    await page.goto('/routines');
+    await page.getByTestId('new-routine').click();
+    await page.getByTestId('paste-routine').click();
+    await page.getByTestId('paste-text').fill(['Holds and pulls', 'Plank 3x45s', 'Pull-ups 3x8', 'Dips 3xAMRAP', 'Walking 1x20 min'].join('\n'));
+
+    const rows = page.getByTestId('paste-row');
+    await expect(rows).toHaveCount(4);
+    // Each is the plain diagram, as a library match, and nothing says a number will not be used.
+    for (const [i, slug] of ['plank', 'pull-up', 'dip', 'walking'].entries()) {
+      await expect(rows.nth(i).getByTestId('paste-row-name')).toHaveText(diagram(slug).name);
+      await expect(rows.nth(i).getByTestId('library-label')).toBeVisible();
+      await expect(rows.nth(i)).not.toContainText('not used');
+    }
+    await expect(rows.nth(0)).toContainText('3 × 45 s');
+
+    await page.getByTestId('paste-save').click();
+    await expect(page).toHaveURL(/\/routines\/[0-9a-f-]+$/);
+
+    const raw = await readRawIron(page);
+    const exercises = raw.tables.exercises as { id: string; demo?: string; kind: string }[];
+    const routine = (raw.tables.routines as { id: string; name: string }[]).find((r) => r.name === 'Holds and pulls')!;
+    const rx = (raw.tables.routineExercises as { routineId: string; exerciseId: string; targetSets: number; repMin: number; repMax: number }[]).filter((r) => r.routineId === routine.id);
+    const of = (slug: string) => {
+      const ex = exercises.find((e) => e.demo === slug)!;
+      return { kind: ex.kind, rx: rx.find((r) => r.exerciseId === ex.id)! };
+    };
+    expect(of('plank').kind).toBe('timed');
+    expect(of('plank').rx).toMatchObject({ targetSets: 3, repMin: 45, repMax: 45 });
+    expect(of('pull-up').kind).toBe('bodyweight_plus');
+    expect(of('pull-up').rx).toMatchObject({ targetSets: 3, repMin: 8, repMax: 8 });
+    expect(of('dip').kind).toBe('bodyweight_plus');
+    expect(of('dip').rx.targetSets).toBe(3);
+    expect(of('walking').kind).toBe('timed');
+    expect(of('walking').rx).toMatchObject({ targetSets: 1, repMin: 1200, repMax: 1200 });
+  });
+
+  test('a seconds line on an exercise that is not timed says its seconds are not used, before Save', async ({ page }) => {
+    await fresh(page);
+    await page.goto('/routines');
+    await page.getByTestId('new-routine').click();
+    await page.getByTestId('paste-routine').click();
+    await page.getByTestId('paste-text').fill(['Day', 'Bench press 3x30s', 'Plank 3x30s'].join('\n'));
+
+    const rows = page.getByTestId('paste-row');
+    await expect(rows).toHaveCount(2);
+    // The owner's Bench Press is a reps exercise: its three sets are used and its 30 seconds are not.
+    await expect(rows.nth(0).getByTestId('paste-row-name')).toHaveText('Bench Press (Barbell)');
+    await expect(rows.nth(0)).toContainText('3 × 30 s · 30 s not used');
+    // The Plank is made timed, so nothing is dropped. The library match is what only a loaded diagram list gives.
+    await expect(rows.nth(1).getByTestId('library-label')).toBeVisible();
+    await expect(rows.nth(1)).not.toContainText('not used');
+  });
+
+  test('an exercise renamed after it was added from the library is still matched by the library\'s name, as the owner\'s own', async ({ page }) => {
+    await fresh(page);
+    const owned = await exercisesInDb(page);
+    const entry = libraryEntries(owned, 'rear delts')[0]!;
+    // Add it the way the owner does, from the list.
+    await openExercises(page, owned);
+    await page.getByTestId('exercise-search').fill(entry.name);
+    await page.getByTestId(`exercise-row-${keyOf(entry)}`).click();
+    await page.getByTestId('library-add').click();
+    await expect(page).toHaveURL(/\/exercises\/[0-9a-f-]{36}$/);
+    const id = page.url().split('/').pop()!;
+    // Rename it in the database, as the edit form would, and let the app read it afresh.
+    await page.evaluate(async (exerciseId) => {
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const req = indexedDB.open('iron');
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction('exercises', 'readwrite');
+        const store = tx.objectStore('exercises');
+        const get = store.get(exerciseId);
+        get.onsuccess = () => store.put({ ...get.result, name: 'My reverse thing' });
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+      db.close();
+    }, id);
+    expect(((await exercisesInDb(page)) as RawExercise[]).find((e) => e.id === id)!.name).toBe('My reverse thing');
+
+    await page.goto('/routines');
+    await page.getByTestId('new-routine').click();
+    await page.getByTestId('paste-routine').click();
+    await page.getByTestId('paste-text').fill(`Day\n${entry.name} 3x12`);
+    const row = page.getByTestId('paste-row').first();
+    // The owner's exercise, by its new name, with no Library label: not a second one made from the entry.
+    await expect(row.getByTestId('paste-row-name')).toHaveText('My reverse thing');
+    await expect(row.getByTestId('library-label')).toHaveCount(0);
+    await expect(row).toContainText(`from “${entry.name}”`);
+
+    await page.getByTestId('paste-save').click();
+    await expect(page).toHaveURL(/\/routines\/[0-9a-f-]+$/);
+    const after = await readRawIron(page);
+    const exercises = after.tables.exercises as RawExercise[];
+    expect(exercises).toHaveLength(owned.length + 1);
+    expect(exercises.filter((e) => e.demo === keyOf(entry))).toHaveLength(1);
+    // The routine uses the owner's exercise, which has learned the wording.
+    const routine = (after.tables.routines as { id: string; name: string }[]).find((r) => r.name === 'Day')!;
+    const used = (after.tables.routineExercises as { routineId: string; exerciseId: string }[]).filter((r) => r.routineId === routine.id);
+    expect(used.map((r) => r.exerciseId)).toEqual([id]);
+    expect(exercises.find((e) => e.id === id)!.aliases).toEqual([entry.name]);
+  });
+
+  test('the Choose picker is drawn a page at a time as it is scrolled, with no tap on More', async ({ page }) => {
+    await fresh(page);
+    await page.goto('/routines');
+    await page.getByTestId('new-routine').click();
+    await page.getByTestId('paste-routine').click();
+    await page.getByTestId('paste-text').fill('Scroll day\nZzzq qqqx 3x8');
+    await page.getByTestId('paste-row').first().getByTestId('paste-choose').click();
+    const picker = page.getByRole('dialog').filter({ hasText: 'Choose exercise' });
+    const rows = picker.locator('[data-testid^="pick-"]');
+    await expect(rows).toHaveCount(60);
+    const list = picker.getByTestId('picker-list');
+    const scrollToEnd = async () => {
+      await list.evaluate((el) => {
+        el.scrollTop = el.scrollHeight;
+      });
+      return rows.count();
+    };
+    await expect.poll(scrollToEnd, { intervals: [150], timeout: 20_000 }).toBeGreaterThan(60);
+  });
+
   test('a paste that is cancelled adds nothing', async ({ page }) => {
     await fresh(page);
     const owned = await exercisesInDb(page);
@@ -465,5 +779,96 @@ test.describe('Paste a routine', () => {
     const raw = await readRawIron(page);
     expect(raw.tables.exercises).toHaveLength(owned.length);
     expect((raw.tables.routines as { name: string }[]).some((r) => r.name === 'Cancelled day')).toBe(false);
+  });
+});
+
+/** The lazy chunk holding the catalogue index (the steps are a separate one). */
+const CATALOGUE_CHUNK = /\/assets\/exerciseCatalogue-[^/]+\.js$/;
+
+test.describe('when the catalogue cannot be fetched', () => {
+  // Playwright cannot see a request the service worker answers, and this is a test of the network failing.
+  test.use({ serviceWorkers: 'block' });
+
+  /** Refuse the catalogue chunk; the returned function says how many times it was asked for. */
+  async function refuseCatalogue(page: Page): Promise<() => number> {
+    let asked = 0;
+    await page.route(CATALOGUE_CHUNK, (route) => {
+      asked++;
+      return route.abort();
+    });
+    return () => asked;
+  }
+
+  test('the Exercises heading says the catalogue is not loaded, and a Yours search never says the library is unavailable', async ({ page }) => {
+    const asked = await refuseCatalogue(page);
+    await fresh(page);
+    const owned = await exercisesInDb(page);
+    await page.goto('/exercises');
+    await expect(page.getByTestId('exercise-counts')).toContainText('catalogue not loaded');
+    expect(asked()).toBeGreaterThan(0);
+
+    // All: the list is the owner's and the diagrams, and the heading over it does not claim more.
+    await expect(page.getByRole('heading', { name: /^\d+ exercises · catalogue not loaded$/ })).toBeVisible();
+
+    // Yours never reads the library, so nothing is said about it: the total is theirs, and an empty search is just empty.
+    await page.getByTestId('exercise-scope-yours').click();
+    await expect(page.getByRole('heading', { name: `${owned.length} exercises`, exact: true })).toBeVisible();
+    await page.getByTestId('exercise-search').fill('zzzz no such exercise');
+    await expect(page.getByText('No matches.')).toBeVisible();
+    await expect(page.getByText('Library unavailable')).toHaveCount(0);
+
+    // All, with nothing found, is the one place that says the library is what is missing.
+    await page.getByTestId('exercise-scope-all').click();
+    await expect(page.getByText('Library unavailable')).toBeVisible();
+  });
+
+  test('the exercise picker says so beside its list, while rows are listed', async ({ page }) => {
+    const asked = await refuseCatalogue(page);
+    await fresh(page);
+    const routine = await routineId(page, 'Upper (Push)');
+    await page.goto(`/routines/${routine}`);
+    await page.getByTestId('add-exercise').click();
+    const picker = page.getByRole('dialog');
+    await expect(picker.getByTestId('picker-status')).toHaveText('Catalogue not loaded');
+    expect(asked()).toBeGreaterThan(0);
+    // It is said beside rows, not only instead of them, and a search with no match is still "No matches".
+    await expect(picker.locator('[data-testid^="pick-"]').first()).toBeVisible();
+    await picker.getByTestId('picker-search').fill('zzzz no such exercise');
+    await expect(picker.getByText('No matches')).toBeVisible();
+    await expect(picker.getByText('Library unavailable')).toHaveCount(0);
+    await expect(picker.getByTestId('picker-status')).toHaveText('Catalogue not loaded');
+  });
+
+  test('Paste says so with its other facts once there is a line to match', async ({ page }) => {
+    const asked = await refuseCatalogue(page);
+    await fresh(page);
+    await page.goto('/routines');
+    await page.getByTestId('new-routine').click();
+    await page.getByTestId('paste-routine').click();
+    await page.getByTestId('paste-text').fill('Day\nBench press 4x6-8 @ 80kg');
+    await expect(page.getByTestId('paste-row')).toHaveCount(1);
+    await expect(page.getByTestId('paste-facts')).toContainText('catalogue not loaded');
+    expect(asked()).toBeGreaterThan(0);
+  });
+
+  test('with the catalogue loaded, neither says anything about it', async ({ page }) => {
+    await fresh(page);
+    const owned = await exercisesInDb(page);
+    const entry = libraryEntries(owned, 'rear delts')[0]!;
+    const routine = await routineId(page, 'Upper (Push)');
+    await page.goto(`/routines/${routine}`);
+    await page.getByTestId('add-exercise').click();
+    const picker = page.getByRole('dialog');
+    // A catalogue entry on the list is what only a loaded catalogue produces: from here the absence means something.
+    await picker.getByTestId('picker-search').fill(entry.name);
+    await expect(picker.getByTestId(`pick-${keyOf(entry)}`)).toBeVisible();
+    await expect(picker.getByTestId('picker-status')).toHaveCount(0);
+
+    await page.goto('/routines');
+    await page.getByTestId('new-routine').click();
+    await page.getByTestId('paste-routine').click();
+    await page.getByTestId('paste-text').fill(`Day\n${entry.name} 3x10`);
+    await expect(page.getByTestId('paste-row').first().getByTestId('library-label')).toBeVisible();
+    await expect(page.getByTestId('paste-facts')).toHaveCount(0);
   });
 });

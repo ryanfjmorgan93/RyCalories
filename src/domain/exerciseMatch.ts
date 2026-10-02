@@ -2,7 +2,7 @@
  * Matches a pasted routine's exercise names against the app's exercise library. Pure — no IO, no
  * clock, no database — so it can be tested against real seed data directly.
  */
-import { tokenScore, tokens } from './products';
+import { tokenScore } from './products';
 
 export interface MatchCandidate {
   id: string;
@@ -53,10 +53,14 @@ const ABBREVIATION_PATTERNS: [RegExp, string][] = [
   [/\bbw\b/gi, 'bodyweight'],
   [/\btricep\b/gi, 'triceps'],
   [/\bbicep\b/gi, 'biceps'],
-  [/\bpull[\s-]?down\b/gi, 'pulldown'],
-  [/\bpush[\s-]?down\b/gi, 'pushdown'],
-  [/\bpull[\s-]?up\b/gi, 'pull up'],
-  [/\bchin[\s-]?up\b/gi, 'chin up'],
+  [/\bpull[\s-]?downs?\b/gi, 'pulldown'],
+  [/\bpush[\s-]?downs?\b/gi, 'pushdown'],
+  // "Pull-ups", "Pull ups", "Pullups", "Chin up", "Pushups", "Step-Ups": one exercise however it is
+  // joined or pluralised. A bare "ups" is three letters, which the plural rule below leaves alone,
+  // so without the optional "s" here "Pull ups" matched only entries that also carried an "ups".
+  [/\b(pull|push|chin|sit|step)[\s-]?ups?\b/gi, '$1 up'],
+  // British English: a push-up is a press-up.
+  [/\bpress[\s-]?ups?\b/gi, 'push up'],
 ];
 
 export function expandAbbreviations(s: string): string {
@@ -67,24 +71,70 @@ export function expandAbbreviations(s: string): string {
 
 const PARENTHETICAL_RE = /\([^()]*\)/g;
 
-/** A query's words, read once with and without its parenthetical parts, so scoring it against hundreds of names does not re-read it for each. */
-interface QueryForms {
+/** Words that say nothing about which exercise it is. Not "bar": 'T-Bar Row' is not a plain row. */
+const FILLER = new Set(['the', 'and', 'with', 'of', 'a', 'an', 'in', 'for', 'on']);
+
+/**
+ * One word as the matcher compares it: plurals and the two common respellings folded, so 'raises'
+ * is 'raise', 'crunches' is 'crunch', 'carries' is 'carry', 'flyes' and 'flies' are 'fly', 'ups' is
+ * 'up'. The same fold is applied to the line and to every name, so what matters is only that both
+ * sides end up the same.
+ */
+function stem(w: string): string {
+  let s = w;
+  if (s.length > 4 && s.endsWith('ies')) s = `${s.slice(0, -3)}y`;
+  else if (s.length > 4 && /(?:ch|sh|ss|x)es$/.test(s)) s = s.slice(0, -2);
+  else if (s === 'ups') s = 'up';
+  else if (s.length > 3 && s.endsWith('s') && !s.endsWith('ss')) s = s.slice(0, -1);
+  return s === 'flye' ? 'fly' : s;
+}
+
+/**
+ * The words of an exercise name, folded (see `stem`). Single letters go ('T-Bar' is bar, 'L-Sit' is
+ * sit) but a lone digit stays; "bar" is a word here, unlike in a food label, where it is packaging.
+ */
+function exerciseTokens(s: string): Set<string> {
+  const out = new Set<string>();
+  for (const raw of s.toLowerCase().split(/[^a-z0-9]+/)) {
+    if (FILLER.has(raw)) continue;
+    if (raw.length < 2 && !/^[0-9]$/.test(raw)) continue;
+    out.add(stem(raw));
+  }
+  return out;
+}
+
+/** The words of a text with and without its parenthetical parts, read once however many names it is scored against. */
+interface TextForms {
   withParens: Set<string>;
   withoutParens: Set<string>;
 }
 
-function queryForms(query: string): QueryForms {
-  return {
-    withParens: tokens(expandAbbreviations(query)),
-    withoutParens: tokens(expandAbbreviations(query.replace(PARENTHETICAL_RE, ' '))),
+const formsCache = new Map<string, TextForms>();
+const FORMS_CACHE_MAX = 6000;
+
+function textForms(text: string): TextForms {
+  const hit = formsCache.get(text);
+  if (hit) return hit;
+  const forms: TextForms = {
+    withParens: exerciseTokens(expandAbbreviations(text)),
+    withoutParens: exerciseTokens(expandAbbreviations(text.replace(PARENTHETICAL_RE, ' '))),
   };
+  if (formsCache.size >= FORMS_CACHE_MAX) formsCache.clear();
+  formsCache.set(text, forms);
+  return forms;
+}
+
+/** A query's words, read once with and without its parenthetical parts, so scoring it against hundreds of names does not re-read it for each. */
+type QueryForms = TextForms;
+
+function queryForms(query: string): QueryForms {
+  return textForms(query);
 }
 
 /** Score a query against one piece of candidate text, trying with and without parentheses. */
 function scoreAgainst(query: QueryForms, text: string): number {
-  const withParens = tokenScore(query.withParens, tokens(expandAbbreviations(text)));
-  const withoutParens = tokenScore(query.withoutParens, tokens(expandAbbreviations(text.replace(PARENTHETICAL_RE, ' '))));
-  return Math.max(withParens, withoutParens);
+  const forms = textForms(text);
+  return Math.max(tokenScore(query.withParens, forms.withParens), tokenScore(query.withoutParens, forms.withoutParens));
 }
 
 interface Scored {
@@ -136,14 +186,54 @@ export function matchExercise(name: string, candidates: MatchCandidate[]): Exerc
     return { id: exact[0]!.candidate.id, score: 1, via: 'exact' };
   }
 
-  // Fuzzy: a guess the owner confirms. When two different exercises are equally good answers
-  // ("Calf raise" against Seated and Standing Calf Raise, "Press" against every press), no guess
-  // is honest, so the row is left for the owner to choose instead of picking one by name length.
+  // Fuzzy: a guess the owner confirms. When two of the owner's own exercises are equally good
+  // answers ("Calf raise" against their Seated and Standing Calf Raise), no guess is honest, so the
+  // row is left for them to choose. Library entries tied with each other are told apart only by
+  // `plainest`, and only when one is plainly the common one.
   const forms = queryForms(name);
   const fuzzy = candidates.map((c) => bestCandidateScore(forms, c)).filter((s) => s.score > EXERCISE_MATCH_THRESHOLD);
   if (fuzzy.length === 0) return null;
   fuzzy.sort(compare);
-  const [best, runnerUp] = fuzzy;
-  if (runnerUp && compare(best!, runnerUp) === 0) return null;
-  return { id: best!.candidate.id, score: best!.score, via: 'fuzzy' };
+  const best = fuzzy[0]!;
+  const tied = fuzzy.filter((s) => compare(best, s) === 0);
+  if (tied.length === 1) return { id: best.candidate.id, score: best.score, via: 'fuzzy' };
+  if (best.candidate.library !== true) return null;
+  const chosen = plainest(tied);
+  return chosen ? { id: chosen.candidate.id, score: chosen.score, via: 'fuzzy' } : null;
+}
+
+/** How many words a name has once folded, its bracketed qualifier included: the fewer, the plainer. */
+function wordCount(c: MatchCandidate): number {
+  return textForms(c.name).withParens.size;
+}
+
+/**
+ * The names a person means when they write the movement without saying which variant, as the
+ * library spells them. "Cable rows" fits Seated, Upright and Elevated Cable Row equally well, and
+ * only the first is what is meant. A short list kept by hand because how common an exercise is
+ * cannot be read off the library: it holds eighty dumbbell variants for every barbell one.
+ */
+export const COMMON_EXERCISE_NAMES: readonly string[] = [
+  'Arnold Press', 'Back Extension', 'Barbell Curl', 'Barbell Row', 'Barbell Shrug', 'Bulgarian Split Squat', 'Cable Crunch', 'Cable Curl',
+  'Cable Fly', 'Cable Lateral Raise', 'Calf Raise', 'Chin-up', 'Close-Grip Bench Press', 'Crunch', 'Deadlift', 'Dip', 'Dumbbell Bench Press',
+  'Dumbbell Bent Over Row', 'Dumbbell Fly', 'EZ-Bar Curl', 'Face Pull', 'Front Raise', 'Front Squat', 'Glute Bridge', 'Goblet Squat',
+  'Good Morning', 'Hack Squat', 'Hammer Curl', 'Hanging Leg Raise', 'Hip Thrust', 'Incline Bench Press', 'Incline Dumbbell Press', 'Lat Pulldown',
+  'Lateral Raise', 'Leg Curl', 'Leg Extension', 'Leg Press', 'Machine Chest Press', 'Machine Shoulder Press', 'One-Arm Dumbbell Row',
+  'Overhead Press', 'Pec Deck', 'Plank', 'Preacher Curl', 'Pull-up', 'Push-up', 'Romanian Deadlift', 'Seated Cable Row', 'Seated Calf Raise',
+  'Skull Crusher', 'Standing Calf Raise', 'Step-Up', 'Sumo Deadlift', 'T-Bar Row', 'Tricep Pushdown', 'Upright Row', 'Walking Lunge',
+];
+const COMMON_KEYS = new Set(COMMON_EXERCISE_NAMES.map(normaliseName));
+
+/**
+ * Of library entries that answer a line equally well, the plain, common one, or undefined when
+ * none stands out. The fewest words come first, since 'Pull-up' is plainer than 'Weighted Pull-up'.
+ * Among those, the one name on `COMMON_EXERCISE_NAMES`. Nothing is picked when none is, or when
+ * several are: "Rows" is a Barbell, a T-Bar and an Upright Row, and "Press" is every press.
+ */
+function plainest(tied: Scored[]): Scored | undefined {
+  const fewest = Math.min(...tied.map((s) => wordCount(s.candidate)));
+  const plain = tied.filter((s) => wordCount(s.candidate) === fewest);
+  if (plain.length === 1) return plain[0];
+  const common = plain.filter((s) => COMMON_KEYS.has(normaliseName(s.candidate.name)));
+  return common.length === 1 ? common[0] : undefined;
 }
