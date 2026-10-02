@@ -12,10 +12,10 @@ import { getSettings } from '../db/repo';
 import { toDateKey } from '../domain/dates';
 import type { ClaudeSummaryInput } from '../domain/claudeSummary';
 import { buildCoachSystemPrompt, coachContextLadder, fitCoachPrompt, promptShapes, shapedPrompt, type CoachTurn } from '../domain/coach';
-import { builtTurn, describeRead, readUsable, requestUsable, reshuffle } from '../domain/coachBuild';
+import { applyEdit, buildCoach, buildEdit, builtTurn, describeRead, readUsable, requestUsable, reshuffle, type CoachRequest } from '../domain/coachBuild';
 import { routeCoachMessage, type CoachRoute } from '../domain/coachIntent';
 import { mergeIntent, parseQuickRequest, type QuickOptions } from '../domain/quickRequest';
-import { buildRoutines, routineRequestFrom, type BuiltRoutine, type RoutineInput, type RoutineRequest } from '../domain/routineBuilder';
+import { routineRequestFrom, type BuiltRoutine, type RoutineInput } from '../domain/routineBuilder';
 import { useAssistant } from './assistant';
 import { describeAnalyzeMealError, Nano, type NanoStatus } from './nano';
 import { useQuickIntent } from './quickIntent';
@@ -95,7 +95,7 @@ export interface BuildEntry extends EntryBase {
   mode: 'build';
   routines: BuiltRoutine[];
   /** The request the routines were built from: Shuffle builds it again. */
-  request: RoutineRequest;
+  request: CoachRequest;
   seed: number;
   /** The fact line: "shoulders, rear delts · 6 exercises". */
   read: string;
@@ -104,7 +104,16 @@ export interface BuildEntry extends EntryBase {
   /** The words the rules could not read, when they read nothing a routine can be built from and the assistant could be asked. */
   unread: string[];
   assist: AssistOutcome | null;
+  /** What a change made to the routine before it, as a fact ("Added Hammer Curl"). Null for a routine built from the words alone. */
+  edit: string | null;
 }
+
+/**
+ * What a message came to: 'sent' when the coach answered it or built it, 'error' when it could not
+ * (the error is in the state), 'stopped' when the owner stopped or cleared it before it finished,
+ * 'ignored' when it was empty or the coach was busy with another.
+ */
+export type SendOutcome = 'sent' | 'error' | 'stopped' | 'ignored';
 
 export type CoachEntry = AskEntry | BuildEntry;
 
@@ -126,24 +135,48 @@ export interface CoachState {
   error: string | null;
   refreshStatus: () => Promise<void>;
   download: () => Promise<void>;
-  /** Routes a typed message to a build or a question and runs it. `build` makes it a build whatever it says. */
-  send: (text: string, opts?: { build?: boolean }) => Promise<void>;
-  ask: (question: string) => Promise<void>;
-  build: (text: string) => Promise<void>;
+  /** Routes a typed message to a build, a change to the routine on screen or a question, and runs it. `build` makes it a build whatever it says. */
+  send: (text: string, opts?: { build?: boolean }) => Promise<SendOutcome>;
+  ask: (question: string) => Promise<SendOutcome>;
+  build: (text: string) => Promise<SendOutcome>;
+  /** A change to the routine on screen, said in words: "add biceps", "swap the front raise", "make it shorter". */
+  edit: (text: string) => Promise<SendOutcome>;
   /** The same request built again with a new seed, in place of that entry's routines. */
   shuffle: (id: number) => Promise<void>;
   /** One call to the default model on the owner's tap: only options come back, and the routine is built again with them. */
   readWithAssistant: (id: number) => Promise<void>;
+  /** Stop what is being answered, built or shuffled. What is already on screen stays. */
+  cancel: () => void;
+  /** Clear: stop whatever is going and empty the conversation. */
   reset: () => void;
 }
 
-/** Whether the coach's last reply was a routine it built: what lets "more rear delts" mean what it means after one. */
-export function lastWasRoutine(entries: readonly CoachEntry[]): boolean {
-  const last = entries[entries.length - 1];
-  return last !== undefined && last.mode === 'build' && last.routines.some((r) => r.rows.length > 0);
+/**
+ * The routine the conversation is about: the latest build with exercises in it. A question asked
+ * since does not end it; clearing the conversation, or building another, does.
+ */
+export function subjectOf(entries: readonly CoachEntry[]): BuildEntry | undefined {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i]!;
+    if (e.mode === 'build' && e.routines.some((r) => r.rows.length > 0)) return e;
+  }
+  return undefined;
 }
 
-/** Which of the coach's two jobs a message is, with the first message of a deep-linked visit always a build. */
+/**
+ * Whether a routine is the subject of the conversation: what lets "more rear delts" mean what it
+ * means after one. The latest build is the one that counts: a build that came to nothing leaves no
+ * routine as the subject, however many questions were asked before or since.
+ */
+export function lastWasRoutine(entries: readonly CoachEntry[]): boolean {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i]!;
+    if (e.mode === 'build') return e.routines.some((r) => r.rows.length > 0);
+  }
+  return false;
+}
+
+/** Which of the coach's three jobs a message is, with the first message of a deep-linked visit always a build. */
 export function routeOf(text: string, entries: readonly CoachEntry[], forceBuild = false): CoachRoute {
   return forceBuild ? 'build' : routeCoachMessage(text, { lastWasRoutine: lastWasRoutine(entries) });
 }
@@ -161,7 +194,7 @@ export function lastRoutines(entries: readonly CoachEntry[]): BuiltRoutine[] {
 function threadFor(entries: readonly CoachEntry[]): CoachTurn[] {
   return entries.flatMap((e): CoachTurn[] => [
     { role: 'user', text: e.question },
-    { role: 'coach', text: e.mode === 'ask' ? e.answer : builtTurn(e.routines) },
+    { role: 'coach', text: e.mode === 'ask' ? e.answer : builtTurn(e.routines, e.edit) },
   ]);
 }
 
@@ -206,6 +239,22 @@ export function createCoachStore({ backend, loadInput, loadBuildInput, intent = 
   // Bumped by Clear: work still going from before it is dropped, not saved.
   let epoch = 0;
   let nextId = 0;
+  // What a Stop or a Clear ends at once: each piece of work that can be waited on has a way out here, so its
+  // message comes back as stopped while the phone, or the database, is still thinking.
+  const aborts = new Set<() => void>();
+  const stopAll = (): void => {
+    for (const abort of [...aborts]) abort();
+    aborts.clear();
+  };
+  /** The work, or 'stopped' as soon as it is stopped or cleared: what the work does after that is dropped by the epoch. */
+  const guarded = (work: () => Promise<SendOutcome>): Promise<SendOutcome> => {
+    let abort: () => void = () => undefined;
+    const stopped = new Promise<SendOutcome>((resolve) => {
+      abort = () => resolve('stopped');
+    });
+    aborts.add(abort);
+    return Promise.race([work(), stopped]).finally(() => aborts.delete(abort));
+  };
   return create<CoachState>((set, get) => {
     const replace = (id: number, change: (e: BuildEntry) => BuildEntry): void =>
       set({ entries: get().entries.map((e) => (e.id === id && e.mode === 'build' ? change(e) : e)) });
@@ -236,26 +285,30 @@ export function createCoachStore({ backend, loadInput, loadBuildInput, intent = 
       send: async (raw, opts) => {
         const text = raw.trim();
         const { pending, working, entries } = get();
-        if (!text || pending || working !== null) return;
-        if (routeOf(text, entries, opts?.build) === 'build') await get().build(text);
-        else await get().ask(text);
+        if (!text || pending || working !== null) return 'ignored';
+        const route = routeOf(text, entries, opts?.build);
+        if (route === 'build') return get().build(text);
+        if (route === 'edit') return get().edit(text);
+        return get().ask(text);
       },
 
-      ask: async (raw) => {
+      ask: (raw) => guarded(async () => {
         const question = raw.trim();
         const { pending, status, entries } = get();
-        if (pending || !question) return;
+        if (pending || !question) return 'ignored';
         if (!status) {
           set({ error: 'Status not checked yet.' });
-          return;
+          return 'error';
         }
         if (status.state !== 'ready') {
           set({ error: status.state === 'unavailable' ? status.detail : 'Model not downloaded.' });
-          return;
+          return 'error';
         }
 
         const mine = epoch;
         const current = () => epoch === mine;
+        // Set when this answer is given up on, for any reason: what the model says after that is nobody's.
+        let abandoned = false;
         set({ pending: { mode: 'ask', question, label: '', partial: '' }, error: null });
         try {
           const system = buildCoachSystemPrompt('ask');
@@ -272,49 +325,59 @@ export function createCoachStore({ backend, loadInput, loadBuildInput, intent = 
             },
             REPLY_TOKENS,
           );
-          if (!current()) return;
+          if (!current()) return 'stopped';
           if (!fit) {
             set({ pending: null, error: 'Question too long for the model.' });
-            return;
+            return 'error';
           }
           const { label, prompt } = shapedPrompt(fit.shape, ladder, thread, question, routines);
           set({ pending: { mode: 'ask', question, label, partial: '' } });
           const whole = await untilQuiet(QUIET_TIMEOUT_MS, (touch) =>
             backend.stream(system, prompt, REPLY_TOKENS, (piece) => {
+              if (abandoned) return;
               touch();
               const p = get().pending;
               if (p && current()) set({ pending: { ...p, partial: p.partial + piece } });
             }),
-          );
-          if (!current()) return;
+          ).catch((e: unknown) => {
+            abandoned = true;
+            throw e;
+          });
+          if (!current()) return 'stopped';
           const answer = whole.trim();
           if (!answer) {
             set({ pending: null, error: 'The model did not answer.' });
-            return;
+            return 'error';
           }
           set({ entries: [...get().entries, { id: nextId++, mode: 'ask', question, label, answer }], pending: null });
+          return 'sent';
         } catch (e) {
-          if (current()) set({ pending: null, error: describeAnalyzeMealError(e) });
+          abandoned = true;
+          if (!current()) return 'stopped';
+          set({ pending: null, error: describeAnalyzeMealError(e) });
+          return 'error';
         }
-      },
+      }),
 
-      build: async (raw) => {
+      build: (raw) => guarded(async () => {
         const text = raw.trim();
-        if (get().pending || !text) return;
+        if (get().pending || !text) return 'ignored';
         const mine = epoch;
         const current = () => epoch === mine;
         set({ pending: { mode: 'build', question: text, label: '', partial: '' }, error: null });
         try {
           const parsed = parseQuickRequest(text);
-          const request = routineRequestFrom(parsed);
+          const request: CoachRequest = routineRequestFrom(parsed);
           // Words the rules could not read are offered to the model on a tap, and only when the rules read
           // nothing to build to; a routine is built either way, by need, so there is never nothing on screen.
-          const offer = !requestUsable(request) && parsed.residue.length > 0 && (await intent.ready());
-          if (!current()) return;
+          // The phone is asked whether it is ready for no longer than a count takes: a status call that
+          // never comes back is no offer, and no wait.
+          const offer = !requestUsable(request) && parsed.residue.length > 0 && (await untilQuiet(COUNT_TIMEOUT_MS, () => intent.ready()).catch(() => false));
+          if (!current()) return 'stopped';
           const input = await loadBuildInput();
-          if (!current()) return;
+          if (!current()) return 'stopped';
           const seed = newSeed();
-          const routines = buildRoutines(input, request, seed);
+          const routines = buildCoach(input, request, seed);
           const entry: BuildEntry = {
             id: nextId++,
             mode: 'build',
@@ -326,12 +389,56 @@ export function createCoachStore({ backend, loadInput, loadBuildInput, intent = 
             by: 'rules',
             unread: offer ? parsed.residue : [],
             assist: null,
+            edit: null,
           };
           set({ entries: [...get().entries, entry], pending: null });
+          return 'sent';
         } catch {
-          if (current()) set({ pending: null, error: COULD_NOT_READ });
+          if (!current()) return 'stopped';
+          set({ pending: null, error: COULD_NOT_READ });
+          return 'error';
         }
-      },
+      }),
+
+      edit: (raw) => guarded(async () => {
+        const text = raw.trim();
+        if (get().pending || get().working !== null || !text) return 'ignored';
+        const subject = subjectOf(get().entries);
+        // With no routine to change, the words are a request for one.
+        if (!subject) return get().build(text);
+        const mine = epoch;
+        const current = () => epoch === mine;
+        set({ pending: { mode: 'build', question: text, label: '', partial: '' }, error: null });
+        try {
+          const input = await loadBuildInput();
+          if (!current()) return 'stopped';
+          const plan = applyEdit(subject.request, subject.routines, text, subject.seed);
+          if (!plan.ok) {
+            set({ pending: null, error: plan.reason });
+            return 'error';
+          }
+          const built = buildEdit(input, plan, subject.routines, newSeed);
+          const entry: BuildEntry = {
+            id: nextId++,
+            mode: 'build',
+            question: text,
+            routines: built.routines,
+            request: built.request,
+            seed: built.seed,
+            read: describeRead(built.request, built.routines),
+            by: 'rules',
+            unread: [],
+            assist: null,
+            edit: built.fact,
+          };
+          set({ entries: [...get().entries, entry], pending: null });
+          return 'sent';
+        } catch {
+          if (!current()) return 'stopped';
+          set({ pending: null, error: COULD_NOT_READ });
+          return 'error';
+        }
+      }),
 
       shuffle: async (id) => {
         const entry = get().entries.find((e) => e.id === id);
@@ -342,7 +449,7 @@ export function createCoachStore({ backend, loadInput, loadBuildInput, intent = 
           const input = await loadBuildInput();
           if (epoch !== mine) return;
           const { routines, seed } = reshuffle(input, entry.request, entry.routines, newSeed);
-          replace(id, (e) => ({ ...e, routines, seed, read: describeRead(e.request, routines) }));
+          replace(id, (e) => ({ ...e, routines, seed, read: describeRead(e.request, routines), edit: null }));
           set({ working: null });
         } catch {
           if (epoch === mine) set({ working: null, error: COULD_NOT_READ });
@@ -364,10 +471,10 @@ export function createCoachStore({ backend, loadInput, loadBuildInput, intent = 
             set({ working: null });
             return;
           }
-          const request = routineRequestFrom({ ...parsed, options: merged });
+          const request: CoachRequest = routineRequestFrom({ ...parsed, options: merged });
           const input = await loadBuildInput();
           if (epoch !== mine) return;
-          const routines = buildRoutines(input, request, entry.seed);
+          const routines = buildCoach(input, request, entry.seed);
           replace(id, (e) => ({ ...e, request, routines, read: describeRead(request, routines), by: 'assistant', unread: [], assist: null }));
           set({ working: null });
         } catch {
@@ -375,8 +482,16 @@ export function createCoachStore({ backend, loadInput, loadBuildInput, intent = 
         }
       },
 
+      cancel: () => {
+        if (get().pending === null && get().working === null) return;
+        epoch++;
+        stopAll();
+        set({ pending: null, working: null, error: null });
+      },
+
       reset: () => {
         epoch++;
+        stopAll();
         set({ entries: [], error: null, pending: null, working: null });
       },
     };

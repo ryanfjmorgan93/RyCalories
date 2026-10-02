@@ -91,6 +91,14 @@ describe('the ask prompt', () => {
     expect(system).toContain('say nothing about it that they do not support');
   });
 
+  it('cannot write or change a routine, says so in a sentence if asked, and gives no exercises or weights of its own (finding 4)', () => {
+    expect(system).toContain('You cannot write or change a routine; the app builds them.');
+    expect(system).toContain('If asked to change one, say so in one sentence and give no exercises or weights.');
+    // The line that lets it explain a routine is still there, beside the one that stops it writing one.
+    expect(system).toContain('Explain the routine from those reasons');
+    expect(system.indexOf('Explain the routine')).toBeLessThan(system.indexOf('You cannot write or change a routine'));
+  });
+
   it('never invents the owner\'s numbers, and says "Not in your data." only for a number of theirs that is not logged', () => {
     expect(system).toContain('Never make up a number of theirs');
     expect(system.match(/Not in your data\./g)).toHaveLength(1);
