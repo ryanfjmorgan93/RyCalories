@@ -633,6 +633,24 @@ describe('a movement left out by name', () => {
     }
   });
 
+  it('says nothing for a movement left out that the routine would not have had anyway: no dips, with three exercises of the chest', () => {
+    const pool = miniInput([
+      cand('Bench Press (Barbell)', 'chest', { compound: true, equipment: 'barbell', weight: 60 }),
+      cand('Incline DB Press', 'chest', { compound: true, weight: 20 }),
+      cand('Cable Fly', 'chest', { equipment: 'cable', weight: 12 }),
+      cand('Chest Dip', 'chest', { library: true, compound: true, equipment: 'bodyweight' }),
+    ]);
+    for (const seed of seedsFrom(40)) {
+      const r = first(pool, { focus: ['chest'], count: 3, excludePatterns: ['dip'] }, seed);
+      expect(r.rows.map((x) => x.name).sort(), `seed ${seed}`).toEqual(['Bench Press (Barbell)', 'Cable Fly', 'Incline DB Press']);
+      expect(r.reasonLines.some((l) => l.includes('as you asked')), `seed ${seed}`).toBe(false);
+    }
+    // Control: with room for a fourth the dip is what it would have taken, and the line is said.
+    const four = first(pool, { focus: ['chest'], count: 4, excludePatterns: ['dip'] }, 1);
+    expect(four.rows.map((x) => x.pattern)).not.toContain('dip');
+    expect(four.reasonLines).toContain('No dip, as you asked');
+  });
+
   it('a split with a movement left out leaves it out of every day', () => {
     for (const seed of SEEDS.slice(0, 100)) {
       for (const d of build(REAL, 'push pull legs, no squats, no deadlifts', seed)) {
@@ -978,11 +996,25 @@ describe('reason lines state only what is true of the routine as built', () => {
   });
 
   it('a muscle the equipment asked for cannot reach says so, and not that the owner has nothing', () => {
-    for (const seed of SEEDS.slice(0, 60)) {
-      const r = first(REAL, 'dumbbells only arms', seed);
-      expect(r.reasonLines.some((l) => /^No exercise for .* in your exercises or the library$/.test(l)), `seed ${seed}`).toBe(false);
-      for (const l of r.reasonLines.filter((x) => x.startsWith('No exercise for '))) expect(l).toMatch(/ with the equipment asked for$/);
-    }
+    const pool = miniInput([
+      cand('DB Curl', 'biceps', { weight: 12 }),
+      cand('Triceps Pushdown', 'triceps', { equipment: 'cable', weight: 25 }),
+      cand('Overhead Triceps Extension', 'triceps', { equipment: 'cable', weight: 20 }),
+    ]);
+    const r = first(pool, { focus: ['biceps', 'triceps'], equipment: ['dumbbell'] }, 1);
+    expect(r.reasonLines).toContain('No exercise for triceps with the equipment asked for');
+    expect(r.reasonLines.some((l) => l.endsWith('in your exercises or the library'))).toBe(false);
+    // And a part of a muscle the equipment cannot reach, where the muscle has another part it can.
+    const parts = miniInput([
+      cand('DB Curl', 'biceps', { weight: 12 }),
+      cand('Triceps Kickback', 'triceps', { weight: 8 }),
+      cand('Overhead Triceps Extension', 'triceps', { equipment: 'cable', weight: 20 }),
+    ]);
+    const p = first(parts, { focus: ['biceps', 'triceps'], equipment: ['dumbbell'] }, 1);
+    expect(p.reasonLines).toContain('No exercise for triceps long head with the equipment asked for');
+    // Control: with no equipment asked for it is the plain wording.
+    const plain = first(miniInput([cand('DB Curl', 'biceps', { weight: 12 })]), { focus: ['biceps', 'triceps'] }, 1);
+    expect(plain.reasonLines).toContain('No exercise for triceps in your exercises or the library');
   });
 
   it('a row\'s reason does not repeat itself or call nothing a working weight', () => {

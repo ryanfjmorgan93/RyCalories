@@ -174,20 +174,25 @@ test('a named day has the muscles it is named for: push has triceps and a latera
   await seedOwner(page);
   await openCoach(page);
 
-  await say(page, 'push pull legs');
-  await expect(entry(page, 0).getByTestId('coach-routine')).toHaveCount(3);
-  await idle(page);
-  const [push, pull, legs] = await Promise.all([0, 1, 2].map((i) => rowNames(routineIn(entry(page, 0), i))));
-  expect(await routineIn(entry(page, 0), 0).getByTestId('coach-routine-name').textContent()).toBe('Push');
-  expect(push).toHaveLength(6);
-  expect(push).toContain('Lateral Raise');
-  expect(push!.some((n) => /Triceps/.test(n))).toBe(true);
-  expect(pull).toHaveLength(6);
-  expect(pull!.some((n) => /Curl/.test(n))).toBe(true);
-  expect(legs).toHaveLength(6);
-  expect(legs).toContain('Barbell Back Squat');
-  expect(legs).toContain('Romanian Deadlift (Barbell)');
-  expect(legs!.some((n) => /Calf Raise/.test(n))).toBe(true);
+  // Every build draws its own random seed, and without a plan per day about one pull day in five has
+  // no biceps work, so one build could miss it by luck. Forty make that a one-in-ten-thousand miss.
+  test.setTimeout(150_000);
+  for (let n = 0; n < 40; n++) {
+    await say(page, 'push pull legs');
+    await expect(entry(page, n).getByTestId('coach-routine')).toHaveCount(3);
+    await idle(page);
+    const [push, pull, legs] = await Promise.all([0, 1, 2].map((i) => rowNames(routineIn(entry(page, n), i))));
+    expect(await routineIn(entry(page, n), 0).getByTestId('coach-routine-name').textContent()).toBe('Push');
+    expect(push).toHaveLength(6);
+    expect(push).toContain('Lateral Raise');
+    expect(push!.some((name) => /Triceps/.test(name))).toBe(true);
+    expect(pull).toHaveLength(6);
+    expect(pull!.some((name) => /Curl/.test(name)), `build ${n}: ${pull!.join(', ')}`).toBe(true);
+    expect(legs).toHaveLength(6);
+    expect(legs).toContain('Barbell Back Squat');
+    expect(legs).toContain('Romanian Deadlift (Barbell)');
+    expect(legs!.some((name) => /Calf Raise/.test(name))).toBe(true);
+  }
   expect(await modelLog(page)).toEqual(NO_CALLS);
 });
 
@@ -266,8 +271,11 @@ test('a stalled bench is swapped for another loaded press, never a push-up, with
   await seedOwner(page, stalledBench());
   await openCoach(page);
 
-  // Three builds: a swap drawn from the library is a different exercise each time, and none of them is a push-up or a core hybrid.
-  for (let n = 0; n < 3; n++) {
+  // Every build draws its own random seed, and with the rule off a push-up or a core hybrid takes the
+  // bench's place on about one build in five, so a handful of builds could miss it by luck. Sixty
+  // make that a one-in-a-million miss. A swap drawn from the library is a different exercise each time.
+  test.setTimeout(150_000);
+  for (let n = 0; n < 60; n++) {
     const r = await built(page, 'give me a chest routine', n);
     expect(r.names).not.toContain('Bench Press (Barbell)');
     const swap = r.lines.map((l) => /^Bench Press \(Barbell\) stalled for 3 sessions: (.+) in its place$/.exec(l)).find((m) => m);
