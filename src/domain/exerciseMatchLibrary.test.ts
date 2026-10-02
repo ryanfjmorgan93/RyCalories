@@ -52,8 +52,29 @@ describe('matchExercise over the owner\'s exercises and the library', () => {
     expect(matchExercise('Cable Lateral Raise', candidates)?.id).toBe('cat:cable-lateral-raise');
   });
 
-  it('two library entries that answer equally well are still no match, left for the owner to choose', () => {
-    expect(matchExercise('Press', [lib('cat:a', 'Chest Press'), lib('cat:b', 'Leg Press')])).toBeNull();
+  it('two library entries that answer equally well, neither a common name, are still no match, left for the owner to choose', () => {
+    // Changed from 'Chest Press' against 'Leg Press': 'Leg Press' is the common name among library
+    // entries that tie, and now settles the line (see the next test). The premise here, that two
+    // equally good answers with nothing to choose between them are not guessed, is unchanged.
+    expect(matchExercise('Press', [lib('cat:a', 'Chest Press'), lib('cat:b', 'Landmine Press')])).toBeNull();
+  });
+
+  it('of two library entries that answer equally well, the one with the common name is the match, and the owner can still change it', () => {
+    expect(matchExercise('Press', [lib('cat:a', 'Chest Press'), lib('cat:b', 'Leg Press')])?.id).toBe('cat:b');
+    // Whichever order they come in.
+    expect(matchExercise('Press', [lib('cat:b', 'Leg Press'), lib('cat:a', 'Chest Press')])?.id).toBe('cat:b');
+  });
+
+  it('two common names that tie are still no match: "Press" is a Leg Press and an Overhead Press', () => {
+    expect(matchExercise('Press', [lib('cat:a', 'Overhead Press'), lib('cat:b', 'Leg Press')])).toBeNull();
+  });
+
+  it('the shorter name wins a tie in score: two words that all fit as well as five that mostly do', () => {
+    // Against four query words, {alpha, beta} and {alpha, beta, gamma, sigma, omega} both score 2/3.
+    const query = 'Alpha Beta Gamma Delta';
+    const candidates = [lib('cat:long', 'Alpha Beta Gamma Sigma Omega'), lib('cat:short', 'Alpha Beta')];
+    expect(matchExercise(query, candidates)?.id).toBe('cat:short');
+    expect(matchExercise(query, [...candidates].reverse())?.id).toBe('cat:short');
   });
 
   it('two of the owner\'s exercises that answer equally well are no match, and a library entry does not settle it', () => {

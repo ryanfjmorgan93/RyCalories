@@ -117,6 +117,27 @@ describe('matchExercise — fuzzy scoring, threshold and abbreviations', () => {
     expect(matchExercise('Bicep curl', candidates)?.id).toBe('bicep-curl');
   });
 
+  it('plurals and respellings are the same word on both sides: ups, -ies, -ches, -sses, flyes', () => {
+    const exact = (typed: string, name: string) => matchExercise(typed, [{ id: 'x', name }]);
+    // A three-letter plural is not stripped by the ordinary rule, so 'ups' has its own.
+    expect(exact('Turkish get ups', 'Turkish Get-Up')?.score).toBe(1);
+    expect(exact('Farmer carries', "Farmer's Carry")?.score).toBe(1);
+    expect(exact('Crunches', 'Crunch')?.score).toBe(1);
+    expect(exact('Chest presses', 'Chest Press')?.score).toBe(1);
+    expect(exact('Dumbbell flyes', 'Dumbbell Fly')?.score).toBe(1);
+    expect(exact('Cable flies', 'Cable Fly')?.score).toBe(1);
+  });
+
+  it('a push-up is a press-up, joined or not, plural or not', () => {
+    for (const typed of ['Pushups', 'Push ups', 'Push-ups', 'Press-ups', 'Press up']) {
+      expect(matchExercise(typed, [{ id: 'push-up', name: 'Push-up' }])?.score, typed).toBe(1);
+    }
+  });
+
+  it('"bar" is a word of an exercise name: a T-Bar Row is not just "a row"', () => {
+    expect(matchExercise('Rows', [{ id: 't', name: 'T-Bar Row' }, { id: 'b', name: 'Barbell Row' }])).toBeNull();
+  });
+
   it('stripping parentheses can only help a candidate whose extra token was inside them', () => {
     const withParens: MatchCandidate[] = [{ id: 'a', name: 'Lying Leg Curl (Machine)' }];
     const scored = matchExercise('Leg curl', withParens);
