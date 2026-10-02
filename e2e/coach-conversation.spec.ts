@@ -341,29 +341,30 @@ test('Review routine opens the routine it sits under and saves it, the library e
     return { exercises, routines };
   };
 
-  // Chest first, from under the second bubble; then the shoulders; then the shoulders again.
-  const saves: [number, string, string[]][] = [
-    [1, 'Chest', chest],
-    [0, 'Shoulders and rear delts', shoulders],
-    [0, 'Shoulders and rear delts', shoulders],
-  ];
-  for (const [i, [which, name, names]] of saves.entries()) {
-    await entry(page, which).getByTestId('coach-review').click();
-    const review = page.getByRole('dialog').filter({ hasText: 'Review routine' });
-    await expect(review.getByTestId('paste-row')).toHaveCount(names.length);
-    await expect(review.getByTestId('paste-row-name')).toHaveText(names);
-    // An exercise the owner has now is matched as theirs: the third time, every row is.
-    if (i === 2) await expect(review.getByTestId('paste-change')).toHaveCount(names.length);
+  const review = page.getByRole('dialog').filter({ hasText: 'Review routine' });
+
+  // From under the second bubble the review is the chest routine, not the first one: opened, read, and put away unsaved.
+  await entry(page, 1).getByTestId('coach-review').click();
+  await expect(review.getByTestId('paste-row')).toHaveCount(chest.length);
+  await expect(review.getByTestId('paste-row-name')).toHaveText(chest);
+  await review.getByRole('button', { name: 'Cancel' }).click();
+  await expect(review).toBeHidden();
+  expect((await saved()).routines).toEqual([]);
+
+  // The shoulders routine, saved twice. Saved once, its exercises are the owner's own and the second review matches every row to them.
+  for (const save of [1, 2]) {
+    await entry(page, 0).getByTestId('coach-review').click();
+    await expect(review.getByTestId('paste-row')).toHaveCount(shoulders.length);
+    await expect(review.getByTestId('paste-row-name')).toHaveText(shoulders);
+    if (save === 2) await expect(review.getByTestId('paste-change')).toHaveCount(shoulders.length);
     while ((await review.getByTestId('paste-add-new').count()) > 0) await review.getByTestId('paste-add-new').first().click();
     await review.getByTestId('paste-save').click();
     await expect(page).toHaveURL(/\/routines\/[0-9a-f-]+$/);
 
     const { exercises, routines } = await saved();
-    expect(routines.filter((r) => r.name === name).map((r) => r.rows)).toEqual(Array.from({ length: routines.filter((r) => r.name === name).length }, () => names));
-    expect(routines).toHaveLength(i + 1);
-    // The owner's four and one row for each library exercise held by any routine saved, however many hold it.
-    const held = new Set(saves.slice(0, i + 1).flatMap(([, , n]) => n));
-    expect(exercises).toHaveLength(4 + held.size);
+    expect(routines).toEqual(Array.from({ length: save }, () => ({ name: 'Shoulders and rear delts', rows: shoulders })));
+    // The owner's four and one row for each library exercise, however many routines hold it.
+    expect(exercises).toHaveLength(4 + shoulders.length);
     expect(new Set(exercises.map((e) => e.name.toLowerCase())).size).toBe(exercises.length);
     await page.goBack();
     await expect(page.getByTestId('coach-routine')).toHaveCount(2);
