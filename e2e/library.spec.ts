@@ -455,6 +455,27 @@ test.describe("a routine's exercise picker", () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
+  test('draws the next page before the end of the list is reached, not when the last row is already on screen', async ({ page }) => {
+    await fresh(page);
+    const routine = await routineId(page, 'Upper (Push)');
+    await page.goto(`/routines/${routine}`);
+    await page.getByTestId('add-exercise').click();
+    const picker = page.getByRole('dialog');
+    const rows = picker.locator('[data-testid^="pick-"]');
+    await expect(rows).toHaveCount(60);
+
+    // Each poll stops 400px short of the end of the list as it is then, so the sentinel after the last
+    // row is never in the list's own view: only the margin the observer looks ahead by can bring a page.
+    const list = picker.getByTestId('picker-list');
+    const scrollNearEnd = async () => {
+      await list.evaluate((el) => {
+        el.scrollTop = el.scrollHeight - el.clientHeight - 400;
+      });
+      return rows.count();
+    };
+    await expect.poll(scrollNearEnd, { intervals: [150], timeout: 20_000 }).toBeGreaterThan(60);
+  });
+
   test('adds a library exercise to the routine in one tap, as a new exercise of the owner\'s', async ({ page }) => {
     await fresh(page);
     const owned = await exercisesInDb(page);
