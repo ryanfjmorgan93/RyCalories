@@ -4,8 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { clickIfPresent, fresh, readRawIron, waitForServiceWorker } from './fresh';
 
 /**
- * The exercise catalogue in the app (src/ui/LibrarySheet.tsx, src/ui/ExerciseDemo.tsx,
- * src/db/catalogueRepo.ts), against the built app and its real pictures. The entry under test is read
+ * The exercise catalogue in the app (the Exercises list and its preview, the routine picker,
+ * src/ui/ExerciseDemo.tsx, src/db/catalogueRepo.ts), against the built app and its real pictures. The
+ * list as a whole is in library.spec.ts; this file follows one entry through it. The entry under test is read
  * from the committed JSON at test time, never named here: it is whatever the catalogue holds that
  * matches "cable crossover" and has steps.
  *
@@ -78,17 +79,19 @@ function demoShowsLoadedFrame(page: Page, n: 1 | 2): Promise<boolean> {
   }, `/${n}.webp`);
 }
 
-/** Open the picker's From library on a routine editor and choose the entry. */
-async function pickFromRoutineEditor(page: Page, routine: string): Promise<void> {
+/**
+ * Open a routine's exercise picker, search `query` and tap the row `rowKey`: the picture key of a
+ * library row, or the id of an exercise the owner already has. One tap adds it to the routine.
+ */
+async function pickFromRoutineEditor(page: Page, routine: string, rowKey: string = KEY, query: string = QUERY): Promise<void> {
   await page.goto(`/routines/${await routineId(page, routine)}`);
   await page.getByTestId('add-exercise').click();
-  await page.getByTestId('from-library').click();
-  await page.getByTestId('library-search').fill(QUERY);
-  await page.getByTestId(`library-${KEY}`).click();
+  await page.getByTestId('picker-search').fill(query);
+  await page.getByTestId(`pick-${rowKey}`).click();
 }
 
 test.describe('catalogue in the app', () => {
-  test('an entry is added once from Exercises, fetched lazily, then picked again without a second row', async ({ page }) => {
+  test('an entry is previewed and added once from Exercises, fetched lazily, then picked again without a second row', async ({ page }) => {
     const catalogueRequests: string[] = [];
     page.on('request', (r) => {
       if (/exerciseCatalogue/.test(r.url())) catalogueRequests.push(r.url());
@@ -98,36 +101,34 @@ test.describe('catalogue in the app', () => {
 
     await fresh(page);
     const baseline = (await exercisesInDb(page)).length;
-    await page.goto('/exercises');
-    await expect(page.getByTestId('exercise-search')).toBeVisible();
     await page.waitForLoadState('networkidle');
-    // Nothing of the catalogue is fetched to show the Exercises list.
+    // Nothing of the catalogue is fetched at app start: it is the Exercises screen (and the pickers) that ask for it.
     expect(catalogueRequests).toEqual([]);
 
-    await page.getByTestId('add-from-library').click();
-    await expect(page.getByTestId('library-search')).toBeVisible();
-    // Opening the sheet is what fetches the entries; the steps are still not wanted.
+    await page.goto('/exercises');
+    await expect(page.getByTestId('exercise-search')).toBeVisible();
+    // Showing the list is what fetches the entries; the steps are still not wanted.
     await expect.poll(entryRequests).toBeGreaterThan(0);
     await page.waitForLoadState('networkidle');
     expect(stepRequests()).toBe(0);
 
-    // An empty search lists nothing; a broad one is capped, and each row carries one lazy thumbnail.
-    const rows = page.locator('button[data-testid^="library-"]');
-    await expect(rows).toHaveCount(0);
-    await page.getByTestId('library-search').fill('press');
-    await expect.poll(() => rows.count()).toBe(30);
-    await expect(page.locator('button[data-testid^="library-"] img[loading="lazy"]')).toHaveCount(30);
-    await page.getByTestId('library-search').fill('');
-    await expect(rows).toHaveCount(0);
+    // Nothing typed: the list is already there, and each row carries one lazy thumbnail.
+    const rows = page.locator('[data-testid^="exercise-row-"]');
+    await expect.poll(() => rows.count()).toBeGreaterThan(baseline);
+    await expect(page.locator('[data-testid^="exercise-row-"] img:not([loading="lazy"])')).toHaveCount(0);
 
-    await page.getByTestId('library-search').fill(QUERY);
-    const row = page.getByTestId(`library-${KEY}`);
+    await page.getByTestId('exercise-search').fill(QUERY);
+    const row = page.getByTestId(`exercise-row-${KEY}`);
     await expect(row).toContainText(entry.name);
     await expect(row).toContainText(`${entry.muscleGroup} · ${entry.equipment}`);
     await expect(row.locator('img')).toHaveAttribute('src', frameUrl(1));
     await expect(row.locator('img')).toHaveAttribute('loading', 'lazy');
 
+    // Tapping it opens the preview; looking adds nothing, Add does.
     await row.click();
+    await expect(page.getByTestId('library-preview')).toBeVisible();
+    expect((await exercisesInDb(page)).filter((e) => e.demo === KEY)).toHaveLength(0);
+    await page.getByTestId('library-add').click();
     await expect(page).toHaveURL(/\/exercises\/[0-9a-f-]{36}$/);
 
     // Stored once, with the catalogue key, and nothing else added or changed.
@@ -157,22 +158,23 @@ test.describe('catalogue in the app', () => {
     await expect(thumb).toHaveAttribute('src', frameUrl(1));
     await expect.poll(() => thumb.evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth > 0)).toBe(true);
 
-    // Picking the same entry again, from a routine's picker, is the same exercise. The routine row
-    // appearing is the signal that this second pick finished: the first pick made none.
-    await pickFromRoutineEditor(page, 'Upper (Push)');
+    // From a routine's picker the entry is now the owner's row, so picking it is picking that
+    // exercise: no second one is made. The routine row appearing is the signal that this pick
+    // finished: the add from Exercises made none.
+    await pickFromRoutineEditor(page, 'Upper (Push)', stored[0]!.id);
     await expect.poll(() => routineRowsFor(page, (e) => e.demo === KEY)).toBe(1);
     const after = await exercisesInDb(page);
     expect(after.filter((e) => e.demo === KEY)).toHaveLength(1);
     expect(after.filter((e) => e.name === entry.name)).toHaveLength(1);
     expect(after).toHaveLength(baseline + 1);
 
-    // With it in the routine, the same picker shows it as added and will not take it twice.
+    // With it in the routine, the same picker does not offer it again. Other crossovers are offered:
+    // the first row naming one is the signal that the search was applied before its absence is read.
     await page.keyboard.press('Escape');
     await page.getByTestId('add-exercise').click();
-    await page.getByTestId('from-library').click();
-    await page.getByTestId('library-search').fill(QUERY);
-    await expect(page.getByTestId(`library-${KEY}`)).toBeDisabled();
-    await expect(page.getByTestId(`library-${KEY}`)).toContainText('Added');
+    await page.getByTestId('picker-search').fill(QUERY);
+    await expect(page.getByTestId('picker-list').locator('[data-testid^="pick-"]').first()).toContainText(/crossover/i);
+    await expect(page.getByTestId(`pick-${stored[0]!.id}`)).toHaveCount(0);
   });
 
   test('How to in a live session shows the first step of a catalogue exercise', async ({ page }) => {
@@ -198,39 +200,39 @@ test.describe('catalogue in the app', () => {
     await expect.poll(() => demoShowsLoadedFrame(page, 2)).toBe(true);
   });
 
-  test('a bundled diagram picked twice is one exercise, and a seeded exercise\'s diagram returns the seeded row', async ({ page }) => {
+  test('a bundled diagram added and then picked is one exercise, and a seeded exercise\'s diagram is not listed a second time', async ({ page }) => {
     await fresh(page);
     const baseline = (await exercisesInDb(page)).length;
 
     await page.goto('/exercises');
-    await page.getByTestId('add-from-library').click();
-    await page.getByTestId('library-search').fill('arnold press');
-    await page.getByTestId('library-arnold-press').click();
+    await page.getByTestId('exercise-search').fill('arnold press');
+    await page.getByTestId('exercise-row-arnold-press').click();
+    await page.getByTestId('library-add').click();
     await expect(page).toHaveURL(/\/exercises\/[0-9a-f-]{36}$/);
-    expect((await exercisesInDb(page)).filter((e) => e.demo === 'arnold-press')).toHaveLength(1);
+    const added = (await exercisesInDb(page)).filter((e) => e.demo === 'arnold-press');
+    expect(added).toHaveLength(1);
     expect((await exercisesInDb(page)).length).toBe(baseline + 1);
 
-    // Second time, through a routine's picker; its routine row is what shows the pick completed.
-    await page.goto(`/routines/${await routineId(page, 'Upper (Push)')}`);
-    await page.getByTestId('add-exercise').click();
-    await page.getByTestId('from-library').click();
-    await page.getByTestId('library-search').fill('arnold press');
-    await page.getByTestId('library-arnold-press').click();
+    // Second time, through a routine's picker: the diagram is the owner's row now, and that is what
+    // is picked. Its routine row is what shows the pick completed.
+    await pickFromRoutineEditor(page, 'Upper (Push)', added[0]!.id, 'arnold press');
     await expect.poll(() => routineRowsFor(page, (e) => e.demo === 'arnold-press')).toBe(1);
     const after = await exercisesInDb(page);
     expect(after.filter((e) => e.demo === 'arnold-press')).toHaveLength(1);
     expect(after).toHaveLength(baseline + 1);
 
-    // A seeded exercise's own diagram returns the seeded row, not a twin.
+    // A seeded exercise's own diagram is that seeded row, not a twin: the list has the seeded row
+    // and no library row for the same picture. The seeded row showing is the signal the search was applied.
+    const bench = after.find((e) => e.demo === 'bench-press')!;
     await page.goto('/exercises');
-    await page.getByTestId('add-from-library').click();
-    await page.getByTestId('library-search').fill('bench press');
-    await page.getByTestId('library-bench-press').click();
-    await expect(page).toHaveURL(/\/exercises\/[0-9a-f-]{36}$/);
+    await page.getByTestId('exercise-search').fill('bench press');
+    await expect(page.getByTestId(`exercise-row-${bench.id}`)).toBeVisible();
+    await expect(page.getByTestId('exercise-row-bench-press')).toHaveCount(0);
+    await page.getByTestId(`exercise-row-${bench.id}`).click();
+    await expect(page.getByRole('heading', { name: 'Bench Press (Barbell)' })).toBeVisible();
     const afterBench = await exercisesInDb(page);
     expect(afterBench.filter((e) => e.demo === 'bench-press')).toHaveLength(1);
     expect(afterBench).toHaveLength(baseline + 1);
-    await expect(page.getByRole('heading', { name: 'Bench Press (Barbell)' })).toBeVisible();
   });
 
   test('the diagram picker on the exercise form offers catalogue photographs', async ({ page }) => {
@@ -286,9 +288,9 @@ test.describe('catalogue in the web build', () => {
     await waitForServiceWorker(page);
 
     await page.goto('/exercises');
-    await page.getByTestId('add-from-library').click();
-    await page.getByTestId('library-search').fill(QUERY);
-    await page.getByTestId(`library-${KEY}`).click();
+    await page.getByTestId('exercise-search').fill(QUERY);
+    await page.getByTestId(`exercise-row-${KEY}`).click();
+    await page.getByTestId('library-add').click();
     await expect(page).toHaveURL(/\/exercises\/[0-9a-f-]{36}$/);
     const detail = page.url();
 

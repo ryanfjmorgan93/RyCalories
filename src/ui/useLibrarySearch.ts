@@ -16,7 +16,7 @@ export interface LibraryRow {
 const lower = (s: string) => s.toLowerCase();
 
 /**
- * The library search behind "From library" and the diagram picker: the bundled diagrams and the
+ * The library search behind the exercise form's diagram picker: the bundled diagrams and the
  * catalogue, at most LIBRARY_RESULT_CAP rows, none for an empty query. The catalogue is fetched the
  * first time `open` is true and never before; if it cannot be fetched the diagrams still search.
  * `settled` is false until that fetch has finished either way, so a caller does not call the list

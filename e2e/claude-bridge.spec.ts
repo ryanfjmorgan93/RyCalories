@@ -83,7 +83,7 @@ test('Paste a routine matches what it can, asks about the rest, saves, and learn
       '1. Bench press 4x6-8 @ 80kg',
       '2. Seated DB shoulder press 3 x 8–10',
       '3. Chest-supported row 3x10',
-      '4. Plank 3x45s',
+      '4. Zzzq qqqx 3x45s',
       '',
       'Rest two minutes between the heavy sets.',
     ].join('\n'),
@@ -95,15 +95,22 @@ test('Paste a routine matches what it can, asks about the rest, saves, and learn
   await expect(rows.nth(0).getByTestId('paste-row-name')).toHaveText('Bench Press (Barbell)');
   await expect(rows.nth(0)).toContainText('4 × 6–8 · 80 kg');
   await expect(rows.nth(1).getByTestId('paste-row-name')).toHaveText('DB Shoulder Press');
-  await expect(page.getByTestId('paste-facts')).toContainText('2 to choose');
+  // Chest-supported row is not one of the owner's exercises but the library has it: matched, and marked Library.
+  // The catalogue loads after the sheet opens, so the mark is what shows the library has been read.
+  await expect(rows.nth(2).getByTestId('paste-row-name')).toHaveText(/^Chest Supported Row$/i);
+  await expect(rows.nth(2).getByTestId('library-label')).toBeVisible();
+  await expect(rows.nth(0).getByTestId('library-label')).toHaveCount(0);
+  // Only the line nothing matches waits for a choice.
+  await expect(page.getByTestId('paste-facts')).toContainText('1 to choose');
   await expect(page.getByTestId('paste-save')).toBeDisabled();
 
-  // Chest-supported row: not confidently in the library, so it waits for a choice.
-  await rows.nth(2).getByTestId('paste-choose').click();
+  // The owner can still have it as one of their own: Change, and pick it from the list.
+  await rows.nth(2).getByTestId('paste-change').click();
   const picker = page.getByRole('dialog').filter({ hasText: 'Choose exercise' });
   await picker.getByRole('button', { name: /Iso-Lateral Row \(Machine\)/ }).click();
   await expect(rows.nth(2).getByTestId('paste-row-name')).toHaveText('Iso-Lateral Row (Machine)');
-  // Plank: new to the library.
+  await expect(rows.nth(2).getByTestId('library-label')).toHaveCount(0);
+  // The last line is new to everything.
   await rows.nth(3).getByTestId('paste-add-new').click();
   await expect(rows.nth(3)).toContainText('new exercise');
 
@@ -113,14 +120,19 @@ test('Paste a routine matches what it can, asks about the rest, saves, and learn
   await expect(page.getByTestId('rx-card-Bench Press (Barbell)')).toContainText('4 × 6–8 @ 80 kg');
   await expect(page.getByTestId('rx-card-DB Shoulder Press')).toBeVisible();
   await expect(page.getByTestId('rx-card-Iso-Lateral Row (Machine)')).toBeVisible();
-  await expect(page.getByTestId('rx-card-Plank')).toBeVisible();
+  await expect(page.getByTestId('rx-card-Zzzq qqqx')).toBeVisible();
 
-  // The choice was learned: the same name now matches on its own.
+  // The choice was learned: the same name now matches the owner's exercise on its own, and it
+  // wins over the library entry that carries exactly that name.
   await page.goto('/routines');
   await page.getByTestId('new-routine').click();
   await page.getByTestId('paste-routine').click();
-  await page.getByTestId('paste-text').fill('Push C\nChest-supported row 3x10');
-  await expect(page.getByTestId('paste-row').first().getByTestId('paste-row-name')).toHaveText('Iso-Lateral Row (Machine)');
+  await page.getByTestId('paste-text').fill('Push C\nChest-supported row 3x10\nPlank 3x45s');
+  const learned = page.getByTestId('paste-row');
+  // Plank is only in the library: its mark says the catalogue has loaded, so a library entry has had its chance to take the first line.
+  await expect(learned.nth(1).getByTestId('library-label')).toBeVisible();
+  await expect(learned.nth(0).getByTestId('paste-row-name')).toHaveText('Iso-Lateral Row (Machine)');
+  await expect(learned.nth(0).getByTestId('library-label')).toHaveCount(0);
   await expect(page.getByTestId('paste-save')).toBeEnabled();
 });
 

@@ -91,7 +91,8 @@ test.describe('Exercise library', () => {
     // Photo (assets/custom-demos/neck/, free-exercise-db): must not carry demo-frame.
     await page.goto('/exercises');
     await page.getByTestId('exercise-search').fill('Neck');
-    await page.getByRole('button', { name: /Neck/ }).click();
+    // The list now holds the library too, and other library entries have "neck" in their names; the owner's own Neck row is listed first.
+    await page.getByRole('button', { name: /Neck/ }).first().click();
     await expect(page.getByRole('heading', { name: 'Neck', exact: true })).toBeVisible();
     await expectClass(page.getByRole('img', { name: 'Neck', exact: true }), 'demo-frame', false);
   });

@@ -6,10 +6,22 @@
 import { db } from './db';
 import { BODYWEIGHT_PLUS_TITLE_RE, CARRY_TITLE_RE, COMPOUND, guessIncrement, guessMuscle, LOWER } from './hevy';
 import { createExercise, createRoutine, defaultRoutineExercise, normaliseName } from './repo';
+import { catalogueDemoKey, exerciseFromCatalogue, type CatalogueEntry } from '@/domain/catalogue';
+import { exerciseFromDemo, findExistingExercise, type DemoLike } from '@/domain/library';
 import type { ParsedRoutineLine } from '@/domain/routineText';
 import type { Exercise, ExerciseKind, Routine, RoutineExercise } from '@/domain/types';
 
-export type ImportChoice = { kind: 'existing'; exerciseId: string } | { kind: 'new' };
+/**
+ * What a pasted line becomes. `demo` and `catalogue` are library entries the owner has not added:
+ * the exercise is made when the routine is saved (or, when they already have that movement, the row
+ * they have is used), so a paste that is cancelled leaves nothing behind. The entry travels in the
+ * choice itself, so saving never has to fetch the catalogue inside its transaction.
+ */
+export type ImportChoice =
+  | { kind: 'existing'; exerciseId: string }
+  | { kind: 'new' }
+  | { kind: 'demo'; demo: DemoLike }
+  | { kind: 'catalogue'; entry: CatalogueEntry };
 
 export interface ImportRow {
   line: ParsedRoutineLine;
@@ -76,6 +88,23 @@ export async function saveParsedRoutines(routines: { name: string; rows: ImportR
   });
 }
 
+/** The picture key, name and Exercise fields a library choice stands for. */
+function libraryChoice(choice: Extract<ImportChoice, { kind: 'demo' | 'catalogue' }>): { pictureKey: string; name: string; input: Omit<Exercise, 'id' | 'createdAt'> } {
+  return choice.kind === 'catalogue'
+    ? { pictureKey: catalogueDemoKey(choice.entry.slug), name: choice.entry.name, input: exerciseFromCatalogue(choice.entry) }
+    : { pictureKey: choice.demo.slug, name: choice.demo.name, input: exerciseFromDemo(choice.demo) };
+}
+
+/** The exercise, knowing the pasted name as an alias (once) so the same wording matches on its own next time. */
+async function withPastedName(exercise: Exercise, pasted: string): Promise<Exercise> {
+  const key = normaliseName(pasted);
+  const alreadyKnown = normaliseName(exercise.name) === key || (exercise.aliases ?? []).some((a) => normaliseName(a) === key);
+  if (alreadyKnown) return exercise;
+  const aliases = [...(exercise.aliases ?? []), pasted];
+  await db.exercises.update(exercise.id, { aliases });
+  return { ...exercise, aliases };
+}
+
 async function writeRoutine(
   name: string,
   rows: ImportRow[],
@@ -96,18 +125,16 @@ async function writeRoutine(
         exercise = await createExercise(guessed);
         createdByName.set(key, exercise);
       }
+    } else if (row.choice.kind === 'demo' || row.choice.kind === 'catalogue') {
+      // The row the owner already has for this movement, else a new one: the same rule as adding it from the list.
+      const { pictureKey, name: entryName, input } = libraryChoice(row.choice);
+      const have = findExistingExercise(await db.exercises.toArray(), pictureKey, entryName);
+      exercise = await withPastedName(have ?? (await createExercise(input)), row.line.name);
     } else {
       const cached = exercisesById.get(row.choice.exerciseId);
       const existing = cached ?? (await db.exercises.get(row.choice.exerciseId));
       if (!existing) throw new Error(`Exercise not found: ${row.choice.exerciseId}`);
-      exercise = existing;
-      const key = normaliseName(row.line.name);
-      const alreadyKnown = normaliseName(exercise.name) === key || (exercise.aliases ?? []).some((a) => normaliseName(a) === key);
-      if (!alreadyKnown) {
-        const aliases = [...(exercise.aliases ?? []), row.line.name];
-        await db.exercises.update(exercise.id, { aliases });
-        exercise = { ...exercise, aliases };
-      }
+      exercise = await withPastedName(existing, row.line.name);
     }
     exercisesById.set(exercise.id, exercise);
     resolved.push({ line: row.line, exercise });
