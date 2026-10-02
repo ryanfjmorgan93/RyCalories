@@ -12,7 +12,7 @@ import { daysBetween, isoToDateKey } from './dates';
 import { normaliseName } from './exerciseMatch';
 import { equipmentFromDemo, exerciseFromDemo, findExistingExercise, type ListDemo } from './library';
 import { NON_ROUTINE_PATTERNS, movementPattern } from './movement';
-import { estimateMinutes, paceFactor, type Candidate, type QuickInput } from './quickSession';
+import { estimateMinutes, paceReading, type Candidate, type QuickInput } from './quickSession';
 import { restSecondsFor, type RestDefaults } from './rest';
 import { countsForProgression, countsForVolume } from './sets';
 import type { Equipment, Exercise, MuscleGroup, Routine, RoutineExercise, Session, SetLog, Settings } from './types';
@@ -327,7 +327,7 @@ export function buildQuickInput(src: QuickSource, settings: Settings, today: str
     .filter((s) => s.endedAt && typeof s.durationSec === 'number')
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
     .slice(0, PACE_SESSIONS);
-  const pace = paceFactor(
+  const pace = paceReading(
     recent.map((s) => ({ durationSec: s.durationSec!, modelledSec: modelledSeconds(setsBySession.get(s.id) ?? [], ctx) })),
   );
 
@@ -338,7 +338,8 @@ export function buildQuickInput(src: QuickSource, settings: Settings, today: str
       weeklySets: src.weeklySets,
       ...(settings.weeklySetTargets ? { weeklyTargets: settings.weeklySetTargets } : {}),
       settings: { ...rest, barKg: settings.barKg, plates: settings.plates },
-      pace,
+      pace: pace.factor,
+      ...(pace.basis ? { paceBasis: pace.basis } : {}),
     },
     catalogueEntries,
     demos,

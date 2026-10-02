@@ -7,7 +7,7 @@
  * / `parseIntentReply` / `mergeIntent`), never exercises and never weights, and never a field the
  * rules already set.
  */
-import { EQUIPMENT_KINDS, MUSCLE_GROUPS, type Equipment, type MuscleGroup } from './types';
+import { EQUIPMENT_KINDS, MUSCLE_GROUPS, type Equipment, type MuscleGroup, type NiggleTag } from './types';
 
 export type Effort = 'light' | 'normal';
 
@@ -42,6 +42,18 @@ export interface ParsedRequest {
   residue: string[];
   /** A split asked for by name ("ppl", "upper lower", "full body"). Absent when none was. */
   split?: RoutineSplit;
+  /**
+   * Movements ruled out by name ("no squats", "no deadlifts"), as `movementPattern` keys. Absent when
+   * none was. Equipment ("no machines") is not here: it is `options.equipment`.
+   */
+  excludePatterns?: string[];
+  /**
+   * A body part said to be sore ("my lower back is sore", "bad knee"), as the tag a logged niggle
+   * carries. It is never a muscle to train: the word is read here and nowhere else. Absent when none.
+   */
+  typedNiggles?: NiggleTag[];
+  /** A part of a muscle asked for beside the muscle ("upper chest"), as `unit:region`. The muscle is in `options.focus`. */
+  preferRegions?: string[];
 }
 
 export const DEFAULT_MINUTES = 40;
@@ -162,6 +174,128 @@ const SPLIT_PHRASES: [string, RoutineSplit][] = [
   ['upper and lower split', 'upper-lower'],
   ['full body', 'full-body'],
   ['fullbody', 'full-body'],
+];
+
+/**
+ * A part of a muscle said with the muscle. Read ahead of the macro words, or "upper chest" would be
+ * the whole upper body and "lower chest" the whole lower body. A part with no region of its own
+ * ("upper traps") is only the muscle.
+ */
+const REGION_PHRASES: [string, MuscleGroup[], string | null][] = [
+  ['upper|top chest|pec|pecs', ['chest'], 'chest:upper'],
+  ['lower|bottom chest|pec|pecs', ['chest'], 'chest:lower'],
+  ['mid|middle chest|pec|pecs', ['chest'], 'chest:mid'],
+  ['inner|outer chest|pec|pecs', ['chest'], 'chest:fly'],
+  ['upper|top trap|traps|trapezius', ['traps'], null],
+  ['upper|lower ab|abs|abdominals', ['abs'], null],
+];
+
+const CURL_PATTERNS = ['curl', 'incline-curl', 'preacher-curl', 'hammer-curl', 'reverse-curl'];
+const PRESS_PATTERNS = ['press-vertical', 'press-horizontal', 'press-incline', 'press-decline', 'press-close'];
+
+/**
+ * Movements a request can leave out by name, as `movementPattern` keys. Read only after a negation:
+ * "squats" on its own asks for nothing this parser knows. Phrases come first, so "no back squats"
+ * is a squat and not the back, and "no leg press" is a press and not the legs.
+ */
+const MOVEMENT_PHRASES: [string, string[]][] = [
+  ['back|front|goblet|barbell squat|squats', ['squat']],
+  ['hack squat|squats', ['leg-press']],
+  ['leg press|presses', ['leg-press']],
+  ['leg curl|curls', ['leg-curl']],
+  ['leg extension|extensions', ['leg-extension']],
+  ['leg raise|raises', ['leg-raise']],
+  ['overhead|shoulder|military press|presses', ['press-vertical']],
+  ['bench|chest press|presses', ['press-horizontal']],
+  ['incline press|presses', ['press-incline']],
+  ['incline bench press|presses', ['press-incline']],
+  ['decline press|presses', ['press-decline']],
+  ['upright row|rows', ['upright-row']],
+  ['bent over row|rows', ['row']],
+  ['pull|chin up|ups', ['pull-up']],
+  ['pull down|downs', ['pulldown']],
+  ['lat pulldown|pulldowns', ['pulldown']],
+  ['hip thrust|thrusts', ['hip-thrust']],
+  ['calf raise|raises', ['calf-raise']],
+  ['lateral|side raise|raises', ['lateral-raise']],
+  ['front raise|raises', ['front-raise']],
+  ['face pull|pulls', ['face-pull']],
+  ['good morning|mornings', ['hinge']],
+  ['sit up|ups', ['crunch']],
+];
+
+const MOVEMENT_WORDS = new Map<string, string[]>(Object.entries({
+  squat: ['squat'],
+  squats: ['squat'],
+  deadlift: ['hinge'],
+  deadlifts: ['hinge'],
+  rdl: ['hinge'],
+  rdls: ['hinge'],
+  lunge: ['lunge'],
+  lunges: ['lunge'],
+  row: ['row'],
+  rows: ['row'],
+  dip: ['dip'],
+  dips: ['dip'],
+  curl: CURL_PATTERNS,
+  curls: CURL_PATTERNS,
+  shrug: ['shrug'],
+  shrugs: ['shrug'],
+  pulldown: ['pulldown'],
+  pulldowns: ['pulldown'],
+  pullup: ['pull-up'],
+  pullups: ['pull-up'],
+  chinup: ['pull-up'],
+  chinups: ['pull-up'],
+  press: PRESS_PATTERNS,
+  presses: PRESS_PATTERNS,
+  overhead: ['press-vertical'],
+  crunch: ['crunch'],
+  crunches: ['crunch'],
+  situp: ['crunch'],
+  situps: ['crunch'],
+  fly: ['fly', 'rear-fly'],
+  flys: ['fly', 'rear-fly'],
+  flye: ['fly', 'rear-fly'],
+  flyes: ['fly', 'rear-fly'],
+  flies: ['fly', 'rear-fly'],
+}));
+
+/**
+ * Words that say a body part hurts. An adjective ("bad knee", "sore shoulders", "tweaked my
+ * hamstring") is read with the body part after it first; a verb or a noun ("shoulder hurts", "knee
+ * pain") with the one before it first.
+ */
+const PAIN_ADJECTIVES = new Set([
+  'sore', 'bad', 'tweaked', 'pulled', 'strained', 'injured', 'dodgy', 'niggling', 'grumbling', 'sprained', 'achy', 'painful',
+]);
+const PAIN_VERBS = new Set(['hurts', 'hurt', 'hurting', 'killing', 'aching', 'aches', 'ache', 'pain', 'pains', 'twinge']);
+const PAIN_PHRASES: string[] = ['playing up'];
+
+/** What can sit between a pain word and its body part: "my knee IS sore", "tweaked MY hamstring", "pain IN MY left shoulder". */
+const PAIN_FILLER = new Set([
+  'my', 'is', 'are', 'was', 'were', 'a', 'an', 'the', 'been', 'got', 'have', 'has', 'having', 'really', 'very', 'so', 'bit', 'quite', 'little',
+  'feels', 'feel', 'feeling', 'felt', 'in', 'on', 'of', 'it', 'its', 'again', 'still', 'always', 'left', 'right', 'both',
+]);
+const PAIN_REACH = 3;
+
+/**
+ * The body parts a sore word can bind to, as the tag a logged niggle carries. The back is the lower
+ * back unless it is said to be the upper one; a part with no tag of its own is 'other', which steers
+ * nothing but still is not a muscle to train.
+ */
+const BODY_PARTS: [string, NiggleTag][] = [
+  ['lower back', 'lower back'],
+  ['upper back', 'other'],
+  ['rotator cuff', 'shoulder'],
+  ['back', 'lower back'],
+  ['knee|knees', 'knee'],
+  ['shoulder|shoulders', 'shoulder'],
+  ['hamstring|hamstrings|hammy|hammies', 'hamstring DOMS'],
+  [
+    'elbow|elbows|wrist|wrists|hip|hips|neck|ankle|ankles|groin|calf|calves|quad|quads|glute|glutes|chest|pec|pecs|bicep|biceps|tricep|triceps|forearm|forearms|lat|lats|trap|traps|ab|abs|arm|arms|leg|legs|foot|feet|rib|ribs|spine',
+    'other',
+  ],
 ];
 
 const MUSCLE_WORDS = new Map<string, MuscleGroup[]>(Object.entries({
@@ -292,8 +426,9 @@ type Reading =
   | { len: number; kind: 'quick' }
   | { len: number; kind: 'cancelled' }
   | { len: number; kind: 'effort'; effort: Effort }
-  | { len: number; kind: 'muscles'; muscles: MuscleGroup[]; negated: boolean }
+  | { len: number; kind: 'muscles'; muscles: MuscleGroup[]; negated: boolean; regions?: string[] }
   | { len: number; kind: 'equipment'; equipment: Equipment; negated: boolean }
+  | { len: number; kind: 'patterns'; patterns: string[] }
   | { len: number; kind: 'split'; split: RoutineSplit };
 
 function readMinutes(tokens: string[], i: number): Reading | null {
@@ -340,6 +475,16 @@ function readVocabulary(tokens: string[], i: number, negated: boolean): Reading 
   }
   const heads = readThreeHeads(tokens, i, negated);
   if (heads) return heads;
+  if (negated) {
+    for (const [pattern, patterns] of MOVEMENT_PHRASES) {
+      const len = matchPhrase(tokens, i, pattern);
+      if (len) return { len, kind: 'patterns', patterns };
+    }
+  }
+  for (const [pattern, muscles, region] of REGION_PHRASES) {
+    const len = matchPhrase(tokens, i, pattern);
+    if (len) return { len, kind: 'muscles', muscles, negated, ...(region ? { regions: [region] } : {}) };
+  }
   for (const [pattern, muscles] of MUSCLE_PHRASES) {
     const len = matchPhrase(tokens, i, pattern);
     if (len) return { len, kind: 'muscles', muscles, negated };
@@ -354,6 +499,8 @@ function readVocabulary(tokens: string[], i: number, negated: boolean): Reading 
   if (muscles) return { len: 1, kind: 'muscles', muscles, negated };
   const equipment = EQUIPMENT_WORDS.get(t);
   if (equipment) return { len: 1, kind: 'equipment', equipment, negated };
+  const patterns = negated ? MOVEMENT_WORDS.get(t) : undefined;
+  if (patterns) return { len: 1, kind: 'patterns', patterns };
   return null;
 }
 
@@ -424,6 +571,102 @@ function pushUnique<T>(list: T[], items: T[]): void {
   for (const x of items) if (!list.includes(x)) list.push(x);
 }
 
+/** The body part that ends at token `end`, when one does: its length and the tag. */
+function bodyPartEndingAt(tokens: string[], end: number): { len: number; tag: NiggleTag } | null {
+  for (const [pattern, tag] of BODY_PARTS) {
+    const len = pattern.split(' ').length;
+    const start = end - len + 1;
+    if (start >= 0 && matchPhrase(tokens, start, pattern) === len) return { len, tag };
+  }
+  return null;
+}
+
+/** The body part that starts at token `start`, when one does: its length and the tag. */
+function bodyPartStartingAt(tokens: string[], start: number): { len: number; tag: NiggleTag } | null {
+  for (const [pattern, tag] of BODY_PARTS) {
+    const len = matchPhrase(tokens, start, pattern);
+    if (len) return { len, tag };
+  }
+  return null;
+}
+
+interface NiggleSpan {
+  len: number;
+  /** Set on the body part: the tag it is a niggle of. The pain word has none. */
+  tag?: NiggleTag;
+}
+
+/**
+ * Pain words and the body parts they bind to, found before anything else is read, so "lower back"
+ * in "my lower back is sore" is never read as a muscle. A pain word binds the nearest body part with
+ * only filler between: a bare muscle word ("shoulders") with no pain word beside it is not touched.
+ * Keyed by the token each part starts at.
+ */
+function findNiggles(tokens: string[]): Map<number, NiggleSpan> {
+  const spans = new Map<number, NiggleSpan>();
+  const owner = new Map<number, number>();
+  const claim = (start: number, len: number) => {
+    for (let k = start; k < start + len; k++) owner.set(k, start);
+  };
+  const taken = (from: number, to: number) => {
+    for (let k = from; k <= to; k++) if (owner.has(k)) return true;
+    return false;
+  };
+
+  for (let p = 0; p < tokens.length; p++) {
+    if (owner.has(p)) continue;
+    let painLen = 0;
+    let adjective = false;
+    for (const phrase of PAIN_PHRASES) {
+      const len = matchPhrase(tokens, p, phrase);
+      if (len) painLen = len;
+    }
+    if (painLen === 0) {
+      if (PAIN_ADJECTIVES.has(tokens[p])) {
+        painLen = 1;
+        adjective = true;
+      } else if (PAIN_VERBS.has(tokens[p])) painLen = 1;
+    }
+    if (painLen === 0) continue;
+
+    const after = (): { start: number; len: number; tag: NiggleTag } | null => {
+      let j = p + painLen;
+      while (j < tokens.length && j - (p + painLen) < PAIN_REACH && PAIN_FILLER.has(tokens[j])) j++;
+      const part = tokens[j] === undefined ? null : bodyPartStartingAt(tokens, j);
+      return part ? { start: j, ...part } : null;
+    };
+    const before = (): { start: number; len: number; tag: NiggleTag } | null => {
+      let j = p - 1;
+      while (j >= 0 && p - 1 - j < PAIN_REACH && PAIN_FILLER.has(tokens[j])) j--;
+      const part = j < 0 ? null : bodyPartEndingAt(tokens, j);
+      return part ? { start: j - part.len + 1, ...part } : null;
+    };
+    const order = adjective ? [after, before] : [before, after];
+    for (const find of order) {
+      const part = find();
+      if (!part) continue;
+      const from = Math.min(part.start, p);
+      // "no knee pain" is the lack of one.
+      if ((from >= 1 && NEGATIONS.has(tokens[from - 1])) || (from >= 2 && NEGATIONS.has(tokens[from - 2]))) continue;
+      const bodyEnd = part.start + part.len - 1;
+      const between = part.start < p ? [bodyEnd + 1, p - 1] : [p + painLen, part.start - 1];
+      if (taken(p, p + painLen - 1) || (between[0]! <= between[1]! && taken(between[0]!, between[1]!))) continue;
+      if (owner.has(part.start)) {
+        // The body part is already said to be sore: this word is one more for the same pain.
+        claim(p, painLen);
+        spans.set(p, { len: painLen });
+      } else {
+        claim(part.start, part.len);
+        claim(p, painLen);
+        spans.set(part.start, { len: part.len, tag: part.tag });
+        spans.set(p, { len: painLen });
+      }
+      break;
+    }
+  }
+  return spans;
+}
+
 export function parseQuickRequest(text: string): ParsedRequest {
   const tokens = tokenise(typeof text === 'string' ? text : '');
   const read: string[] = [];
@@ -439,12 +682,24 @@ export function parseQuickRequest(text: string): ParsedRequest {
   const equipmentAdded: Equipment[] = [];
   const equipmentRemoved: Equipment[] = [];
   let split: RoutineSplit | undefined;
+  const patternsRemoved: string[] = [];
+  const niggles: NiggleTag[] = [];
+  const regions: string[] = [];
+  const sore = findNiggles(tokens);
 
-  // Whether the last thing read was a muscle or equipment that was ruled out: a joiner straight after
-  // it rules out the next one too.
+  // Whether the last thing read was a muscle, equipment or movement that was ruled out: a joiner
+  // straight after it rules out the next one too.
   let negating = false;
   let i = 0;
   while (i < tokens.length) {
+    const span = sore.get(i);
+    if (span) {
+      if (span.tag !== undefined) pushUnique(niggles, [span.tag]);
+      read.push(tokens.slice(i, i + span.len).join(' '));
+      negating = false;
+      i += span.len;
+      continue;
+    }
     const r: Reading | null = readAt(tokens, i) ?? (negating && NEGATION_JOINERS.has(tokens[i]) ? readJoined(tokens, i) : null);
     let accepted = false;
     if (r) {
@@ -479,6 +734,11 @@ export function parseQuickRequest(text: string): ParsedRequest {
           break;
         case 'muscles':
           pushUnique(r.negated ? removed : added, r.muscles);
+          if (!r.negated && r.regions) pushUnique(regions, r.regions);
+          accepted = true;
+          break;
+        case 'patterns':
+          pushUnique(patternsRemoved, r.patterns);
           accepted = true;
           break;
         case 'equipment':
@@ -495,7 +755,7 @@ export function parseQuickRequest(text: string): ParsedRequest {
       }
     }
 
-    negating = accepted && r !== null && (r.kind === 'muscles' || r.kind === 'equipment') && r.negated;
+    negating = accepted && r !== null && (r.kind === 'patterns' || ((r.kind === 'muscles' || r.kind === 'equipment') && r.negated));
     if (accepted && r) {
       read.push(tokens.slice(i, i + r.len).join(' '));
       i += r.len;
@@ -528,7 +788,14 @@ export function parseQuickRequest(text: string): ParsedRequest {
       : [];
   if (equipment.length) options.equipment = equipment;
 
-  return split ? { options, read, residue, split } : { options, read, residue };
+  const out: ParsedRequest = { options, read, residue };
+  if (split) out.split = split;
+  if (patternsRemoved.length) out.excludePatterns = patternsRemoved;
+  if (niggles.length) out.typedNiggles = niggles;
+  // A part of a muscle only counts while its muscle is asked for.
+  const parts = regions.filter((r) => (focus as string[]).some((m) => r.startsWith(`${m}:`)));
+  if (parts.length) out.preferRegions = parts;
+  return out;
 }
 
 /** Fills every field the request left open. Minutes are already 30 when the text said short or tired. */

@@ -463,6 +463,26 @@ describe('pace', () => {
     expect(build(src).input.pace).toBe(1);
   });
 
+  it('says where the pace came from: measured from three sessions, held when it ran past the bounds, and nothing when there was no evidence', () => {
+    const three = (secs: number) =>
+      source({
+        exercises: [squat],
+        sessions: [finished('a', 1, secs), finished('b', 2, secs), finished('c', 3, secs)],
+        setLogs: [...threeSets('a', 1), ...threeSets('b', 2), ...threeSets('c', 3)],
+      });
+    expect(build(three(600)).input.paceBasis).toBe('measured');
+    // 480 s modelled: 1200 s is 2.5 times it, held to 1.6; 120 s is a quarter of it, held to 0.6.
+    const slow = build(three(1200)).input;
+    expect(slow.pace).toBe(1.6);
+    expect(slow.paceBasis).toBe('held-slow');
+    const fast = build(three(120)).input;
+    expect(fast.pace).toBe(0.6);
+    expect(fast.paceBasis).toBe('held-fast');
+    const none = build(source({ exercises: [squat], sessions: [finished('a', 1, 600)], setLogs: threeSets('a', 1) })).input;
+    expect(none.pace).toBe(1);
+    expect('paceBasis' in none).toBe(false);
+  });
+
   it('counts a quick session\'s own pace too', () => {
     const src = source({
       exercises: [squat],

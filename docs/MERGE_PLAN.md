@@ -620,6 +620,57 @@ only as diagrams, could never be chosen. Both now draw on the same library the E
   `without` to say which world it is. `e2e/quick-session.spec.ts` counts what Start made as the
   exercises that were not there before, not as the ones with a `cat:` key.
 
+### P9d — The builder writes what a coach would · **M** · ✅ shipped
+
+The owner: "Keep it on the phone but it needs to be smarter when building routines." A review of the
+built routines found them lopsided (3D shoulders gave the side delts one exercise and the fewest sets)
+and the typed words mostly ignored. All of it is `routineBuilder.ts`, `quickRequest.ts` and
+`movement.ts`, pure and tested over 500 seeds with the real library.
+- **Plans** (`PLANS`): a day is written as an ordered list of slots, each a part of a muscle
+  (`unit:region`, `unit:*`, or alternatives joined by `|`) and the movements wanted there. 3D shoulders
+  (any request that is the shoulders and nothing outside their three heads): one heavy vertical
+  press, a lateral raise, a rear fly, a *second* lateral raise in other equipment, a face pull, then a
+  front raise or upright row. A smaller routine keeps the first slots, so the front raise is only taken
+  when the count leaves room after the side and rear delts. Sets: side delts at least as many as the
+  rear, the rear at least as many as a front raise, the three heads held to 9-18 together. Push always
+  has triceps and a lateral raise, Pull biceps, Legs quads, hamstrings and calves, Upper both arms and
+  a lateral raise (seven exercises, the others six). Typed "push", "pull", "legs", "upper", "lower"
+  and a named split read the same plans; the week's need decides only what is beyond them.
+- **Rear delts are the shoulders'**: a request for shoulders alone admits the owner's own rear-delt
+  exercises (filed under `rear delts`) for `shoulders:rear`. The pool filter used to leave them out.
+- **Typed words** (`ParsedRequest.typedNiggles`, `.excludePatterns`, `.preferRegions`, copied by
+  `routineRequestFrom` onto `RoutineRequest`): "my lower back is sore", "bad knee", "tweaked my
+  hamstring" bind a pain word to the body part beside it and are a niggle, never a muscle to train;
+  "no squats", "no deadlifts", "no leg press" leave a movement pattern out ("no machines" is still
+  equipment); "upper chest" is the chest with `chest:upper` taking two exercises. `tender` is not a
+  pain word: `quickDraft.test.ts` uses "tender legs" as a phrase about something else.
+- **Niggles by severity**: severity 1 refuses the worst movements (upright row, behind the neck, dips;
+  hinges and bent-over rows; sissy, deep and kneeling squats; hinges), 2 and 3 and anything typed the
+  full list (barbell overhead press; back squats; lunges; leg curls too). A landmine press, whatever
+  the dataset names it, is the shoulder-friendly press. A line is printed only when the niggle changed
+  a choice: the day is built again with it left out, and the line is said if the rows differ.
+- **Draws are a race** (`choose`): each exercise gets a time drawn from the day's seed, the draw it is
+  and the exercise's id, shorter for a heavier weight, and the quickest wins. The odds are the same as
+  a weighted draw, but taking an unrelated exercise out of a list no longer reshuffles the pick, which
+  is what made "rows identical, niggle line printed" and its opposite impossible to tell apart.
+- **A stalled lift** is replaced by another lift of the same movement, part and muscle that can be
+  loaded (no push-up for a bench, no plank hybrid, nothing behind the neck), the owner's own before the
+  library; failing that another part of the muscle that is the same kind of lift. The row carries the
+  owner's weight for that exercise or none.
+- **A length asked for is a target**: finishers go while that lands nearer, one is added (up to ten
+  exercises) when it is short and no count was asked, and the last line says what it came to ("About
+  47 min for the 45 min asked"), never "nearer". "At your pace" is said only for a measured pace
+  (`QuickInput.paceBasis`, from `paceReading`); a pace held to 0.6 or 1.6 times says so.
+- **Reason lines say only what is true**: a sets line quotes a window only if the routine meets it; the
+  Focus line names the muscles that have a row and a muscle that got nothing says so; "N of M exercises"
+  is what is in the routine after a trim; a repeat blocked by the cap on library exercises says the cap;
+  an equipment filter is named when it is why nothing was found.
+- **Traps paid for**: a diagram carries no compound flag worth trusting (a dumbbell bench press is
+  "not compound"), so for a library exercise the movement decides whether it is a main lift; a test that
+  holds for one seed holds by luck (the forearms in eight exercises were seed 1's jitter); chest routines
+  always take a dip in the last place, so a shoulder niggle changes them every time and a niggle line
+  there is not a no-op.
+
 ---
 
 ## 5. Design and structure decisions

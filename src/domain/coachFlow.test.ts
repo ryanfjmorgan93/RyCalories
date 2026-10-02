@@ -15,14 +15,16 @@ import { parseRoutineText } from './routineText';
 const REAL = seededInput({ recency: { shoulders: 6, 'rear delts': 6 } });
 
 describe('the owner\'s conversation', () => {
-  it('"Give me a routine solely designed to build 3D shoulders" is built, with six different movements across both groups, and no model involved', () => {
+  it('"Give me a routine solely designed to build 3D shoulders" is built, with six different exercises across both groups, two of them lateral raises, and no model involved', () => {
     const message = 'Give me a routine solely designed to build 3D shoulders';
     expect(routeCoachMessage(message, { lastWasRoutine: false })).toBe('build');
     for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
       const [routine] = buildRoutines(REAL, routineRequestFrom(parseQuickRequest(message)), seed);
       expect(routine!.rows).toHaveLength(6);
       expect(new Set(routine!.rows.map((r) => r.name)).size).toBe(6);
-      expect(new Set(routine!.rows.map((r) => r.pattern)).size).toBe(6);
+      // One press, the side delts twice, the rear delts twice, and a front raise or an upright row.
+      expect(new Set(routine!.rows.map((r) => r.pattern)).size).toBe(5);
+      expect(routine!.rows.filter((r) => r.pattern === 'lateral-raise')).toHaveLength(2);
       expect(new Set(routine!.rows.map((r) => r.muscleGroup))).toEqual(new Set(['shoulders', 'rear delts']));
       // Where the model gave DB Shoulder Press three times and Lateral Raise twice.
       expect(routine!.rows.filter((r) => r.name === 'DB Shoulder Press')).toHaveLength(1);

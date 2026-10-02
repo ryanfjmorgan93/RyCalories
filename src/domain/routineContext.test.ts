@@ -70,6 +70,18 @@ describe('buildRoutineContext: the owner\'s routines', () => {
     expect(ctx.routines).toHaveLength(5);
   });
 
+  it('leaves out a quick session\'s routine for being a quick one, whether or not it was archived', () => {
+    // A quick session's routine is archived in the app, but the rule is its own: not archived, still not the owner's.
+    const routines: Routine[] = [...SEED_ROUTINES, { id: 'quick-open', name: 'Quick open', order: 10, isLowerBody: false, quick: true }];
+    const rx: RoutineExercise[] = [
+      ...SEED_ROUTINE_EXERCISES,
+      { id: 'q1', routineId: 'quick-open', exerciseId: BENCH, order: 0, targetSets: 2, repMin: 10, repMax: 15, currentWeight: 30, increment: 2.5, mode: 'normal', optional: false },
+    ];
+    const ctx = buildRoutineContext(source({ routines, routineExercises: rx }), TODAY);
+    expect(ctx.routines.map((r) => r.name)).not.toContain('Quick open');
+    expect(ctx.routines).toHaveLength(5);
+  });
+
   it('puts a routine\'s exercises in their order in it, and skips a row whose exercise is gone', () => {
     const routines: Routine[] = [{ id: 'r', name: 'R', order: 0, isLowerBody: false }];
     const base = { routineId: 'r', targetSets: 3, repMin: 8, repMax: 10, currentWeight: 0, increment: 2, mode: 'normal' as const, optional: false };
@@ -109,6 +121,35 @@ describe('buildRoutineContext: niggles in the last fortnight', () => {
     const { niggles } = buildRoutineContext(source({ sessions }), TODAY);
     expect(niggles.map((n) => n.tag)).toEqual(['knee']);
     expect(niggles[0]!.date).toBe('2026-09-17');
+  });
+
+  it('dates a session by the local day it was started on, not the UTC one: 00:30 British Summer Time is the day after its UTC date', () => {
+    const before = process.env.TZ;
+    process.env.TZ = 'Europe/London';
+    try {
+      // Guard the premise: this instant is the 27th in UTC and the 28th on a London clock.
+      const startedAt = '2026-09-27T23:30:00.000Z';
+      expect(new Date(startedAt).getDate()).toBe(28);
+      const { niggles } = buildRoutineContext(source({ sessions: [session('late', startedAt, [{ tag: 'shoulder', severity: 2 }])] }), TODAY);
+      expect(niggles).toEqual([{ tag: 'shoulder', severity: 2, date: '2026-09-28' }]);
+    } finally {
+      if (before === undefined) delete process.env.TZ;
+      else process.env.TZ = before;
+    }
+  });
+
+  it('the window is counted in local days too: a session at 00:30 BST on the 17th is fourteen days before the 1st, and in', () => {
+    const before = process.env.TZ;
+    process.env.TZ = 'Europe/London';
+    try {
+      // 2026-09-16T23:30Z is 17 September in London: 14 days back from the 1st of October. In UTC it would be 15 days back, and out.
+      const edge = session('edge', '2026-09-16T23:30:00.000Z', [{ tag: 'knee', severity: 2 }]);
+      const { niggles } = buildRoutineContext(source({ sessions: [edge] }), TODAY);
+      expect(niggles).toEqual([{ tag: 'knee', severity: 2, date: '2026-09-17' }]);
+    } finally {
+      if (before === undefined) delete process.env.TZ;
+      else process.env.TZ = before;
+    }
   });
 
   it('leaves out a session from the future, a session with no niggles, and one with an empty list', () => {

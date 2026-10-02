@@ -51,6 +51,11 @@ export interface QuickInput {
   settings: Pick<Settings, 'restCompoundSec' | 'restIsolationSec' | 'restCarrySec' | 'barKg' | 'plates'>;
   /** Actual over modelled duration from recent sessions (`paceFactor`). 1 when there is no history. */
   pace: number;
+  /**
+   * Where `pace` came from (`paceReading`). Absent: there was no evidence and 1 is a default, or the
+   * caller did not say. A line that calls the estimate the owner's own pace needs this to be 'measured'.
+   */
+  paceBasis?: PaceBasis;
 }
 
 export interface QuickRow {
@@ -166,23 +171,46 @@ const MAX_PACE_SESSION_SEC = 3 * 60 * 60;
 const MIN_PACE_SESSIONS = 3;
 
 /**
- * How much slower or faster than modelled the owner's sessions run: the median of actual over
- * modelled duration, from at least three usable sessions, held to 0.6–1.6. A zero, negative or
- * over-three-hour duration is a session left open or logged wrong, and is dropped rather than
- * averaged in. Fewer than three usable sessions is no evidence: 1.
+ * 'measured': the median of at least three usable sessions, inside the bounds. 'held-slow' and
+ * 'held-fast': the median ran past 1.6 or under 0.6 times the model and was held to it, so the
+ * estimate is shorter (or longer) than the owner's own sessions are.
  */
-export function paceFactor(sessions: { durationSec: number; modelledSec: number }[]): number {
+export type PaceBasis = 'measured' | 'held-slow' | 'held-fast';
+
+export interface PaceReading {
+  factor: number;
+  /** Null: fewer than three usable sessions, so the factor is the default 1 and no measurement. */
+  basis: PaceBasis | null;
+}
+
+const PACE_MIN = 0.6;
+const PACE_MAX = 1.6;
+
+/**
+ * How much slower or faster than modelled the owner's sessions run: the median of actual over
+ * modelled duration, from at least three usable sessions, held to 0.6-1.6, and which of those it
+ * was. A zero, negative or over-three-hour duration is a session left open or logged wrong, and is
+ * dropped rather than averaged in. Fewer than three usable sessions is no evidence: 1, no basis.
+ */
+export function paceReading(sessions: { durationSec: number; modelledSec: number }[]): PaceReading {
   const ratios: number[] = [];
   for (const s of sessions) {
     if (!finite(s.durationSec) || !finite(s.modelledSec)) continue;
     if (s.durationSec <= 0 || s.durationSec > MAX_PACE_SESSION_SEC || s.modelledSec <= 0) continue;
     ratios.push(s.durationSec / s.modelledSec);
   }
-  if (ratios.length < MIN_PACE_SESSIONS) return 1;
+  if (ratios.length < MIN_PACE_SESSIONS) return { factor: 1, basis: null };
   ratios.sort((a, b) => a - b);
   const mid = Math.floor(ratios.length / 2);
   const median = ratios.length % 2 ? ratios[mid] : (ratios[mid - 1] + ratios[mid]) / 2;
-  return Math.min(1.6, Math.max(0.6, median));
+  if (median > PACE_MAX) return { factor: PACE_MAX, basis: 'held-slow' };
+  if (median < PACE_MIN) return { factor: PACE_MIN, basis: 'held-fast' };
+  return { factor: median, basis: 'measured' };
+}
+
+/** The factor alone: see `paceReading`. */
+export function paceFactor(sessions: { durationSec: number; modelledSec: number }[]): number {
+  return paceReading(sessions).factor;
 }
 
 // ---------------------------------------------------------------------------

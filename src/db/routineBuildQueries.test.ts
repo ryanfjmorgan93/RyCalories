@@ -89,6 +89,21 @@ describe('loadRoutineContext: niggles from the last fortnight', () => {
     expect((await context()).niggles).toEqual([{ tag: 'lower back', severity: 1, date: '2026-09-16' }]);
   });
 
+  it('reads a session by the day it was started on where the owner is, though that was the day before in UTC: a day the window\'s edge must not lose', async () => {
+    const before = process.env.TZ;
+    process.env.TZ = 'Pacific/Auckland';
+    try {
+      // 00:30 in Auckland on the 16th is 14 days before TODAY, so in the window; in UTC it is still the 15th, before the window's first day.
+      const startedAt = new Date(2026, 8, 16, 0, 30).toISOString();
+      expect(startedAt.slice(0, 10)).toBe('2026-09-15');
+      await db.sessions.put({ id: 'nz', routineId: '', title: 'nz', startedAt, endedAt: startedAt, durationSec: 1800, niggles: [{ tag: 'knee', severity: 2 }] });
+      expect((await context()).niggles).toEqual([{ tag: 'knee', severity: 2, date: '2026-09-16' }]);
+    } finally {
+      if (before === undefined) delete process.env.TZ;
+      else process.env.TZ = before;
+    }
+  });
+
   it('puts the newest first, and reads every niggle of a session', async () => {
     await session('a', 10, [{ tag: 'knee', severity: 1 }]);
     await session('b', 2, [{ tag: 'shoulder', severity: 2 }, { tag: 'lower back', severity: 1 }]);
@@ -212,12 +227,22 @@ describe('loadRoutineInput: everything the builder reads', () => {
       { rule: 'hold_missing_sets', from: 65, to: 65 },
     ]);
     const input = await loadRoutineInput({ today: TODAY, settings: await settings() });
+    // The niggle is read from the owner's own session, and said on the routines it changed: the same seed built without it differs.
+    const withoutNiggle = { ...input, context: { ...input.context!, niggles: [] } };
+    let said = 0;
+    for (const seed of Array.from({ length: 40 }, (_, i) => i + 1)) {
+      const [shoulders] = buildRoutines(input, { focus: ['shoulders'] }, seed);
+      const [plain] = buildRoutines(withoutNiggle, { focus: ['shoulders'] }, seed);
+      const line = shoulders!.reasonLines.some((l) => l.startsWith('Shoulder niggle on 28 Sep'));
+      expect(line, `seed ${seed}`).toBe(shoulders!.rows.map((r) => r.id).join() !== plain!.rows.map((r) => r.id).join());
+      if (line) said++;
+    }
+    expect(said).toBeGreaterThan(0);
     for (const seed of [1, 2, 3, 4, 5, 6]) {
       const [chest] = buildRoutines(input, { focus: ['chest'] }, seed);
       expect(chest!.rows.map((r) => r.name), `seed ${seed}`).not.toContain('Bench Press (Barbell)');
       expect(chest!.reasonLines.some((l) => l.startsWith('Bench Press (Barbell) stalled for 3 sessions')), `seed ${seed}`).toBe(true);
-      const [shoulders] = buildRoutines(input, { focus: ['shoulders'] }, seed);
-      expect(shoulders!.reasonLines.some((l) => l.startsWith('Shoulder niggle on 28 Sep')), `seed ${seed}`).toBe(true);
+      expect(chest!.rows.map((r) => r.pattern), `seed ${seed}`).not.toContain('dip');
     }
   });
 });

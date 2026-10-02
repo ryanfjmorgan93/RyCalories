@@ -512,7 +512,8 @@ describe('coach store: shuffle and the assistant', () => {
     expect(after!.request).toEqual({ focus: ['shoulders'], count: 4 });
     expect(after!.routines[0]!.rows).toHaveLength(4);
     // Only options came back from it: every exercise is the builder's.
-    expect(after!.routines[0]!.rows.every((r) => r.muscleGroup === 'shoulders')).toBe(true);
+    // The rear delts are part of the shoulders: their exercises are taken for the rear of it.
+    expect(after!.routines[0]!.rows.every((r) => r.muscleGroup === 'shoulders' || r.muscleGroup === 'rear delts')).toBe(true);
     expect(streamed).toEqual([]);
     expect(store.getState().working).toBeNull();
   });

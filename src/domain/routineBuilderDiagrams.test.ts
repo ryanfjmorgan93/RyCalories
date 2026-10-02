@@ -207,13 +207,14 @@ describe('over the real library, 500 seeds', () => {
     }
   });
 
-  it('3D shoulders is still six distinct movements, front, side and rear, with diagram rows among them', () => {
+  it('3D shoulders is still six distinct exercises, front, side and rear, with diagram rows among them, the side delts taking two lateral raises', () => {
     let withDiagram = 0;
     const fromDiagram = new Set<string>();
     for (const seed of SEEDS) {
       const r = one(buildRoutines(REAL, { focus: ['shoulders', 'rear delts'] }, seed));
       expect(r.rows, `seed ${seed}`).toHaveLength(6);
-      expect(new Set(patternsOf(r)).size, `seed ${seed}`).toBe(6);
+      expect(new Set(r.rows.map((x) => x.id)).size, `seed ${seed}`).toBe(6);
+      expect(new Set(patternsOf(r)).size, `seed ${seed}`).toBe(5);
       const regions = new Set(r.rows.map((x) => x.region));
       for (const region of ['shoulders:front', 'shoulders:side', 'shoulders:rear']) expect(regions, `seed ${seed}`).toContain(region);
       for (const x of r.rows.filter((y) => y.origin === 'diagram')) {
@@ -305,7 +306,8 @@ describe('a fresh owner: nothing logged, routines built on machines, cables and 
     for (const seed of seedsFrom(150)) {
       const r = one(buildRoutines(FRESH, { focus: ['shoulders', 'rear delts'] }, seed));
       expect(r.rows, `seed ${seed}`).toHaveLength(6);
-      expect(new Set(patternsOf(r)).size, `seed ${seed}`).toBe(6);
+      expect(new Set(r.rows.map((x) => x.id)).size, `seed ${seed}`).toBe(6);
+      expect(new Set(patternsOf(r)).size, `seed ${seed}`).toBe(5);
       for (const x of r.rows.filter((y) => y.origin !== 'own')) library.add(x.equipment ?? 'none');
     }
     // The library exercises it took are machines, cables and weights, not only the body.
