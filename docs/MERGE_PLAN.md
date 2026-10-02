@@ -443,6 +443,16 @@ nothing new leaving the phone, Settings → About unchanged.
   reasons, and the owner's data; the oldest turns are dropped first when the prompt does not fit.
   Entry points: Progress → Coach, and Routines → New routine → Draft with coach (the first
   message there is a build whatever it says).
+- **Edits change the routine on screen** (`readEdit` in `coachIntent.ts`, `applyEdit` and
+  `buildEdit` in `coachBuild.ts`). While a built routine is the subject, "add biceps", "no legs",
+  "make it 5 exercises", "shorter" / "30 mins", "harder" / "easier", "swap the front raise",
+  "more rear delts", "make it a push day" and "another one" edit that routine (the previous request
+  is spread and changed, so every field the parser adds is carried), with no model call; the change
+  is added to the reasons ("Changed: …"). A movement the parser knows ("no front raises", "no
+  upright row") is ruled out for later edits too; a row it does not know ("no hammer curls") is
+  dropped and the rest kept. Questions about the routine, or anything ending in "?", go to the
+  model with the current routine. Clear cancels a question or build in flight, and an error keeps
+  the typed message.
 
 ### P6 — Explicitly deferred to v1.1
 
