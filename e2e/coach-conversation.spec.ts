@@ -305,52 +305,68 @@ function bareOwner(): Owner {
   return { exercises: [mine('o1', 'Aardvark', 'barbell'), mine('o2', 'Bonobo', 'dumbbell'), mine('o3', 'Cheetah', 'cable'), mine('o4', 'Dingo', 'machine')], routines: false };
 }
 
-test('Review routine saves a routine of library exercises, each made once however often it is saved', async ({ page }) => {
+test('Review routine opens the routine it sits under and saves it, the library exercises made once however often it is saved', async ({ page }) => {
   await fakeModel(page);
   await seedOwner(page, bareOwner());
   await openCoach(page);
+
+  // Two routines in one conversation, so a Review that opened the wrong one would show.
   await say(page, 'give me a routine for 3d shoulders');
-  const bubble = entry(page, 0).getByTestId('coach-routine');
-  await expect(bubble).toHaveCount(1);
+  await expect(page.getByTestId('coach-routine')).toHaveCount(1);
   await idle(page);
-  const names = await rowNames(bubble);
-  // Nothing of the owner's is a shoulder exercise: every row is from the library, and says so.
-  expect(names.length).toBeGreaterThanOrEqual(2);
-  await expect(bubble.getByTestId('coach-new')).toHaveCount(names.length);
-  expect(new Set(names).size).toBe(names.length);
-  await expect(bubble.getByTestId('coach-minutes')).toHaveText(/^about \d+ min$/);
+  await say(page, 'give me a chest routine');
+  await expect(page.getByTestId('coach-routine')).toHaveCount(2);
+  await idle(page);
+  const shoulders = await rowNames(entry(page, 0));
+  const chest = await rowNames(entry(page, 1));
+  // Nothing of the owner's is for either muscle: every row is from the library, and says so.
+  for (const [n, names] of [[0, shoulders], [1, chest]] as const) {
+    expect(names.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(names).size).toBe(names.length);
+    await expect(entry(page, n).getByTestId('coach-new')).toHaveCount(names.length);
+    await expect(entry(page, n).getByTestId('coach-minutes')).toHaveText(/^about \d+ min$/);
+  }
+  expect(shoulders).not.toEqual(chest);
   expect(await modelLog(page)).toEqual(NO_CALLS);
 
   const saved = async () => {
     const { tables } = await readRawIron(page);
     const exercises = tables.exercises as { id: string; name: string }[];
     const nameOf = new Map(exercises.map((e) => [e.id, e.name]));
-    const routines = (tables.routines as { id: string; name: string }[]).filter((r) => r.name === 'Shoulders and rear delts');
     const rx = tables.routineExercises as { routineId: string; exerciseId: string; order: number }[];
-    return { exercises, routines: routines.map((r) => rx.filter((x) => x.routineId === r.id).sort((a, b) => a.order - b.order).map((x) => nameOf.get(x.exerciseId))) };
+    const routines = (tables.routines as { id: string; name: string }[]).map((r) => ({
+      name: r.name,
+      rows: rx.filter((x) => x.routineId === r.id).sort((a, b) => a.order - b.order).map((x) => nameOf.get(x.exerciseId)),
+    }));
+    return { exercises, routines };
   };
 
-  for (const save of [1, 2]) {
-    await entry(page, 0).getByTestId('coach-review').click();
+  // Chest first, from under the second bubble; then the shoulders; then the shoulders again.
+  const saves: [number, string, string[]][] = [
+    [1, 'Chest', chest],
+    [0, 'Shoulders and rear delts', shoulders],
+    [0, 'Shoulders and rear delts', shoulders],
+  ];
+  for (const [i, [which, name, names]] of saves.entries()) {
+    await entry(page, which).getByTestId('coach-review').click();
     const review = page.getByRole('dialog').filter({ hasText: 'Review routine' });
     await expect(review.getByTestId('paste-row')).toHaveCount(names.length);
     await expect(review.getByTestId('paste-row-name')).toHaveText(names);
-    // The second time the exercises are the owner's own and are matched as theirs. The first time any the library has not matched wait for a choice.
-    if (save === 2) await expect(review.getByTestId('paste-change')).toHaveCount(names.length);
+    // An exercise the owner has now is matched as theirs: the third time, every row is.
+    if (i === 2) await expect(review.getByTestId('paste-change')).toHaveCount(names.length);
     while ((await review.getByTestId('paste-add-new').count()) > 0) await review.getByTestId('paste-add-new').first().click();
     await review.getByTestId('paste-save').click();
     await expect(page).toHaveURL(/\/routines\/[0-9a-f-]+$/);
 
     const { exercises, routines } = await saved();
-    expect(routines).toHaveLength(save);
-    for (const routine of routines) expect(routine).toEqual(names);
-    // The owner's four and one row for each library exercise, however many routines hold it.
-    expect(exercises).toHaveLength(4 + names.length);
+    expect(routines.filter((r) => r.name === name).map((r) => r.rows)).toEqual(Array.from({ length: routines.filter((r) => r.name === name).length }, () => names));
+    expect(routines).toHaveLength(i + 1);
+    // The owner's four and one row for each library exercise held by any routine saved, however many hold it.
+    const held = new Set(saves.slice(0, i + 1).flatMap(([, , n]) => n));
+    expect(exercises).toHaveLength(4 + held.size);
     expect(new Set(exercises.map((e) => e.name.toLowerCase())).size).toBe(exercises.length);
-    if (save === 1) {
-      await page.goBack();
-      await expect(entry(page, 0).getByTestId('coach-routine')).toHaveCount(1);
-    }
+    await page.goBack();
+    await expect(page.getByTestId('coach-routine')).toHaveCount(2);
   }
 });
 
