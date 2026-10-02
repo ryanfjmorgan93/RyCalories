@@ -99,12 +99,13 @@ describe('parseQuickRequest: a number that counts something else is not an exerc
     ['3 times 10', ['3', 'times', '10']],
     ['4 sets of 10', ['4', 'sets', '10']],
     ['three sets of eight', ['three', 'sets', 'eight']],
-    ['3 days a week', ['3', 'days', 'week']],
+    // "days" is a word a routine request uses ("a 3 day split"), so it is filler and no longer residue.
+    ['3 days a week', ['3', 'week']],
     ['three times a week', ['three', 'times', 'week']],
     ['2 rounds', ['2', 'rounds']],
     ['5 kg', ['5', 'kg']],
     ['4 weeks ago', ['4', 'weeks', 'ago']],
-    ['3 day split', ['3', 'split']],
+    ['3 day split', ['3']],
   ])('"%s" is no count, and what it says is left as residue', (text, residue) => {
     const p = parse(text);
     expect(p.options.count, text).toBeUndefined();
@@ -324,7 +325,7 @@ describe('parseQuickRequest: muscles', () => {
     ['back', ['lats', 'upper back']],
     ['shoulders', ['shoulders']],
     ['shoulder', ['shoulders']],
-    ['delts', ['shoulders']],
+    ['delts', ['shoulders', 'rear delts']],
     ['biceps', ['biceps']],
     ['bicep', ['biceps']],
     ['triceps', ['triceps']],

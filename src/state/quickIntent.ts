@@ -11,8 +11,8 @@
 import { create } from 'zustand';
 import { buildIntentPrompt, parseIntentReply, type QuickOptions } from '../domain/quickRequest';
 import { useAssistant } from './assistant';
-import { NO_ANSWER, untilQuiet } from './coach';
 import { describeAnalyzeMealError, Nano, type NanoStatus } from './nano';
+import { NO_ANSWER, untilQuiet } from './untilQuiet';
 
 /** A reply is one small JSON object; this leaves room for it and no more. */
 export const INTENT_MAX_TOKENS = 120;

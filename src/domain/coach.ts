@@ -23,6 +23,7 @@ import {
 import { windowStart } from './checkin';
 import { expandAbbreviations } from './exerciseMatch';
 import { fmtSetsLine } from './format';
+import { routineToText, type BuiltRoutine } from './routineBuilder';
 import { countsForVolume } from './sets';
 
 export type CoachMode = 'ask' | 'routine';
@@ -38,8 +39,8 @@ export interface CoachRung {
   label: string;
 }
 
-/** Turns of earlier conversation carried into a prompt: the last question and its answer. */
-const THREAD_TURNS = 2;
+/** Turns of earlier conversation carried into a prompt: the last three questions and their answers. */
+export const THREAD_TURNS = 6;
 
 /** The widest window for training as a whole; a named exercise gets all the history loaded. */
 const FULL_TRAINING_DAYS = 56;
@@ -55,21 +56,125 @@ export function buildCoachSystemPrompt(mode: CoachMode): string {
     ].join('\n');
   }
   return [
-    "You answer questions about the user's own training and food, using the data from their training app below.",
-    'Answer only what is asked, as briefly as the question allows. British English; weights in kilograms.',
-    'Quote the dates and sets from the data that the answer rests on. Never make up a number.',
-    'If the data does not answer the question, say "Not in your data."',
-    'No tips, encouragement or motivational lines.',
+    'You answer questions for the user of their gym and food app. British English; weights in kilograms.',
+    'Answer what was asked, briefly.',
+    "For questions about the user's own training, food or bodyweight, use their data below and quote the dates and sets the answer rests on. Never make up a number of theirs. Say \"Not in your data.\" only when asked for a number of theirs that is not logged.",
+    'For anything else, such as what works a muscle, why an exercise or a rep range suits a goal, or what an exercise is, answer from general training knowledge.',
+    'If a routine the app built is below, the app chose its exercises and wrote its reasons. Explain the routine from those reasons, and say nothing about it that they do not support.',
+    'Ask the user nothing. No encouragement, no motivational lines, no tips beyond what was asked.',
   ].join('\n');
 }
 
-/** The prompt sent with one rung of context: the data, the last exchange, then the question. */
-export function buildCoachPrompt(context: string, thread: CoachTurn[], question: string): string {
+/** How much of a built routine's reasons a prompt carries. */
+export type RoutineDetail = 'full' | 'lines' | 'text';
+
+/**
+ * The routine the app built, for the model to explain: the routine as the app writes it, then why,
+ * from the reasons the builder recorded. `lines` leaves out each exercise's own reason and `text`
+ * leaves out the reasons altogether, for when the prompt has to be smaller.
+ */
+export function buildRoutineBlock(routines: readonly BuiltRoutine[], detail: RoutineDetail = 'full'): string {
+  if (routines.length === 0) return '';
+  const parts = ['Routine the app built:', routineToText(routines)];
+  if (detail !== 'text') {
+    const several = routines.length > 1;
+    const why: string[] = [];
+    for (const r of routines) {
+      const prefix = several ? `${r.name}: ` : '';
+      if (detail === 'full') for (const row of r.rows) why.push(`${prefix}${row.name}: ${row.reason}`);
+      for (const line of r.reasonLines) why.push(`${prefix}${line}`);
+    }
+    parts.push('', 'Why:', ...why);
+  }
+  return parts.join('\n');
+}
+
+/**
+ * The prompt sent with one rung of context: the data, the routine the app built when there is one,
+ * the last three exchanges, then the question.
+ */
+export function buildCoachPrompt(context: string, thread: CoachTurn[], question: string, routineBlock = ''): string {
   const parts: string[] = [];
   if (context) parts.push(context);
+  if (routineBlock) parts.push(routineBlock);
   for (const t of thread.slice(-THREAD_TURNS)) parts.push(`${t.role === 'user' ? 'User' : 'Coach'}: ${t.text}`);
   parts.push(`User: ${question.trim()}`);
   return parts.join('\n\n');
+}
+
+// ---------------------------------------------------------------------------
+// Fitting a prompt to the model's limit
+
+/** One way to shape a prompt: how many turns of conversation, which rung of the owner's data, how much of the routine's reasons. */
+export interface PromptShape {
+  /** Turns of the thread kept: the newest ones, the oldest dropped first. */
+  turns: number;
+  /** Index into the context ladder. */
+  rung: number;
+  detail: RoutineDetail;
+}
+
+/**
+ * Every shape a prompt may take, fullest first. The oldest turns go first, down to the last
+ * exchange; then the owner's data shrinks rung by rung; then the routine's reasons; and the last
+ * exchange goes only when nothing else is left to drop. The routine itself is never dropped: it is
+ * what a "why" is about.
+ */
+export function promptShapes(threadLength: number, rungCount: number, hasRoutine: boolean): PromptShape[] {
+  const whole = Math.min(THREAD_TURNS, Math.max(0, Math.floor(Number.isFinite(threadLength) ? threadLength : 0)));
+  const lastExchange = Math.min(2, whole);
+  const rungs = Math.max(1, Math.floor(Number.isFinite(rungCount) ? rungCount : 1));
+  const shapes: PromptShape[] = [];
+  for (let turns = whole; turns > lastExchange; turns -= 2) shapes.push({ turns, rung: 0, detail: 'full' });
+  shapes.push({ turns: lastExchange, rung: 0, detail: 'full' });
+  for (let rung = 1; rung < rungs; rung++) shapes.push({ turns: lastExchange, rung, detail: 'full' });
+  if (hasRoutine) {
+    shapes.push({ turns: lastExchange, rung: rungs - 1, detail: 'lines' });
+    shapes.push({ turns: lastExchange, rung: rungs - 1, detail: 'text' });
+  }
+  if (lastExchange > 0) shapes.push({ turns: 0, rung: rungs - 1, detail: hasRoutine ? 'text' : 'full' });
+  return shapes;
+}
+
+/** Whether a counted prompt, with room left for the reply, is within the model's limit. */
+export function fitsLimit(counted: { tokens: number; limit: number }, replyTokens: number): boolean {
+  return Number.isFinite(counted.tokens) && Number.isFinite(counted.limit) && counted.tokens + replyTokens <= counted.limit;
+}
+
+/**
+ * The first shape that fits, trying them in order and stopping at it. `count` is the phone's own
+ * token counter for the prompt of that shape; this decides only what to drop next. Null when even
+ * the smallest shape is over the limit.
+ */
+export async function fitCoachPrompt(
+  shapes: readonly PromptShape[],
+  count: (shape: PromptShape) => Promise<{ tokens: number; limit: number }>,
+  replyTokens: number,
+): Promise<{ shape: PromptShape; tries: number } | null> {
+  for (let i = 0; i < shapes.length; i++) {
+    const shape = shapes[i]!;
+    if (fitsLimit(await count(shape), replyTokens)) return { shape, tries: i + 1 };
+  }
+  return null;
+}
+
+/** The prompt for a shape, and what it holds, in words, for the screen to say the answer was based on. */
+export function shapedPrompt(
+  shape: PromptShape,
+  ladder: readonly CoachRung[],
+  thread: readonly CoachTurn[],
+  question: string,
+  routines: readonly BuiltRoutine[],
+): { prompt: string; label: string } {
+  const rung = ladder[Math.min(Math.max(0, shape.rung), ladder.length - 1)] ?? { text: '', label: 'none of your data' };
+  const kept = shape.turns > 0 ? thread.slice(-shape.turns) : [];
+  const parts = [rung.label];
+  if (routines.length > 0) parts.push(shape.detail === 'full' ? 'routine and reasons' : shape.detail === 'lines' ? 'routine and summary' : 'routine only');
+  if (kept.length > 0) {
+    const exchanges = Math.ceil(kept.length / 2);
+    parts.push(`last ${exchanges === 1 ? 'exchange' : `${exchanges} exchanges`}`);
+  }
+  return { prompt: buildCoachPrompt(rung.text, [...kept], question, buildRoutineBlock(routines, shape.detail)), label: parts.join(' \u00b7 ') };
 }
 
 /**

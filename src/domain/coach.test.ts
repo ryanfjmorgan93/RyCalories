@@ -217,21 +217,20 @@ describe('prompts', () => {
     expect(routines[0]).toMatchObject({ name: 'Upper A', exercises: [{ name: 'Bench press', sets: 3, repMin: 8, repMax: 10, weightKg: 60 }, { name: 'Row' }] });
   });
 
-  it('the ask prompt says to answer from the data and nothing more', () => {
+  it('the ask prompt answers what was asked, from the data for their own numbers, and no longer says "Not in your data." for everything else', () => {
+    // Deliberately changed from the prompt that told the model to answer only from the data: that is
+    // what made "I want 3d shoulders" come back as "Not in your data." (see coachPrompt.test.ts).
     const system = buildCoachSystemPrompt('ask');
-    expect(system).toContain('Answer only what is asked');
+    expect(system).toContain('Answer what was asked, briefly');
     expect(system).toContain('Not in your data.');
-    expect(system).toContain('No tips, encouragement');
+    expect(system).toContain('no tips beyond what was asked');
   });
 
-  it('carries the data, the last question and answer only, then the new question', () => {
-    const thread = [
-      { role: 'user' as const, text: 'first' },
-      { role: 'coach' as const, text: 'one' },
-      { role: 'user' as const, text: 'second' },
-      { role: 'coach' as const, text: 'two' },
-    ];
-    expect(buildCoachPrompt('DATA', thread, ' third ')).toBe('DATA\n\nUser: second\n\nCoach: two\n\nUser: third');
+  it('carries the data, the last three exchanges, then the new question', () => {
+    const thread = Array.from({ length: 8 }, (_, i) => ({ role: i % 2 === 0 ? ('user' as const) : ('coach' as const), text: `t${i}` }));
+    expect(buildCoachPrompt('DATA', thread, ' third ')).toBe(
+      ['DATA', 'User: t2', 'Coach: t3', 'User: t4', 'Coach: t5', 'User: t6', 'Coach: t7', 'User: third'].join('\n\n'),
+    );
     expect(buildCoachPrompt('', [], 'q')).toBe('User: q');
   });
 });

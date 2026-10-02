@@ -9,6 +9,10 @@ import { clickIfPresent, fresh, logOneSet } from './fresh';
  * cannot run here is NanoPlugin.java and the model itself — whether the Fold 8 serves the fuller
  * variant, and how good and how fast its answers are, is checked on the phone (Settings → Assistant
  * → Coach model names the model and its token limit).
+ *
+ * There is one box: a request for a routine is built by the app with no model, anything else is a
+ * question for the model. The conversation across both (the routine, why, a new routine) is
+ * coach-conversation.spec.ts; this file is the model's side of it and the way into the screen.
  */
 
 interface FakeConfig {
@@ -106,32 +110,47 @@ test('Ask: when the fullest context is too big, the first smaller one that fits 
   expect(streamed[0]).not.toContain('ROUTINES');
 });
 
-test('Build a routine: the draft opens in the paste review, matched, and saves as a routine', async ({ page }) => {
-  await setFakeNano(page, { statusFull: READY_FULL, reply: ['Upper A\nBench press 3x8-10 @ 60kg\n', 'Face pull 3x15'] });
+test('Draft with coach opens the box on a build: its first message is built by the app with no model, opens in the paste review, matched, and saves as a routine', async ({ page }) => {
+  // Changed with the Ask / Build toggle: a routine used to be written by the model from this message, and the toggle
+  // chose that. The box is one now, and "Draft with coach" makes the first message a build.
+  await setFakeNano(page, { statusFull: READY_FULL, reply: ['unused'] });
   await fresh(page);
   await page.goto('/routines');
   await page.getByTestId('new-routine').click();
   await page.getByTestId('draft-with-coach').click();
   await expect(page).toHaveURL(/\/coach\?mode=routine$/);
-  await expect(page.getByRole('radio', { name: 'Build a routine' })).toHaveAttribute('aria-checked', 'true');
+  // Once the box is there the toggle would be: it is gone.
+  await expect(page.getByTestId('coach-input')).toBeVisible();
+  await expect(page.getByRole('radio')).toHaveCount(0);
 
+  // Worded as a request for nothing in particular, so only the deep link makes it a build.
   await page.getByTestId('coach-input').fill('One upper day, 45 minutes');
   await page.getByTestId('coach-send').click();
-  await expect(page.getByTestId('coach-read')).toContainText('Read: working weights');
-  expect((await coachLog(page)).streamed[0]).toContain('WORKING WEIGHTS');
+  await expect(page.getByTestId('coach-routine')).toHaveCount(1);
+  await expect(page.getByTestId('coach-read')).toHaveText(/^Read: upper · \d+ exercises · 45 min$/);
+  await expect(page.getByTestId('coach-send')).toHaveText('Send');
+  const log = await coachLog(page);
+  expect(log.streamed).toEqual([]);
+  expect(log.counted).toEqual([]);
+  const built = await page.getByTestId('coach-row-name').allTextContents();
+  expect(built.length).toBeGreaterThan(0);
 
   await page.getByTestId('coach-review').click();
   const review = page.getByRole('dialog').filter({ hasText: 'Review routine' });
   const rows = review.getByTestId('paste-row');
-  await expect(rows).toHaveCount(2);
-  await expect(rows.nth(0).getByTestId('paste-row-name')).toHaveText('Bench Press (Barbell)');
-  await expect(rows.nth(1).getByTestId('paste-row-name')).toHaveText('Face Pull');
+  await expect(rows).toHaveCount(built.length);
+  await expect(review.getByTestId('paste-row-name')).toHaveText(built);
+  // The owner's own exercises are matched to their rows; a library one waits for its choice.
+  await expect(review.getByTestId('paste-change').first()).toBeVisible();
+  while ((await review.getByTestId('paste-add-new').count()) > 0) await review.getByTestId('paste-add-new').first().click();
   await review.getByTestId('paste-save').click();
   await expect(page).toHaveURL(/\/routines\/[0-9a-f-]+$/);
-  await expect(page.getByTestId('rx-card-Bench Press (Barbell)')).toContainText('3 × 8–10 @ 60 kg');
+  for (const name of built) await expect(page.getByTestId(`rx-card-${name}`)).toBeVisible();
 });
 
-test('when the coach model is not there, the reason is shown and nothing can be sent', async ({ page }) => {
+test('when the coach model is not there, the reason is shown and a question cannot be sent, but a routine can be built', async ({ page }) => {
+  // Changed with the toggle: Send used to be off for everything while the model was away. A routine is built
+  // by the app, so only a question needs the model.
   const detail = 'UNAVAILABLE · samsung SM-F971B · SDK 36 · AICore 2026.9.4';
   await setFakeNano(page, { statusFull: { state: 'unavailable', detail }, reply: ['unused'] });
   await fresh(page);
@@ -139,6 +158,16 @@ test('when the coach model is not there, the reason is shown and nothing can be 
   await expect(page.getByTestId('coach-status')).toContainText(detail);
   await page.getByTestId('coach-input').fill('How was last week?');
   await expect(page.getByTestId('coach-send')).toBeDisabled();
+
+  await page.getByTestId('coach-input').fill('Give me a chest routine');
+  await expect(page.getByTestId('coach-send')).toBeEnabled();
+  await page.getByTestId('coach-send').click();
+  await expect(page.getByTestId('coach-routine')).toHaveCount(1);
+  await expect(page.getByTestId('coach-read')).toHaveText(/^Read: chest · \d+ exercises$/);
+  await expect(page.getByTestId('coach-status')).toContainText(detail);
+  const log = await coachLog(page);
+  expect(log.streamed).toEqual([]);
+  expect(log.counted).toEqual([]);
 
   await page.goto('/settings');
   await expect(page.getByTestId('coach-model-detail')).toHaveText(detail);

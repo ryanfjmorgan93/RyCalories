@@ -7,6 +7,7 @@
  * weight it already has, or has none and is prescribed as calibrating ("you pick the weight").
  */
 import { roundKg } from './engine';
+import { movementPattern } from './movement';
 import { deloadLoad } from './prescription';
 import { DEFAULT_MINUTES, type QuickOptions } from './quickRequest';
 import { restSecondsFor, type RestDefaults } from './rest';
@@ -90,6 +91,12 @@ const NEED_DAYS_CAP = 14;
 /** Up to this many days' worth of seeded wobble on a muscle's need, so Shuffle can swap near-equal muscles but never a rested one for a badly overdue one. */
 const NEED_WOBBLE_DAYS = 3;
 const DEFICIT_WEIGHT = 2;
+/**
+ * What a candidate's weight is multiplied by when its movement is one the plan already has, so two
+ * presses are not drawn for one muscle while a lateral raise or a fly is on offer. A fraction rather
+ * than a ban: when everything left is the same movement, they share the pick as before.
+ */
+export const PATTERN_PENALTY = 0.05;
 /** With a catalogue and an own exercise for the same muscle, catalogue ones share this fraction of the own weight. */
 const CATALOGUE_SHARE = 0.5;
 const LIGHT_SETS_COMPOUND = 3;
@@ -112,7 +119,7 @@ function finite(n: unknown): n is number {
 }
 
 /** A small seeded generator (mulberry32): 32 bits of state, uniform in [0, 1). */
-function mulberry32(seed: number): () => number {
+export function mulberry32(seed: number): () => number {
   let a = seed | 0;
   return () => {
     a = (a + 0x6d2b79f5) | 0;
@@ -130,7 +137,7 @@ function byId(a: Candidate, b: Candidate): number {
 // ---------------------------------------------------------------------------
 // Time
 
-function rowSeconds(row: Pick<QuickRow, 'sets' | 'restSec' | 'candidate'>): number {
+export function rowSeconds(row: Pick<QuickRow, 'sets' | 'restSec' | 'candidate'>): number {
   const work = row.sets * WORK_SEC_PER_SET * (row.candidate.unilateral ? 2 : 1);
   return SETUP_SEC + work + Math.max(0, row.sets - 1) * row.restSec;
 }
@@ -194,7 +201,7 @@ function eligiblePool(candidates: Candidate[], options: QuickOptions, light: boo
   });
 }
 
-function baseWeight(c: Candidate): number | null {
+export function baseWeight(c: Candidate): number | null {
   const b = c.base;
   if (!b || b.mode === 'calibrating' || !finite(b.weightKg) || b.weightKg < 0) return null;
   return b.weightKg;
@@ -238,11 +245,15 @@ function prescribeRow(c: Candidate, light: boolean, barKg: number, plates: numbe
   return { sets, repMin, repMax, weightKg: known === null ? null : roundKg(known), mode: known === null ? 'calibrating' : 'normal' };
 }
 
-/** How likely a candidate is to be chosen, relative to the others for its muscle. Never zero. */
-function weightOf(c: Candidate, light: boolean): number {
+/**
+ * How likely a candidate is to be chosen, relative to the others for its muscle. Never zero.
+ * `ignoreRecovery` is for a plan made for a later day: an exercise done yesterday is as good a
+ * pick as any other, without pretending it was done longer ago.
+ */
+export function weightOf(c: Candidate, light: boolean, ignoreRecovery = false): number {
   let w = 1;
   if (baseWeight(c) !== null) w *= 2;
-  if (finite(c.daysSinceUsed) && c.daysSinceUsed < RECOVERY_DAYS) w *= 0.25;
+  if (!ignoreRecovery && finite(c.daysSinceUsed) && c.daysSinceUsed < RECOVERY_DAYS) w *= 0.25;
   if (light) {
     if (c.equipment === 'machine' || c.equipment === 'cable') w *= 2;
     if (!c.isCompound) w *= 1.5;
@@ -350,8 +361,14 @@ export function generateQuickSession(input: QuickInput, options: QuickOptions, s
     return (byGroup.get(g) ?? []).filter((c) => !chosenIds.has(c.id) && (c.origin !== 'catalogue' || catalogueCount < MAX_CATALOGUE));
   };
 
+  const patternOf = new Map<string, string>();
+  for (const c of pool) patternOf.set(c.id, movementPattern(c.name, c.muscleGroup));
+  const patternsTaken = new Set<string>();
+
   const weightedPick = (list: Candidate[]): Candidate => {
-    const weights = list.map((c) => weightOf(c, light));
+    // A movement already in the plan is drawn far less often than one that is not. When every one left
+    // is the same movement they are all scaled alike, so they share the pick as they would have.
+    const weights = list.map((c) => weightOf(c, light) * (patternsTaken.has(patternOf.get(c.id)!) ? PATTERN_PENALTY : 1));
     const own = list.reduce((s, c, i) => (c.origin === 'catalogue' ? s : s + weights[i]), 0);
     const cat = list.reduce((s, c, i) => (c.origin === 'catalogue' ? s + weights[i] : s), 0);
     // Never-done exercises are a garnish, not the meal: beside own ones, they share a fixed fraction.
@@ -390,6 +407,7 @@ export function generateQuickSession(input: QuickInput, options: QuickOptions, s
       const pick = explicit === undefined ? pickForTime(g, avail) : weightedPick(avail);
       chosen.push(pick);
       chosenIds.add(pick.id);
+      patternsTaken.add(patternOf.get(pick.id)!);
       perMuscle.set(pick.muscleGroup, (perMuscle.get(pick.muscleGroup) ?? 0) + 1);
       if (pick.origin === 'catalogue') catalogueCount++;
       seconds += costOf(pick);

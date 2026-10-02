@@ -430,9 +430,19 @@ nothing new leaving the phone, Settings → About unchanged.
   the store counts each rung with `countTokens` until prompt plus the reply's room fits
   `getTokenLimit`. An exercise the question names keeps its 26 weeks and is the last thing cut.
   Each answer says what it read ("Read: training 8 weeks · food 4 weeks · …").
-- **Build a routine** asks for the Paste a routine line format and opens the draft in that same
-  review — matching, Choose/Add new, one-transaction save. Entry points: Progress → Coach, and
-  Routines → New routine → Draft with coach.
+- **One box, and the app builds the routine.** There is no Ask / Build toggle. `routeCoachMessage`
+  (`src/domain/coachIntent.ts`) reads each message: a request for a routine is built at once by
+  `buildRoutines` from the owner's exercises, the library and `loadRoutineInput`
+  (`src/db/routineBuildQueries.ts`: their routines, niggles from the last 14 days, stalled lifts),
+  with no model call; anything else is a question. A built routine shows what was read
+  ("Read: shoulders, rear delts · 6 exercises"), about N min, Why (the builder's reason lines,
+  collapsed), Shuffle (same request, new seed) and Review routine — the same Paste a routine
+  review, matching, Choose/Add new and one-transaction save. Words the rules read nothing from
+  are offered to the default model on a tap ("Not read: …", Read with assistant), which may only
+  fill options. A question is sent with the last three exchanges, the last routine built and its
+  reasons, and the owner's data; the oldest turns are dropped first when the prompt does not fit.
+  Entry points: Progress → Coach, and Routines → New routine → Draft with coach (the first
+  message there is a build whatever it says).
 
 ### P6 — Explicitly deferred to v1.1
 
@@ -855,8 +865,8 @@ counts drop below a baseline without an in-app delete, and a Backups card in Set
   screen said "Answering…" for ever. Counting is given 20 s; an answer is given up after 2 min
   with nothing new, the clock restarting with every piece, because the fuller variant can take
   many seconds before its first word.
-- **Clear must drop an answer still on its way**, or it reappears when it lands; a generation
-  count in the store ignores anything from before the Clear.
+- **Clear must drop an answer still on its way**, or it reappears when it lands; an epoch in the
+  store, bumped by Clear, ignores anything started before it (a question, a build or a Shuffle).
 
 ### 6.11 Small faults — traps paid for
 

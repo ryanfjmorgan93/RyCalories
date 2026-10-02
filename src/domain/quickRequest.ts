@@ -27,12 +27,21 @@ export interface QuickOptions {
   includeNew: boolean;
 }
 
+/**
+ * A named way of dividing the week into days. It is a request of its own and never a muscle focus:
+ * "ppl" asks for three routines, where "push pull legs" typed as three separate words would have
+ * been one routine of all their muscles.
+ */
+export type RoutineSplit = 'ppl' | 'upper-lower' | 'full-body';
+
 export interface ParsedRequest {
   options: Partial<QuickOptions>;
   /** The phrases that were understood, as typed (lower-cased), in the order they appeared. */
   read: string[];
   /** The words that were not understood and are not filler, in the order they appeared. */
   residue: string[];
+  /** A split asked for by name ("ppl", "upper lower", "full body"). Absent when none was. */
+  split?: RoutineSplit;
 }
 
 export const DEFAULT_MINUTES = 40;
@@ -127,10 +136,32 @@ const MULTIPLIERS = new Set(['x', 'by', 'times']);
 const MINUTE_UNITS = new Set(['min', 'mins', 'minute', 'minutes', 'm']);
 const HOUR_UNITS = new Set(['hour', 'hours', 'hr', 'hrs']);
 
+/** The two groups "delts" and "3D shoulders" stand for: the shoulder proper and the rear delt, which has a group of its own. */
+const SHOULDER_COMPLEX: MuscleGroup[] = ['shoulders', 'rear delts'];
+
 const MUSCLE_PHRASES: [string, MuscleGroup[]][] = [
   ['lower back', ['lower back']],
   ['upper back', ['upper back']],
-  ['rear delt|delts', ['rear delts']],
+  // "3D" is split by the tokeniser into the digit and the letter.
+  ['3 d|dee shoulder|shoulders|delt|delts|deltoid|deltoids', SHOULDER_COMPLEX],
+  ['rear|posterior delt|delts|deltoid|deltoids', ['rear delts']],
+  // The front and the side of the shoulder are the shoulder group; only the rear has a group of its own.
+  ['front|side|lateral|middle|medial delt|delts|deltoid|deltoids', ['shoulders']],
+];
+
+/** "All three heads" of the deltoid. A triceps has three heads too, so the phrase gives way when the triceps is named after it. */
+const THREE_HEADS = 'all three heads';
+const THREE_HEADS_LOOKAHEAD = 4;
+
+/** Splits asked for by name. "push/pull/legs" and "upper/lower" tokenise to the same words as the spaced forms. */
+const SPLIT_PHRASES: [string, RoutineSplit][] = [
+  ['ppl', 'ppl'],
+  ['push pull legs', 'ppl'],
+  ['push pull and legs', 'ppl'],
+  ['upper lower', 'upper-lower'],
+  ['upper and lower split', 'upper-lower'],
+  ['full body', 'full-body'],
+  ['fullbody', 'full-body'],
 ];
 
 const MUSCLE_WORDS = new Map<string, MuscleGroup[]>(Object.entries({
@@ -140,8 +171,10 @@ const MUSCLE_WORDS = new Map<string, MuscleGroup[]>(Object.entries({
   back: ['lats', 'upper back'],
   shoulder: ['shoulders'],
   shoulders: ['shoulders'],
-  delt: ['shoulders'],
-  delts: ['shoulders'],
+  delt: SHOULDER_COMPLEX,
+  delts: SHOULDER_COMPLEX,
+  deltoid: SHOULDER_COMPLEX,
+  deltoids: SHOULDER_COMPLEX,
   bicep: ['biceps'],
   biceps: ['biceps'],
   tricep: ['triceps'],
@@ -213,6 +246,10 @@ const STOP_WORDS = new Set([
   'lifting', 'weights', 'weight', 'body', 'too', 'very', 'this', 'we', 'you', 'your', 'us', 'lets', "let's", 'have', 'has', 'got',
   'will', 'would', 'could', 'should', 'am', 'was', 'been', 'ok', 'okay', 'thanks', 'thank', 'hi', 'hey', 'yeah', 'yes', 'now',
   'tonight', 'at', 'from', 'by', 'as', 'about', 'then', 'also', 'still', 'though', 'kind', 'sort', 'or',
+  // What a request for a routine says around its muscles: "a routine solely designed to build 3D shoulders".
+  'routine', 'routines', 'workouts', 'programme', 'programmes', 'program', 'programs', 'plan', 'plans', 'split', 'splits', 'days',
+  'sessions', 'solely', 'designed', 'design', 'build', 'building', 'built', 'grow', 'growing', 'bigger', 'develop', 'developing',
+  'focus', 'focused',
 ]);
 
 // ---------------------------------------------------------------------------
@@ -256,7 +293,8 @@ type Reading =
   | { len: number; kind: 'cancelled' }
   | { len: number; kind: 'effort'; effort: Effort }
   | { len: number; kind: 'muscles'; muscles: MuscleGroup[]; negated: boolean }
-  | { len: number; kind: 'equipment'; equipment: Equipment; negated: boolean };
+  | { len: number; kind: 'equipment'; equipment: Equipment; negated: boolean }
+  | { len: number; kind: 'split'; split: RoutineSplit };
 
 function readMinutes(tokens: string[], i: number): Reading | null {
   for (const p of ['half an hour', 'half a hour', 'half hour']) {
@@ -277,7 +315,31 @@ function readMinutes(tokens: string[], i: number): Reading | null {
   return null;
 }
 
+/** "All three heads" and whatever follows it, as muscles: the shoulder complex, unless a triceps is named within a few words. */
+function readThreeHeads(tokens: string[], i: number, negated: boolean): Reading | null {
+  const len = matchPhrase(tokens, i, THREE_HEADS);
+  if (!len) return null;
+  const ahead = tokens.slice(i + len, i + len + THREE_HEADS_LOOKAHEAD);
+  const triceps = ahead.some((w) => w === 'triceps' || w === 'tricep');
+  return { len, kind: 'muscles', muscles: triceps ? [] : SHOULDER_COMPLEX, negated };
+}
+
+function readSplit(tokens: string[], i: number): Extract<Reading, { kind: 'split' }> | null {
+  for (const [pattern, split] of SPLIT_PHRASES) {
+    const len = matchPhrase(tokens, i, pattern);
+    // "upper, lower back" is two muscles, not the split.
+    if (len && tokens[i + len] !== 'back') return { len, kind: 'split', split };
+  }
+  return null;
+}
+
 function readVocabulary(tokens: string[], i: number, negated: boolean): Reading | null {
+  if (!negated) {
+    const split = readSplit(tokens, i);
+    if (split) return split;
+  }
+  const heads = readThreeHeads(tokens, i, negated);
+  if (heads) return heads;
   for (const [pattern, muscles] of MUSCLE_PHRASES) {
     const len = matchPhrase(tokens, i, pattern);
     if (len) return { len, kind: 'muscles', muscles, negated };
@@ -318,10 +380,18 @@ function readAt(tokens: string[], i: number): Reading | null {
     if (next !== undefined && (MOOD_WORDS.has(next) || QUICK_WORDS.has(next))) return { len: j + 1 - i, kind: 'cancelled' };
     const vocab = readVocabulary(tokens, j, true);
     if (vocab) return { ...vocab, len: j - i + vocab.len };
+    // "no ppl" asks for nothing, and is not a split.
+    const split = readSplit(tokens, j);
+    if (split) return { len: j - i + split.len, kind: 'cancelled' };
     return null;
   }
 
   if (isNumber(t)) {
+    // "3D shoulders" starts with a digit that is not a count.
+    for (const [pattern, muscles] of MUSCLE_PHRASES) {
+      const len = matchPhrase(tokens, i, pattern);
+      if (len) return { len, kind: 'muscles', muscles, negated: false };
+    }
     const n = Number(t);
     if (countsSomethingElse(tokens, i)) return null;
     return Number.isInteger(n) && n >= MIN_COUNT && n <= MAX_TYPED_COUNT ? { len: 1, kind: 'count', n } : null;
@@ -368,6 +438,7 @@ export function parseQuickRequest(text: string): ParsedRequest {
   const removed: MuscleGroup[] = [];
   const equipmentAdded: Equipment[] = [];
   const equipmentRemoved: Equipment[] = [];
+  let split: RoutineSplit | undefined;
 
   // Whether the last thing read was a muscle or equipment that was ruled out: a joiner straight after
   // it rules out the next one too.
@@ -414,6 +485,13 @@ export function parseQuickRequest(text: string): ParsedRequest {
           pushUnique(r.negated ? equipmentRemoved : equipmentAdded, [r.equipment]);
           accepted = true;
           break;
+        case 'split':
+          // A second split is not guessed between: the first stands, the rest is residue.
+          if (split === undefined) {
+            split = r.split;
+            accepted = true;
+          }
+          break;
       }
     }
 
@@ -450,7 +528,7 @@ export function parseQuickRequest(text: string): ParsedRequest {
       : [];
   if (equipment.length) options.equipment = equipment;
 
-  return { options, read, residue };
+  return split ? { options, read, residue, split } : { options, read, residue };
 }
 
 /** Fills every field the request left open. Minutes are already 30 when the text said short or tired. */
