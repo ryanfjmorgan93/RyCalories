@@ -599,6 +599,7 @@ describe('buildEdit: the routine an edit comes to, built by the generator from t
     const { built } = edited('add biceps');
     const lines = built!.routines[0]!.reasonLines;
     expect(lines).toContain(`Changed: ${built!.fact}`);
-    expect(lines[lines.length - 1]).toMatch(/^About \d+ min at your pace$/);
+    // 'at your pace' only when a pace was measured (the seeded input has none), as the builder words it.
+    expect(lines[lines.length - 1]).toMatch(/^About \d+ min( at your pace)?$/);
   });
 });

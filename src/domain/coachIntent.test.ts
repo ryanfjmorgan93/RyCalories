@@ -426,7 +426,9 @@ describe('readEdit: what a change asks for', () => {
     ['give me something else instead of the press', { swap: { target: ['press'], replacement: ['give', 'me', 'something', 'else'] } }],
     ['remove the front raise', { remove: { target: ['front', 'raise'] } }],
     ['drop the face pull', { remove: { target: ['face', 'pull'] } }],
-    ['no front raises', { remove: { target: ['front', 'raises'] } }],
+    // A movement the request parser knows is ruled out (and stays out through later edits), not one row dropped.
+    ['no front raises', { extras: { excludePatterns: ['front-raise'] } }],
+    ['no hammer curls', { remove: { target: ['hammer', 'curls'] } }],
     ['take out the front raise', { remove: { target: ['front', 'raise'] } }],
     ['dumbbells only', { equipment: { list: ['dumbbell'], add: false } }],
     ['no barbell', { equipment: { list: ['dumbbell', 'machine', 'cable', 'bodyweight', 'kettlebell', 'other'], add: false } }],
