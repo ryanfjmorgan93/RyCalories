@@ -9,6 +9,7 @@ import {
   estimateMinutes,
   generateQuickSession,
   paceFactor,
+  paceReading,
   type Candidate,
   type QuickInput,
   type QuickPlan,
@@ -982,6 +983,36 @@ describe('estimateMinutes', () => {
     const plan = generateQuickSession(input(groupPool(['chest'], 3)), opts({ count: 1 }), 1);
     expect(plan.rows).toHaveLength(1);
     expect(plan.estimateMin).toBe(6);
+  });
+});
+
+describe('paceReading: where a pace came from', () => {
+  const s = (durationSec: number, modelledSec = 1000) => ({ durationSec, modelledSec });
+
+  it('is no basis at all with fewer than three usable sessions: the 1 is a default, not a measurement', () => {
+    expect(paceReading([])).toEqual({ factor: 1, basis: null });
+    expect(paceReading([s(1200), s(1200)])).toEqual({ factor: 1, basis: null });
+    // Three sessions of which one is junk are two.
+    expect(paceReading([s(1200), s(1200), s(0)])).toEqual({ factor: 1, basis: null });
+  });
+
+  it('is measured from three usable sessions, even when the measurement is exactly the model', () => {
+    expect(paceReading([s(1100), s(1200), s(1300)]).basis).toBe('measured');
+    expect(paceReading([s(1000), s(1000), s(1000)])).toEqual({ factor: 1, basis: 'measured' });
+    // 1.6 and 0.6 themselves are inside the bounds, so they are measured, not held.
+    expect(paceReading([s(1600), s(1600), s(1600)]).basis).toBe('measured');
+    expect(paceReading([s(600), s(600), s(600)]).basis).toBe('measured');
+  });
+
+  it('says which way it was held: slower than 1.6 times the model, or faster than 0.6 times', () => {
+    expect(paceReading([s(3000), s(4000), s(5000)])).toEqual({ factor: 1.6, basis: 'held-slow' });
+    expect(paceReading([s(100), s(200), s(300)])).toEqual({ factor: 0.6, basis: 'held-fast' });
+  });
+
+  it('gives the factor paceFactor gives', () => {
+    for (const list of [[], [s(1200)], [s(1100), s(1200), s(1300)], [s(3000), s(4000), s(5000)], [s(100), s(200), s(300)]]) {
+      expect(paceReading(list).factor).toBe(paceFactor(list));
+    }
   });
 });
 

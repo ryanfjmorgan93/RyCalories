@@ -86,7 +86,10 @@ describe('buildRoutines: what it hands back', () => {
     const r = one(buildRoutines(REAL, SHOULDERS, 3));
     expect(Number.isInteger(r.estimateMinutes) && r.estimateMinutes > 0).toBe(true);
     expect(aboutMinutes(r)).toBe(`about ${r.estimateMinutes} min`);
-    expect(r.reasonLines).toContain(`About ${r.estimateMinutes} min at your pace`);
+    // No pace was measured for this input, so the line does not call it the owner's.
+    expect(r.reasonLines).toContain(`About ${r.estimateMinutes} min`);
+    const measured = one(buildRoutines({ ...REAL, pace: 1.2, paceBasis: 'measured' }, SHOULDERS, 3));
+    expect(measured.reasonLines).toContain(`About ${measured.estimateMinutes} min at your pace`);
   });
 
   it('is the same for the same input and seed, and the seed is used', () => {
@@ -161,13 +164,13 @@ describe('buildRoutines: what it hands back', () => {
 });
 
 describe('buildRoutines: how many exercises', () => {
-  it('is six for one routine and five a day for a split, where the pool has them', () => {
+  it('is six for one routine and the day\'s own for a split (six, and seven for an upper day), where the pool has them', () => {
     expect(DEFAULT_ROUTINE_COUNT).toBe(6);
-    expect(DEFAULT_SPLIT_DAY_COUNT).toBe(5);
+    expect(DEFAULT_SPLIT_DAY_COUNT).toBe(6);
     for (const seed of seedsFrom(20)) {
       expect(one(buildRoutines(REAL, SHOULDERS, seed)).rows).toHaveLength(6);
-      for (const day of buildRoutines(REAL, { focus: [], split: 'ppl' }, seed)) expect(day.rows).toHaveLength(5);
-      for (const day of buildRoutines(REAL, { focus: [], split: 'upper-lower' }, seed)) expect(day.rows).toHaveLength(5);
+      for (const day of buildRoutines(REAL, { focus: [], split: 'ppl' }, seed)) expect(day.rows).toHaveLength(6);
+      expect(buildRoutines(REAL, { focus: [], split: 'upper-lower' }, seed).map((d) => d.rows.length)).toEqual([7, 6]);
       expect(one(buildRoutines(REAL, { focus: [] }, seed)).rows).toHaveLength(6);
     }
   });
@@ -202,11 +205,13 @@ describe('buildRoutines: 3D shoulders over 500 seeds with the real library', () 
     }
   });
 
-  it('is six exercises with no exercise twice and no movement twice', () => {
+  it('is six exercises with no exercise twice, and no movement twice but the lateral raise, which the side delts take two of', () => {
     for (const { seed, r } of routines) {
       expect(r.rows, `seed ${seed}`).toHaveLength(6);
       expect(new Set(r.rows.map((x) => x.id)).size, `seed ${seed}`).toBe(6);
-      expect(new Set(patternsOf(r)).size, `seed ${seed}: ${patternsOf(r).join(', ')}`).toBe(6);
+      const patterns = patternsOf(r);
+      expect(new Set(patterns).size, `seed ${seed}: ${patterns.join(', ')}`).toBe(5);
+      expect(patterns.filter((p) => p === 'lateral-raise'), `seed ${seed}`).toHaveLength(2);
     }
   });
 
@@ -228,7 +233,8 @@ describe('buildRoutines: 3D shoulders over 500 seeds with the real library', () 
       expect(p, `seed ${seed}`).toContain('press-vertical');
       expect(p, `seed ${seed}`).toContain('lateral-raise');
       expect(p.some((x) => x === 'rear-fly' || x === 'face-pull'), `seed ${seed}: ${p.join(', ')}`).toBe(true);
-      expect(p.some((x) => x === 'front-raise'), `seed ${seed}: ${p.join(', ')}`).toBe(true);
+      // The sixth exercise is a front raise or an upright row.
+      expect(p.some((x) => x === 'front-raise' || x === 'upright-row'), `seed ${seed}: ${p.join(', ')}`).toBe(true);
       const regions = new Set(r.rows.map((x) => x.region));
       for (const region of ['shoulders:front', 'shoulders:side', 'shoulders:rear']) expect(regions, `seed ${seed}`).toContain(region);
       for (const x of p) tally.set(x, (tally.get(x) ?? 0) + 1);
@@ -236,11 +242,12 @@ describe('buildRoutines: 3D shoulders over 500 seeds with the real library', () 
     console.info(`3D shoulders, movement in how many of ${SEEDS.length} routines: ${[...tally].sort().map(([k, v]) => `${k} ${v}`).join(', ')}`);
   });
 
-  it('opens with the vertical press and finishes with isolation work', () => {
+  it('opens with the vertical press and finishes with isolation work, an upright row being a secondary lift between them', () => {
     for (const { seed, r } of routines) {
       expect(r.rows[0]!.pattern, `seed ${seed}`).toBe('press-vertical');
       expect(r.rows[0]!.tier).toBe('primary');
-      expect(r.rows.slice(1).every((x) => x.tier === 'isolation'), `seed ${seed}`).toBe(true);
+      expect(r.rows.slice(1).every((x) => x.tier === 'isolation' || x.pattern === 'upright-row'), `seed ${seed}`).toBe(true);
+      expect(r.rows[r.rows.length - 1]!.tier, `seed ${seed}`).toBe('isolation');
     }
   });
 
@@ -268,13 +275,11 @@ describe('buildRoutines: 3D shoulders over 500 seeds with the real library', () 
     expect(mostNew).toBeLessThanOrEqual(2);
   });
 
-  it('gives each muscle nine to fifteen working sets', () => {
+  it('gives the three heads of the shoulder nine to eighteen working sets between them', () => {
     for (const { seed, r } of routines) {
-      for (const group of ['shoulders', 'rear delts'] as const) {
-        const sets = r.rows.filter((x) => x.muscleGroup === group).reduce((s, x) => s + x.sets, 0);
-        expect(sets, `seed ${seed}: ${group}`).toBeGreaterThanOrEqual(9);
-        expect(sets, `seed ${seed}: ${group}`).toBeLessThanOrEqual(15);
-      }
+      const sets = r.rows.reduce((s, x) => s + x.sets, 0);
+      expect(sets, `seed ${seed}`).toBeGreaterThanOrEqual(9);
+      expect(sets, `seed ${seed}`).toBeLessThanOrEqual(18);
     }
   });
 
@@ -285,7 +290,8 @@ describe('buildRoutines: 3D shoulders over 500 seeds with the real library', () 
       const press = r.rows.find((x) => x.name === 'DB Shoulder Press');
       if (press) expect([press.sets, press.repMin, press.repMax], `seed ${seed}`).toEqual([3, 6, 8]);
       for (const x of r.rows.filter((y) => y.origin === 'catalogue')) {
-        expect(x.repMin, `seed ${seed}: ${x.name}`).toBeGreaterThanOrEqual(10);
+        // Isolation work 10 to 20; an upright row is a secondary lift, 8 to 12.
+        expect(x.repMin, `seed ${seed}: ${x.name}`).toBeGreaterThanOrEqual(x.pattern === 'upright-row' ? 8 : 10);
         expect(x.repMax).toBeLessThanOrEqual(20);
       }
     }
@@ -364,7 +370,9 @@ describe('buildRoutines: a movement is repeated only when nothing else is left',
       );
       for (const seed of SEEDS.slice(0, 120)) {
         const r = one(buildRoutines(REAL, { focus }, seed));
-        const used = r.rows.map((x) => x.pattern);
+        // The side delts are written two lateral raises, which is no repeat for want of anything else.
+        const twoSide = r.reasonLines.some((l) => l.startsWith('A second lateral raise') && l.endsWith(': two exercises for the side delts'));
+        const used = r.rows.map((x) => x.pattern).filter((p, k, all) => !(twoSide && p === 'lateral-raise' && all.indexOf(p) !== k));
         if (new Set(used).size === used.length) continue;
         repeated++;
         const left = [...offered].filter((p) => !used.includes(p));
@@ -690,18 +698,23 @@ describe('buildRoutines: niggles and stalls over 500 seeds with the real library
 
   it('the niggle is said, with its date, on every routine it changed, and on none it did not', () => {
     const input = withNiggle('shoulder');
+    const plain = seededInput();
     let said = 0;
     let silent = 0;
-    for (const [, request] of REQUESTS) {
-      for (const r of days(input, request, 3)) {
-        const line = r.reasonLines.find((l) => l.startsWith('Shoulder niggle on 28 Sep: '));
-        const shoulderWork = r.focus.some((m) => m === 'shoulders' || m === 'chest' || m === 'triceps' || m === 'traps');
-        if (line) said++;
-        else silent++;
-        // A leg day has no upright row to refuse.
-        if (r.name === 'Legs' || r.name === 'Lower' || r.name === 'Core') expect(line, r.name).toBeUndefined();
-        if (r.name === 'Shoulders and rear delts') expect(line).toBeTruthy();
-        void shoulderWork;
+    for (const [label, request] of REQUESTS) {
+      for (const seed of [3, 4, 5]) {
+        const built = days(input, request, seed);
+        const without = days(plain, request, seed);
+        built.forEach((r, i) => {
+          const line = r.reasonLines.find((l) => l.startsWith('Shoulder niggle on 28 Sep: '));
+          // The same day built again without the niggle: said when the rows are not the same, and not otherwise.
+          const changed = r.rows.map((x) => x.id).join() !== without[i]!.rows.map((x) => x.id).join();
+          expect(Boolean(line), `${label}, seed ${seed}: ${r.name}`).toBe(changed);
+          if (line) said++;
+          else silent++;
+          // A leg day has no upright row to refuse.
+          if (r.name === 'Legs' || r.name === 'Lower' || r.name === 'Core') expect(line, r.name).toBeUndefined();
+        });
       }
     }
     expect(said).toBeGreaterThan(3);

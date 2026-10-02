@@ -81,15 +81,17 @@ describe('rule: structure and order', () => {
     }
   });
 
-  it('control: put the tiers out of order and this test would see it', () => {
-    const r = one(buildRoutines(miniInput(PUSH_POOL), PUSH, 1));
-    const ranks = r.rows.map((x) => tierRank[x.tier]);
-    // The press is not first by the order the muscles were named in, nor by the order the exercises were drawn.
-    expect(ranks[0]).toBe(0);
-    expect(r.rows.map((x) => x.muscleGroup)).not.toEqual(['chest', 'chest', 'chest', 'shoulders', 'triceps', 'triceps'].slice().sort().reverse());
+  it('control: the order the exercises are drawn in is not the order of their tiers, and the routine is in the tiers\' order all the same', () => {
+    // A push day is written chest press, vertical press, lateral raise, triceps, incline press, triceps: an isolation move is drawn before a secondary lift.
+    for (const seed of SEEDS_100) {
+      const r = one(buildRoutines(miniInput(PUSH_POOL), PUSH, seed));
+      expect(r.rows.map((x) => x.tier), `seed ${seed}`).toEqual(['primary', 'primary', 'secondary', 'isolation', 'isolation', 'isolation']);
+      // The draw order has the lateral raise (isolation) before the incline press (secondary): the sequence is not the draw's.
+      expect(r.rows.findIndex((x) => x.name === 'Incline DB Press'), `seed ${seed}`).toBeLessThan(r.rows.findIndex((x) => x.name === 'Lateral Raise'));
+    }
   });
 
-  it('never takes two of one movement while another is on offer: a second press waits for the lateral raise', () => {
+  it('never takes two of one movement while another is on offer: a second press waits, the side delts take two lateral raises, and the front raise comes last', () => {
     const pool = miniInput([
       cand('DB Shoulder Press', 'shoulders', { compound: true, weight: 18 }),
       cand('Arnold Press', 'shoulders', { compound: true, weight: 14 }),
@@ -98,9 +100,14 @@ describe('rule: structure and order', () => {
       cand('Front Raise', 'shoulders', { weight: 6 }),
     ]);
     for (const seed of SEEDS_100) {
-      const r = one(buildRoutines(pool, { focus: ['shoulders'], count: 3 }, seed));
-      expect(new Set(r.rows.map((x) => x.pattern)), `seed ${seed}`).toEqual(new Set(['press-vertical', 'lateral-raise', 'front-raise']));
-      expect(r.reasonLines).toContain('One exercise per movement: vertical press, lateral raise and front raise');
+      // A routine for the shoulders is written by what a coach wants of it: one press, then the side delts twice.
+      const three = one(buildRoutines(pool, { focus: ['shoulders'], count: 3 }, seed));
+      expect(three.rows.filter((x) => x.pattern === 'press-vertical'), `seed ${seed}`).toHaveLength(1);
+      expect(three.rows.filter((x) => x.pattern === 'lateral-raise'), `seed ${seed}`).toHaveLength(2);
+      // With room for a fourth, it is the front raise: a second press is still not taken while a movement is left.
+      const four = one(buildRoutines(pool, { focus: ['shoulders'], count: 4 }, seed));
+      expect(four.rows.map((x) => x.pattern).sort(), `seed ${seed}`).toEqual(['front-raise', 'lateral-raise', 'lateral-raise', 'press-vertical']);
+      expect(four.reasonLines.some((l) => l.startsWith('A second vertical press')), `seed ${seed}`).toBe(false);
     }
   });
 
@@ -119,7 +126,8 @@ describe('rule: structure and order', () => {
       const repeats = r.reasonLines.filter((l) => l.startsWith('A second '));
       expect(repeats).toHaveLength(2);
       expect(repeats.some((l) => /^A second vertical press, (DB Shoulder Press|Arnold Press): nothing else left for shoulders in your exercises or the library$/.test(l))).toBe(true);
-      expect(repeats.some((l) => /^A second lateral raise, (Lateral Raise|Cable Lateral Raise): nothing else left for shoulders in your exercises or the library$/.test(l))).toBe(true);
+      // The second lateral raise is not a repeat for want of anything else: the side delts are written two exercises.
+      expect(repeats.some((l) => /^A second lateral raise, (Lateral Raise|Cable Lateral Raise): two exercises for the side delts$/.test(l))).toBe(true);
       expect(r.reasonLines.some((l) => l.startsWith('One exercise per movement'))).toBe(false);
     }
   });
@@ -277,21 +285,40 @@ describe('rule: sets and reps by role', () => {
     expect([r.rows[0]!.sets, r.rows[0]!.repMin, r.rows[0]!.repMax]).toEqual([4, 12, 20]);
   });
 
-  it('a muscle named on its own gets nine to fifteen sets: eighteen is trimmed from the end to fifteen, the main lift kept at four', () => {
+  it('a muscle named on its own gets nine to fifteen sets: nineteen is trimmed from the end to fifteen, the main lift kept at four', () => {
+    const pool = miniInput([
+      cand('Bench Press (Barbell)', 'chest', { compound: true, equipment: 'barbell' }),
+      cand('Incline DB Press', 'chest', { compound: true }),
+      cand('Decline Bench Press', 'chest', { compound: true, equipment: 'barbell' }),
+      cand('Chest Dip', 'chest', { compound: true, equipment: 'bodyweight' }),
+      cand('Cable Fly', 'chest', { equipment: 'cable' }),
+      cand('Pec Deck', 'chest', { equipment: 'machine' }),
+    ]);
+    const r = one(buildRoutines(pool, { focus: ['chest'], count: 6 }, 1));
+    expect(r.rows).toHaveLength(6);
+    expect(r.rows.reduce((s, x) => s + x.sets, 0)).toBe(15);
+    expect(r.rows[0]!.sets).toBe(4);
+    // Nineteen and a main lift of four: four sets come off, from the last rows up.
+    expect(r.rows.map((x) => x.sets)).toEqual([4, 3, 2, 2, 2, 2]);
+  });
+
+  it('the shoulders, three heads, are held to nine to eighteen between them', () => {
     const pool = miniInput([
       cand('DB Shoulder Press', 'shoulders', { compound: true }),
       cand('Upright Row (Barbell)', 'shoulders', { compound: true, equipment: 'barbell' }),
       cand('Lateral Raise', 'shoulders'),
+      cand('Cable Lateral Raise', 'shoulders', { equipment: 'cable' }),
       cand('Front Raise', 'shoulders'),
       cand('Reverse Fly (Dumbbell)', 'shoulders'),
       cand('Face Pull (Cable)', 'shoulders', { equipment: 'cable' }),
     ]);
-    const r = one(buildRoutines(pool, { focus: ['shoulders'], count: 6 }, 1));
-    expect(r.rows).toHaveLength(6);
-    expect(r.rows.reduce((s, x) => s + x.sets, 0)).toBe(15);
-    expect(r.rows[0]!.sets).toBe(4);
-    // Eighteen and a main lift of four make nineteen: four sets come off, from the last rows up.
-    expect(r.rows.map((x) => x.sets)).toEqual([4, 3, 2, 2, 2, 2]);
+    for (const seed of SEEDS_100.slice(0, 30)) {
+      const r = one(buildRoutines(pool, { focus: ['shoulders'], count: 6 }, seed));
+      expect(r.rows, `seed ${seed}`).toHaveLength(6);
+      const total = r.rows.reduce((s, x) => s + x.sets, 0);
+      expect(total, `seed ${seed}`).toBeGreaterThanOrEqual(9);
+      expect(total, `seed ${seed}`).toBeLessThanOrEqual(18);
+    }
   });
 
   it('one exercise for a muscle in a day of a split is brought up to four sets, which is the least a day gives a muscle', () => {
@@ -345,30 +372,34 @@ describe('rule: the week around it', () => {
     }
   });
 
-  it('a muscle the week leaves short takes a second exercise before one it does not', () => {
+  it('a muscle the week leaves short takes the exercise a day is not written for before one it does not', () => {
+    // A push day is written to hold six: a flat press, a vertical press, a lateral raise, two for the triceps and an incline press. The seventh is the week's to give.
     const push = miniInput(
       [
         cand('Bench Press (Barbell)', 'chest', { compound: true, equipment: 'barbell', weight: 60 }),
         cand('Incline DB Press', 'chest', { compound: true, weight: 20 }),
         cand('DB Shoulder Press', 'shoulders', { compound: true, weight: 18 }),
         cand('Lateral Raise', 'shoulders', { weight: 8 }),
+        cand('Front Raise', 'shoulders', { weight: 6 }),
         cand('Overhead Triceps Extension', 'triceps', { equipment: 'cable', weight: 20 }),
         cand('Triceps Pushdown', 'triceps', { equipment: 'cable', weight: 25 }),
+        cand('Triceps Kickback', 'triceps', { weight: 8 }),
       ],
       { context: context({ routines: [routine('Heavy', [['Bench Press (Barbell)', 'chest', 12, 6, 8], ['DB Shoulder Press', 'shoulders', 12, 6, 8]])] }) },
     );
     for (const seed of SEEDS_100) {
-      const r = one(buildRoutines(push, { focus: [], split: 'ppl', count: 5 }, seed));
+      const r = one(buildRoutines(push, { focus: [], split: 'ppl', count: 7 }, seed));
       expect(r.name).toBe('Push');
-      expect(r.rows.filter((x) => x.muscleGroup === 'triceps'), `seed ${seed}`).toHaveLength(2);
+      expect(r.rows.filter((x) => x.muscleGroup === 'triceps'), `seed ${seed}`).toHaveLength(3);
       expect(r.rows.filter((x) => x.muscleGroup === 'chest'), `seed ${seed}`).toHaveLength(2);
-      expect(r.rows.filter((x) => x.muscleGroup === 'shoulders'), `seed ${seed}`).toHaveLength(1);
+      expect(r.rows.filter((x) => x.muscleGroup === 'shoulders'), `seed ${seed}`).toHaveLength(2);
     }
-    // Control: with the week unread, the shoulders are the bigger muscle and take the second.
+    // Control: with the week unread, the shoulders are the bigger muscle and take the seventh.
     const unread = miniInput(push.candidates);
     for (const seed of SEEDS_100.slice(0, 30)) {
-      const r = one(buildRoutines(unread, { focus: [], split: 'ppl', count: 5 }, seed));
-      expect(r.rows.filter((x) => x.muscleGroup === 'shoulders'), `seed ${seed}`).toHaveLength(2);
+      const r = one(buildRoutines(unread, { focus: [], split: 'ppl', count: 7 }, seed));
+      expect(r.rows.filter((x) => x.muscleGroup === 'shoulders'), `seed ${seed}`).toHaveLength(3);
+      expect(r.rows.filter((x) => x.muscleGroup === 'triceps'), `seed ${seed}`).toHaveLength(2);
     }
   });
 
@@ -596,7 +627,7 @@ describe('rule: a niggle steers the choice', () => {
         {
           context: context({
             niggles: [
-              { tag: 'knee', severity: 1, date: '2026-09-20' },
+              { tag: 'knee', severity: 2, date: '2026-09-20' },
               { tag: 'shoulder', severity: 2, date: '2026-09-25' },
               { tag: 'shoulder', severity: 3, date: '2026-09-29' },
             ],
@@ -604,7 +635,7 @@ describe('rule: a niggle steers the choice', () => {
         },
       );
       const r = one(buildRoutines(pool, { focus: ['shoulders', 'quads'], count: 4 }, 1));
-      const lines = r.reasonLines.filter((l) => l.includes('niggle'));
+      const lines = r.reasonLines.filter((l) => /niggle on /.test(l));
       expect(lines).toEqual([
         'Shoulder niggle on 29 Sep: no upright row, no behind-the-neck or barbell overhead press, no dips; neutral grips preferred',
         'Knee niggle on 20 Sep: no lunges, jumps, deep or sissy squats; leg press, leg curl and hip thrust preferred',
@@ -740,11 +771,11 @@ describe('rule: familiar first, some new', () => {
     cand('Front Raise', 'shoulders', { library: true }),
   ];
 
-  it('takes the owner\'s own exercise for a part of the muscle they can cover, and the library only for the one they cannot', () => {
+  it('takes the owner\'s own exercise for a part of the muscle they can cover, and the library only for what they cannot: the second lateral raise', () => {
     for (const seed of SEEDS_100) {
       const r = one(buildRoutines(miniInput(OWN_AND_LIBRARY), { focus: ['shoulders'], count: 3 }, seed));
-      expect(names(r).sort(), `seed ${seed}`).toEqual(['DB Shoulder Press', 'Front Raise', 'Lateral Raise']);
-      expect(r.rows.filter((x) => x.origin === 'catalogue').map((x) => x.name)).toEqual(['Front Raise']);
+      expect(names(r).sort(), `seed ${seed}`).toEqual(['Cable Lateral Raise', 'DB Shoulder Press', 'Lateral Raise']);
+      expect(r.rows.filter((x) => x.origin === 'catalogue').map((x) => x.name)).toEqual(['Cable Lateral Raise']);
     }
   });
 
@@ -786,9 +817,9 @@ describe('rule: familiar first, some new', () => {
   });
 
   it('never gives a library exercise a weight, and never invents one for an own exercise with none', () => {
-    const r = one(buildRoutines(miniInput(OWN_AND_LIBRARY), { focus: ['shoulders'], count: 3 }, 1));
+    const r = one(buildRoutines(miniInput(OWN_AND_LIBRARY), { focus: ['shoulders'], count: 4 }, 1));
     for (const x of r.rows) {
-      if (x.origin === 'catalogue' || x.name === 'DB Shoulder Press' && false) expect(x.weightKg).toBeNull();
+      if (x.origin === 'catalogue') expect(x.weightKg, x.name).toBeNull();
     }
     expect(r.rows.find((x) => x.name === 'DB Shoulder Press')!.weightKg).toBe(18);
     expect(r.rows.find((x) => x.name === 'Front Raise')!.weightKg).toBeNull();
@@ -797,7 +828,7 @@ describe('rule: familiar first, some new', () => {
   });
 
   it('a library exercise carries its slug, and its reason says it is new', () => {
-    const r = one(buildRoutines(miniInput(OWN_AND_LIBRARY), { focus: ['shoulders'], count: 3 }, 1));
+    const r = one(buildRoutines(miniInput(OWN_AND_LIBRARY), { focus: ['shoulders'], count: 4 }, 1));
     const front = r.rows.find((x) => x.name === 'Front Raise')!;
     expect(front.catalogueSlug).toBe('front-raise');
     expect(front.id).toBe('cat:front-raise');
@@ -811,11 +842,15 @@ describe('rule: time', () => {
   const REAL = seededInput({ recency: { shoulders: 6 } });
   const SHOULDERS: RoutineRequest = { focus: ['shoulders', 'rear delts'] };
 
-  it('says how long it takes at the owner\'s pace: slower at 1.5 and longer for it', () => {
+  it('says how long it takes: slower at 1.5 and longer for it, and "at your pace" only where that pace was measured', () => {
     const base = one(buildRoutines(REAL, SHOULDERS, 1));
     const slow = one(buildRoutines({ ...REAL, pace: 1.5 }, SHOULDERS, 1));
     expect(slow.estimateMinutes).toBeGreaterThan(base.estimateMinutes);
-    expect(slow.reasonLines).toContain(`About ${slow.estimateMinutes} min at your pace`);
+    // A pace that is only a number is not the owner's own: no one measured it.
+    expect(slow.reasonLines).toContain(`About ${slow.estimateMinutes} min`);
+    const measured = one(buildRoutines({ ...REAL, pace: 1.5, paceBasis: 'measured' }, SHOULDERS, 1));
+    expect(measured.estimateMinutes).toBe(slow.estimateMinutes);
+    expect(measured.reasonLines).toContain(`About ${measured.estimateMinutes} min at your pace`);
   });
 
   it('is exactly the time the short-session model gives the rows', () => {
@@ -830,25 +865,26 @@ describe('rule: time', () => {
     expect(estimateMinutes(rows, 1.5)).toBe(one(buildRoutines({ ...REAL, pace: 1.5 }, SHOULDERS, 1)).estimateMinutes);
   });
 
-  it('a duration asked for drops finishers first and never the main lift', () => {
+  it('a duration asked for drops finishers while that lands nearer, and never the main lift, and says what it came to', () => {
     const full = one(buildRoutines(REAL, SHOULDERS, 1));
     const asked = one(buildRoutines(REAL, { ...SHOULDERS, minutes: 28 }, 1));
     expect(asked.rows.length).toBeLessThan(full.rows.length);
     expect(asked.rows[0]!.tier).toBe('primary');
     expect(asked.rows[0]!.name).toBe(full.rows[0]!.name);
-    expect(asked.estimateMinutes).toBeLessThanOrEqual(28);
+    expect(Math.abs(asked.estimateMinutes - 28)).toBeLessThan(Math.abs(full.estimateMinutes - 28));
     expect(asked.estimateMinutes).toBeLessThan(full.estimateMinutes);
     const dropped = full.rows.filter((x) => !asked.rows.some((y) => y.id === x.id));
     // What was dropped is isolation work.
     expect(dropped.every((x) => x.tier === 'isolation')).toBe(true);
-    expect(asked.reasonLines.some((l) => l.startsWith('Dropped ') && l.endsWith(' to come nearer the 28 min asked'))).toBe(true);
+    expect(asked.reasonLines.some((l) => l.startsWith('Dropped ') && l.endsWith(' for the 28 min asked'))).toBe(true);
+    expect(asked.reasonLines).toContain(asked.estimateMinutes === 28 ? 'About 28 min' : `About ${asked.estimateMinutes} min for the 28 min asked`);
   });
 
-  it('control: a duration the routine already fits in changes nothing and adds nothing', () => {
+  it('control: a duration the routine already is changes nothing and adds nothing', () => {
     const full = one(buildRoutines(REAL, SHOULDERS, 1));
-    const roomy = one(buildRoutines(REAL, { ...SHOULDERS, minutes: 90 }, 1));
-    expect(roomy).toEqual(full);
-    expect(roomy.reasonLines.some((l) => l.startsWith('Dropped'))).toBe(false);
+    const exact = one(buildRoutines(REAL, { ...SHOULDERS, minutes: full.estimateMinutes }, 1));
+    expect(exact).toEqual(full);
+    expect(exact.reasonLines.some((l) => l.startsWith('Dropped') || l.startsWith('Added'))).toBe(false);
   });
 
   it('keeps a part of every muscle while it trims: a second exercise for a part goes before the only one', () => {
@@ -863,19 +899,20 @@ describe('rule: time', () => {
 
   it('drops the second exercise for a part of a muscle, not the last finisher, when the last finisher is the only one for its part', () => {
     const pool = miniInput([
-      cand('DB Shoulder Press', 'shoulders', { compound: true, weight: 18 }),
-      cand('Lateral Raise', 'shoulders', { weight: 8 }),
-      cand('Front Raise', 'shoulders', { weight: 6 }),
-      cand('Rear Delt Fly (Machine)', 'rear delts', { equipment: 'machine', weight: 30 }),
+      cand('Bench Press (Barbell)', 'chest', { compound: true, equipment: 'barbell', weight: 60 }),
+      cand('Decline Bench Press', 'chest', { compound: true, equipment: 'barbell' }),
+      cand('Chest Dip', 'chest', { compound: true, equipment: 'bodyweight' }),
+      cand('Cable Fly', 'chest', { equipment: 'cable', weight: 12 }),
     ]);
-    const request: RoutineRequest = { focus: ['shoulders', 'rear delts'], count: 4 };
+    const request: RoutineRequest = { focus: ['chest'], count: 4 };
     const full = one(buildRoutines(pool, request, 1));
-    // The last finisher is the rear fly: the only exercise for the rear delt. The front raise is the second for the front.
-    expect(full.rows[full.rows.length - 1]!.name).toBe('Rear Delt Fly (Machine)');
-    const asked = one(buildRoutines(pool, { ...request, minutes: full.estimateMinutes - 1 }, 1));
+    // The last finisher is the fly: the only exercise for it. The dip is the second for the lower chest.
+    expect(full.rows[full.rows.length - 1]!.name).toBe('Cable Fly');
+    expect(full.rows.map((x) => x.region).filter((r) => r === 'chest:lower')).toHaveLength(2);
+    const asked = one(buildRoutines(pool, { ...request, minutes: full.estimateMinutes - 7 }, 1));
     expect(asked.rows).toHaveLength(3);
-    expect(asked.rows.map((x) => x.name).sort()).toEqual(['DB Shoulder Press', 'Lateral Raise', 'Rear Delt Fly (Machine)']);
-    expect(asked.reasonLines).toContain(`Dropped Front Raise to come nearer the ${full.estimateMinutes - 1} min asked`);
+    expect(asked.rows.map((x) => x.name).sort()).toEqual(['Bench Press (Barbell)', 'Cable Fly', 'Decline Bench Press']);
+    expect(asked.reasonLines).toContain(`Dropped Chest Dip for the ${full.estimateMinutes - 7} min asked`);
   });
 
   it('never goes below two exercises, and never clamps the time to the minutes asked', () => {
@@ -883,13 +920,16 @@ describe('rule: time', () => {
     expect(tiny.rows).toHaveLength(2);
     expect(tiny.rows[0]!.tier).toBe('primary');
     expect(tiny.estimateMinutes).toBeGreaterThan(5);
-    expect(tiny.reasonLines).toContain(`About ${tiny.estimateMinutes} min at your pace`);
+    expect(tiny.reasonLines).toContain(`About ${tiny.estimateMinutes} min for the 5 min asked`);
   });
 
   it('a split reads the duration per day', () => {
-    for (const d of buildRoutines(REAL, { focus: [], split: 'ppl', minutes: 30 }, 1)) {
-      expect(d.estimateMinutes, d.name).toBeLessThanOrEqual(30);
-    }
+    const full = buildRoutines(REAL, { focus: [], split: 'ppl' }, 1);
+    const asked = buildRoutines(REAL, { focus: [], split: 'ppl', minutes: 30 }, 1);
+    asked.forEach((d, i) => {
+      expect(Math.abs(d.estimateMinutes - 30), d.name).toBeLessThanOrEqual(Math.abs(full[i]!.estimateMinutes - 30));
+      expect(d.rows.length, d.name).toBeLessThan(full[i]!.rows.length);
+    });
   });
 });
 
@@ -906,13 +946,13 @@ describe('reasons, word for word', () => {
     { recency: { shoulders: 6, 'rear delts': 12 } },
   );
 
-  it('says what each row is for', () => {
+  it('says what each row is for, side delts first, then rear, with the front raise last', () => {
     const r = one(buildRoutines(POOL, { focus: ['shoulders', 'rear delts'], count: 4 }, 1));
     expect(r.rows.map((x) => [x.name, x.reason])).toEqual([
       ['DB Shoulder Press', 'shoulders · front delts (vertical press) · last trained 6 days ago · your working weight 22 kg'],
       ['Lateral Raise', 'shoulders · side delts (lateral raise) · last trained 6 days ago · your working weight 8 kg'],
-      ['Front Raise', 'shoulders · front delts (front raise) · new to you, no weight yet'],
       ['Rear Delt Fly (Machine)', 'rear delts · rear delts (rear fly) · last trained 12 days ago · no weight yet'],
+      ['Front Raise', 'shoulders · front delts (front raise) · new to you, no weight yet'],
     ]);
   });
 
@@ -920,12 +960,12 @@ describe('reasons, word for word', () => {
     const r = one(buildRoutines(POOL, { focus: ['shoulders', 'rear delts'], count: 4 }, 1));
     expect(r.reasonLines).toEqual([
       'Focus: shoulders and rear delts, as asked',
-      'One exercise per movement: vertical press, lateral raise, front raise and rear fly',
+      'One exercise per movement: vertical press, lateral raise, rear fly and front raise',
       'Order: main lifts, then isolation; the bigger muscle first in each',
-      'rear delts: sets raised from 3 to 4 (at least 9 sets for a muscle in a routine for it)',
+      'Sets by part: side delts 4, rear delts 3, front delts 7 (4 the press)',
       'From the library, where your own exercises had nothing for the part: Front Raise',
       'Weights are your own working weights; new exercises have none yet',
-      `About ${r.estimateMinutes} min at your pace`,
+      `About ${r.estimateMinutes} min`,
     ]);
   });
 
@@ -952,16 +992,27 @@ describe('reasons, word for word', () => {
     expect(one(buildRoutines(fresh, { focus: ['shoulders'], count: 1 }, 1)).reasonLines).toContain('Weights are your own working weights; new exercises have none yet');
   });
 
-  it('every line is a plain fact: no question, no encouragement, no advice', () => {
-    const real = seededInput({ context: context({ niggles: [{ tag: 'shoulder', severity: 2, date: '2026-09-28' }], stalled: [{ exerciseId: 'Bench Press (Barbell)', sessions: 3 }] }) });
+  it('every line is a plain fact: no question, no encouragement, no advice, the stall lines and the niggle lines among them', () => {
+    const real = seededInput({
+      context: context({ niggles: [{ tag: 'shoulder', severity: 2, date: '2026-09-28' }], stalled: [{ exerciseId: SEED_EXERCISE_IDS['Bench Press (Barbell)'], sessions: 3 }] }),
+    });
     const banned = /\b(you should|try|remember|great|nice|good luck|let's|don't forget|aim|consider|tip)\b|[!?]/i;
+    let stall = 0;
+    let niggle = 0;
     for (const request of [{ focus: ['shoulders', 'rear delts'] }, { focus: ['chest'] }, { focus: [], split: 'ppl' }, { focus: [] }] as RoutineRequest[]) {
       for (const seed of seedsFrom(40)) {
         for (const r of buildRoutines(real, request, seed)) {
-          for (const line of [...r.reasonLines, ...r.rows.map((x) => x.reason)]) expect(line, line).not.toMatch(banned);
+          for (const line of [...r.reasonLines, ...r.rows.map((x) => x.reason)]) {
+            expect(line, line).not.toMatch(banned);
+            if (line.includes('stalled')) stall++;
+            if (line.includes('niggle on')) niggle++;
+          }
         }
       }
     }
+    // The rule has seen the lines it is about: a stall that matches nothing would pass it for nothing.
+    expect(stall).toBeGreaterThan(0);
+    expect(niggle).toBeGreaterThan(0);
   });
 });
 
@@ -985,8 +1036,16 @@ describe('reasons for the rules that changed a prescription', () => {
   });
 
   it('says when sets were cut to keep a muscle to what a routine for it holds, and from what', () => {
-    const r = one(buildRoutines(miniInput(POOL), { focus: ['shoulders'], count: 6 }, 1));
-    expect(r.reasonLines).toContain('shoulders: sets cut from 19 to 15 (at most 15 sets for a muscle in a routine for it)');
+    const chest = miniInput([
+      cand('Bench Press (Barbell)', 'chest', { compound: true, equipment: 'barbell' }),
+      cand('Incline DB Press', 'chest', { compound: true }),
+      cand('Decline Bench Press', 'chest', { compound: true, equipment: 'barbell' }),
+      cand('Chest Dip', 'chest', { compound: true, equipment: 'bodyweight' }),
+      cand('Cable Fly', 'chest', { equipment: 'cable' }),
+      cand('Pec Deck', 'chest', { equipment: 'machine' }),
+    ]);
+    const r = one(buildRoutines(chest, { focus: ['chest'], count: 6 }, 1));
+    expect(r.reasonLines).toContain('chest: sets cut from 19 to 15 (at most 15 sets for a muscle in a routine for it)');
     expect(r.rows.reduce((s, x) => s + x.sets, 0)).toBe(15);
   });
 
@@ -1011,7 +1070,10 @@ describe('reasons for the rules that changed a prescription', () => {
   it('says the order, from the tiers there are: a routine of isolation work alone has no main lift to name', () => {
     const iso = miniInput([cand('Lateral Raise', 'shoulders'), cand('Front Raise', 'shoulders'), cand('Reverse Fly (Dumbbell)', 'shoulders')]);
     expect(one(buildRoutines(iso, { focus: ['shoulders'], count: 3 }, 1)).reasonLines).toContain('Order: isolation');
-    expect(one(buildRoutines(miniInput(POOL), { focus: ['shoulders'], count: 4 }, 1)).reasonLines).toContain('Order: main lifts, then isolation');
+    const noRow = miniInput(POOL.filter((c) => !c.name.startsWith('Upright Row')));
+    expect(one(buildRoutines(noRow, { focus: ['shoulders'], count: 4 }, 1)).reasonLines).toContain('Order: main lifts, then isolation');
+    // An upright row is a compound lift that is no main lift: a secondary one, between them.
+    expect(one(buildRoutines(miniInput(POOL), { focus: ['shoulders'], count: 4 }, 1)).reasonLines).toContain('Order: main lifts, then secondary lifts, then isolation');
     // One exercise has no order to say.
     expect(one(buildRoutines(miniInput(POOL), { focus: ['shoulders'], count: 1 }, 1)).reasonLines.some((l) => l.startsWith('Order:'))).toBe(false);
   });
@@ -1058,8 +1120,10 @@ describe('rule: who has a part of a muscle, and which muscles get a share', () =
       expect(six.rows.filter((x) => x.muscleGroup === 'biceps')).toHaveLength(3);
       expect(six.rows.filter((x) => x.muscleGroup === 'triceps')).toHaveLength(3);
     }
-    const eight = one(buildRoutines(pool, { focus: [...MACRO_MUSCLES.arms], count: 8 }, 1));
-    expect(eight.rows.map((x) => x.muscleGroup)).toContain('forearms');
+    // Eight and nine: a seed that has the forearms take the last place and one that does not, and then with the biceps and triceps out of exercises it is the forearms' to have.
+    const eights = SEEDS_100.map((seed) => one(buildRoutines(pool, { focus: [...MACRO_MUSCLES.arms], count: 8 }, seed)).rows.map((x) => x.muscleGroup).includes('forearms'));
+    expect(eights.some(Boolean)).toBe(true);
+    expect(one(buildRoutines(pool, { focus: [...MACRO_MUSCLES.arms], count: 9 }, 1)).rows.map((x) => x.muscleGroup)).toContain('forearms');
     // Named on its own, the same muscle gets every exercise.
     expect(names(one(buildRoutines(pool, { focus: ['forearms'], count: 3 }, 1)))).toEqual(['Cable Wrist Curl']);
   });
