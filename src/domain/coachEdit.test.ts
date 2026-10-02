@@ -334,6 +334,43 @@ describe('buildEdit: the routine an edit comes to, built by the generator from t
     }
   });
 
+  it('a swap of any row of any routine, over many seeds, replaces exactly that row: in its place when the replacement is the same kind of lift, and no other exercise ever changes', () => {
+    const requests: CoachRequest[] = [{ focus: ['shoulders', 'rear delts'] }, { focus: ['chest'] }, { focus: ['biceps', 'triceps'] }, { focus: [], count: 8 }];
+    let inPlace = 0;
+    for (const request of requests) {
+      for (let seed = 1; seed <= 40; seed++) {
+        const before = buildCoach(INPUT, request, seed);
+        const was = before[0]!.rows;
+        for (const [at, row] of was.entries()) {
+          const plan = applyEdit(request, before, `swap the ${row.name}`, seed);
+          expect(plan.ok, `${row.name} is a row of the routine`).toBe(true);
+          const built = buildEdit(INPUT, plan as EditPlan, before, () => 1);
+          const now = built.routines[0]!.rows;
+          expect(now.length, `seed ${seed} ${row.name}`).toBe(was.length);
+          expect(new Set(now.map((r) => r.name)).size).toBe(now.length);
+          const gone = was.filter((r) => !now.some((x) => x.name === r.name));
+          const came = now.filter((r) => !was.some((x) => x.name === r.name));
+          if (built.fact.startsWith('Kept ')) {
+            // Nothing else for that part of the muscle: the routine is as it was.
+            expect(now.map((r) => r.name), `seed ${seed} ${row.name}`).toEqual(was.map((r) => r.name));
+            continue;
+          }
+          // Exactly the row named went, and exactly one exercise came, and it is for the same part of the muscle.
+          expect(gone.map((r) => r.name), `seed ${seed} ${row.name}`).toEqual([row.name]);
+          expect(came).toHaveLength(1);
+          expect(came[0]!.region).toBe(row.region);
+          if (came[0]!.tier === row.tier) {
+            // The same kind of lift takes the place of the one it replaces, and every other row keeps its own.
+            expect(now.map((r, i) => (r.name === was[i]!.name ? -1 : i)).filter((i) => i >= 0), `seed ${seed} ${row.name}`).toEqual([at]);
+            inPlace++;
+          }
+        }
+      }
+    }
+    // The property was looked at over real swaps, not an empty set of them.
+    expect(inPlace).toBeGreaterThan(500);
+  });
+
   it('a swap with equipment named gives that equipment, or says there is none', () => {
     const { built, before } = edited('swap the lateral raise for a cable one');
     const row = built!.routines[0]!.rows.find((r) => !names(before).includes(r.name));

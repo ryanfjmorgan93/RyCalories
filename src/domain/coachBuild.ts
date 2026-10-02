@@ -410,15 +410,19 @@ function findRow(target: readonly string[], routines: readonly BuiltRoutine[]): 
   const words = target.flatMap(wordsOf);
   if (words.length === 0) return null;
   // Every word of the owner's must be one of the row's: "the leg press" is not the shoulder press because both are presses.
-  // Where several rows have them all, it is the first.
+  // Where several rows have them all, it is the one whose own name says least beyond them ("DB Curl" is the DB Curl and not
+  // the Incline DB Curl, though the words are in both), and the first of those.
+  let best: { routine: number; row: number; extra: number } | null = null;
   for (let ri = 0; ri < routines.length; ri++) {
     const rows = routines[ri]!.rows;
     for (let i = 0; i < rows.length; i++) {
-      const bag = rowBag(rows[i]!);
-      if (words.every((w) => bag.has(w))) return { routine: ri, row: i };
+      const row = rows[i]!;
+      if (!words.every((w) => rowBag(row).has(w))) continue;
+      const extra = wordsOf(row.name).filter((w) => !words.includes(w)).length;
+      if (best === null || extra < best.extra) best = { routine: ri, row: i, extra };
     }
   }
-  return null;
+  return best === null ? null : { routine: best.routine, row: best.row };
 }
 
 /** The muscles a routine has rows for, in the order its rows come. */

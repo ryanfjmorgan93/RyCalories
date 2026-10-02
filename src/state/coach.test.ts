@@ -884,14 +884,16 @@ describe('coach store: a change asked for after a routine changes that routine (
     const id = builds(store)[0]!.id;
     const shuffling = store.getState().shuffle(id);
     await vi.waitFor(() => expect(store.getState().working).toBe(id));
-    // Taken out of the guard in `send`, this builds a second routine while the first is being shuffled.
-    const outcome = await store.getState().send('add biceps');
-    expect(outcome).toBe('ignored');
+    // Each kind of message is put off by the guard in `send`, not by the one in the action it goes to: a build has none of its own.
+    expect(await store.getState().send('add biceps')).toBe('ignored');
+    expect(await store.getState().send('give me a chest routine')).toBe('ignored');
+    expect(await store.getState().send('How was last week?')).toBe('ignored');
     expect(store.getState().entries).toHaveLength(1);
     expect(loads).toBe(2);
     release(BUILD_INPUT);
     await shuffling;
     expect(store.getState().entries).toHaveLength(1);
+    expect(store.getState().pending).toBeNull();
   });
 });
 
