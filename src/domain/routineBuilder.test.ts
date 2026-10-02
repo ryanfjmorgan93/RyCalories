@@ -26,7 +26,7 @@ const SHOULDERS: RoutineRequest = { focus: ['shoulders', 'rear delts'] };
 
 // One input, built once through the app's own `buildQuickInput`: the owner's 27 exercises and the real catalogue.
 const REAL = seededInput({ recency: { shoulders: 6, 'rear delts': 6, chest: 2, biceps: 3 } });
-const OWN_ONLY = seededInput({ catalogue: false });
+const OWN_ONLY = seededInput({ catalogue: false, diagrams: false });
 const candidateById = new Map(REAL.candidates.map((c) => [c.id, c]));
 
 const one = (r: BuiltRoutine[]): BuiltRoutine => r[0]!;
@@ -72,11 +72,13 @@ describe('buildRoutines: what it hands back', () => {
       expect(row.name).toBeTruthy();
       expect(Number.isInteger(row.sets) && row.sets >= 1).toBe(true);
       expect(Number.isInteger(row.repMin) && row.repMin >= 1 && row.repMax >= row.repMin).toBe(true);
-      expect(['own', 'catalogue']).toContain(row.origin);
+      expect(['own', 'catalogue', 'diagram']).toContain(row.origin);
       expect(row.reason.startsWith(row.muscleGroup)).toBe(true);
       expect(row.pattern).toBe(movementPattern(row.name, row.muscleGroup));
       if (row.origin === 'catalogue') expect(row.catalogueSlug).toBeTruthy();
       else expect(row.catalogueSlug).toBeUndefined();
+      if (row.origin === 'diagram') expect(row.demoSlug).toBeTruthy();
+      else expect(row.demoSlug).toBeUndefined();
     }
   });
 

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { saveParsedRoutines, type ImportChoice, type ImportRow } from '@/db/routineImport';
-import { matchExercise, type ExerciseMatch, type MatchCandidate } from '@/domain/exerciseMatch';
+import { matchExercise, normaliseName, type ExerciseMatch, type MatchCandidate } from '@/domain/exerciseMatch';
 import { fmtNum, fmtRange } from '@/domain/format';
-import type { ExerciseListRow } from '@/domain/library';
+import { findExistingExercise, type ExerciseListRow } from '@/domain/library';
 import { parseRoutineText, type ParsedRoutineLine } from '@/domain/routineText';
 import { Button } from './components/Button';
 import { Card, Divider } from './components/Card';
@@ -43,17 +43,28 @@ function rowKey(ri: number, ei: number, line: ParsedRoutineLine): string {
  * the library (theirs win a tie), anything it is not sure of waits for a choice, and nothing is
  * saved until Save. A line matched to a library entry is marked Library and the exercise is made
  * when the routine is saved, so a paste that is cancelled adds nothing.
+ *
+ * A routine the app built itself comes with `preMatched`: it already knows which exercise each of
+ * its rows is, so those lines are not matched by name at all.
  */
 export function PasteRoutineSheet({
   open,
   onClose,
   initialText,
+  preMatched,
   title = 'Paste a routine',
 }: {
   open: boolean;
   onClose: () => void;
   /** Text to start from — the coach's drafted routine — instead of an empty box. */
   initialText?: string;
+  /**
+   * What the lines of `initialText` are, by name (`normaliseName`): the exercise-list key of each
+   * line of that name in the order they are written (`builtRowKeys`). A line named here is that
+   * exercise, never a match from its name; a line that is not, or that the owner has since chosen
+   * another exercise for, is read as pasted text is.
+   */
+  preMatched?: ReadonlyMap<string, readonly string[]>;
   title?: string;
 }) {
   const nav = useNavigate();
@@ -84,17 +95,34 @@ export function PasteRoutineSheet({
     };
   }, [listRows]);
 
-  const rows = useMemo(
-    () =>
-      parsed.routines.map((routine, ri) =>
-        routine.exercises.map((line, ei) => {
-          const key = rowKey(ri, ei, line);
-          const choice: ImportChoice | undefined = overrides[key] ?? matcher(line.name);
-          return { key, line, choice };
-        }),
-      ),
-    [parsed, matcher, overrides],
-  );
+  // A built row's exercise, from its list key. A library row the owner has since made theirs (a
+  // saved copy of it, or one of the same name) is no longer on the list, and the exercise they have is the row.
+  const known = useMemo(() => {
+    const byKey = new Map(listRows.map((r) => [r.key, r] as const));
+    return (key: string, name: string): ImportChoice | undefined => {
+      const row = byKey.get(key);
+      if (row) return choiceFor(row);
+      const have = findExistingExercise(exercises ?? [], key, name);
+      return have ? { kind: 'existing', exerciseId: have.id } : undefined;
+    };
+  }, [listRows, exercises]);
+
+  const rows = useMemo(() => {
+    const written = new Map<string, number>();
+    return parsed.routines.map((routine, ri) =>
+      routine.exercises.map((line, ei) => {
+        const key = rowKey(ri, ei, line);
+        const name = normaliseName(line.name);
+        const nth = written.get(name) ?? 0;
+        written.set(name, nth + 1);
+        const builtKey = preMatched?.get(name)?.[nth];
+        const fromBuild = builtKey !== undefined ? known(builtKey, line.name) : undefined;
+        // A built row that cannot be found yet (the catalogue is still on its way) waits; it is never matched from its name.
+        const choice: ImportChoice | undefined = overrides[key] ?? (builtKey !== undefined ? fromBuild : matcher(line.name));
+        return { key, line, choice };
+      }),
+    );
+  }, [parsed, matcher, overrides, preMatched, known]);
   const total = rows.reduce((n, r) => n + r.length, 0);
   const pending = rows.reduce((n, r) => n + r.filter((row) => !row.choice).length, 0);
 

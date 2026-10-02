@@ -14,8 +14,8 @@ import { db } from './db';
 import { getActiveSession } from './repo';
 import { catalogueDemoKey, exerciseFromCatalogue, type CatalogueEntry } from '@/domain/catalogue';
 import { nowIso } from '@/domain/dates';
-import { normaliseName } from '@/domain/exerciseMatch';
 import { uuid } from '@/domain/ids';
+import { exerciseFromDemo, findExistingExercise, type DemoLike } from '@/domain/library';
 import type { QuickPlan } from '@/domain/quickSession';
 import type { Exercise, Routine, RoutineExercise, Session } from '@/domain/types';
 
@@ -31,20 +31,27 @@ export const QUICK_SESSION_NAME = 'Quick session';
  * untouched), and it decides what the session may count for: a light session never reaches a record
  * or an e1RM (`sessionCountsForRecords`).
  *
- * `catalogueEntries` must hold every entry a catalogue-origin row names, already loaded: a Dexie
- * transaction cannot await anything that is not a Dexie call, so nothing is imported in here. A
- * catalogue row reuses an exercise the owner already has (same `cat:<slug>` demo key, else the same
- * name) rather than adding a second one.
+ * `catalogueEntries` and `demos` must hold every entry a catalogue-origin or diagram-origin row
+ * names, already loaded: a Dexie transaction cannot await anything that is not a Dexie call, so
+ * nothing is imported in here. A library row reuses an exercise the owner already has rather than
+ * adding a second one, by the rule the Exercises list and Add use (`findExistingExercise`: the
+ * picture key, else the same name, else an alias; the owner's own row wins).
  */
-export async function startQuickSession(plan: QuickPlan, catalogueEntries: readonly CatalogueEntry[], effort: 'light' | 'normal'): Promise<Session> {
+export async function startQuickSession(
+  plan: QuickPlan,
+  catalogueEntries: readonly CatalogueEntry[],
+  effort: 'light' | 'normal',
+  demos: readonly DemoLike[] = [],
+): Promise<Session> {
   const entryBySlug = new Map(catalogueEntries.map((e) => [e.slug, e]));
+  const demoBySlug = new Map(demos.map((d) => [d.slug, d]));
   return db.transaction('rw', [db.sessions, db.routines, db.routineExercises, db.exercises], async () => {
     const active = await getActiveSession();
     if (active) return active;
     if (plan.rows.length === 0) throw new Error('Quick session has no exercises');
 
     const now = nowIso();
-    const exerciseIds = await resolveExercises(plan, entryBySlug, now);
+    const exerciseIds = await resolveExercises(plan, entryBySlug, demoBySlug, now);
 
     const lower = plan.rows.filter((r) => r.candidate.isLowerBody).length;
     const routine: Routine = {
@@ -85,40 +92,51 @@ export async function startQuickSession(plan: QuickPlan, catalogueEntries: reado
 }
 
 /**
- * The exercise id for each row of the plan, in order. An owned exercise must still exist; a
- * catalogue one is found among the owner's exercises or created, and created once however many
- * rows name it.
+ * The exercise id for each row of the plan, in order. An owned exercise must still exist; a library
+ * one (catalogue or diagram) is found among the owner's exercises or created, and created once
+ * however many rows name it.
  */
-async function resolveExercises(plan: QuickPlan, entryBySlug: ReadonlyMap<string, CatalogueEntry>, createdAt: string): Promise<string[]> {
-  const ownIds = plan.rows.filter((r) => r.candidate.origin !== 'catalogue').map((r) => r.candidate.id);
+async function resolveExercises(
+  plan: QuickPlan,
+  entryBySlug: ReadonlyMap<string, CatalogueEntry>,
+  demoBySlug: ReadonlyMap<string, DemoLike>,
+  createdAt: string,
+): Promise<string[]> {
+  const ownIds = plan.rows.filter((r) => r.candidate.origin === 'own').map((r) => r.candidate.id);
   const owned = new Set((await db.exercises.bulkGet(ownIds)).filter((e): e is Exercise => !!e).map((e) => e.id));
   for (const id of ownIds) if (!owned.has(id)) throw new Error('Exercise not found');
 
-  const needsCatalogue = plan.rows.some((r) => r.candidate.origin === 'catalogue');
-  const byDemo = new Map<string, Exercise>();
-  const byName = new Map<string, Exercise>();
-  if (needsCatalogue) {
-    for (const e of await db.exercises.toArray()) {
-      if (e.demo) byDemo.set(e.demo, e);
-      byName.set(normaliseName(e.name), e);
-    }
-  }
+  // Every exercise the owner has, kept up to date as this loop makes more, so a movement two rows name is made once.
+  const have: Exercise[] = plan.rows.some((r) => r.candidate.origin !== 'own') ? await db.exercises.toArray() : [];
 
   const ids: string[] = [];
   for (const row of plan.rows) {
     const c = row.candidate;
-    if (c.origin !== 'catalogue') {
+    if (c.origin === 'own') {
       ids.push(c.id);
       continue;
     }
-    const entry = c.catalogueSlug ? entryBySlug.get(c.catalogueSlug) : undefined;
-    if (!entry) throw new Error(`Catalogue entry not found: ${c.catalogueSlug ?? c.name}`);
-    let exercise = byDemo.get(catalogueDemoKey(entry.slug)) ?? byName.get(normaliseName(entry.name));
+    let pictureKey: string;
+    let name: string;
+    let made: Omit<Exercise, 'id' | 'createdAt'>;
+    if (c.origin === 'catalogue') {
+      const entry = c.catalogueSlug ? entryBySlug.get(c.catalogueSlug) : undefined;
+      if (!entry) throw new Error(`Catalogue entry not found: ${c.catalogueSlug ?? c.name}`);
+      pictureKey = catalogueDemoKey(entry.slug);
+      name = entry.name;
+      made = exerciseFromCatalogue(entry);
+    } else {
+      const demo = c.demoSlug ? demoBySlug.get(c.demoSlug) : undefined;
+      if (!demo) throw new Error(`Diagram not found: ${c.demoSlug ?? c.name}`);
+      pictureKey = demo.slug;
+      name = demo.name;
+      made = exerciseFromDemo(demo);
+    }
+    let exercise = findExistingExercise(have, pictureKey, name);
     if (!exercise) {
-      exercise = { ...exerciseFromCatalogue(entry), id: uuid(), createdAt };
+      exercise = { ...made, id: uuid(), createdAt };
       await db.exercises.put(exercise);
-      byDemo.set(catalogueDemoKey(entry.slug), exercise);
-      byName.set(normaliseName(exercise.name), exercise);
+      have.push(exercise);
     }
     ids.push(exercise.id);
   }

@@ -1,16 +1,22 @@
 import { describe, expect, it } from 'vitest';
+import { EXERCISE_DEMOS } from '../data/exerciseDemos';
 import type { CatalogueEntry } from './catalogue';
+import { exerciseFromDemo, type ListDemo } from './library';
+import { NON_ROUTINE_PATTERNS, movementPattern } from './movement';
 import {
   buildQuickInput,
   catalogueCandidates,
+  diagramCandidateId,
+  diagramCandidates,
   historyBase,
+  isLiftDiagram,
   modelledSeconds,
   ownedEquipment,
   routineBase,
   type PaceContext,
   type QuickSource,
 } from './quickInput';
-import { DEFAULT_SETTINGS, type Exercise, type Routine, type RoutineExercise, type Session, type SetLog, type Settings } from './types';
+import { DEFAULT_SETTINGS, type Equipment, type Exercise, type Routine, type RoutineExercise, type Session, type SetLog, type Settings } from './types';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -511,5 +517,238 @@ describe('the same input in any order', () => {
     const key = (c: { id: string }) => c.id;
     expect([...forward.input.candidates].sort((x, y) => (key(x) < key(y) ? -1 : 1))).toEqual([...backward.input.candidates].sort((x, y) => (key(x) < key(y) ? -1 : 1)));
     expect(forward.input.pace).toBe(backward.input.pace);
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// Equipment from the owner's routines
+
+describe('ownedEquipment: what a routine says the owner uses', () => {
+  const press = exercise('leg-press', { muscleGroup: 'quads', equipment: 'machine' });
+  const cable = exercise('cable-curl', { muscleGroup: 'biceps', equipment: 'cable' });
+  const band = exercise('band-pull', { muscleGroup: 'lats', equipment: 'other' });
+  const kb = exercise('kb-swing', { muscleGroup: 'glutes', equipment: 'kettlebell' });
+  const all = [press, cable, band, kb];
+
+  it('counts the equipment of an exercise in a routine of theirs with no set ever logged', () => {
+    expect([...ownedEquipment(all, new Set(), new Set(['leg-press', 'cable-curl']))].sort()).toEqual(['bodyweight', 'cable', 'machine']);
+  });
+
+  it('counts a logged set and a routine row together, each for its own exercise', () => {
+    expect([...ownedEquipment(all, new Set(['kb-swing']), new Set(['leg-press']))].sort()).toEqual(['bodyweight', 'kettlebell', 'machine']);
+  });
+
+  it('is what it always was when no routine is given: logged sets, and bodyweight', () => {
+    expect([...ownedEquipment(all, new Set(['cable-curl']))].sort()).toEqual(['bodyweight', 'cable']);
+  });
+
+  it("'other' is still no evidence of owning anything, in a routine as much as in a set", () => {
+    expect([...ownedEquipment(all, new Set(['band-pull']), new Set(['band-pull']))]).toEqual(['bodyweight']);
+  });
+
+  it('an exercise in neither says nothing', () => {
+    expect([...ownedEquipment(all, new Set(), new Set())]).toEqual(['bodyweight']);
+  });
+
+  describe('through buildQuickInput, which reads the routines', () => {
+    const entries = [entry('a-machine', { equipment: 'machine' }), entry('a-cable', { equipment: 'cable' }), entry('a-kettlebell', { equipment: 'kettlebell' })];
+    const slugs = (src: QuickSource) => build(src).catalogueEntries.map((e) => e.slug);
+
+    it('offers the library for equipment their routines use, though nothing was ever logged', () => {
+      const src = source({
+        exercises: [press, kb],
+        routines: [routine('r1', 0)],
+        routineExercises: [rx('x1', 'r1', 'leg-press')],
+        catalogue: entries,
+      });
+      expect(slugs(src)).toEqual(['a-machine']);
+    });
+
+    it('a routine the owner archived, and the hidden one a quick session runs on, say nothing about what they use', () => {
+      const src = source({
+        exercises: [press, cable, kb],
+        routines: [routine('old', 0, { archived: true }), routine('quick', 1, { archived: true, quick: true }), routine('r3', 2)],
+        routineExercises: [rx('x1', 'old', 'leg-press'), rx('x2', 'quick', 'kb-swing'), rx('x3', 'r3', 'cable-curl')],
+        catalogue: entries,
+      });
+      expect(slugs(src)).toEqual(['a-cable']);
+    });
+
+    it('an exercise in no routine and never logged is still no evidence', () => {
+      const src = source({ exercises: [press, cable], routines: [routine('r1', 0)], routineExercises: [rx('x1', 'r1', 'cable-curl')], catalogue: entries });
+      expect(slugs(src)).toEqual(['a-cable']);
+    });
+
+    it("an 'other' exercise in a routine opens nothing", () => {
+      const src = source({
+        exercises: [band],
+        routines: [routine('r1', 0)],
+        routineExercises: [rx('x1', 'r1', 'band-pull')],
+        catalogue: [...entries, entry('a-other', { equipment: 'other' }), entry('a-bodyweight', { equipment: 'bodyweight' })],
+      });
+      expect(slugs(src)).toEqual(['a-bodyweight']);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The bundled diagrams
+
+describe('the diagrams', () => {
+  const diagram = (slug: string, over: Partial<ListDemo> = {}): ListDemo => ({
+    slug,
+    name: slug.replace(/-/g, ' '),
+    equipment: 'Cable',
+    muscleGroup: 'upper back',
+    primaryMuscle: 'Upper Back',
+    ...over,
+  });
+  const cable = exercise('cable-curl', { muscleGroup: 'biceps', equipment: 'cable' });
+  const ran = (extra: Partial<QuickSource> = {}) =>
+    source({ exercises: [cable], sessions: [session('s', 4)], setLogs: sets('s', 'cable-curl', 4, [[20, 12]]), ...extra });
+  const slugsOf = (src: QuickSource) => build(src).demos.map((d) => d.slug);
+
+  it('adds nothing, and returns no diagrams, when new exercises are not wanted', () => {
+    const { input, demos } = build(ran());
+    expect(input.candidates.every((c) => c.origin === 'own')).toBe(true);
+    expect(demos).toEqual([]);
+  });
+
+  it('adds a candidate for a diagram the owner has not got, from the exercise it would become, and returns the diagram', () => {
+    const face = diagram('face-pull');
+    const { input, demos } = build(ran({ demos: [face] }));
+    const fresh = input.candidates.filter((c) => c.origin === 'diagram');
+    expect(fresh).toHaveLength(1);
+    const made = exerciseFromDemo(face);
+    expect(fresh[0]).toEqual({
+      id: diagramCandidateId('face-pull'),
+      name: 'face pull',
+      muscleGroup: 'upper back',
+      equipment: 'cable',
+      kind: made.kind,
+      isCompound: made.isCompound,
+      isLowerBody: false,
+      unilateral: false,
+      defaultIncrement: made.defaultIncrement,
+      defaultRestSec: made.defaultRestSec,
+      origin: 'diagram',
+      demoSlug: 'face-pull',
+    });
+    // Never an owned exercise's id, and never a weight or a history of its own.
+    expect(fresh[0]!.id).toBe('demo:face-pull');
+    expect(fresh[0]).not.toHaveProperty('base');
+    expect(fresh[0]).not.toHaveProperty('daysSinceUsed');
+    expect(demos).toEqual([face]);
+  });
+
+  it('only for equipment the owner has used (a set, or a routine), and bodyweight', () => {
+    const demos = [
+      diagram('a-cable', { equipment: 'Cable' }),
+      diagram('a-machine', { equipment: 'Machine' }),
+      diagram('a-barbell', { equipment: 'Barbell' }),
+      diagram('a-band', { equipment: 'Resistance Band' }),
+      diagram('a-bodyweight', { equipment: 'Bodyweight' }),
+      diagram('a-bar', { equipment: 'Pull-up Bar' }),
+    ];
+    expect(slugsOf(ran({ demos }))).toEqual(['a-cable', 'a-bodyweight', 'a-bar']);
+    // A machine exercise in a routine of theirs opens machines, with no set logged on it.
+    const press = exercise('leg-press', { muscleGroup: 'quads', equipment: 'machine' });
+    const withRoutine = ran({ demos, exercises: [cable, press], routines: [routine('r1', 0)], routineExercises: [rx('x', 'r1', 'leg-press')] });
+    expect(slugsOf(withRoutine)).toEqual(['a-cable', 'a-machine', 'a-bodyweight', 'a-bar']);
+  });
+
+  it("leaves out a diagram that is already one of the owner's exercises, by picture key, name or alias: their own row wins", () => {
+    const byDemo = exercise('mine-1', { name: 'Something Else', equipment: 'cable', demo: 'by-key' });
+    const byName = exercise('mine-2', { name: 'Cable  Fly', equipment: 'cable' });
+    const byAlias = exercise('mine-3', { name: 'Hevy Name', aliases: ['Rope Pushdown'], equipment: 'cable' });
+    const src = ran({
+      exercises: [cable, byDemo, byName, byAlias],
+      demos: [
+        diagram('by-key', { name: 'Whatever' }),
+        diagram('by-name', { name: 'cable fly' }),
+        diagram('by-alias', { name: 'Rope Pushdown' }),
+        diagram('free', { name: 'Cable Crossover' }),
+      ],
+    });
+    const { input } = build(src);
+    expect(slugsOf(src)).toEqual(['free']);
+    // The owner's exercises are all still there, each as their own.
+    for (const id of ['mine-1', 'mine-2', 'mine-3']) expect(input.candidates.find((c) => c.id === id)?.origin).toBe('own');
+    expect(input.candidates.filter((c) => c.origin === 'diagram').map((c) => c.demoSlug)).toEqual(['free']);
+  });
+
+  it('a catalogue entry with the name of a diagram that is a candidate is left out: the diagram wins', () => {
+    const src = ran({
+      demos: [diagram('face-pull', { name: 'Face Pull' })],
+      catalogue: [entry('standing-face-pull', { name: 'face  PULL', equipment: 'cable' }), entry('cable-row', { name: 'Cable Row', equipment: 'cable' })],
+    });
+    const out = build(src);
+    expect(out.demos.map((d) => d.slug)).toEqual(['face-pull']);
+    expect(out.catalogueEntries.map((e) => e.slug)).toEqual(['cable-row']);
+    expect(out.input.candidates.filter((c) => c.name.toLowerCase().includes('face')).map((c) => c.origin)).toEqual(['diagram']);
+  });
+
+  it('with no diagrams the catalogue is exactly what it was', () => {
+    const entries = [entry('a', { equipment: 'cable' }), entry('b', { equipment: 'bodyweight' })];
+    expect(build(ran({ catalogue: entries })).catalogueEntries.map((e) => e.slug)).toEqual(['a', 'b']);
+  });
+
+  it('is the same whatever order the diagrams come in', () => {
+    const demos = [diagram('a'), diagram('b'), diagram('c', { equipment: 'Bodyweight' })];
+    const sorted = (list: { id: string }[]) => [...list].sort((x, y) => (x.id < y.id ? -1 : 1));
+    expect(sorted(build(ran({ demos })).input.candidates)).toEqual(sorted(build(ran({ demos: [...demos].reverse() })).input.candidates));
+  });
+
+  describe('which diagrams are lifts', () => {
+    const lift = (name: string, over: Partial<ListDemo> = {}) => isLiftDiagram(diagram('x', { name, equipment: 'Bodyweight', ...over }));
+
+    it('leaves out stretches, mobility, cardio, carries, jumps, and strongman and Olympic lifts, however they are filed', () => {
+      expect(lift('Hamstring Stretch', { muscleGroup: 'hamstrings' })).toBe(false);
+      expect(lift('Doorway Chest Stretch', { muscleGroup: 'chest', equipment: 'Doorway' })).toBe(false);
+      expect(lift('Cat-Cow Stretch', { muscleGroup: null, primaryMuscle: 'Mobility' })).toBe(false);
+      expect(lift('Leg Swings', { muscleGroup: null, primaryMuscle: 'Mobility' })).toBe(false);
+      expect(lift('Spin', { muscleGroup: 'quads', equipment: 'Cardio' })).toBe(false);
+      expect(lift('Treadmill Incline Walk', { muscleGroup: 'quads', equipment: 'Cardio' })).toBe(false);
+      expect(lift('Farmer Carry', { muscleGroup: 'forearms', equipment: 'Dumbbell' })).toBe(false);
+      expect(lift('Jump Squat', { muscleGroup: 'quads' })).toBe(false);
+      expect(lift('Burpee', { muscleGroup: 'quads' })).toBe(false);
+      expect(lift('Dumbbell Snatch', { muscleGroup: 'shoulders', equipment: 'Dumbbell' })).toBe(false);
+      expect(lift('Sled Push', { muscleGroup: 'quads' })).toBe(false);
+      expect(lift('Warm-up', { muscleGroup: 'abs', primaryMuscle: 'Mobility' })).toBe(false);
+    });
+
+    it('keeps the lifts, including the ones that look like something else', () => {
+      expect(lift('Face Pull', { muscleGroup: 'upper back', equipment: 'Cable' })).toBe(true);
+      expect(lift('Leg Press', { muscleGroup: 'quads', equipment: 'Machine' })).toBe(true);
+      expect(lift('Dip', { muscleGroup: 'triceps' })).toBe(true);
+      expect(lift('Hip Abduction Machine', { muscleGroup: 'glutes', equipment: 'Machine' })).toBe(true);
+      expect(lift('Plank', { muscleGroup: 'abs' })).toBe(true);
+    });
+
+    it('over every real diagram: none that is a candidate is a movement a routine cannot be built from, and the lifts are there', () => {
+      const every = new Set<Equipment>(['barbell', 'dumbbell', 'machine', 'cable', 'bodyweight', 'kettlebell']);
+      const { candidates } = diagramCandidates(EXERCISE_DEMOS, [cable], every);
+      expect(candidates.length).toBeGreaterThan(150);
+      for (const c of candidates) {
+        expect(NON_ROUTINE_PATTERNS.has(movementPattern(c.name, c.muscleGroup)), c.name).toBe(false);
+        expect(c.muscleGroup, c.name).not.toBe('other');
+        expect(c.equipment, c.name).not.toBe('other');
+      }
+      const names = new Set(candidates.map((c) => c.name));
+      for (const lifts of ['Face Pull', 'Leg Press', 'Dip', 'Hip Abduction Machine', 'Chest Dip']) expect(names.has(lifts), lifts).toBe(true);
+      // And the ones that are not lifts are not.
+      for (const gone of ['Hamstring Stretch', 'Cat-Cow Stretch', 'Assault Bike', 'Running', 'Jump Squat', 'Burpee', 'Farmer Carry', 'Leg Swings', 'Battle Ropes']) {
+        expect(names.has(gone), gone).toBe(false);
+      }
+    });
+  });
+
+  it('has a unique id for every candidate over the real data, and never one that is an owned exercise', () => {
+    const owned = ['bench', 'face-pull'].map((id) => exercise(id, { equipment: 'cable' }));
+    const { input } = build(source({ exercises: owned, sessions: [session('s', 4)], setLogs: sets('s', 'bench', 4, [[10, 10]]), demos: EXERCISE_DEMOS }));
+    const ids = input.candidates.map((c) => c.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(input.candidates.filter((c) => c.origin === 'diagram').every((c) => c.id.startsWith('demo:') && c.id === `demo:${c.demoSlug}`)).toBe(true);
   });
 });

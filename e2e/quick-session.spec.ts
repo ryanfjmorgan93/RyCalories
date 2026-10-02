@@ -544,8 +544,14 @@ test('says what there is to say and no more: a muscle with no exercise, a short 
   await expect(page.getByTestId('quick-estimate')).toHaveText(/^about \d+ min · 1 exercise$/);
 });
 
-test('Include new adds exercises from the catalogue, marks them New, and Start makes them the owner\'s own', async ({ page }) => {
+/** The ids of every exercise there is now: what Start makes is whatever is not among them afterwards. */
+async function exerciseIds(page: Page): Promise<Set<string>> {
+  return new Set((await table(page, 'exercises')).map((e) => String(e.id)));
+}
+
+test('Include new adds exercises from the library, the catalogue and the diagrams, marks them New, and Start makes them the owner\'s own', async ({ page }) => {
   await fresh(page);
+  const had = await exerciseIds(page);
   await openSheet(page);
   await expect(page.getByTestId('quick-include-new')).toHaveAttribute('aria-checked', 'false');
 
@@ -557,7 +563,7 @@ test('Include new adds exercises from the catalogue, marks them New, and Start m
 
   await page.getByTestId('quick-include-new').click();
   await expect(page.getByTestId('quick-include-new')).toHaveAttribute('aria-checked', 'true');
-  // The catalogue loads, and the short count fills up: at most two rows are new.
+  // The catalogue loads, and the short count fills up: at most two rows are new, however they split between the catalogue and the diagrams.
   await expect(page.getByTestId('quick-short')).toHaveText('Only 3 available');
   const preview = await readPreview(page);
   expect(preview).toHaveLength(3);
@@ -570,18 +576,22 @@ test('Include new adds exercises from the catalogue, marks them New, and Start m
   await expect(cardsOf(page)).toHaveCount(3);
   expect(await cardNames(page)).toEqual(preview.map((r) => r.name));
 
-  // The new ones are exercises now, each with its picture key, and only the ones that were shown.
-  await expect.poll(async () => (await table(page, 'exercises')).filter((e) => String(e.demo ?? '').startsWith('cat:')).length).toBe(2);
-  const made = (await table(page, 'exercises')).filter((e) => String(e.demo ?? '').startsWith('cat:'));
+  // The new ones are exercises now, each with its picture key (a catalogue key, or a diagram's slug), and only the ones that were shown.
+  const madeNow = async (): Promise<Row[]> => (await table(page, 'exercises')).filter((e) => !had.has(String(e.id)));
+  await expect.poll(async () => (await madeNow()).length).toBe(2);
+  const made = await madeNow();
   expect(made.map((e) => e.name).sort()).toEqual(added.map((r) => r.name).sort());
-  expect(made.every((e) => e.equipment === 'bodyweight')).toBe(true);
+  expect(made.every((e) => typeof e.demo === 'string' && e.demo !== '')).toBe(true);
+  // Only for equipment the owner has used: their routines are built on weights, machines and cables, and nothing else is offered.
+  expect(made.every((e) => ['bodyweight', 'barbell', 'dumbbell', 'machine', 'cable'].includes(String(e.equipment)))).toBe(true);
 });
 
-test('discarding a session that used Include new takes the exercises Start made from the catalogue, and nothing else', async ({ page }) => {
+test('discarding a session that used Include new takes the exercises Start made from the library, and nothing else', async ({ page }) => {
   await fresh(page);
   const seeded = await seededRows(page);
-  const exercisesBefore = (await table(page, 'exercises')).length;
-  const made = async (): Promise<Row[]> => (await table(page, 'exercises')).filter((e) => String(e.demo ?? '').startsWith('cat:'));
+  const had = await exerciseIds(page);
+  const exercisesBefore = had.size;
+  const made = async (): Promise<Row[]> => (await table(page, 'exercises')).filter((e) => !had.has(String(e.id)));
 
   await openSheet(page);
   await page.getByTestId('quick-request').fill('four abs');

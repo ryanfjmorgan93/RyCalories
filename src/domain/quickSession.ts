@@ -27,9 +27,14 @@ export interface Candidate {
   defaultRestSec: number;
   standard?: StrengthStandard;
   level?: 'beginner' | 'intermediate' | 'expert';
-  /** A row in the owner's database, or a catalogue entry never done that would become one. */
-  origin: 'own' | 'catalogue';
+  /**
+   * A row in the owner's database, or a library entry never done that would become one: a catalogue
+   * entry, or one of the bundled diagrams.
+   */
+  origin: 'own' | 'catalogue' | 'diagram';
   catalogueSlug?: string;
+  /** The bundled diagram's slug (origin 'diagram'): also the picture key the exercise made from it carries. */
+  demoSlug?: string;
   /** Whole days since this exercise was last logged. Absent = never. */
   daysSinceUsed?: number;
   /** What the owner already does for it: their routine's prescription or their last top set. */
@@ -83,7 +88,8 @@ const WORK_SEC_PER_SET = 40;
 const MIN_ROWS = 3;
 const MAX_ROWS = 8;
 const MAX_PER_MUSCLE = 2;
-const MAX_CATALOGUE = 2;
+/** The most library exercises (catalogue and diagrams together) one short session takes. */
+const MAX_NEW = 2;
 /** The derived count aims to reach the minutes target without going past this, where it can. */
 const TIME_CEILING_MIN = 45;
 const RECOVERY_DAYS = 2;
@@ -97,8 +103,8 @@ const DEFICIT_WEIGHT = 2;
  * than a ban: when everything left is the same movement, they share the pick as before.
  */
 export const PATTERN_PENALTY = 0.05;
-/** With a catalogue and an own exercise for the same muscle, catalogue ones share this fraction of the own weight. */
-const CATALOGUE_SHARE = 0.5;
+/** With library exercises and an own exercise for the same muscle, the library ones share this fraction of the own weight. */
+const NEW_SHARE = 0.5;
 const LIGHT_SETS_COMPOUND = 3;
 const LIGHT_SETS_ISOLATION = 2;
 const LIGHT_REPS: [number, number] = [10, 15];
@@ -195,7 +201,7 @@ function eligiblePool(candidates: Candidate[], options: QuickOptions, light: boo
     if (!TRAINABLE.has(c.muscleGroup) || exclude.has(c.muscleGroup)) return false;
     // An exercise with no equipment recorded counts as 'other', so "no barbell" keeps it.
     if (equipment && !equipment.has(c.equipment ?? 'other')) return false;
-    if (c.origin === 'catalogue' && (!options.includeNew || c.level === 'expert')) return false;
+    if (c.origin !== 'own' && (!options.includeNew || c.level === 'expert')) return false;
     if (light && isLightExcluded(c)) return false;
     return true;
   });
@@ -351,14 +357,14 @@ export function generateQuickSession(input: QuickInput, options: QuickOptions, s
   const chosen: Candidate[] = [];
   const chosenIds = new Set<string>();
   const perMuscle = new Map<MuscleGroup, number>();
-  let catalogueCount = 0;
+  let newCount = 0;
   let seconds = 0;
 
   const minutesAt = (sec: number): number => Math.round((sec / 60) * pace);
   const costOf = (c: Candidate): number => rowSeconds(rowOf.get(c.id)!);
   const available = (g: MuscleGroup): Candidate[] => {
     if ((perMuscle.get(g) ?? 0) >= perMuscleCap) return [];
-    return (byGroup.get(g) ?? []).filter((c) => !chosenIds.has(c.id) && (c.origin !== 'catalogue' || catalogueCount < MAX_CATALOGUE));
+    return (byGroup.get(g) ?? []).filter((c) => !chosenIds.has(c.id) && (c.origin === 'own' || newCount < MAX_NEW));
   };
 
   const patternOf = new Map<string, string>();
@@ -369,11 +375,11 @@ export function generateQuickSession(input: QuickInput, options: QuickOptions, s
     // A movement already in the plan is drawn far less often than one that is not. When every one left
     // is the same movement they are all scaled alike, so they share the pick as they would have.
     const weights = list.map((c) => weightOf(c, light) * (patternsTaken.has(patternOf.get(c.id)!) ? PATTERN_PENALTY : 1));
-    const own = list.reduce((s, c, i) => (c.origin === 'catalogue' ? s : s + weights[i]), 0);
-    const cat = list.reduce((s, c, i) => (c.origin === 'catalogue' ? s + weights[i] : s), 0);
+    const own = list.reduce((s, c, i) => (c.origin === 'own' ? s + weights[i] : s), 0);
+    const fresh = list.reduce((s, c, i) => (c.origin === 'own' ? s : s + weights[i]), 0);
     // Never-done exercises are a garnish, not the meal: beside own ones, they share a fixed fraction.
-    const scale = own > 0 && cat > 0 ? (own * CATALOGUE_SHARE) / cat : 1;
-    const scaled = weights.map((w, i) => (list[i].origin === 'catalogue' ? w * scale : w));
+    const scale = own > 0 && fresh > 0 ? (own * NEW_SHARE) / fresh : 1;
+    const scaled = weights.map((w, i) => (list[i].origin === 'own' ? w : w * scale));
     let r = rng() * scaled.reduce((s, w) => s + w, 0);
     for (let i = 0; i < list.length; i++) {
       if (r < scaled[i]) return list[i];
@@ -409,7 +415,7 @@ export function generateQuickSession(input: QuickInput, options: QuickOptions, s
       chosenIds.add(pick.id);
       patternsTaken.add(patternOf.get(pick.id)!);
       perMuscle.set(pick.muscleGroup, (perMuscle.get(pick.muscleGroup) ?? 0) + 1);
-      if (pick.origin === 'catalogue') catalogueCount++;
+      if (pick.origin !== 'own') newCount++;
       seconds += costOf(pick);
       progressed = true;
     }

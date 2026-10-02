@@ -95,7 +95,7 @@ function QuickSessionBody({ onClose }: { onClose: () => void }) {
   const options = useMemo(() => quickOptions(draft), [draft]);
   const chips = useMemo(() => quickChips(draft), [draft]);
 
-  // Read once on opening, and again when the catalogue is switched in or out: never live, so a
+  // Read once on opening, and again when the library is switched in or out: never live, so a
   // plan on screen cannot move under the owner's thumb.
   useEffect(() => {
     if (!settings) return;
@@ -145,7 +145,8 @@ function QuickSessionBody({ onClose }: { onClose: () => void }) {
     try {
       // Exactly the plan on screen: nothing is generated again here.
       const entries = plan.rows.some((r) => r.candidate.origin === 'catalogue') ? loaded.catalogueEntries : [];
-      const session = await startQuickSession(plan, entries, options.effort);
+      const demos = plan.rows.some((r) => r.candidate.origin === 'diagram') ? loaded.demos : [];
+      const session = await startQuickSession(plan, entries, options.effort, demos);
       onClose();
       nav(`/session/${session.id}`);
     } catch (e) {
@@ -298,7 +299,7 @@ function QuickSessionBody({ onClose }: { onClose: () => void }) {
               <div key={row.candidate.id} className="rounded-xl border border-line bg-surface-2 px-3 py-2" data-testid={`quick-row-${i}`}>
                 <div className="flex items-center justify-between gap-2">
                   <span className="min-w-0 truncate font-semibold">{row.candidate.name}</span>
-                  {row.candidate.origin === 'catalogue' && (
+                  {row.candidate.origin !== 'own' && (
                     <Chip size="sm" tone="info" testId={`quick-new-${i}`}>
                       New
                     </Chip>

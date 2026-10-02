@@ -1235,6 +1235,61 @@ describe('generateQuickSession: choosing between exercises for a muscle', () => 
     expect(plan.rows).toHaveLength(2);
     expect(plan.shortfall).toBe(2);
   });
+
+  describe('with diagrams beside the catalogue', () => {
+    const own = [cand({ id: 'own1', base }), cand({ id: 'own2', base })];
+    const catalogue = Array.from({ length: 6 }, (_, i) => cand({ id: `cat${i}`, origin: 'catalogue', catalogueSlug: `cat${i}` }));
+    const diagrams = Array.from({ length: 6 }, (_, i) => cand({ id: `demo:dia${i}`, origin: 'diagram', demoSlug: `dia${i}` }));
+    const isNew = (r: QuickRow) => r.candidate.origin !== 'own';
+
+    it('takes at most two new exercises in all, whichever of the two they come from, and the cap is reached by a mix', () => {
+      let mixed = false;
+      for (const seed of seeds(300)) {
+        const plan = generateQuickSession(input([...own, ...catalogue, ...diagrams]), opts({ focus: ['chest'], count: 6, includeNew: true }), seed);
+        const fresh = plan.rows.filter(isNew);
+        expect(fresh.length, `seed ${seed}`).toBeLessThanOrEqual(2);
+        if (fresh.some((r) => r.candidate.origin === 'catalogue') && fresh.some((r) => r.candidate.origin === 'diagram')) mixed = true;
+      }
+      // One of each in a plan: a cap on each kind alone would have let four through, and one of each is how they share it.
+      expect(mixed).toBe(true);
+    });
+
+    it('draws a diagram only when new exercises are asked for', () => {
+      for (const seed of seeds(60)) {
+        const plan = generateQuickSession(input([...own, ...diagrams]), opts({ focus: ['chest'], count: 3, includeNew: false }), seed);
+        expect(plan.rows.map((r) => r.candidate.id).sort(), `seed ${seed}`).toEqual(['own1', 'own2']);
+      }
+      const asked = Array.from(seeds(60), (seed) => generateQuickSession(input([...own, ...diagrams]), opts({ focus: ['chest'], count: 3, includeNew: true }), seed));
+      expect(asked.some((plan) => plan.rows.some((r) => r.candidate.origin === 'diagram'))).toBe(true);
+    });
+
+    it('a diagram is a garnish beside the own ones, as a catalogue entry is, not most of the plan', () => {
+      let fresh = 0;
+      let total = 0;
+      for (const seed of seeds(500)) {
+        const plan = generateQuickSession(input([...own, ...Array.from({ length: 30 }, (_, i) => cand({ id: `demo:d${i}`, origin: 'diagram', demoSlug: `d${i}` }))]), opts({ focus: ['chest'], count: 2, includeNew: true }), seed);
+        total += plan.rows.length;
+        fresh += plan.rows.filter((r) => r.candidate.origin === 'diagram').length;
+      }
+      expect(fresh / total).toBeGreaterThan(0.27);
+      expect(fresh / total).toBeLessThan(0.38);
+    });
+
+    it('a muscle with only diagrams still gets them, up to two', () => {
+      const plan = generateQuickSession(input(diagrams), opts({ focus: ['chest'], count: 4, includeNew: true }), 1);
+      expect(plan.rows).toHaveLength(2);
+      expect(plan.rows.every((r) => r.candidate.origin === 'diagram')).toBe(true);
+      expect(plan.shortfall).toBe(2);
+    });
+
+    it('a diagram carries no weight, and is prescribed as calibrating, as a catalogue entry is', () => {
+      const plan = generateQuickSession(input(diagrams), opts({ focus: ['chest'], count: 2, includeNew: true }), 1);
+      for (const r of plan.rows) {
+        expect(r.weightKg).toBeNull();
+        expect(r.mode).toBe('calibrating');
+      }
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
