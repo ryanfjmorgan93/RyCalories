@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 import type { CatalogueEntry } from './catalogue';
 import {
   buildExerciseList,
+  emptyListText,
   filterExerciseList,
   findExistingExercise,
   groupsInList,
   libraryCountsLine,
   LIST_PAGE_SIZE,
   listCounts,
+  listHeading,
   pageWindow,
   type ExerciseListRow,
   type ListDemo,
@@ -246,6 +248,44 @@ describe('libraryCountsLine', () => {
 
   it('says so when the catalogue could not be loaded', () => {
     expect(libraryCountsLine({ owned: 27, library: 276 }, 'failed')).toBe('27 yours · 276 in the library · catalogue not loaded');
+  });
+});
+
+describe('listHeading', () => {
+  it('counts the rows, and says "exercise" for one', () => {
+    expect(listHeading(303, 'ready', 'all')).toBe('303 exercises');
+    expect(listHeading(1, 'ready', 'all')).toBe('1 exercise');
+    expect(listHeading(0, 'ready', 'yours')).toBe('0 exercises');
+  });
+
+  it('qualifies the count of a list that reads the library while the catalogue is on its way, or never came', () => {
+    expect(listHeading(303, 'loading', 'all')).toBe('303 exercises so far');
+    expect(listHeading(303, 'failed', 'all')).toBe('303 exercises · catalogue not loaded');
+  });
+
+  it('says nothing about the catalogue over Yours, which is whole whatever became of it', () => {
+    expect(listHeading(27, 'failed', 'yours')).toBe('27 exercises');
+    expect(listHeading(27, 'loading', 'yours')).toBe('27 exercises');
+  });
+});
+
+describe('emptyListText', () => {
+  const base = { status: 'ready' as const, scope: 'all' as const, owned: 27, query: '', muscle: 'all' as const };
+
+  it('blames the library only in a list that reads it', () => {
+    expect(emptyListText({ ...base, status: 'failed' })).toBe('Library unavailable');
+    expect(emptyListText({ ...base, status: 'loading' })).toBe('Loading…');
+    // Yours reads only the owner's rows: a search that finds nothing there found nothing.
+    expect(emptyListText({ ...base, status: 'failed', scope: 'yours', query: 'zzzz' })).toBe('No matches.');
+    expect(emptyListText({ ...base, status: 'loading', scope: 'yours', query: 'zzzz' })).toBe('No matches.');
+  });
+
+  it('says "No exercises." only for an owner with none, with nothing typed or chosen', () => {
+    expect(emptyListText({ ...base, scope: 'yours', owned: 0 })).toBe('No exercises.');
+    expect(emptyListText({ ...base, scope: 'yours', owned: 0, query: 'curl' })).toBe('No matches.');
+    expect(emptyListText({ ...base, scope: 'yours', owned: 0, muscle: 'biceps' })).toBe('No matches.');
+    expect(emptyListText({ ...base, scope: 'yours', owned: 3 })).toBe('No matches.');
+    expect(emptyListText({ ...base, query: 'zzzz' })).toBe('No matches.');
   });
 });
 

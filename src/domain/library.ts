@@ -232,6 +232,9 @@ export function listCounts(rows: readonly ExerciseListRow[]): { owned: number; l
 /** Whether the catalogue half of the library has arrived: the diagrams are always there. */
 export type CatalogueStatus = 'loading' | 'ready' | 'failed';
 
+/** The fact every place that lists the library states when the catalogue half of it could not be fetched. */
+export const CATALOGUE_NOT_LOADED = 'catalogue not loaded';
+
 /**
  * The fact line over the list. A total is only claimed once the catalogue has loaded: while it is
  * on its way the line says the count is what has arrived so far, and if it never arrives it says so.
@@ -239,8 +242,34 @@ export type CatalogueStatus = 'loading' | 'ready' | 'failed';
 export function libraryCountsLine(counts: { owned: number; library: number }, status: CatalogueStatus): string {
   const base = `${counts.owned} yours · ${counts.library} in the library`;
   if (status === 'loading') return `${base} so far`;
-  if (status === 'failed') return `${base} · catalogue not loaded`;
+  if (status === 'failed') return `${base} · ${CATALOGUE_NOT_LOADED}`;
   return base;
+}
+
+/**
+ * The heading over the Exercises list. Only a list that reads the library (All) can be short of it:
+ * its count is qualified while the catalogue is on its way and when it never came. Yours is the
+ * owner's own rows and is whole whatever the catalogue did.
+ */
+export function listHeading(count: number, status: CatalogueStatus, scope: 'all' | 'yours'): string {
+  const base = `${count} ${count === 1 ? 'exercise' : 'exercises'}`;
+  if (scope === 'yours') return base;
+  if (status === 'loading') return `${base} so far`;
+  if (status === 'failed') return `${base} · ${CATALOGUE_NOT_LOADED}`;
+  return base;
+}
+
+/**
+ * What the Exercises screen says when its list is empty. The library is blamed only by a list that
+ * reads it: a search in Yours that finds nothing found nothing among the owner's own exercises,
+ * whatever became of the catalogue.
+ */
+export function emptyListText(state: { status: CatalogueStatus; scope: 'all' | 'yours'; owned: number; query: string; muscle: MuscleGroup | 'all' }): string {
+  if (state.scope === 'all') {
+    if (state.status === 'failed') return 'Library unavailable';
+    if (state.status === 'loading') return 'Loading…';
+  }
+  return state.owned === 0 && state.scope === 'yours' && !state.query.trim() && state.muscle === 'all' ? 'No exercises.' : 'No matches.';
 }
 
 /** The muscle group a row is filed under: diagrams with none sit under 'other', as they will once added. */
