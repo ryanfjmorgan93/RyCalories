@@ -3,7 +3,7 @@ import { loadCatalogue } from '@/data/catalogue';
 import { EXERCISE_DEMOS } from '@/data/exerciseDemos';
 import { SEED_EXERCISES } from '@/db/seed';
 import { matchExercise, type MatchCandidate } from './exerciseMatch';
-import { buildExerciseList, type ExerciseListRow } from './library';
+import { buildExerciseList, candidatesFromRows, type ExerciseListRow } from './library';
 
 const mine = (id: string, name: string, aliases?: string[]): MatchCandidate => ({ id, name, aliases });
 const lib = (id: string, name: string): MatchCandidate => ({ id, name, library: true });
@@ -92,7 +92,7 @@ describe('matchExercise over the real seed, the bundled diagrams and the catalog
   const owned = SEED_EXERCISES.map((e) => ({ ...e, createdAt: '2026-01-01T00:00:00.000Z' }));
   const pool = async (): Promise<{ rows: ExerciseListRow[]; candidates: MatchCandidate[] }> => {
     const rows = buildExerciseList({ owned, demos: EXERCISE_DEMOS, entries: await loadCatalogue() });
-    return { rows, candidates: rows.map((r) => ({ id: r.key, name: r.name, aliases: r.exercise?.aliases, library: !r.owned })) };
+    return { rows, candidates: candidatesFromRows(rows) };
   };
 
   it('every library entry is found by its own name, and is that entry', async () => {

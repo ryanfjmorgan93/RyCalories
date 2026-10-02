@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { saveParsedRoutines, type ImportChoice, type ImportRow } from '@/db/routineImport';
-import { matchExercise, normaliseName, type ExerciseMatch, type MatchCandidate } from '@/domain/exerciseMatch';
+import { matchExercise, normaliseName, type ExerciseMatch } from '@/domain/exerciseMatch';
 import { fmtNum, fmtRange } from '@/domain/format';
-import { findExistingExercise, type ExerciseListRow } from '@/domain/library';
+import { candidatesFromRows, findExistingExercise, type ExerciseListRow } from '@/domain/library';
 import { parseRoutineText, type ParsedRoutineLine } from '@/domain/routineText';
 import { Button } from './components/Button';
 import { Card, Divider } from './components/Card';
@@ -84,7 +84,7 @@ export function PasteRoutineSheet({
   // Their exercises and every library entry they have not added, as one pool. A name is looked up
   // once per pool, not once per keystroke: the library is some eight hundred names.
   const matcher = useMemo(() => {
-    const candidates: MatchCandidate[] = listRows.map((r) => ({ id: r.key, name: r.name, aliases: r.exercise?.aliases, library: !r.owned }));
+    const candidates = candidatesFromRows(listRows);
     const byKey = new Map(listRows.map((r) => [r.key, r] as const));
     const cache = new Map<string, ExerciseMatch | null>();
     return (name: string): ImportChoice | undefined => {

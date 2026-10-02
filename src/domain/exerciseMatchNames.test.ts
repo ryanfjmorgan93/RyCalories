@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { loadCatalogue } from '@/data/catalogue';
 import { EXERCISE_DEMOS } from '@/data/exerciseDemos';
 import { SEED_EXERCISES } from '@/db/seed';
-import { COMMON_EXERCISE_NAMES, matchExercise, normaliseName, type MatchCandidate } from './exerciseMatch';
-import { buildExerciseList } from './library';
+import { COMMON_EXERCISE_NAMES, matchExercise, normaliseName } from './exerciseMatch';
+import { buildExerciseList, candidatesFromRows } from './library';
 
 /**
  * The matcher over forty-odd names written the way people type them, against the real seed, the
@@ -16,7 +16,7 @@ const owned = SEED_EXERCISES.map((e) => ({ ...e, createdAt: '2026-01-01T00:00:00
 
 async function pool() {
   const rows = buildExerciseList({ owned, demos: EXERCISE_DEMOS, entries: await loadCatalogue() });
-  return { rows, candidates: rows.map((r): MatchCandidate => ({ id: r.key, name: r.name, aliases: r.exercise?.aliases, library: !r.owned })) };
+  return { rows, candidates: candidatesFromRows(rows) };
 }
 
 /** The id of the owner's exercise with this name. */
@@ -117,7 +117,7 @@ describe('matchExercise over common gym names, written the way people type them'
 describe('matchExercise over the library alone, where nothing is the owner\'s', () => {
   const library = async () => {
     const rows = buildExerciseList({ owned: [], demos: EXERCISE_DEMOS, entries: await loadCatalogue() });
-    return { rows, candidates: rows.map((r): MatchCandidate => ({ id: r.key, name: r.name, library: true })) };
+    return { rows, candidates: candidatesFromRows(rows) };
   };
   const nameOf = (rows: { key: string; name: string }[], id: string | undefined) => rows.find((r) => r.key === id)?.name;
 

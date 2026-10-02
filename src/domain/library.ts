@@ -6,7 +6,7 @@
  * Pure: no IO, no imports of the data files (the shapes below are structural).
  */
 import { catalogueDemoKey, LOWER_BODY_GROUPS, matchTier, type CatalogueEntry } from './catalogue';
-import { normaliseName } from './exerciseMatch';
+import { normaliseName, type MatchCandidate } from './exerciseMatch';
 import { MUSCLE_GROUPS, type Equipment, type Exercise, type MuscleGroup } from './types';
 
 /** What the exercise form's diagram picker shows at most, diagrams and catalogue together. */
@@ -135,6 +135,12 @@ export interface ExerciseListRow {
   entry?: CatalogueEntry;
   /** The picture key an exercise made from this row carries (an owned row: its own, when it has one). */
   pictureKey?: string;
+  /**
+   * An owned row only: what the library calls the movement its picture key belongs to, when that is
+   * no longer what the row is called (it was renamed after being added) or one of its aliases. It is
+   * not stored on the exercise; the paste matcher reads it as one more name the row answers to.
+   */
+  libraryName?: string;
 }
 
 const collator = new Intl.Collator('en-GB');
@@ -153,12 +159,20 @@ export function buildExerciseList(input: { owned: readonly Exercise[]; demos: re
   const ownedKeys = new Set<string>();
   const ownedNames = new Set<string>();
   const mine: ExerciseListRow[] = [];
+  const libraryNames = new Map<string, string>();
+  for (const d of input.demos) libraryNames.set(d.slug, d.name);
+  for (const entry of input.entries) libraryNames.set(catalogueDemoKey(entry.slug), entry.name);
   for (const e of input.owned) {
     if (e.demo !== undefined) ownedKeys.add(e.demo);
+    const own = new Set<string>();
     for (const n of [e.name, ...(e.aliases ?? [])]) {
       const k = normaliseName(n);
-      if (k !== '') ownedNames.add(k);
+      if (k !== '') {
+        ownedNames.add(k);
+        own.add(k);
+      }
     }
+    const libraryName = e.demo !== undefined ? libraryNames.get(e.demo) : undefined;
     mine.push({
       key: e.id,
       name: e.name,
@@ -168,6 +182,7 @@ export function buildExerciseList(input: { owned: readonly Exercise[]; demos: re
       owned: true,
       exercise: e,
       pictureKey: e.demo,
+      ...(libraryName !== undefined && !own.has(normaliseName(libraryName)) ? { libraryName } : {}),
     });
   }
   const taken = (pictureKey: string, name: string) => ownedKeys.has(pictureKey) || ownedNames.has(normaliseName(name));
@@ -192,6 +207,20 @@ export function buildExerciseList(input: { owned: readonly Exercise[]; demos: re
     library.push({ key, name: entry.name, muscleGroup: entry.muscleGroup, muscleLabel: entry.muscleGroup, equipment: entry.equipment, owned: false, entry, pictureKey: key });
   }
   return [...mine.sort(byName), ...library.sort(byName)];
+}
+
+/**
+ * The rows of a list as the paste matcher reads them (see `matchExercise`): the owner's own with
+ * their aliases, the library's marked as such. The one place a list becomes match candidates, so
+ * what the screen matches is what the tests match.
+ */
+export function candidatesFromRows(rows: readonly ExerciseListRow[]): MatchCandidate[] {
+  return rows.map((r) => ({
+    id: r.key,
+    name: r.name,
+    aliases: r.libraryName !== undefined ? [...(r.exercise?.aliases ?? []), r.libraryName] : r.exercise?.aliases,
+    library: !r.owned,
+  }));
 }
 
 export function listCounts(rows: readonly ExerciseListRow[]): { owned: number; library: number } {
