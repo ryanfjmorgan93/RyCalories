@@ -344,9 +344,9 @@ test.describe('the Exercises screen keeps its place', () => {
     // The scroll position comes back (one row moved up into the owner's own rows, so not to the pixel),
     // and the rows that were drawn are drawn again. Neither can be true before the list has been restored:
     // a fresh list is at the top with 60 rows.
-    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(before - 200);
-    expect(await page.evaluate(() => window.scrollY)).toBeLessThan(before + 200);
-    await expect.poll(() => rows.count()).toBe(drawn);
+    await expect.poll(async () => Math.abs((await page.evaluate(() => window.scrollY)) - before)).toBeLessThan(200);
+    // At least the pages that were drawn when the page was read: more may have been drawn by the time Add was tapped.
+    await expect.poll(() => rows.count()).toBeGreaterThanOrEqual(drawn);
   });
 
   test('after Add and Back the search, the muscle chip and the scope are as they were', async ({ page }) => {
