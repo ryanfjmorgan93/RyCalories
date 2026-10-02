@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { routeCoachMessage, type CoachRoute } from './coachIntent';
+import { readEdit, routeCoachMessage, type CoachRoute } from './coachIntent';
 
-/** [what was typed, whether the coach's last reply was a routine, where it goes]. */
+/**
+ * [what was typed, whether a routine the coach built is the subject, where it goes].
+ * Where it goes is a routine built afresh ('build'), the routine on screen changed ('edit'), or a
+ * question for the model ('ask').
+ */
 const TABLE: [string, boolean, CoachRoute][] = [
   // The owner's own screenshots.
   ['Give me a routine solely designed to build 3D shoulders', false, 'build'],
@@ -64,15 +68,20 @@ const TABLE: [string, boolean, CoachRoute][] = [
   ['recommend a routine for chest', false, 'build'],
   ['push routine?', false, 'build'],
 
-  // A muscle asked for after a routine.
-  ['more rear delts', true, 'build'],
-  ['shoulders', true, 'build'],
-  ['add calves', true, 'build'],
-  ['no legs', true, 'build'],
-  ['just chest', true, 'build'],
-  ['actually 3d shoulders', true, 'build'],
-  ['swap it for 3d shoulders', true, 'build'],
-  ['make it more shoulders', true, 'build'],
+  // After a routine, a muscle changes THAT routine: it is an edit, not a second routine built from the new words alone.
+  // (These rows were 'build' before edits existed; the words and the thing they ask for are the same.)
+  ['more rear delts', true, 'edit'],
+  ['shoulders', true, 'edit'],
+  ['add calves', true, 'edit'],
+  ['no legs', true, 'edit'],
+  ['just chest', true, 'edit'],
+  ['actually 3d shoulders', true, 'edit'],
+  ['swap it for 3d shoulders', true, 'edit'],
+  ['make it more shoulders', true, 'edit'],
+  // Before one there is nothing to change: the same words are a question.
+  ['more rear delts', false, 'ask'],
+  ['no legs', false, 'ask'],
+  ['add calves', false, 'ask'],
 
   // Questions.
   ['why is there no squat in my routine', false, 'ask'],
@@ -127,7 +136,7 @@ const TABLE: [string, boolean, CoachRoute][] = [
   ['give me a summary of my week', false, 'ask'],
   ['give me a break', false, 'ask'],
   ['make me a sandwich', false, 'ask'],
-  ['make it harder', true, 'ask'],
+  ['make it harder', false, 'ask'],
   ['build muscle', false, 'ask'],
   ['plan', false, 'ask'],
   ['i want to know why', true, 'ask'],
@@ -136,6 +145,218 @@ const TABLE: [string, boolean, CoachRoute][] = [
   ['I need a break', false, 'ask'],
   ['I want to bench more', false, 'ask'],
   ['any chest routine ideas', false, 'ask'],
+
+  // Greetings, slang and the ways a person opens a request: still a request for a routine, with or without one on screen.
+  ['hey can you do me a shoulder session', false, 'build'],
+  ['hey can you do me a shoulder session', true, 'build'],
+  ['looking for a chest workout', false, 'build'],
+  ['looking for a chest workout', true, 'build'],
+  ['can I get a leg day', false, 'build'],
+  ['can I get a leg day', true, 'build'],
+  ['sort me a back sesh', false, 'build'],
+  ['sort me a back sesh', true, 'build'],
+  ['chuck me some arms', false, 'build'],
+  ['chuck me some arms', true, 'build'],
+  ['yo give me a chest workout', false, 'build'],
+  ['yo give me a chest workout', true, 'build'],
+  ['mate give me a chest routine', false, 'build'],
+  ['cheers mate, now give me a back routine', false, 'build'],
+  ['cheers mate, now give me a back routine', true, 'build'],
+  ['do me a chest routine', false, 'build'],
+  ['do me a chest routine', true, 'build'],
+  ['do us a leg day', false, 'build'],
+  ['can i get a chest routine', false, 'build'],
+  ['can i get a chest routine', true, 'build'],
+  ['can i have a leg routine', false, 'build'],
+  ['could i have a chest routine', false, 'build'],
+  ['can we do chest', false, 'build'],
+  ['im looking for a chest routine', false, 'build'],
+  ['looking for a chest routine', false, 'build'],
+  ["i'm after a chest routine", false, 'build'],
+  ['get me a push day', false, 'build'],
+  ['lob me a pull workout', false, 'build'],
+  ['a beginner chest routine', false, 'build'],
+  // A question that happens to open like a request is still a question.
+  ['can I do chest after legs?', false, 'ask'],
+  ['can I train legs today?', true, 'ask'],
+  ['looking for advice on chest', false, 'ask'],
+  ['can I get some advice on legs', false, 'ask'],
+
+  // A routine pointed at is not a routine asked for: this, my, the, your.
+  ['make this routine harder', false, 'ask'],
+  ['make my routine shorter', false, 'ask'],
+  ['make the routine shorter', false, 'ask'],
+  ['give me the reasons for this routine', false, 'ask'],
+  ['give me the reasons for this routine', true, 'ask'],
+  ['give me a summary of this routine', true, 'ask'],
+  ['give me a rundown of my routine', true, 'ask'],
+  ['give me feedback on my routine', true, 'ask'],
+  ['give me a breakdown of the routine', true, 'ask'],
+  ['give me a progression plan', false, 'ask'],
+  ['make me a meal plan', false, 'ask'],
+  ['make me a meal plan', true, 'ask'],
+  ['give me a diet plan', true, 'ask'],
+
+  // A trailing question mark after a routine: the routine is being asked about, not added to.
+  ['rear delts?', true, 'ask'],
+  ['shoulders?', true, 'ask'],
+  ['chest ok?', true, 'ask'],
+  ['no legs in it?', true, 'ask'],
+  ['no chest?', true, 'ask'],
+  ['more rear delts?', true, 'ask'],
+  ['legs?', true, 'ask'],
+  ['harder?', true, 'ask'],
+  ['shorter?', true, 'ask'],
+  ['what does a lateral raise work?', true, 'ask'],
+  ['why have you chosen this?', true, 'ask'],
+  ['is that too many sets', true, 'ask'],
+  ['how many sets is that', true, 'ask'],
+  ['rear delts covered?', true, 'ask'],
+  ['any legs?', true, 'ask'],
+
+  // The routine on screen is changed: another one, a different length, harder or easier, a muscle added or dropped, a row swapped.
+  ['give me another one', true, 'edit'],
+  ['another one', true, 'edit'],
+  ['another', true, 'edit'],
+  ['again', true, 'edit'],
+  ['try again', true, 'edit'],
+  ['different one', true, 'edit'],
+  ['give me a different one', true, 'edit'],
+  ['give me something else', true, 'edit'],
+  ['something else', true, 'edit'],
+  ['another routine', true, 'edit'],
+  ['give me a new one', true, 'edit'],
+  ['make it different', true, 'edit'],
+  ['redo', true, 'edit'],
+  ['shuffle', true, 'edit'],
+  ['mix it up', true, 'edit'],
+  ['switch it up', true, 'edit'],
+  ['swap the front raise', true, 'edit'],
+  ['swap front raise', true, 'edit'],
+  ['swap the front raise for something else', true, 'edit'],
+  ['swap out the front raise', true, 'edit'],
+  ['replace the press', true, 'edit'],
+  ['replace the press with something else', true, 'edit'],
+  ['change the lateral raise', true, 'edit'],
+  ['switch the face pull for a cable one', true, 'edit'],
+  ['remove the front raise', true, 'edit'],
+  ['drop the face pull', true, 'edit'],
+  ['take out the front raise', true, 'edit'],
+  ['get rid of the press', true, 'edit'],
+  ['ditch the shrugs', true, 'edit'],
+  ['no front raises', true, 'edit'],
+  ['can you swap the front raise?', true, 'edit'],
+  ['could you make it shorter?', true, 'edit'],
+  ['make it 5 exercises', true, 'edit'],
+  ['5 exercises', true, 'edit'],
+  ['only 5 exercises', true, 'edit'],
+  ['make it 5', true, 'edit'],
+  ['four exercises', true, 'edit'],
+  ['fewer', true, 'edit'],
+  ['fewer exercises', true, 'edit'],
+  ['less exercises', true, 'edit'],
+  ['more', true, 'edit'],
+  ['more exercises', true, 'edit'],
+  ['one more', true, 'edit'],
+  ['add another exercise', true, 'edit'],
+  ['drop one', true, 'edit'],
+  ['shorter', true, 'edit'],
+  ['make it shorter', true, 'edit'],
+  ['make the routine shorter', true, 'edit'],
+  ['make my routine shorter', true, 'edit'],
+  ['a bit shorter', true, 'edit'],
+  ['quicker', true, 'edit'],
+  ['make it quicker', true, 'edit'],
+  ['30 mins', true, 'edit'],
+  ['make it 45 minutes', true, 'edit'],
+  ['half an hour', true, 'edit'],
+  ['longer', true, 'edit'],
+  ['make it longer', true, 'edit'],
+  ['harder', true, 'edit'],
+  ['make it harder', true, 'edit'],
+  ['make this routine harder', true, 'edit'],
+  ['a bit harder', true, 'edit'],
+  ['tougher', true, 'edit'],
+  ['heavier', true, 'edit'],
+  ['easier', true, 'edit'],
+  ['make it easier', true, 'edit'],
+  ['lighter', true, 'edit'],
+  ['more sets', true, 'edit'],
+  ['fewer sets', true, 'edit'],
+  ['less volume', true, 'edit'],
+  ['add biceps', true, 'edit'],
+  ['also chest', true, 'edit'],
+  ['include triceps', true, 'edit'],
+  ['more biceps', true, 'edit'],
+  ['extra calves', true, 'edit'],
+  ['drop the legs', true, 'edit'],
+  ['without legs', true, 'edit'],
+  ['skip legs', true, 'edit'],
+  ['lose the legs', true, 'edit'],
+  ['switch to legs', true, 'edit'],
+  ['chest', true, 'edit'],
+  ['chest and triceps', true, 'edit'],
+  ['make it a push day', true, 'edit'],
+  ['make it push pull legs', true, 'edit'],
+  ['dumbbells only', true, 'edit'],
+  ['no barbell', true, 'edit'],
+  ['add biceps and make it 8 exercises', true, 'edit'],
+  ['make it shorter and easier', true, 'edit'],
+  // The same words with nothing to change are not a request.
+  ['shorter', false, 'ask'],
+  ['harder', false, 'ask'],
+  ['swap the front raise', false, 'ask'],
+  ['give me another one', false, 'ask'],
+  ['make it 5 exercises', false, 'ask'],
+  // With a routine on screen, a whole new request is still a new routine.
+  ['give me a routine for chest', true, 'build'],
+  ['give me a 45 minute shoulder routine', true, 'build'],
+  ['make me a push day', true, 'build'],
+  ['build me a chest and triceps routine', true, 'build'],
+  ['I want a back routine', true, 'build'],
+  ['give me a chest routine, no triceps', true, 'build'],
+  ['a new chest routine', true, 'build'],
+  ['push day', true, 'build'],
+  ['give me chest', true, 'build'],
+  ['plan my legs', true, 'build'],
+  ['draft an upper lower split', true, 'build'],
+  ['generate a ppl routine', true, 'build'],
+  // The owner's own numbers and history, asked in the clipped way of someone typing on a phone: a question, routine or no routine.
+  ['chest volume', true, 'ask'],
+  ['chest volume this month', true, 'ask'],
+  ['bench press progress', true, 'ask'],
+  ['shoulders last week', true, 'ask'],
+  ['my chest', true, 'ask'],
+  ['chest pr', true, 'ask'],
+  ['shoulders sets per week', true, 'ask'],
+  ['lateral raise weight', true, 'ask'],
+  ['legs sore', true, 'ask'],
+  ['my shoulder hurts', true, 'ask'],
+  // More ways a message names a row, a length or a count.
+  ['swap the bench for dumbbell bench', true, 'edit'],
+  ['replace bench press with dumbbell press', true, 'edit'],
+  ['two more', true, 'edit'],
+  ['add 2 exercises', true, 'edit'],
+  ['4 fewer', true, 'edit'],
+  ['make it 12 exercises', true, 'edit'],
+  ['cut it down', true, 'edit'],
+  ['get me another one', true, 'edit'],
+  ['legs instead', true, 'edit'],
+  ['take out the barbell', true, 'edit'],
+  ['no machines', true, 'edit'],
+  ['swap legs for arms', true, 'edit'],
+  ['I want it shorter', true, 'edit'],
+  ['can you make it harder', true, 'edit'],
+  ['can you add calves', true, 'edit'],
+  ['can you do legs', true, 'ask'],
+  ['make it 5 exercises', false, 'ask'],
+  // Said about the routine, with no change asked for.
+  ['this routine is too long', true, 'ask'],
+  ['my routine is shorter than yesterday', true, 'ask'],
+  ['thanks again', true, 'ask'],
+  ['it is hard', true, 'ask'],
+  ['too many exercises', true, 'ask'],
+  ['I am tired', true, 'ask'],
 
   // Nothing, or nothing that says anything.
   ['', false, 'ask'],
@@ -148,9 +369,106 @@ const TABLE: [string, boolean, CoachRoute][] = [
   ['\u0000\u0001', false, 'ask'],
 ];
 
+/** What each kind of message is read to ask of the routine on screen: the parts of it, and nothing more. */
+describe('readEdit: what a change asks for', () => {
+  const LEGS = ['quads', 'hamstrings', 'glutes', 'adductors', 'calves'];
+  const ROWS: [string, object][] = [
+    ['add biceps', { muscles: { add: ['biceps'] } }],
+    ['also chest', { muscles: { add: ['chest'] } }],
+    ['more rear delts', { muscles: { add: ['rear delts'] } }],
+    ['extra calves', { muscles: { add: ['calves'] } }],
+    ['include triceps', { muscles: { add: ['triceps'] } }],
+    ['no legs', { muscles: { exclude: LEGS } }],
+    ['drop the legs', { muscles: { exclude: LEGS } }],
+    ['without legs', { muscles: { exclude: LEGS } }],
+    ['skip legs', { muscles: { exclude: LEGS } }],
+    ['lose the legs', { muscles: { exclude: LEGS } }],
+    ['just chest', { muscles: { replace: ['chest'] } }],
+    ['actually 3d shoulders', { muscles: { replace: ['shoulders', 'rear delts'] } }],
+    ['swap it for 3d shoulders', { muscles: { replace: ['shoulders', 'rear delts'] } }],
+    ['switch to legs', { muscles: { replace: LEGS } }],
+    ['make it a push day', { muscles: { replace: ['chest', 'shoulders', 'triceps'] } }],
+    ['make it push pull legs', { split: 'ppl' }],
+    ['swap legs for arms', { muscles: { out: LEGS, add: ['biceps', 'triceps', 'forearms'] } }],
+    ['make it 5 exercises', { count: { to: 5 } }],
+    ['only 4 exercises', { count: { to: 4 } }],
+    ['make it 12 exercises', { count: { to: 12 } }],
+    ['fewer', { count: { by: -1 } }],
+    ['more', { count: { by: 1 } }],
+    ['two more', { count: { by: 2 } }],
+    ['4 fewer', { count: { by: -4 } }],
+    ['add another exercise', { count: { by: 1 } }],
+    ['drop one', { count: { by: -1 } }],
+    ['lose a couple', { count: { by: -2 } }],
+    ['make it shorter', { minutes: { by: 'shorter' } }],
+    ['quicker', { minutes: { by: 'shorter' } }],
+    ['cut it down', { minutes: { by: 'shorter' } }],
+    ['make it longer', { minutes: { by: 'longer' } }],
+    ['30 mins', { minutes: { to: 30 } }],
+    ['half an hour', { minutes: { to: 30 } }],
+    ['make it 45 minutes', { minutes: { to: 45 } }],
+    ['an hour', { minutes: { to: 60 } }],
+    ['harder', { effort: 1 }],
+    ['make this routine harder', { effort: 1 }],
+    ['more sets', { effort: 1 }],
+    ['heavier', { effort: 1 }],
+    ['easier', { effort: -1 }],
+    ['fewer sets', { effort: -1 }],
+    ['less volume', { effort: -1 }],
+    ['lighter', { effort: -1 }],
+    ['give me another one', { shuffle: true }],
+    ['try again', { shuffle: true }],
+    ['something else', { shuffle: true }],
+    ['switch it up', { shuffle: true }],
+    ['swap the front raise', { swap: { target: ['front', 'raise'], replacement: [] } }],
+    ['swap the front raise for something else', { swap: { target: ['front', 'raise'], replacement: ['something', 'else'] } }],
+    ['replace the press with a cable one', { swap: { target: ['press'], replacement: ['a', 'cable', 'one'] } }],
+    ['give me something else instead of the press', { swap: { target: ['press'], replacement: ['give', 'me', 'something', 'else'] } }],
+    ['remove the front raise', { remove: { target: ['front', 'raise'] } }],
+    ['drop the face pull', { remove: { target: ['face', 'pull'] } }],
+    ['no front raises', { remove: { target: ['front', 'raises'] } }],
+    ['take out the front raise', { remove: { target: ['front', 'raise'] } }],
+    ['dumbbells only', { equipment: { list: ['dumbbell'], add: false } }],
+    ['no barbell', { equipment: { list: ['dumbbell', 'machine', 'cable', 'bodyweight', 'kettlebell', 'other'], add: false } }],
+    ['take out the barbell', { equipment: { list: ['dumbbell', 'machine', 'cable', 'bodyweight', 'kettlebell', 'other'], add: false } }],
+    ['add biceps and make it 8 exercises', { muscles: { add: ['biceps'] }, count: { to: 8 } }],
+    ['make it shorter and easier', { minutes: { by: 'shorter' }, effort: -1 }],
+    ['no legs, 30 mins', { muscles: { exclude: LEGS }, minutes: { to: 30 } }],
+  ];
+
+  it.each(ROWS)('%j', (text, expected) => {
+    expect(readEdit(text)).toMatchObject(expected);
+  });
+
+  it('reads a message with several parts into all of them, and one with none into nothing', () => {
+    expect(readEdit('add biceps and make it 8 exercises')).toMatchObject({ muscles: { add: ['biceps'] }, count: { to: 8 } });
+    for (const text of ['why', 'what does a lateral raise work', 'my shoulders are sore', 'hello', '', 'thanks', 'is it too long', 'chest volume', 'give me a chest routine', "Doesn't matter, I want 3d shoulders"]) {
+      expect(readEdit(text), text).toBeNull();
+    }
+  });
+
+  it('never throws, whatever it is given', () => {
+    for (const text of [undefined, null, 42, {}, [], 'x'.repeat(5000), '💪'.repeat(100), 'swap '.repeat(300), 'no '.repeat(300)]) expect(() => readEdit(text as never)).not.toThrow();
+  });
+});
+
 describe('routeCoachMessage', () => {
-  it('has the owner\'s four messages and at least sixty more real phrases', () => {
-    expect(TABLE.length).toBeGreaterThanOrEqual(64);
+  it('has the owner\'s four messages, every phrase the review turned up, and at least eighty distinct real phrases', () => {
+    const phrases = new Set(TABLE.map(([text]) => text.trim().toLowerCase()));
+    expect(phrases.size).toBeGreaterThanOrEqual(80);
+    const owners = ['Give me a routine solely designed to build 3D shoulders', 'Why have you chosen this?', '?', "Doesn't matter, I want 3d shoulders"];
+    // The phrases the review measured going to the wrong place.
+    const reviewed = [
+      'make this routine harder', 'give me the reasons for this routine', 'give me feedback on my routine', 'make me a meal plan', 'yo give me a chest workout', 'do me a chest routine',
+      'can i get a chest routine', 'looking for a chest routine', 'swap the front raise', 'make it shorter', 'harder', '30 mins', 'give me another one', 'try again',
+      'rear delts?', 'chest ok?', 'no legs in it?', 'add biceps', 'no legs', 'make it 5 exercises', 'more rear delts',
+      'hey can you do me a shoulder session', 'looking for a chest workout', 'can i get a leg day', 'sort me a back sesh', 'chuck me some arms',
+    ];
+    for (const phrase of [...owners, ...reviewed]) expect(phrases.has(phrase.toLowerCase()), phrase).toBe(true);
+  });
+
+  it('sends each kind of message to each of the three places', () => {
+    for (const route of ['build', 'edit', 'ask'] as const) expect(TABLE.filter(([, , to]) => to === route).length, route).toBeGreaterThanOrEqual(20);
   });
 
   it.each(TABLE)('%j (after a routine: %s) goes to %s', (text, lastWasRoutine, route) => {
@@ -165,10 +483,11 @@ describe('routeCoachMessage', () => {
     expect(routeCoachMessage("DOESN’T MATTER, I WANT 3D SHOULDERS", { lastWasRoutine: true })).toBe('build');
   });
 
-  it('a muscle on its own is a question until a routine has been built, and a request after one', () => {
+  it('a muscle on its own is a question until a routine has been built, and a change to it after one', () => {
     for (const word of ['shoulders', 'chest', 'legs', 'rear delts', 'arms', 'back']) {
       expect(routeCoachMessage(word, { lastWasRoutine: false }), word).toBe('ask');
-      expect(routeCoachMessage(word, { lastWasRoutine: true }), word).toBe('build');
+      // This was 'build' before edits: the same words, and now they change the routine that is there.
+      expect(routeCoachMessage(word, { lastWasRoutine: true }), word).toBe('edit');
     }
   });
 

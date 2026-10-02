@@ -27,16 +27,37 @@ interface ModelLog {
   streamed: string[];
 }
 
-/** The fake default and full models: every prompt of every kind is recorded in `window.__modelLog`. */
-async function fakeModel(page: Page, opts: { reply?: string[]; intent?: string } = {}): Promise<void> {
+interface FakeOptions {
+  /** What an answer says, in pieces. */
+  reply?: string[];
+  /** What the default model answers when it is asked to read a typed line. */
+  intent?: string;
+  /** What the nth answer says, where it is not `reply`. */
+  replies?: string[][];
+  /** The first answer stops after its first piece and waits for `window.__release()`. */
+  hold?: boolean;
+  /** The first answer fails with "boom". */
+  fail?: boolean;
+  /** The model is not there: the status says so, and a question cannot be sent. */
+  unavailable?: boolean;
+}
+
+/**
+ * The fake default and full models: every prompt of every kind is recorded in `window.__modelLog`.
+ * `window.__streamsFinished` counts the answers that have run to their end: a held answer adds one
+ * only after `__release()`, so a test can wait for something that cannot have happened before it.
+ */
+async function fakeModel(page: Page, opts: FakeOptions = {}): Promise<void> {
   await page.addInitScript(
-    (c: { reply: string[]; intent: string }) => {
+    (c: Required<Pick<FakeOptions, 'reply' | 'intent' | 'replies' | 'hold' | 'fail' | 'unavailable'>>) => {
       const w = window as unknown as Record<string, unknown>;
       const log = { generate: [] as string[], counted: [] as string[], streamed: [] as string[] };
       w.__modelLog = log;
+      w.__streamsFinished = 0;
+      let calls = 0;
       w.__ironNanoFake = {
         status: { state: 'ready', detail: 'AVAILABLE · default' },
-        statusFull: { state: 'ready', detail: 'AVAILABLE · nano-v4-full · 4000 tokens · samsung SM-F971B' },
+        statusFull: c.unavailable ? { state: 'unavailable', detail: 'UNAVAILABLE · samsung SM-F971B' } : { state: 'ready', detail: 'AVAILABLE · nano-v4-full · 4000 tokens · samsung SM-F971B' },
         generate: async ({ prompt }: { prompt: string }) => {
           log.generate.push(prompt);
           return { text: c.intent };
@@ -46,15 +67,24 @@ async function fakeModel(page: Page, opts: { reply?: string[]; intent?: string }
           return { tokens: Math.ceil(prompt.length / 4), limit: 4000 };
         },
         generateStream: async ({ prompt }: { prompt: string }, emit: (t: string) => void) => {
+          const n = calls++;
           log.streamed.push(prompt);
-          for (const piece of c.reply) emit(piece);
-          return { text: c.reply.join('') };
+          if (c.fail && n === 0) throw new Error('boom');
+          const reply = c.replies[n] ?? c.reply;
+          emit(reply[0]!);
+          if (c.hold && n === 0) await new Promise<void>((resolve) => (w.__release = resolve));
+          for (const piece of reply.slice(1)) emit(piece);
+          w.__streamsFinished = (w.__streamsFinished as number) + 1;
+          return { text: reply.join('') };
         },
       };
     },
-    { reply: opts.reply ?? REPLY, intent: opts.intent ?? '{}' },
+    { reply: opts.reply ?? REPLY, intent: opts.intent ?? '{}', replies: opts.replies ?? [], hold: opts.hold ?? false, fail: opts.fail ?? false, unavailable: opts.unavailable ?? false },
   );
 }
+
+const release = (page: Page) => page.evaluate(() => (window as unknown as { __release: () => void }).__release());
+const streamsFinished = (page: Page) => page.evaluate(() => (window as unknown as { __streamsFinished: number }).__streamsFinished);
 
 const modelLog = (page: Page) => page.evaluate(() => (window as unknown as { __modelLog: ModelLog }).__modelLog);
 const NO_CALLS: ModelLog = { generate: [], counted: [], streamed: [] };
@@ -303,11 +333,18 @@ test('the owner\'s conversation: a routine built with no model, why answered fro
     const review = page.getByRole('dialog').filter({ hasText: 'Review routine' });
     await expect(review.getByTestId('paste-row')).toHaveCount(shuffled.length);
     // A row of the routine that is not a library one is the owner's own exercise, and the review reads it as that exercise.
+    // One that is a library one is matched to the library's entry: the Library mark is on exactly those rows.
     const rows = entry(page, 2).getByTestId('coach-row');
+    let fromLibrary = 0;
     for (let i = 0; i < shuffled.length; i++) {
-      if ((await rows.nth(i).getByTestId('coach-new').count()) > 0) continue;
+      if ((await rows.nth(i).getByTestId('coach-new').count()) > 0) {
+        fromLibrary++;
+        continue;
+      }
       await expect(review.getByTestId('paste-row-name').nth(i)).toHaveText(shuffled[i]!);
     }
+    await expect(review.getByTestId('library-label')).toHaveCount(fromLibrary);
+    await expect(review.getByTestId('paste-add-new')).toHaveCount(0);
     await review.getByRole('button', { name: 'Cancel' }).click();
     await expect(review).toBeHidden();
     expect((await modelLog(page)).streamed).toHaveLength(1);
@@ -366,11 +403,22 @@ test('Review routine opens the routine it sits under and saves it, the library e
     await expect(review.getByTestId('paste-row')).toHaveCount(shoulders.length);
     await expect(review.getByTestId('paste-row-name')).toHaveText(shoulders);
     if (save === 2) await expect(review.getByTestId('paste-change')).toHaveCount(shoulders.length);
-    while ((await review.getByTestId('paste-add-new').count()) > 0) await review.getByTestId('paste-add-new').first().click();
+    // Every row is matched before anything is chosen, and none is offered as a blank "new exercise": the first time to the library's entry
+    // (the Library mark is only on a row matched to one), the second to the owner's own copy of it. A row left unmatched would be
+    // clicked into a blank exercise of the same name by hand, and everything below would still be true of it.
+    await expect(review.getByTestId('paste-add-new')).toHaveCount(0);
+    await expect(review.getByTestId('library-label')).toHaveCount(save === 1 ? shoulders.length : 0);
     await review.getByTestId('paste-save').click();
     await expect(page).toHaveURL(/\/routines\/[0-9a-f-]+$/);
 
     const { exercises, routines } = await saved();
+    // Made from the library's entry, not blank: its picture key, its muscle group and its equipment.
+    for (const name of shoulders) {
+      const made = (exercises as { name: string; demo?: string; muscleGroup?: string; equipment?: string }[]).find((e) => e.name === name);
+      expect(made?.demo, `${name}: picture key`).toBeTruthy();
+      expect(made?.muscleGroup, `${name}: muscle group`).toBe(library.get(name)?.group);
+      if (library.get(name)?.equipment) expect(made?.equipment, `${name}: equipment`).toBe(library.get(name)!.equipment);
+    }
     expect(routines).toEqual(Array.from({ length: save }, () => ({ name: 'Shoulders and rear delts', rows: shoulders })));
     // The owner's four and one row for each library exercise, however many routines hold it.
     expect(exercises).toHaveLength(4 + shoulders.length);
@@ -565,6 +613,254 @@ test('the box has no example text and no toggle', async ({ page }) => {
   await expect(page.getByRole('textbox', { name: 'Message' })).toBeVisible();
   await expect(page.getByRole('radio')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /^(Ask|Build a routine)$/ })).toHaveCount(0);
+});
+
+// ---------------------------------------------------------------------------
+// The conversation carried on: a change is made to the routine on screen
+
+/** "about 38 min" as 38. */
+async function minutesOf(where: Pick<Locator, 'getByTestId'>): Promise<number> {
+  const text = await where.getByTestId('coach-minutes').first().textContent();
+  return Number(/^about (\d+) min$/.exec(text ?? '')![1]);
+}
+
+test('the owner\'s conversation carried on: "add biceps", "swap the front raise" and "make it shorter" change that routine with no model, and "why" is about the one on screen', async ({ page }) => {
+  await fakeModel(page);
+  await seedOwner(page);
+  await openCoach(page);
+
+  await say(page, SHOULDERS);
+  await expect(page.getByTestId('coach-routine')).toHaveCount(1);
+  await idle(page);
+  const first = await rowNames(entry(page, 0));
+  expect(first).toHaveLength(6);
+
+  let added: string[] = [];
+  await test.step('add biceps: the shoulder work is still there, and biceps is now in it', async () => {
+    await say(page, 'add biceps');
+    await expect(page.getByTestId('coach-routine')).toHaveCount(2);
+    await idle(page);
+    added = await rowNames(entry(page, 1));
+    // Not a biceps routine, and not a second routine from the new words alone: the first, with biceps in it.
+    for (const name of first) expect(added, `${name} kept`).toContain(name);
+    expect(await groupsOf(page, added)).toEqual(expect.arrayContaining(['shoulders', 'rear delts', 'biceps']));
+    expect(added).toHaveLength(first.length + 2);
+    expect(new Set(added).size).toBe(added.length);
+    await expect(entry(page, 1).getByTestId('coach-read')).toHaveText('Read: shoulders, rear delts, biceps · 8 exercises');
+    await expect(entry(page, 1).getByTestId('coach-edit')).toHaveText(/^Added .+/);
+    expect(await modelLog(page)).toEqual(NO_CALLS);
+  });
+
+  let swapped: string[] = [];
+  let replaced = '';
+  await test.step('swap the front raise: that row is replaced, in its place, and every other row is as it was', async () => {
+    await say(page, 'swap the front raise');
+    await expect(page.getByTestId('coach-routine')).toHaveCount(3);
+    await idle(page);
+    swapped = await rowNames(entry(page, 2));
+    expect(swapped).toHaveLength(added.length);
+    const changed = swapped.map((name, i) => (name === added[i] ? -1 : i)).filter((i) => i >= 0);
+    expect(changed).toHaveLength(1);
+    replaced = added[changed[0]!]!;
+    expect(new Set(swapped).size).toBe(swapped.length);
+    // The row that went was the front raise, by what the routine itself said of it, and what took its place is for the same part of the shoulder.
+    const reasons = await whyLines(entry(page, 1));
+    expect(reasons.find((line) => line.startsWith(`${replaced}: `)), reasons.join('\n')).toMatch(/front raise/);
+    await expect(entry(page, 2).getByTestId('coach-edit')).toHaveText(`Swapped ${replaced} for ${swapped[changed[0]!]}`);
+    expect(await modelLog(page)).toEqual(NO_CALLS);
+  });
+
+  let shorter: string[] = [];
+  await test.step('make it shorter: fewer exercises, and less time', async () => {
+    const was = await minutesOf(entry(page, 2));
+    await say(page, 'make it shorter');
+    await expect(page.getByTestId('coach-routine')).toHaveCount(4);
+    await idle(page);
+    shorter = await rowNames(entry(page, 3));
+    const now = await minutesOf(entry(page, 3));
+    expect(now).toBeLessThan(was);
+    expect(shorter.length).toBeLessThan(swapped.length);
+    for (const name of shorter) expect(swapped).toContain(name);
+    expect(await modelLog(page)).toEqual(NO_CALLS);
+  });
+
+  await test.step('why have you chosen this? is one call, and its prompt holds the routine on screen now', async () => {
+    await say(page, 'Why have you chosen this?');
+    await expect(entry(page, 4).getByTestId('coach-answer')).toHaveText(REPLY.join(''));
+    await idle(page);
+    await expect(page.getByTestId('coach-routine')).toHaveCount(4);
+    const log = await modelLog(page);
+    expect(log.streamed).toHaveLength(1);
+    expect(log.generate).toEqual([]);
+    const prompt = log.streamed[0]!;
+    const block = prompt.slice(prompt.indexOf('Routine the app built:'), prompt.indexOf('\n\nWhy:'));
+    for (const name of shorter) expect(block, name).toContain(name);
+    // Nothing of the earlier routines that the later ones dropped or replaced.
+    for (const gone of [replaced, ...swapped.filter((n) => !shorter.includes(n))]) expect(block, gone).not.toContain(gone);
+    // And the model is told what the coach did.
+    expect(prompt).toContain(`Coach: Routine changed (Shoulders, rear delts and biceps): ${await entry(page, 3).getByTestId('coach-edit').textContent()}`);
+    expect(prompt.endsWith('User: Why have you chosen this?')).toBe(true);
+  });
+});
+
+test('Clear while an answer is held mid-stream empties the screen, and the answer does not come back when it finishes', async ({ page }) => {
+  await fakeModel(page, { hold: true, replies: [REPLY, ['A fresh answer.']] });
+  await seedOwner(page);
+  await openCoach(page);
+  await say(page, SHOULDERS);
+  await expect(page.getByTestId('coach-routine')).toHaveCount(1);
+  await idle(page);
+
+  await say(page, 'Why have you chosen this?');
+  await expect(page.getByTestId('coach-partial')).toHaveText(REPLY[0]!);
+  await expect(page.getByTestId('coach-send')).toHaveText('Answering…');
+  await expect(page.getByTestId('coach-send')).toBeDisabled();
+
+  // Clear is there while it is busy, and it works.
+  await page.getByTestId('coach-clear').click();
+  await expect(page.getByTestId('coach-entry')).toHaveCount(0);
+  await expect(page.getByTestId('coach-pending')).toHaveCount(0);
+  await expect(page.getByTestId('coach-send')).toHaveText('Send');
+  await expect(page.getByTestId('coach-clear')).toHaveCount(0);
+
+  // The held answer runs to its end. Only once it has is anything asserted about it: a check made before would pass whatever the app did with it.
+  await release(page);
+  await expect.poll(() => streamsFinished(page)).toBe(1);
+
+  // The next question is answered alone: nothing of the cleared one, and not its second half.
+  await say(page, 'How was last week?');
+  await expect(page.getByTestId('coach-answer')).toHaveText('A fresh answer.');
+  await expect(page.getByTestId('coach-answer')).toHaveCount(1);
+  await expect(page.getByTestId('coach-entry')).toHaveCount(1);
+  await expect(page.locator('body')).not.toContainText(REPLY[1]!);
+  const { streamed } = await modelLog(page);
+  expect(streamed).toHaveLength(2);
+  expect(streamed[1]).not.toContain('Routine the app built');
+});
+
+test('while an answer is held, Shuffle and Read with assistant are off and Stop is there; Stop keeps what is on screen and puts the question back in the box', async ({ page }) => {
+  await fakeModel(page, { hold: true, intent: '{"focus":["biceps"]}' });
+  await seedOwner(page);
+  await openCoach(page);
+  // A routine the rules could not read, so that Read with assistant is offered under it.
+  await say(page, 'give me a routine that makes me look like thor');
+  await expect(page.getByTestId('coach-routine')).toHaveCount(1);
+  await idle(page);
+  const shuffle = entry(page, 0).getByTestId('coach-shuffle');
+  const assist = entry(page, 0).getByTestId('coach-read-assistant');
+  await expect(shuffle).toBeEnabled();
+  await expect(assist).toBeEnabled();
+  await expect(page.getByTestId('coach-stop')).toHaveCount(0);
+  const before = await rowNames(entry(page, 0));
+
+  const question = 'Why have you chosen this?';
+  await say(page, question);
+  await expect(page.getByTestId('coach-partial')).toHaveText(REPLY[0]!);
+  // Both would do nothing now, and say so by being off.
+  await expect(shuffle).toBeDisabled();
+  await expect(assist).toBeDisabled();
+  await expect(page.getByTestId('coach-stop')).toBeVisible();
+
+  await page.getByTestId('coach-stop').click();
+  await expect(page.getByTestId('coach-pending')).toHaveCount(0);
+  await expect(page.getByTestId('coach-send')).toHaveText('Send');
+  // What was on screen stays, and the question is in the box to be sent again, not retyped.
+  await expect(page.getByTestId('coach-entry')).toHaveCount(1);
+  expect(await rowNames(entry(page, 0))).toEqual(before);
+  await expect(page.getByTestId('coach-input')).toHaveValue(question);
+  await expect(shuffle).toBeEnabled();
+  await expect(assist).toBeEnabled();
+  await expect(page.getByTestId('coach-stop')).toHaveCount(0);
+
+  await release(page);
+  await expect.poll(() => streamsFinished(page)).toBe(1);
+  // Stopped for good: the second half of the answer is nowhere, and no entry was made of it.
+  await page.getByTestId('coach-send').click();
+  await expect(entry(page, 1).getByTestId('coach-answer')).toHaveText(REPLY.join(''));
+  await expect(page.getByTestId('coach-entry')).toHaveCount(2);
+});
+
+test('an error keeps what was typed in the box, can be cleared, and goes with the next message', async ({ page }) => {
+  await fakeModel(page, { fail: true, replies: [REPLY, ['Fine.']] });
+  await seedOwner(page);
+  await openCoach(page);
+  const question = 'How was last week, in some detail please?';
+  await say(page, question);
+  await expect(page.getByTestId('coach-error')).toHaveText('boom');
+  // Not lost: it is in the box, and nothing was made of it.
+  await expect(page.getByTestId('coach-input')).toHaveValue(question);
+  await expect(page.getByTestId('coach-entry')).toHaveCount(0);
+  await expect(page.getByTestId('coach-pending')).toHaveCount(0);
+  // With nothing else on screen, Clear is how the error goes.
+  await page.getByTestId('coach-clear').click();
+  await expect(page.getByTestId('coach-error')).toHaveCount(0);
+  await expect(page.getByTestId('coach-input')).toHaveValue(question);
+
+  // The same words sent again are answered, and the box is empty after them.
+  await page.getByTestId('coach-send').click();
+  await expect(page.getByTestId('coach-answer')).toHaveText('Fine.');
+  await expect(page.getByTestId('coach-error')).toHaveCount(0);
+  await expect(page.getByTestId('coach-input')).toHaveValue('');
+});
+
+test('an error goes with the next message sent, whatever kind it is', async ({ page }) => {
+  await fakeModel(page, { fail: true, replies: [REPLY, ['Fine.']] });
+  await seedOwner(page);
+  await openCoach(page);
+  await say(page, 'How was last week?');
+  await expect(page.getByTestId('coach-error')).toHaveText('boom');
+  // A new message, of another kind: the build is made, and the error is gone with it.
+  await page.getByTestId('coach-input').fill('Give me a chest routine');
+  await page.getByTestId('coach-send').click();
+  await expect(page.getByTestId('coach-routine')).toHaveCount(1);
+  await expect(page.getByTestId('coach-error')).toHaveCount(0);
+});
+
+test('a routine that comes to nothing is said to be nothing: the fact, no minutes, no Why, and the model is not told a routine was built', async ({ page }) => {
+  await fakeModel(page);
+  await seedOwner(page, bareOwner());
+  await openCoach(page);
+
+  await say(page, 'give me a neck routine with a barbell');
+  await expect(page.getByTestId('coach-routine')).toHaveCount(1);
+  await idle(page);
+  await expect(entry(page, 0).getByTestId('coach-row')).toHaveCount(0);
+  await expect(entry(page, 0).getByTestId('coach-nothing')).toHaveText('Nothing to choose from for neck');
+  // No "about 0 min", anywhere: not as a pill and not among the reasons.
+  await expect(entry(page, 0).getByTestId('coach-minutes')).toHaveCount(0);
+  await expect(entry(page, 0).getByTestId('coach-why')).toHaveCount(0);
+  await expect(entry(page, 0)).not.toContainText(/\b0 min\b/);
+  await expect(entry(page, 0).getByTestId('coach-shuffle')).toHaveCount(0);
+  await expect(entry(page, 0).getByTestId('coach-review')).toHaveCount(0);
+
+  await say(page, 'Why have you chosen this?');
+  await expect(entry(page, 1).getByTestId('coach-answer')).toHaveText(REPLY.join(''));
+  const { streamed } = await modelLog(page);
+  expect(streamed).toHaveLength(1);
+  expect(streamed[0]).toContain('Coach: Built nothing: Nothing to choose from for neck');
+  expect(streamed[0]).not.toContain('Routine built');
+  expect(streamed[0]).not.toContain('Routine the app built');
+});
+
+test('with the model not there, a change to the routine is made, and a question is not sent', async ({ page }) => {
+  await fakeModel(page, { unavailable: true });
+  await seedOwner(page);
+  await openCoach(page);
+  await say(page, SHOULDERS);
+  await expect(page.getByTestId('coach-routine')).toHaveCount(1);
+  await idle(page);
+  const first = await rowNames(entry(page, 0));
+
+  await page.getByTestId('coach-input').fill('add biceps');
+  await expect(page.getByTestId('coach-send')).toBeEnabled();
+  await page.getByTestId('coach-send').click();
+  await expect(page.getByTestId('coach-routine')).toHaveCount(2);
+  await idle(page);
+  for (const name of first) expect(await rowNames(entry(page, 1))).toContain(name);
+
+  await page.getByTestId('coach-input').fill('Why have you chosen this?');
+  await expect(page.getByTestId('coach-send')).toBeDisabled();
+  expect(await modelLog(page)).toEqual(NO_CALLS);
 });
 
 // ---------------------------------------------------------------------------

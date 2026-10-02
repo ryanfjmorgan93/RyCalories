@@ -4,7 +4,7 @@ import type { ClaudeSummaryInput } from '../domain/claudeSummary';
 import { buildCoachPrompt, buildCoachSystemPrompt, buildRoutineBlock, coachContextLadder, THREAD_TURNS } from '../domain/coach';
 import type { QuickOptions } from '../domain/quickRequest';
 import { parseQuickRequest } from '../domain/quickRequest';
-import { routineToText, type RoutineInput } from '../domain/routineBuilder';
+import { buildRoutines, routineToText, type RoutineInput } from '../domain/routineBuilder';
 import {
   COULD_NOT_READ,
   COUNT_TIMEOUT_MS,
@@ -511,6 +511,8 @@ describe('coach store: shuffle and the assistant', () => {
     expect(after).toMatchObject({ by: 'assistant', unread: [], assist: null, seed: before!.seed, read: 'shoulders · 4 exercises' });
     expect(after!.request).toEqual({ focus: ['shoulders'], count: 4 });
     expect(after!.routines[0]!.rows).toHaveLength(4);
+    // Built with the seed the entry already had, and not another: the routine is the builder's for that seed and request.
+    expect(routineToText(after!.routines)).toBe(routineToText(buildRoutines(BUILD_INPUT, after!.request, before!.seed)));
     // Only options came back from it: every exercise is the builder's.
     // The rear delts are part of the shoulders: their exercises are taken for the rear of it.
     expect(after!.routines[0]!.rows.every((r) => r.muscleGroup === 'shoulders' || r.muscleGroup === 'rear delts')).toBe(true);
@@ -518,14 +520,17 @@ describe('coach store: shuffle and the assistant', () => {
     expect(store.getState().working).toBeNull();
   });
 
-  it('the assistant never overrides what the rules read, and never adds an exercise', async () => {
-    const { intent } = fakeIntent({ options: { focus: ['calves'], count: 2, minutes: 20 } });
+  it('the assistant fills the five options it may and no other: a muscle ruled out is not one of them, and nothing it says adds an exercise', async () => {
+    // `exclude` is not an option the assistant may set (only the rules read a muscle ruled out), so a reply that holds one is read without it.
+    const { intent } = fakeIntent({ options: { focus: ['calves'], count: 2, minutes: 20, exclude: ['chest'] } });
     const { store } = setup({}, intent);
     // Nothing the rules can use ("six" would be a count): the words are residue.
     await store.getState().send('give me a routine that makes me look like thor');
     await store.getState().readWithAssistant(builds(store)[0]!.id);
     const entry = builds(store)[0]!;
     expect(entry.request.focus).toEqual(['calves']);
+    expect(entry.request.count).toBe(2);
+    expect(entry.request.exclude).toBeUndefined();
     expect(entry.routines[0]!.rows.length).toBeLessThanOrEqual(2);
     // The library may add a calf raise; whatever is chosen is from the owner's rows or the library, with the builder's weights.
     for (const row of entry.routines[0]!.rows) expect(row.muscleGroup).toBe('calves');
@@ -570,17 +575,62 @@ describe('coach store: shuffle and the assistant', () => {
 
 describe('coach store: routing', () => {
   const routine = (store: ReturnType<typeof setup>['store']) => store.getState().entries;
-  it('knows when the last thing said was a routine', async () => {
+  it('knows when a routine is the subject: the latest build has exercises, and no one has cleared the conversation', async () => {
     const { store } = setup();
     await ready(store);
     expect(lastWasRoutine(routine(store))).toBe(false);
     await store.getState().send('give me a chest routine');
     expect(lastWasRoutine(routine(store))).toBe(true);
-    // "more rear delts" is a request after a routine, and a question before one.
-    expect(routeOf('more rear delts', routine(store))).toBe('build');
+    // "more rear delts" changes a routine after one, and is a question before one. (Was 'build' before edits.)
+    expect(routeOf('more rear delts', routine(store))).toBe('edit');
     expect(routeOf('more rear delts', [])).toBe('ask');
+    // A question about the routine does not end it as the subject: finding 6. (This was `false` here.)
     await store.getState().send('Why?');
+    expect(lastWasRoutine(routine(store))).toBe(true);
+    expect(routeOf('add biceps', routine(store))).toBe('edit');
+    store.getState().reset();
     expect(lastWasRoutine(routine(store))).toBe(false);
+  });
+
+  it('the follow-up reads the same after a question as straight after the build: build, why, then a change, in the owner\'s own order', async () => {
+    const { store, streamed } = setup({ reply: ['Fine.'] });
+    await ready(store);
+    await store.getState().send(SHOULDERS);
+    for (const text of ['add biceps', 'more rear delts', 'give me another one', 'make it shorter']) {
+      const straight = routeOf(text, store.getState().entries);
+      await store.getState().send('Why have you chosen this?');
+      expect(store.getState().entries[store.getState().entries.length - 1]!.mode, text).toBe('ask');
+      expect(routeOf(text, store.getState().entries), text).toBe(straight);
+      expect(straight, text).toBe('edit');
+    }
+    expect(streamed.length).toBe(4);
+    const before = store.getState().entries.length;
+    await store.getState().send('add biceps');
+    expect(store.getState().entries).toHaveLength(before + 1);
+    expect(store.getState().entries[before]!.mode).toBe('build');
+    // The change was made by the app: the four questions are the only calls the model had.
+    expect(streamed.length).toBe(4);
+  });
+
+  it('an empty build does not take the routine from one that is still on screen: a question is still about the older one', async () => {
+    let loads = 0;
+    const fake = fakeBackend({ reply: ['Fine.'] });
+    const store = createCoachStore({
+      backend: fake.backend,
+      loadInput: async () => INPUT,
+      // The second routine asked for has nothing to be made of.
+      loadBuildInput: async () => (loads++ === 0 ? BUILD_INPUT : { ...BUILD_INPUT, candidates: [] }),
+      newSeed: () => 5,
+    });
+    await ready(store);
+    await store.getState().send(SHOULDERS);
+    const first = builds(store)[0]!;
+    await store.getState().send('give me a chest routine');
+    expect(builds(store)[1]!.routines[0]!.rows).toEqual([]);
+    expect(lastWasRoutine(store.getState().entries)).toBe(false);
+    expect(lastRoutines(store.getState().entries)).toEqual(first.routines);
+    await store.getState().send('Why have you chosen this?');
+    expect(fake.streamed[0]).toContain(`Routine the app built:\n${routineToText(first.routines)}`);
   });
 });
 
@@ -712,5 +762,348 @@ describe('coach store: a model that goes quiet, and Clear', () => {
     release(BUILD_INPUT);
     await shuffling;
     expect(store.getState()).toMatchObject({ entries: [], working: null });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Findings: a follow-up changes THE routine, and the conversation is robust
+
+describe('coach store: a change asked for after a routine changes that routine (finding 1)', () => {
+  it('"add biceps" after the 3D shoulders routine is that routine with biceps, kept exercises and all, and no call to the model', async () => {
+    const { store, counted, streamed } = setup();
+    await store.getState().send(SHOULDERS);
+    const first = builds(store)[0]!;
+    await store.getState().send('add biceps');
+    const second = builds(store)[1]!;
+    expect(store.getState().entries.map((e) => e.mode)).toEqual(['build', 'build']);
+    expect(second.question).toBe('add biceps');
+    expect(second.request.focus).toEqual(['shoulders', 'rear delts', 'biceps']);
+    expect(second.read).toBe('shoulders, rear delts, biceps · 8 exercises');
+    for (const name of namesOf(first)) expect(namesOf(second)).toContain(name);
+    expect(second.routines[0]!.rows.filter((r) => r.muscleGroup === 'biceps').length).toBeGreaterThanOrEqual(2);
+    expect(second.edit).toMatch(/^Added /);
+    expect(first.edit).toBeNull();
+    // The seed it was built with is the routine's own, so what is kept stays.
+    expect(second.seed).toBe(first.seed);
+    expect(counted).toEqual([]);
+    expect(streamed).toEqual([]);
+  });
+
+  it.each([
+    ['make it 5 exercises', 'shoulders, rear delts · 5 exercises'],
+    ['more rear delts', 'shoulders, rear delts · 7 exercises'],
+    ['no legs', 'shoulders, rear delts · 6 exercises · no quads, hamstrings, glutes, adductors, calves'],
+    ['make this routine harder', 'shoulders, rear delts · 6 exercises · harder'],
+    ['make it shorter', null],
+    ['swap the front raise', 'shoulders, rear delts · 6 exercises'],
+    ['give me another one', 'shoulders, rear delts · 6 exercises'],
+    ['make it a push day', 'push · 6 exercises'],
+  ])('%j reads from the shoulders routine, not from its own words alone', async (text, read) => {
+    const { store, streamed } = setup();
+    await store.getState().send(SHOULDERS);
+    await store.getState().send(text);
+    const second = builds(store)[1]!;
+    expect(second).toBeDefined();
+    if (read !== null) expect(second.read).toBe(read);
+    // Nothing is "full body by need" or "nothing specific": the shoulders request is carried into it.
+    expect(second.read).not.toMatch(/by need|nothing specific/);
+    expect(streamed).toEqual([]);
+  });
+
+  it('a chain of changes each starts from the routine the one before made', async () => {
+    const { store } = setup();
+    await store.getState().send(SHOULDERS);
+    await store.getState().send('add biceps');
+    await store.getState().send('swap the front raise');
+    await store.getState().send('make it shorter');
+    const [first, added, swapped, shorter] = builds(store);
+    expect(namesOf(swapped!).filter((n) => !namesOf(added!).includes(n))).toHaveLength(1);
+    expect(shorter!.routines[0]!.rows.length).toBeLessThan(swapped!.routines[0]!.rows.length);
+    expect(shorter!.routines[0]!.estimateMinutes).toBeLessThan(swapped!.routines[0]!.estimateMinutes);
+    expect(shorter!.request.focus).toEqual(['shoulders', 'rear delts', 'biceps']);
+    for (const name of namesOf(shorter!)) expect(namesOf(swapped!)).toContain(name);
+    expect(first!.routines[0]!.rows.length).toBe(6);
+  });
+
+  it('the Shuffle button after a change builds the changed request, not the one before it', async () => {
+    const { store } = setup();
+    await store.getState().send(SHOULDERS);
+    await store.getState().send('add biceps');
+    const id = builds(store)[1]!.id;
+    await store.getState().shuffle(id);
+    const after = builds(store)[1]!;
+    expect(after.request.focus).toEqual(['shoulders', 'rear delts', 'biceps']);
+    expect(after.routines[0]!.rows).toHaveLength(8);
+    expect(after.routines[0]!.rows.some((r) => r.muscleGroup === 'biceps')).toBe(true);
+  });
+
+  it('another one is a new routine for the same request, with a new seed and no call to the model', async () => {
+    const { store, streamed } = setup();
+    await store.getState().send(SHOULDERS);
+    const first = builds(store)[0]!;
+    await store.getState().send('give me another one');
+    const second = builds(store)[1]!;
+    expect(second.seed).not.toBe(first.seed);
+    expect(second.request).toEqual(first.request);
+    expect(routineToText(second.routines)).not.toBe(routineToText(first.routines));
+    expect(streamed).toEqual([]);
+  });
+
+  it('a row that is not in the routine is a fact in the error, and nothing is added', async () => {
+    const { store } = setup();
+    await store.getState().send(SHOULDERS);
+    const outcome = await store.getState().send('swap the leg press');
+    expect(outcome).toBe('error');
+    expect(store.getState().error).toBe('No exercise called leg press in this routine');
+    expect(store.getState().entries).toHaveLength(1);
+    expect(store.getState().pending).toBeNull();
+  });
+
+  it('a question after a change is about the changed routine, which the model is told changed', async () => {
+    const { store, streamed } = setup({ reply: ['Fine.'] });
+    await ready(store);
+    await store.getState().send(SHOULDERS);
+    await store.getState().send('add biceps');
+    const now = builds(store)[1]!;
+    await store.getState().send('Why have you chosen this?');
+    const prompt = streamed[0]!;
+    expect(prompt).toContain(`Routine the app built:\n${routineToText(now.routines)}`);
+    expect(prompt).not.toContain(routineToText(builds(store)[0]!.routines));
+    expect(prompt).toContain(`Coach: Routine changed (Shoulders, rear delts and biceps): ${now.edit}`);
+    for (const line of now.routines[0]!.reasonLines) expect(prompt).toContain(line);
+  });
+
+  it('while something is being shuffled a change is not taken', async () => {
+    let release: (input: RoutineInput) => void = () => undefined;
+    let loads = 0;
+    const store = createCoachStore({
+      backend: fakeBackend().backend,
+      loadInput: async () => INPUT,
+      loadBuildInput: () => (loads++ === 0 ? Promise.resolve(BUILD_INPUT) : new Promise<RoutineInput>((resolve) => (release = resolve))),
+    });
+    await store.getState().send(SHOULDERS);
+    const id = builds(store)[0]!.id;
+    const shuffling = store.getState().shuffle(id);
+    await vi.waitFor(() => expect(store.getState().working).toBe(id));
+    // Each kind of message is put off by the guard in `send`, not by the one in the action it goes to: a build has none of its own.
+    expect(await store.getState().send('add biceps')).toBe('ignored');
+    expect(await store.getState().send('give me a chest routine')).toBe('ignored');
+    expect(await store.getState().send('How was last week?')).toBe('ignored');
+    expect(store.getState().entries).toHaveLength(1);
+    expect(loads).toBe(2);
+    release(BUILD_INPUT);
+    await shuffling;
+    expect(store.getState().entries).toHaveLength(1);
+    expect(store.getState().pending).toBeNull();
+  });
+});
+
+describe('coach store: what send comes to', () => {
+  it('says whether the message was taken, failed, stopped or ignored', async () => {
+    const { store } = setup({ reply: ['Fine.'] });
+    await ready(store);
+    expect(await store.getState().send('   ')).toBe('ignored');
+    expect(await store.getState().send(SHOULDERS)).toBe('sent');
+    expect(await store.getState().send('How was last week?')).toBe('sent');
+    expect(await store.getState().send('swap the zzz')).toBe('error');
+    const failing = setup({ fail: { message: 'x', data: { genAiError: 'BUSY' } } });
+    await ready(failing.store);
+    expect(await failing.store.getState().send('How was last week?')).toBe('error');
+  });
+
+  it('an error is cleared by the next message sent', async () => {
+    const { store } = setup({ reply: ['Fine.'] });
+    await ready(store);
+    await store.getState().send(SHOULDERS);
+    await store.getState().send('swap the zzz');
+    expect(store.getState().error).toBe('No exercise called zzz in this routine');
+    await store.getState().send('How was last week?');
+    expect(store.getState().error).toBeNull();
+  });
+});
+
+describe('coach store: an empty build is a fact (finding 11)', () => {
+  it('is told to the model as nothing built, never as "Routine built", and the model gets no routine to explain', async () => {
+    const fake = fakeBackend({ reply: ['Fine.'] });
+    const store = createCoachStore({ backend: fake.backend, loadInput: async () => INPUT, loadBuildInput: async () => ({ ...BUILD_INPUT, candidates: [] }) });
+    await ready(store);
+    await store.getState().send('give me a chest routine');
+    const [entry] = builds(store);
+    expect(entry!.routines[0]!.rows).toEqual([]);
+    await store.getState().send('Why have you chosen this?');
+    const prompt = fake.streamed[0]!;
+    expect(prompt).not.toContain('Routine built');
+    expect(prompt).not.toContain('Routine the app built');
+    expect(prompt).toContain('Coach: Built nothing: Nothing to choose from for chest');
+  });
+});
+
+describe('coach store: a build the rules cannot read does not wait on the phone for ever (finding 9)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('gives up on a status call that never returns, and builds the routine with no assistant offered', async () => {
+    vi.useFakeTimers();
+    const intent: CoachIntent = { ready: () => new Promise(() => undefined), read: async () => ({ options: null, error: null }) };
+    const store = createCoachStore({ backend: fakeBackend().backend, loadInput: async () => INPUT, loadBuildInput: async () => BUILD_INPUT, intent });
+    const sending = store.getState().send('give me a bench routine');
+    await vi.advanceTimersByTimeAsync(COUNT_TIMEOUT_MS - 1);
+    expect(store.getState().pending).not.toBeNull();
+    await vi.advanceTimersByTimeAsync(1);
+    await sending;
+    expect(store.getState()).toMatchObject({ pending: null, error: null });
+    const [entry] = builds(store);
+    expect(entry).toMatchObject({ unread: [], by: 'rules' });
+    expect(entry!.routines[0]!.rows.length).toBeGreaterThan(0);
+  });
+
+  it('a status call that fails is no offer either, and no error', async () => {
+    const intent: CoachIntent = { ready: () => Promise.reject(new Error('binder died')), read: async () => ({ options: null, error: null }) };
+    const store = createCoachStore({ backend: fakeBackend().backend, loadInput: async () => INPUT, loadBuildInput: async () => BUILD_INPUT, intent });
+    await store.getState().send('give me a bench routine');
+    expect(store.getState().error).toBeNull();
+    expect(builds(store)[0]!.unread).toEqual([]);
+  });
+});
+
+describe('coach store: an answer given up on leaves nothing behind (finding 10)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("late pieces of an answer that timed out never reach the next answer's bubble", async () => {
+    vi.useFakeTimers();
+    const pieces: ((piece: string) => void)[] = [];
+    let call = 0;
+    let finish: (text: string) => void = () => undefined;
+    const backend: CoachBackend = {
+      status: async () => READY,
+      download: async () => undefined,
+      countTokens: async (_s, prompt) => ({ tokens: prompt.length, limit: 100_000 }),
+      stream: (_s, _p, _m, onText) => {
+        pieces.push(onText);
+        if (call++ === 0) {
+          onText('old-');
+          return new Promise(() => undefined);
+        }
+        onText('new-');
+        return new Promise((resolve) => (finish = resolve));
+      },
+    };
+    const store = await ready(createCoachStore({ backend, loadInput: async () => INPUT, loadBuildInput: async () => BUILD_INPUT }));
+    const first = store.getState().ask('How was last week?');
+    await vi.advanceTimersByTimeAsync(QUIET_TIMEOUT_MS);
+    await first;
+    expect(store.getState().error).toBe('The model did not answer.');
+    const second = store.getState().ask('And the week before?');
+    await vi.waitFor(() => expect(store.getState().pending?.partial).toBe('new-'));
+    // AICore resumes the first answer.
+    pieces[0]!('LATE');
+    expect(store.getState().pending?.partial).toBe('new-');
+    finish('new-done');
+    await second;
+    const [entry] = store.getState().entries;
+    expect(entry!.mode === 'ask' && entry!.answer).toBe('new-done');
+  });
+});
+
+describe('coach store: Stop and Clear while it is busy', () => {
+  /** A model that says "Half" and then waits to be told to finish. */
+  const held = () => {
+    const state = { onText: (_p: string): void => undefined, finish: (_t: string): void => undefined, calls: 0 };
+    const backend: CoachBackend = {
+      status: async () => READY,
+      download: async () => undefined,
+      countTokens: async (_s, prompt) => ({ tokens: prompt.length, limit: 100_000 }),
+      stream: (_s, _p, _m, onText) =>
+        new Promise((resolve) => {
+          state.calls++;
+          state.onText = onText;
+          state.finish = resolve;
+          onText('Half');
+        }),
+    };
+    return { backend, state };
+  };
+
+  it('Stop while an answer is coming drops it and keeps the conversation, and the message is reported stopped', async () => {
+    const { backend, state } = held();
+    const store = await ready(createCoachStore({ backend, loadInput: async () => INPUT, loadBuildInput: async () => BUILD_INPUT }));
+    await store.getState().send(SHOULDERS);
+    const asking = store.getState().send('Why have you chosen this?');
+    await vi.waitFor(() => expect(store.getState().pending?.partial).toBe('Half'));
+    store.getState().cancel();
+    expect(store.getState().pending).toBeNull();
+    state.onText(' and more');
+    state.finish('Half and more.');
+    expect(await asking).toBe('stopped');
+    expect(store.getState().entries.map((e) => e.mode)).toEqual(['build']);
+    expect(store.getState()).toMatchObject({ pending: null, error: null });
+  });
+
+  it('what a stopped answer says later never reaches the answer that follows it', async () => {
+    const { backend, state } = held();
+    const store = await ready(createCoachStore({ backend, loadInput: async () => INPUT, loadBuildInput: async () => BUILD_INPUT }));
+    const first = store.getState().send('How was last week?');
+    await vi.waitFor(() => expect(store.getState().pending?.partial).toBe('Half'));
+    const firstPieces = state.onText;
+    const firstFinish = state.finish;
+    store.getState().cancel();
+    await first;
+    const second = store.getState().send('And the week before?');
+    await vi.waitFor(() => expect(state.calls).toBe(2));
+    await vi.waitFor(() => expect(store.getState().pending?.partial).toBe('Half'));
+    firstPieces('LATE');
+    firstFinish('Old answer.');
+    expect(store.getState().pending?.partial).toBe('Half');
+    state.finish('New answer.');
+    await second;
+    expect(store.getState().entries).toHaveLength(1);
+    const [entry] = store.getState().entries;
+    expect(entry!.mode === 'ask' && entry!.answer).toBe('New answer.');
+  });
+
+  it('Stop while a routine is being changed drops it', async () => {
+    let release: (input: RoutineInput) => void = () => undefined;
+    let loads = 0;
+    const store = createCoachStore({
+      backend: held().backend,
+      loadInput: async () => INPUT,
+      loadBuildInput: () => (loads++ === 0 ? Promise.resolve(BUILD_INPUT) : new Promise<RoutineInput>((resolve) => (release = resolve))),
+    });
+    await store.getState().send(SHOULDERS);
+    const changing = store.getState().send('add biceps');
+    await vi.waitFor(() => expect(store.getState().pending?.mode).toBe('build'));
+    store.getState().cancel();
+    release(BUILD_INPUT);
+    expect(await changing).toBe('stopped');
+    expect(store.getState().entries).toHaveLength(1);
+    expect(store.getState()).toMatchObject({ pending: null, error: null });
+  });
+
+  it('Clear while a change is being built empties the conversation, and nothing of it reappears', async () => {
+    let release: (input: RoutineInput) => void = () => undefined;
+    let loads = 0;
+    const store = createCoachStore({
+      backend: held().backend,
+      loadInput: async () => INPUT,
+      loadBuildInput: () => (loads++ === 0 ? Promise.resolve(BUILD_INPUT) : new Promise<RoutineInput>((resolve) => (release = resolve))),
+    });
+    await store.getState().send(SHOULDERS);
+    const changing = store.getState().send('make it shorter');
+    await vi.waitFor(() => expect(store.getState().pending).not.toBeNull());
+    store.getState().reset();
+    release(BUILD_INPUT);
+    await changing;
+    expect(store.getState()).toMatchObject({ entries: [], pending: null, error: null });
+  });
+
+  it('Stop with nothing busy does nothing', async () => {
+    const { store } = setup();
+    await store.getState().send(SHOULDERS);
+    const before = store.getState().entries;
+    store.getState().cancel();
+    expect(store.getState().entries).toBe(before);
   });
 });
