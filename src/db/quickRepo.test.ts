@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { gatherContext } from './assistantQueries';
 import { exportBackup, exportCsv, importBackup, type Backup } from './backup';
 import { calendarData } from './calendarQueries';
-import { addCatalogueExercise } from './catalogueRepo';
+import { addCatalogueExercise, addDemoExercise } from './catalogueRepo';
 import { db } from './db';
 import { reconcileWeights } from './hevy';
 import { startQuickSession } from './quickRepo';
@@ -42,6 +42,7 @@ import { weeklySetsByMuscle } from './volumeQueries';
 import { buildContextBlock } from '@/domain/assistant';
 import { exerciseFromCatalogue, isCatalogueDemo, type CatalogueEntry } from '@/domain/catalogue';
 import { addDays, toDateKey } from '@/domain/dates';
+import { exerciseFromDemo, type DemoLike } from '@/domain/library';
 import type { Candidate, QuickPlan, QuickRow } from '@/domain/quickSession';
 import { isConsecutiveLower, suggestNextRoutine } from '@/domain/schedule';
 import { e1rm } from '@/domain/strength';
@@ -94,6 +95,15 @@ function entryOf(slug: string, over: Partial<CatalogueEntry> = {}): CatalogueEnt
 
 function catalogueRowOf(entry: CatalogueEntry, over: Partial<QuickRow> = {}): QuickRow {
   const c = candidateOf({ ...exerciseFromCatalogue(entry), id: `cat:${entry.slug}`, createdAt: '' }, { origin: 'catalogue', catalogueSlug: entry.slug, level: entry.level });
+  return { candidate: c, sets: 2, repMin: 10, repMax: 15, weightKg: null, mode: 'calibrating', restSec: 75, daysSince: null, ...over };
+}
+
+function demoOf(slug: string, over: Partial<DemoLike> = {}): DemoLike {
+  return { slug, name: 'Cable Rear Delt Fly', equipment: 'Cable', muscleGroup: 'rear delts', ...over };
+}
+
+function diagramRowOf(demo: DemoLike, over: Partial<QuickRow> = {}): QuickRow {
+  const c = candidateOf({ ...exerciseFromDemo(demo), id: `demo:${demo.slug}`, createdAt: '' }, { origin: 'diagram', demoSlug: demo.slug });
   return { candidate: c, sets: 2, repMin: 10, repMax: 15, weightKg: null, mode: 'calibrating', restSec: 75, daysSince: null, ...over };
 }
 
@@ -314,6 +324,93 @@ describe('startQuickSession: catalogue rows', () => {
     expect((await counts()).exercises).toBe(before.exercises);
     const rxs = await db.routineExercises.where('routineId').equals(session.routineId).sortBy('order');
     expect(rxs.map((r) => r.exerciseId)).toEqual([byDemo.id, byName.id]);
+  });
+});
+
+describe('startQuickSession: diagram rows', () => {
+  const fly = demoOf('cable-rear-delt-fly');
+  const made = async (slug: string) => (await db.exercises.toArray()).filter((e) => e.demo === slug);
+
+  it('materialises a diagram exercise from the diagram passed in, keyed by its slug, in the same transaction as the session', async () => {
+    const before = await counts();
+    const session = await startQuickSession(planOf([diagramRowOf(fly)]), [], 'normal', [fly]);
+
+    expect((await counts()).exercises).toBe(before.exercises + 1);
+    const created = await made('cable-rear-delt-fly');
+    expect(created).toHaveLength(1);
+    expect(created[0]).toMatchObject({ ...exerciseFromDemo(fly), id: expect.any(String), createdAt: session.startedAt });
+    // Not a catalogue key: the diagram's own slug is the picture key.
+    expect(isCatalogueDemo(created[0].demo)).toBe(false);
+    const [rx] = await db.routineExercises.where('routineId').equals(session.routineId).toArray();
+    expect(rx.exerciseId).toBe(created[0].id);
+    expect(rx.mode).toBe('calibrating');
+    expect(rx.currentWeight).toBe(0);
+  });
+
+  it('a catalogue row and a diagram row in one plan are each made once, and the plan keeps its order', async () => {
+    const entry = entryOf('cable-woodchop');
+    const before = await counts();
+    const session = await startQuickSession(planOf([rowOf(BENCH), diagramRowOf(fly), catalogueRowOf(entry)]), [entry], 'normal', [fly]);
+
+    expect((await counts()).exercises).toBe(before.exercises + 2);
+    const names = (await routineItems(session.routineId)).map((i) => i.exercise.name);
+    expect(names).toEqual([BENCH.name, 'Cable Rear Delt Fly', 'Cable Woodchop']);
+  });
+
+  it('two rows naming one diagram make one exercise', async () => {
+    const before = await counts();
+    const session = await startQuickSession(planOf([diagramRowOf(fly), diagramRowOf(fly)]), [], 'normal', [fly]);
+    expect((await counts()).exercises).toBe(before.exercises + 1);
+    const rxs = await db.routineExercises.where('routineId').equals(session.routineId).toArray();
+    expect(new Set(rxs.map((r) => r.exerciseId)).size).toBe(1);
+  });
+
+  it('reuses the exercise it made the last time, however many sessions use it', async () => {
+    const first = await startQuickSession(planOf([diagramRowOf(fly)]), [], 'normal', [fly]);
+    const [first1] = await made('cable-rear-delt-fly');
+    // Finished, not deleted: deleting a session takes the exercises its Start made.
+    await updateSession(first.id, { endedAt: first.startedAt, durationSec: 60 });
+    const second = await startQuickSession(planOf([diagramRowOf(fly)]), [], 'normal', [fly]);
+
+    expect(second.id).not.toBe(first.id);
+    expect((await made('cable-rear-delt-fly')).map((e) => e.id)).toEqual([first1.id]);
+    expect((await db.routineExercises.where('routineId').equals(second.routineId).toArray())[0].exerciseId).toBe(first1.id);
+  });
+
+  it("an exercise the owner already has under that picture key, that name or that alias wins: their own row, never a second", async () => {
+    const byKey = await createExercise({ ...exerciseFromDemo(demoOf('by-key', { name: 'Something Else' })), name: 'My own name' });
+    const byName = await createExercise({ ...exerciseFromDemo(demoOf('by-name', { name: 'Kneeling Crunch' })), demo: undefined, name: 'kneeling  CRUNCH' });
+    const byAlias = await createExercise({ ...exerciseFromDemo(demoOf('by-alias', { name: 'Rope Pushdown' })), demo: undefined, name: 'Hevy Name', aliases: ['Rope Pushdown'] });
+    const demos = [demoOf('by-key', { name: 'Something Else' }), demoOf('by-name', { name: 'Kneeling Crunch' }), demoOf('by-alias', { name: 'Rope Pushdown' })];
+    const before = await counts();
+
+    const session = await startQuickSession(planOf(demos.map((d) => diagramRowOf(d))), [], 'normal', demos);
+
+    expect((await counts()).exercises).toBe(before.exercises);
+    const rxs = await db.routineExercises.where('routineId').equals(session.routineId).sortBy('order');
+    expect(rxs.map((r) => r.exerciseId)).toEqual([byKey.id, byName.id, byAlias.id]);
+  });
+
+  it('an exercise the owner added from the diagrams first, or the seeded one a diagram is the picture of, is theirs and is used', async () => {
+    const added = await addDemoExercise(fly);
+    const bench = demoOf('bench-press', { name: 'Bench Press', equipment: 'Barbell', muscleGroup: 'chest' });
+    const before = await counts();
+    const session = await startQuickSession(planOf([diagramRowOf(fly), diagramRowOf(bench)]), [], 'normal', [fly, bench]);
+    expect((await counts()).exercises).toBe(before.exercises);
+    expect((await routineItems(session.routineId)).map((i) => i.exercise.id)).toEqual([added.id, BENCH.id]);
+  });
+
+  it('writes nothing when a diagram is missing from those passed in, not even the exercise an earlier row created', async () => {
+    const before = await counts();
+    const gone = demoOf('never-loaded', { name: 'Never Loaded' });
+    await expect(startQuickSession(planOf([diagramRowOf(fly), diagramRowOf(gone)]), [], 'light', [fly])).rejects.toThrow(/Diagram not found: never-loaded/);
+    expect(await counts()).toEqual(before);
+    expect(await made('cable-rear-delt-fly')).toEqual([]);
+    // And one that was passed but names no diagram at all is refused the same way.
+    const nameless = diagramRowOf(fly);
+    delete nameless.candidate.demoSlug;
+    await expect(startQuickSession(planOf([nameless]), [], 'light', [fly])).rejects.toThrow(/Diagram not found/);
+    expect(await counts()).toEqual(before);
   });
 });
 
@@ -736,6 +833,45 @@ describe('deleting a quick session: the catalogue exercises its Start made', () 
 
     expect(await db.exercises.get(made.id)).toBeDefined();
     expect(await routineItems(second.routineId)).toHaveLength(1);
+  });
+
+  it('a discarded session takes the diagram exercises its Start made, as it takes catalogue ones, and only those', async () => {
+    const fly = demoOf('cable-rear-delt-fly');
+    const bench = demoOf('bench-press', { name: 'Bench Press', equipment: 'Barbell', muscleGroup: 'chest' });
+    const before = await counts();
+    const session = await startQuickSession(planOf([rowOf(BENCH), diagramRowOf(fly), diagramRowOf(bench), catalogueRowOf(woodchop)]), [woodchop], 'normal', [fly, bench]);
+    expect((await counts()).exercises).toBe(before.exercises + 2);
+
+    await deleteSession(session.id);
+
+    expect(await counts()).toEqual(before);
+    expect(await db.exercises.filter((e) => e.demo === 'cable-rear-delt-fly').count()).toBe(0);
+    // The seeded Bench Press is the owner's, and was never made by this Start.
+    expect(await db.exercises.get(BENCH.id)).toBeDefined();
+  });
+
+  it('a diagram exercise the owner added first, one a set was logged on, and one a routine lists all stay', async () => {
+    const fly = demoOf('cable-rear-delt-fly');
+    const added = await addDemoExercise(fly);
+    await db.exercises.update(added.id, { createdAt: '2026-09-01T10:00:00.000Z' });
+    const first = await startQuickSession(planOf([diagramRowOf(fly)]), [], 'normal', [fly]);
+    await deleteSession(first.id);
+    expect(await db.exercises.get(added.id)).toMatchObject({ demo: 'cable-rear-delt-fly' });
+
+    await db.exercises.delete(added.id);
+    const logged = demoOf('logged-one', { name: 'Logged One' });
+    const listed = demoOf('listed-one', { name: 'Listed One' });
+    const session = await startQuickSession(planOf([diagramRowOf(logged), diagramRowOf(listed)]), [], 'normal', [logged, listed]);
+    const [loggedEx, listedEx] = (await routineItems(session.routineId)).map((i) => i.exercise);
+    await end(session);
+    const real = await startSession(HINGE);
+    await logSet({ sessionId: real.id, routineExerciseId: null, exerciseId: loggedEx.id, type: 'working', weight: 0, reps: 10 });
+    await addRoutineExercise(PUSH, listedEx.id);
+
+    await deleteSession(session.id);
+
+    expect(await db.exercises.get(loggedEx.id)).toBeDefined();
+    expect(await db.exercises.get(listedEx.id)).toBeDefined();
   });
 
   it('an exercise with no catalogue picture key is never taken, even one made at the same instant', async () => {

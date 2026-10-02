@@ -176,6 +176,31 @@ describe('loadRoutineInput: everything the builder reads', () => {
     expect(input.context!.stalled).toEqual([{ exerciseId: BENCH, sessions: 3 }]);
   });
 
+  it('holds the bundled diagrams as well, none of them one of the owner\'s own exercises', async () => {
+    const input = await loadRoutineInput({ today: TODAY, settings: await settings() });
+    const diagrams = input.candidates.filter((c) => c.origin === 'diagram');
+    expect(diagrams.length).toBeGreaterThan(100);
+    expect(diagrams.every((c) => c.id === `demo:${c.demoSlug}` && !!c.demoSlug)).toBe(true);
+    // Nothing the owner has is offered a second time as its diagram: the seeds carry their diagram's slug.
+    const owned = new Set(SEED_EXERCISES.map((e) => e.demo).filter(Boolean));
+    expect(diagrams.some((c) => owned.has(c.demoSlug))).toBe(false);
+    expect(new Set(input.candidates.map((c) => c.id)).size).toBe(input.candidates.length);
+  });
+
+  it('a fresh install, with not one set logged, is built 3D shoulders to six exercises, library ones included, on the equipment its routines use', async () => {
+    expect(await db.setLogs.count()).toBe(0);
+    const input = await loadRoutineInput({ today: TODAY, settings: await settings() });
+    const equipment = new Set(input.candidates.filter((c) => c.origin !== 'own').map((c) => c.equipment));
+    expect(equipment).toEqual(new Set(['bodyweight', 'barbell', 'dumbbell', 'machine', 'cable']));
+    const taken = new Set<string>();
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+      const [r] = buildRoutines(input, { focus: ['shoulders', 'rear delts'] }, seed);
+      expect(r!.rows, `seed ${seed}`).toHaveLength(6);
+      for (const x of r!.rows.filter((y) => y.origin !== 'own')) taken.add(`${x.origin}:${x.equipment}`);
+    }
+    expect([...taken].some((t) => !t.endsWith(':bodyweight'))).toBe(true);
+  });
+
   it('is what the builder needs: with a niggle and a stall in the owner\'s data, the routine steers round both', async () => {
     // Logged sets on every seeded exercise, so the equipment the owner has used is the equipment they have.
     await db.sessions.put({ id: 'hist', routineId: '', title: 'Past', startedAt: noon(40), endedAt: noon(40), durationSec: 3600 });

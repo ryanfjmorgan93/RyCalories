@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from './db';
 import { loadQuickInput } from './quickQueries';
 import { startQuickSession } from './quickRepo';
-import { createExercise, exerciseHistory, logSet, resetToSeed, saveSettings, startSession, updateSession } from './repo';
+import { addRoutineExercise, createExercise, createRoutine, exerciseHistory, logSet, resetToSeed, saveSettings, startSession, updateSession } from './repo';
 import { SEED_EXERCISE_IDS, SEED_EXERCISES, SEED_ROUTINE_IDS } from './seed';
 import { muscleRecency, weeklySetsByMuscle } from './volumeQueries';
 import { loadCatalogue } from '@/data/catalogue';
@@ -287,20 +287,45 @@ describe('loadQuickInput: the catalogue', () => {
     expect(catalogueEntries).toEqual([]);
   });
 
-  it('with includeNew, suggests only bodyweight and equipment the owner has logged sets with, none expert', async () => {
+  it('with includeNew, suggests only bodyweight and the equipment the owner has used, in a routine or with a logged set, none expert', async () => {
     const fresh = await load(true);
     const freshCat = fresh.input.candidates.filter((c) => c.origin === 'catalogue');
-    // A fresh install has logged nothing: only bodyweight.
+    // A fresh install has logged nothing, but its routines are built on barbells, dumbbells, machines and cables.
     expect(freshCat.length).toBeGreaterThan(0);
-    expect(new Set(freshCat.map((c) => c.equipment))).toEqual(new Set(['bodyweight']));
+    expect(new Set(freshCat.map((c) => c.equipment))).toEqual(new Set(['bodyweight', 'barbell', 'dumbbell', 'machine', 'cable']));
 
-    // A set on a cable exercise (Cable Crunch) opens up cable, and only cable.
-    await realSession(PULL, 2, [{ exerciseId: CABLE_CRUNCH, weight: 30, reps: 12 }]);
+    // A set on a kettlebell exercise no routine has opens up kettlebell, and only kettlebell.
+    const swing = await customExercise({ name: 'Custom Swing', equipment: 'kettlebell', muscleGroup: 'glutes' });
+    await realSession(PULL, 2, [{ exerciseId: swing.id, weight: 16, reps: 12 }]);
     const after = await load(true);
     const cat = after.input.candidates.filter((c) => c.origin === 'catalogue');
-    expect(new Set(cat.map((c) => c.equipment))).toEqual(new Set(['bodyweight', 'cable']));
+    expect(new Set(cat.map((c) => c.equipment))).toEqual(new Set(['bodyweight', 'barbell', 'dumbbell', 'machine', 'cable', 'kettlebell']));
     expect(cat.some((c) => c.level === 'expert')).toBe(false);
     expect(new Set(cat.map((c) => c.level))).toEqual(new Set(['beginner', 'intermediate']));
+  });
+
+  it('equipment an exercise brings by being in one of the owner\'s routines counts with no set logged; one in an archived routine, the hidden quick one or no routine does not', async () => {
+    const bell = async (name: string) => customExercise({ name, equipment: 'kettlebell', muscleGroup: 'glutes' });
+    const kettlebellEntries = async () => (await load(true)).catalogueEntries.filter((e) => e.equipment === 'kettlebell');
+    expect(await kettlebellEntries()).toEqual([]);
+
+    // In no routine: nothing.
+    const loose = await bell('Loose Swing');
+    expect(await kettlebellEntries()).toEqual([]);
+
+    // In an archived routine: nothing.
+    const gone = await createRoutine({ name: 'Old', isLowerBody: false });
+    await addRoutineExercise(gone.id, (await bell('Archived Swing')).id);
+    await db.routines.update(gone.id, { archived: true });
+    expect(await kettlebellEntries()).toEqual([]);
+
+    // In the hidden routine of a quick session: nothing.
+    await startQuickSession({ rows: [rowOf(loose)], estimateMin: 10, shortfall: 0, unmet: [], relaxed: false, focus: [], seed: 1 }, [], 'normal');
+    expect(await kettlebellEntries()).toEqual([]);
+
+    // In one of their routines, never logged: kettlebell.
+    await addRoutineExercise(PUSH, (await bell('Routine Swing')).id);
+    expect((await kettlebellEntries()).length).toBeGreaterThan(0);
   });
 
   it('returns the entries behind the candidates, and each candidate is the entry it says it is', async () => {

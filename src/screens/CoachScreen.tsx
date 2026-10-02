@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { fmtKg, fmtRange } from '@/domain/format';
-import { aboutMinutes, routineToText, type BuiltRoutine } from '@/domain/routineBuilder';
+import { aboutMinutes, builtRowKeys, routineToText, type BuiltRoutine } from '@/domain/routineBuilder';
 import { routeOf, useCoach, type AskEntry, type BuildEntry } from '@/state/coach';
 import { PasteRoutineSheet } from '@/ui/PasteRoutineSheet';
 import { Button } from '@/ui/components/Button';
@@ -21,7 +21,8 @@ export function CoachScreen() {
   const [params] = useSearchParams();
   const { status, entries, pending, working, error, refreshStatus, send, shuffle, readWithAssistant, download, reset } = useCoach();
   const [text, setText] = useState('');
-  const [review, setReview] = useState<string | null>(null);
+  // The routine under review: its text, and which exercise each of its rows is (the builder's own, not a guess from the name).
+  const [review, setReview] = useState<{ text: string; known: Map<string, string[]> } | null>(null);
   // Routines > New routine > Draft with coach opens here to build: its first message is a build whatever it says.
   const [openingBuild, setOpeningBuild] = useState(params.get('mode') === 'routine');
   const newest = useRef<HTMLDivElement>(null);
@@ -98,7 +99,7 @@ export function CoachScreen() {
                 entry={e}
                 working={working}
                 onShuffle={() => void shuffle(e.id)}
-                onReview={() => setReview(routineToText(e.routines))}
+                onReview={() => setReview({ text: routineToText(e.routines), known: builtRowKeys(e.routines) })}
                 onAssist={() => void readWithAssistant(e.id)}
               />
             )}
@@ -134,7 +135,13 @@ export function CoachScreen() {
         </div>
       </div>
 
-      <PasteRoutineSheet open={review !== null} onClose={() => setReview(null)} initialText={review ?? undefined} title="Review routine" />
+      <PasteRoutineSheet
+        open={review !== null}
+        onClose={() => setReview(null)}
+        initialText={review?.text}
+        preMatched={review?.known}
+        title="Review routine"
+      />
     </div>
   );
 }
@@ -234,7 +241,7 @@ function RoutineBubble({ routine }: { routine: BuiltRoutine }) {
         <div key={row.id} className="mt-1.5 flex items-start justify-between gap-3" data-testid="coach-row">
           <span className="min-w-0 flex-1">
             <span data-testid="coach-row-name">{row.name}</span>
-            {row.origin === 'catalogue' && (
+            {row.origin !== 'own' && (
               <Chip size="sm" tone="info" className="ml-2 align-middle" testId="coach-new">
                 New
               </Chip>

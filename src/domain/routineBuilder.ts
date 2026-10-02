@@ -21,7 +21,9 @@
  *     stopped progressing.
  *   - Says every one of those in a short factual line (`reasonLines`), so the coach can answer "why".
  */
+import { catalogueDemoKey } from './catalogue';
 import { roundKg } from './engine';
+import { normaliseName } from './exerciseMatch';
 import { fmtKg } from './format';
 import { MUSCLE_REGIONS, NON_ROUTINE_PATTERNS, REGION_LABELS, movementPattern, patternLabel, regionOf } from './movement';
 import { MACRO_MUSCLES, type ParsedRequest, type RoutineSplit } from './quickRequest';
@@ -51,7 +53,10 @@ export interface RoutineRequest {
 export type Tier = 'primary' | 'secondary' | 'isolation';
 
 export interface BuiltRow {
-  /** The owner's exercise id, or the catalogue key (`cat:slug`) of an exercise they have not got yet. */
+  /**
+   * The owner's exercise id, or, for an exercise they have not got yet, the key of the library entry:
+   * `cat:slug` for a catalogue entry, `demo:slug` for a bundled diagram (see `builtRowKey`).
+   */
   id: string;
   name: string;
   sets: number;
@@ -59,8 +64,11 @@ export interface BuiltRow {
   repMax: number;
   /** kg, from the owner's own numbers. Null for one they have not got a working weight for. */
   weightKg: number | null;
-  origin: 'own' | 'catalogue';
+  /** 'catalogue' and 'diagram' rows are library exercises the owner has not got yet: new, with no weight. */
+  origin: 'own' | 'catalogue' | 'diagram';
   catalogueSlug?: string;
+  /** The diagram's slug, for a 'diagram' row: the picture key the exercise made from it carries. */
+  demoSlug?: string;
   muscleGroup: MuscleGroup;
   equipment?: Equipment;
   /** `movementPattern`: a key such as 'press-vertical', or the muscle group when the name says nothing. */
@@ -96,7 +104,7 @@ export interface RoutineInput extends QuickInput {
 export const DEFAULT_ROUTINE_COUNT = 6;
 export const DEFAULT_SPLIT_DAY_COUNT = 5;
 const MAX_COUNT = 12;
-/** The most exercises from the library a single routine takes. */
+/** The most exercises from the library (catalogue entries and diagrams together) a single routine takes. */
 export const MAX_NEW_EXERCISES = 3;
 const MAX_SETS = 4;
 const MIN_SETS = 2;
@@ -302,7 +310,7 @@ function eligibleInfos(candidates: readonly Candidate[], request: RoutineRequest
     if (!TRAINABLE.has(c.muscleGroup) || exclude.has(c.muscleGroup)) continue;
     // An exercise with no equipment recorded counts as 'other', so "no barbell" keeps it.
     if (equipment && !equipment.has(c.equipment ?? 'other')) continue;
-    if (c.origin === 'catalogue' && c.level === 'expert') continue;
+    if (c.origin !== 'own' && c.level === 'expert') continue;
     const pattern = movementPattern(c.name, c.muscleGroup);
     if (NON_ROUTINE_PATTERNS.has(pattern)) continue;
     out.push({ c, pattern, region: regionOf(c.name, c.muscleGroup) });
@@ -509,13 +517,13 @@ function buildDay(sh: Shared, day: DaySpec, rng: () => number): BuiltRoutine {
     !used.has(i.c.id) &&
     !displaced.has(i.c.id) &&
     (repeat || !usedPatterns.has(i.pattern)) &&
-    (i.c.origin !== 'catalogue' || newCount < MAX_NEW_EXERCISES);
+    (i.c.origin === 'own' || newCount < MAX_NEW_EXERCISES);
 
   const drawWeight = (i: Info): number => {
     let w = weightOf(i.c, false, true) * preference(sh.niggleTags, i);
     // A name no rule can place is the last resort within its muscle.
     if (i.pattern === i.c.muscleGroup) w *= 0.2;
-    if (i.c.origin === 'catalogue' && SPECIALTY.test(plainName(i.c.name))) w *= SPECIALTY_FACTOR;
+    if (i.c.origin !== 'own' && SPECIALTY.test(plainName(i.c.name))) w *= SPECIALTY_FACTOR;
     return w;
   };
 
@@ -548,9 +556,9 @@ function buildDay(sh: Shared, day: DaySpec, rng: () => number): BuiltRoutine {
     const same = (i: Info) => (stalled.region ? i.region === stalled.region : i.pattern === stalled.pattern);
     const sameUnitAndKind = (i: Info) => unit !== null && i.region !== null && i.region.startsWith(`${unit}:`) && i.c.isCompound === stalled.c.isCompound;
     const ok = (i: Info) => i.c.id !== stalled.c.id && !sh.stalled.has(i.c.id) && allowed(i, false);
-    for (const origin of ['own', 'catalogue'] as const) {
+    for (const fromLibrary of [false, true]) {
       for (const near of [same, sameUnitAndKind]) {
-        const list = pool.filter((i) => i.c.origin === origin && ok(i) && near(i));
+        const list = pool.filter((i) => (i.c.origin !== 'own') === fromLibrary && ok(i) && near(i));
         if (list.length > 0) return chooseOther(list, stalled);
       }
     }
@@ -593,7 +601,7 @@ function buildDay(sh: Shared, day: DaySpec, rng: () => number): BuiltRoutine {
     picks.push({ info, repeat: usedPatterns.has(info.pattern) });
     used.add(info.c.id);
     usedPatterns.add(info.pattern);
-    if (info.c.origin === 'catalogue') newCount++;
+    if (info.c.origin !== 'own') newCount++;
     counts.set(owner, (counts.get(owner) ?? 0) + 1);
   };
 
@@ -786,7 +794,7 @@ function buildDay(sh: Shared, day: DaySpec, rng: () => number): BuiltRoutine {
     const weightKg = known === null ? null : roundKg(known);
     const place = info.region ? `${REGION_LABELS[info.region] ?? info.region} (${patternLabel(info.pattern)})` : patternLabel(info.pattern);
     const parts: string[] = [c.muscleGroup, place];
-    if (c.origin === 'catalogue') parts.push('new to you, no weight yet');
+    if (c.origin !== 'own') parts.push('new to you, no weight yet');
     else {
       parts.push(fmtRecency(input.recency?.[c.muscleGroup]));
       parts.push(weightKg === null ? 'no weight yet' : `your working weight ${fmtKg(weightKg)}`);
@@ -807,6 +815,7 @@ function buildDay(sh: Shared, day: DaySpec, rng: () => number): BuiltRoutine {
     };
     if (c.equipment) row.equipment = c.equipment;
     if (c.catalogueSlug) row.catalogueSlug = c.catalogueSlug;
+    if (c.demoSlug) row.demoSlug = c.demoSlug;
     return row;
   });
 
@@ -853,7 +862,7 @@ function buildDay(sh: Shared, day: DaySpec, rng: () => number): BuiltRoutine {
   }
   for (const r of missing) lines.push(`No exercise for ${REGION_LABELS[r] ?? r} in your exercises or the library`);
   if (rows.length + dropped.length < n && unmet.length < (day.asked ?? dayMuscles).length) {
-    const capped = newCount >= MAX_NEW_EXERCISES && pool.some((i) => i.c.origin === 'catalogue' && !used.has(i.c.id));
+    const capped = newCount >= MAX_NEW_EXERCISES && pool.some((i) => i.c.origin !== 'own' && !used.has(i.c.id));
     lines.push(
       capped
         ? `${rows.length + dropped.length} of ${n} exercises: ${MAX_NEW_EXERCISES} from the library is the most for one routine, and your own have nothing more for ${joinList(dayMuscles)}`
@@ -867,10 +876,10 @@ function buildDay(sh: Shared, day: DaySpec, rng: () => number): BuiltRoutine {
 
   if (dropped.length > 0) lines.push(`Dropped ${joinList(dropped.map((w) => w.pick.info.c.name))} to come nearer the ${asked} min asked`);
 
-  const fromLibrary = rows.filter((r) => r.origin === 'catalogue').map((r) => r.name);
+  const fromLibrary = rows.filter((r) => r.origin !== 'own').map((r) => r.name);
   if (fromLibrary.length > 0) lines.push(`From the library, where your own exercises had nothing for the part: ${joinList(fromLibrary)}`);
 
-  if (rows.some((r) => r.origin === 'catalogue')) lines.push('Weights are your own working weights; new exercises have none yet');
+  if (rows.some((r) => r.origin !== 'own')) lines.push('Weights are your own working weights; new exercises have none yet');
   else if (rows.some((r) => r.weightKg === null)) lines.push('Weights are your own working weights; exercises with none logged have none yet');
   else if (rows.length > 0) lines.push('Weights are your own working weights');
 
@@ -920,6 +929,38 @@ function rowLine(r: BuiltRow): string {
  */
 export function routineToText(routines: readonly BuiltRoutine[]): string {
   return routines.map((r) => [r.name, ...r.rows.map(rowLine)].join('\n')).join('\n\n');
+}
+
+/**
+ * What a built row is in the exercise list (`ExerciseListRow.key`): the owner's exercise id, a
+ * diagram's slug, or `cat:slug` for a catalogue entry. The key an exercise made from it carries as
+ * its picture key is the same for the last two, and an owned row is found by id.
+ */
+export function builtRowKey(row: Pick<BuiltRow, 'id' | 'origin' | 'demoSlug' | 'catalogueSlug'>): string {
+  if (row.origin === 'diagram' && row.demoSlug) return row.demoSlug;
+  if (row.origin === 'catalogue' && row.catalogueSlug) return catalogueDemoKey(row.catalogueSlug);
+  return row.id;
+}
+
+/**
+ * Which exercise each row of built routines is, for the review that follows: the list key of every
+ * row (`builtRowKey`) under its name as `routineToText` writes it (case, apostrophes and spacing
+ * ignored), in the order the rows are written. Two rows of one name (two exercises of the owner's
+ * that share one) are two keys, so the first line of that name in the text is the first of them. A
+ * review reads these in place of matching the names, so a routine the app built is never read back
+ * as a different exercise.
+ */
+export function builtRowKeys(routines: readonly BuiltRoutine[]): Map<string, string[]> {
+  const keys = new Map<string, string[]>();
+  for (const routine of routines) {
+    for (const row of routine.rows) {
+      const name = normaliseName(row.name);
+      const list = keys.get(name);
+      if (list) list.push(builtRowKey(row));
+      else keys.set(name, [builtRowKey(row)]);
+    }
+  }
+  return keys;
 }
 
 /** "about 52 min". */

@@ -2,14 +2,15 @@
  * Fixtures for the routine builder's tests.
  *
  * `seededInput` is the owner's real starting data as a builder input: the 27 seeded exercises with
- * the weights their seeded routines give them, the five seeded routines, and the real catalogue,
- * built through the same `buildQuickInput` the app uses. `cand` and `miniInput` make small
+ * the weights their seeded routines give them, the five seeded routines, and the real catalogue and
+ * bundled diagrams, built through the same `buildQuickInput` the app uses. `cand` and `miniInput` make small
  * hand-built pools, for tests where one rule has to be seen changing the outcome.
  */
 import { readFileSync } from 'node:fs';
 import { SEED_EXERCISES, SEED_ROUTINES, SEED_ROUTINE_EXERCISES } from '../db/seed';
+import { EXERCISE_DEMOS } from '../data/exerciseDemos';
 import type { CatalogueEntry } from '../domain/catalogue';
-import { buildQuickInput } from '../domain/quickInput';
+import { buildQuickInput, diagramCandidateId } from '../domain/quickInput';
 import type { Candidate } from '../domain/quickSession';
 import type { RoutineInput } from '../domain/routineBuilder';
 import { buildRoutineContext, type RoutineContext } from '../domain/routineContext';
@@ -47,31 +48,42 @@ export interface FixtureOptions {
   weeklyTargets?: Partial<Record<MuscleGroup, number>>;
   /** The owner's routines, niggles and stalls. Default: their five seeded routines and nothing else. `null`: no context at all. */
   context?: Partial<RoutineContext> | null;
-  /** Without the catalogue the pool is the owner's own 27. */
+  /** Without the catalogue the pool has none of it. Default: with. */
   catalogue?: boolean;
+  /** Without the bundled diagrams the pool has none of them. Default: with. */
+  diagrams?: boolean;
   settings?: Partial<Settings>;
+  /** Without any logged set, as on a fresh install: the equipment they have used is what their routines use. Default: with. */
+  sets?: boolean;
+  /** Seeded exercises the owner does not have (by name), and so not in their routines either. */
+  without?: string[];
 }
 
 export function seededInput(opts: FixtureOptions = {}): RoutineInput {
-  const { sessions, setLogs } = history(OWN_EXERCISES);
+  const gone = new Set(opts.without ?? []);
+  const exercises = OWN_EXERCISES.filter((e) => !gone.has(e.name));
+  const have = new Set(exercises.map((e) => e.id));
+  const routineExercises = SEED_ROUTINE_EXERCISES.filter((rx) => have.has(rx.exerciseId));
+  const { sessions, setLogs } = opts.sets === false ? { sessions: [], setLogs: [] } : history(exercises);
   const settings: Settings = { ...SETTINGS, ...opts.settings, ...(opts.weeklyTargets ? { weeklySetTargets: opts.weeklyTargets } : {}) };
   const { input } = buildQuickInput(
     {
-      exercises: OWN_EXERCISES,
+      exercises,
       routines: SEED_ROUTINES,
-      routineExercises: SEED_ROUTINE_EXERCISES,
+      routineExercises,
       sessions,
       setLogs,
       recency: opts.recency ?? {},
       weeklySets: {},
       ...(opts.catalogue === false ? {} : { catalogue: CATALOGUE }),
+      ...(opts.diagrams === false ? {} : { demos: EXERCISE_DEMOS }),
     },
     settings,
     TODAY,
   );
   if (opts.context === null) return input;
   const seeded = buildRoutineContext(
-    { exercises: OWN_EXERCISES, routines: SEED_ROUTINES, routineExercises: SEED_ROUTINE_EXERCISES, sessions: [], decisions: [] },
+    { exercises, routines: SEED_ROUTINES, routineExercises, sessions: [], decisions: [] },
     TODAY,
   );
   return { ...input, context: { ...seeded, ...opts.context } };
@@ -95,6 +107,8 @@ interface CandidateOptions {
   weight?: number;
   /** A catalogue exercise they have not got yet. */
   library?: boolean;
+  /** A bundled diagram they have not got yet. */
+  diagram?: boolean;
   daysSinceUsed?: number;
   unilateral?: boolean;
 }
@@ -102,7 +116,9 @@ interface CandidateOptions {
 /** A candidate named as the app names exercises, so its movement is read from the name as it would be in the app. */
 export function cand(name: string, muscleGroup: MuscleGroup, o: CandidateOptions = {}): Candidate {
   const library = o.library === true;
-  const id = library ? `cat:${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : name;
+  const diagram = o.diagram === true;
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const id = library ? `cat:${slug}` : diagram ? diagramCandidateId(slug) : name;
   const out: Candidate = {
     id,
     name,
@@ -114,12 +130,13 @@ export function cand(name: string, muscleGroup: MuscleGroup, o: CandidateOptions
     unilateral: o.unilateral ?? false,
     defaultIncrement: 2,
     defaultRestSec: o.compound ? 150 : 75,
-    origin: library ? 'catalogue' : 'own',
+    origin: library ? 'catalogue' : diagram ? 'diagram' : 'own',
   };
   if (library) {
     out.catalogueSlug = id.slice(4);
     out.level = 'beginner';
   }
+  if (diagram) out.demoSlug = slug;
   if (o.weight !== undefined) out.base = { sets: 3, repMin: 8, repMax: 12, weightKg: o.weight, mode: 'normal' };
   if (o.daysSinceUsed !== undefined) out.daysSinceUsed = o.daysSinceUsed;
   return out;

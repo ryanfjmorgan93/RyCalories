@@ -5,21 +5,25 @@
 import { db } from './db';
 import { muscleSetRowsFrom } from './volumeQueries';
 import { loadCatalogue } from '@/data/catalogue';
+import { EXERCISE_DEMOS } from '@/data/exerciseDemos';
 import type { CatalogueEntry } from '@/domain/catalogue';
 import { mondayOf } from '@/domain/dates';
+import type { ListDemo } from '@/domain/library';
 import { buildQuickInput } from '@/domain/quickInput';
 import type { QuickInput } from '@/domain/quickSession';
 import type { Settings } from '@/domain/types';
 import { muscleRecency, weeklySetsByMuscle } from '@/domain/volume';
 
 /**
- * The generator's input as of `today` (a local YYYY-MM-DD). `includeNew` adds catalogue exercises
- * the owner could try, and returns the entries behind them so Start can turn the chosen ones into
- * exercises; without it the catalogue is not even loaded.
+ * The generator's input as of `today` (a local YYYY-MM-DD). `includeNew` adds the library's
+ * exercises the owner could try, the catalogue and the bundled diagrams, and returns the entries
+ * behind them so Start can turn the chosen ones into exercises; without it the catalogue is not even
+ * loaded.
  */
-export async function loadQuickInput(opts: { today: string; settings: Settings; includeNew: boolean }): Promise<{ input: QuickInput; catalogueEntries: CatalogueEntry[] }> {
+export async function loadQuickInput(opts: { today: string; settings: Settings; includeNew: boolean }): Promise<{ input: QuickInput; catalogueEntries: CatalogueEntry[]; demos: ListDemo[] }> {
   // Before the transaction: a Dexie transaction cannot wait on anything that is not a Dexie call.
   const catalogue = opts.includeNew ? await loadCatalogue() : undefined;
+  const demos = opts.includeNew ? EXERCISE_DEMOS : undefined;
   // One read transaction, one read of each table: the recency and weekly sets are drawn from the
   // rows already in hand (the set logs are the big table), so they agree with them by construction.
   const tables = await db.transaction('r', [db.exercises, db.routines, db.routineExercises, db.sessions, db.setLogs], async () => {
@@ -35,5 +39,5 @@ export async function loadQuickInput(opts: { today: string; settings: Settings; 
   const rows = muscleSetRowsFrom(tables.setLogs, tables.sessions, tables.exercises);
   const recency = muscleRecency(rows, opts.today);
   const weeklySets = weeklySetsByMuscle(rows, mondayOf(opts.today));
-  return buildQuickInput({ ...tables, recency, weeklySets, catalogue }, opts.settings, opts.today);
+  return buildQuickInput({ ...tables, recency, weeklySets, catalogue, demos }, opts.settings, opts.today);
 }

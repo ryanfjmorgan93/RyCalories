@@ -583,6 +583,43 @@ the owner's own exercises first and the diagrams and catalogue they have not add
   a library row at all (it is the seeded row), so a test that opened it from "the library" opens the
   owned row. The diagrams are 303, not 302: the neck photograph is a bespoke addition.
 
+### P9c — The whole library in what the app builds · **S** · ✅ shipped
+
+The routine builder (`routineBuilder.ts`) and the short session (`quickSession.ts`) drew only on the
+owner's exercises and the catalogue, so face pulls, leg press, dips and hip abduction, which exist
+only as diagrams, could never be chosen. Both now draw on the same library the Exercises screen shows.
+- **Diagrams as candidates** (`diagramCandidates` in `quickInput.ts`): origin `'diagram'`, id
+  `demo:<slug>` (never an owned exercise's id; `demoSlug` is the slug, which is also the picture key
+  the exercise made from it carries). Left out: stretches, mobility, cardio, carries, jumps and
+  strongman or Olympic lifts (`isLiftDiagram`, from `NON_ROUTINE_PATTERNS` and the diagram's own
+  group and equipment), and a diagram for equipment the owner has not used. Deduped against the
+  owner's exercises by `findExistingExercise` (the owner's row always wins), and a catalogue entry
+  with the name of a diagram that is a candidate is dropped (the diagram wins). The two sets share no
+  name today, so that second rule is a guard.
+- **Shared cap**: a diagram counts toward "up to 3 new exercises" in a routine (2 in a short session)
+  exactly as a catalogue entry does; both are "new to you, no weight yet", and both come after the
+  owner's own exercises for a part of the muscle. The diagram's group is the one the diagram set
+  gives it, so a Face Pull diagram is an upper-back exercise: it is reachable from a back or pull
+  request, and from nowhere in a 3D shoulders request (whose pool is shoulders and rear delts).
+- **Equipment** (`ownedEquipment`): counts the exercises in the owner's own routines (not archived,
+  not a quick session's hidden one) as well as the ones with a logged set; `'other'` is still no
+  evidence. A fresh install, with nothing logged, used to be offered bodyweight only and built "3D
+  shoulders" to four of six.
+- **Review** (`PasteRoutineSheet`'s optional `preMatched`, from `builtRowKeys`): a routine the app
+  built tells the review which exercise each row is (owned id, diagram slug, `cat:<slug>`), so its rows
+  are never matched by name. Pasted text still is. A row names its list key; once the owner has the
+  exercise the key is looked up with `findExistingExercise`. Lines of one name are taken in the order
+  they are written.
+- **Short session**: `startQuickSession(plan, catalogueEntries, effort, demos)` materialises diagram rows
+  in the same transaction, found or created by `findExistingExercise` (so the same dedupe as Add and
+  Paste); `loadQuickInput` returns the `demos` behind its diagram candidates. `deleteSession` takes the
+  diagram exercises a discarded quick session's Start made (any exercise created at the session's own
+  instant that has a picture key), as it already took catalogue ones.
+- **Traps paid for**: a test that built a routine for a muscle and expected "bodyweight only" or "three
+  library exercises, all catalogue" now meets diagrams; `seededInput` takes `diagrams`, `sets` and
+  `without` to say which world it is. `e2e/quick-session.spec.ts` counts what Start made as the
+  exercises that were not there before, not as the ones with a `cat:` key.
+
 ---
 
 ## 5. Design and structure decisions

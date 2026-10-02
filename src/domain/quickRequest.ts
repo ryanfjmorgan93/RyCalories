@@ -23,7 +23,7 @@ export interface QuickOptions {
   exclude?: MuscleGroup[];
   /** Equipment allowed. Absent = any. */
   equipment?: Equipment[];
-  /** Whether never-done exercises from the catalogue may be mixed in. */
+  /** Whether never-done exercises from the library (the catalogue and the bundled diagrams) may be mixed in. */
   includeNew: boolean;
 }
 

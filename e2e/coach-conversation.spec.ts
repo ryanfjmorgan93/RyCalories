@@ -2,8 +2,10 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { SEED_EXERCISES, SEED_EXERCISE_IDS, SEED_ROUTINES, SEED_ROUTINE_EXERCISES, SEED_ROUTINE_IDS } from '../src/db/seed';
+import { EXERCISE_DEMOS } from '../src/data/exerciseDemos';
+import { equipmentFromDemo } from '../src/domain/library';
 import { DEFAULT_SETTINGS } from '../src/domain/types';
-import { createRawIronDb, IRON_SCHEMA_V3, readRawIron } from './fresh';
+import { createRawIronDb, fresh, IRON_SCHEMA_V3, readRawIron } from './fresh';
 
 /**
  * The coach as one box, on the built app, against `window.__ironNanoFake` (the documented stand-in
@@ -135,12 +137,13 @@ interface Known {
   equipment?: string;
 }
 
-const library = new Map(
-  (JSON.parse(readFileSync(fileURLToPath(new URL('../src/data/exerciseCatalogue.json', import.meta.url)), 'utf8')) as { name: string; muscleGroup: string; equipment: string }[]).map((e) => [
-    e.name,
-    { name: e.name, group: e.muscleGroup, equipment: e.equipment } satisfies Known,
-  ]),
-);
+/** The library as the builder draws on it: the catalogue's entries and the bundled diagrams, by name. */
+const library = new Map<string, Known>([
+  ...(JSON.parse(readFileSync(fileURLToPath(new URL('../src/data/exerciseCatalogue.json', import.meta.url)), 'utf8')) as { name: string; muscleGroup: string; equipment: string }[]).map(
+    (e): [string, Known] => [e.name, { name: e.name, group: e.muscleGroup, equipment: e.equipment }],
+  ),
+  ...EXERCISE_DEMOS.map((d): [string, Known] => [d.name, { name: d.name, group: d.muscleGroup ?? 'other', equipment: equipmentFromDemo(d.equipment) }]),
+]);
 
 async function lookup(page: Page, names: string[]): Promise<Known[]> {
   const owned = new Map(
@@ -163,6 +166,19 @@ function ruledOutByShoulder(k: Known): boolean {
     /\bdips?\b/i.test(k.name) ||
     (k.equipment === 'barbell' && /(shoulder|overhead|military|arnold|push) press|\bohp\b/i.test(k.name) && !/landmine/i.test(k.name))
   );
+}
+
+/** What is saved, read raw: every exercise, and each routine with the names and ids of its rows in order. */
+async function savedState(page: Page) {
+  const { tables } = await readRawIron(page);
+  const exercises = tables.exercises as { id: string; name: string; demo?: string; muscleGroup?: string; equipment?: string }[];
+  const nameOf = new Map(exercises.map((e) => [e.id, e.name]));
+  const rx = tables.routineExercises as { routineId: string; exerciseId: string; order: number }[];
+  const routines = (tables.routines as { id: string; name: string }[]).map((r) => {
+    const rows = rx.filter((x) => x.routineId === r.id).sort((a, b) => a.order - b.order);
+    return { name: r.name, rows: rows.map((x) => nameOf.get(x.exerciseId)), exerciseIds: rows.map((x) => x.exerciseId) };
+  });
+  return { exercises, routines };
 }
 
 // ---------------------------------------------------------------------------
@@ -330,15 +346,8 @@ test('Review routine opens the routine it sits under and saves it, the library e
   expect(await modelLog(page)).toEqual(NO_CALLS);
 
   const saved = async () => {
-    const { tables } = await readRawIron(page);
-    const exercises = tables.exercises as { id: string; name: string }[];
-    const nameOf = new Map(exercises.map((e) => [e.id, e.name]));
-    const rx = tables.routineExercises as { routineId: string; exerciseId: string; order: number }[];
-    const routines = (tables.routines as { id: string; name: string }[]).map((r) => ({
-      name: r.name,
-      rows: rx.filter((x) => x.routineId === r.id).sort((a, b) => a.order - b.order).map((x) => nameOf.get(x.exerciseId)),
-    }));
-    return { exercises, routines };
+    const { exercises, routines } = await savedState(page);
+    return { exercises, routines: routines.map(({ name, rows }) => ({ name, rows })) };
   };
 
   const review = page.getByRole('dialog').filter({ hasText: 'Review routine' });
@@ -369,6 +378,143 @@ test('Review routine opens the routine it sits under and saves it, the library e
     await page.goBack();
     await expect(page.getByTestId('coach-routine')).toHaveCount(2);
   }
+});
+
+// ---------------------------------------------------------------------------
+// The diagrams, and the identity of a built row
+
+/** The diagrams the adductors have: no catalogue entry is for them, and the owner of bareOwner() has none. */
+const ADDUCTOR_DIAGRAMS = ['cable-standing-hip-adduction', 'hip-adduction-machine'].map((slug) => EXERCISE_DEMOS.find((d) => d.slug === slug)!);
+
+test('a routine built from the diagrams: Review has every row matched already, Save makes one exercise from each diagram and points the routine at it, and building and saving it again makes no second one', async ({ page }) => {
+  await fakeModel(page);
+  await seedOwner(page, bareOwner());
+  await openCoach(page);
+  expect(ADDUCTOR_DIAGRAMS).toHaveLength(2);
+
+  // Nothing the owner has is for the adductors, and the library has only these two diagrams for them: the pool is the same every time.
+  await say(page, 'give me an adductor routine');
+  await expect(page.getByTestId('coach-routine')).toHaveCount(1);
+  await idle(page);
+  const built = await rowNames(entry(page, 0));
+  expect([...built].sort()).toEqual(ADDUCTOR_DIAGRAMS.map((d) => d.name).sort());
+  await expect(entry(page, 0).getByTestId('coach-new')).toHaveCount(2);
+  expect(await modelLog(page)).toEqual(NO_CALLS);
+
+  const review = page.getByRole('dialog').filter({ hasText: 'Review routine' });
+
+  // Review: both rows are there, and each is already the diagram the builder took. The Library mark
+  // is only on a row that has been matched to a library entry, so it is what shows the matching has been done.
+  await entry(page, 0).getByTestId('coach-review').click();
+  await expect(review.getByTestId('paste-row')).toHaveCount(2);
+  await expect(review.getByTestId('library-label')).toHaveCount(2);
+  await expect(review.getByTestId('paste-choose')).toHaveCount(0);
+  await expect(review.getByTestId('paste-add-new')).toHaveCount(0);
+  await expect(review.getByTestId('paste-facts')).toHaveCount(0);
+  await expect(review.getByTestId('paste-row-name')).toHaveText(built);
+  await expect(review.getByTestId('paste-save')).toBeEnabled();
+  expect((await savedState(page)).routines).toEqual([]);
+
+  await review.getByTestId('paste-save').click();
+  await expect(page).toHaveURL(/\/routines\/[0-9a-f-]+$/);
+
+  // Exactly one new exercise per diagram, carrying its slug, and the routine's rows point at them.
+  const first = await savedState(page);
+  expect(first.exercises).toHaveLength(4 + 2);
+  const madeIds: string[] = [];
+  for (const d of ADDUCTOR_DIAGRAMS) {
+    const made = first.exercises.filter((e) => e.demo === d.slug);
+    expect(made, d.slug).toHaveLength(1);
+    expect(made[0]).toMatchObject({ name: d.name, muscleGroup: 'adductors', equipment: equipmentFromDemo(d.equipment) });
+    madeIds.push(made[0]!.id);
+  }
+  expect(first.routines).toEqual([{ name: 'Adductors', rows: built, exerciseIds: built.map((n) => madeIds[ADDUCTOR_DIAGRAMS.findIndex((d) => d.name === n)]) }]);
+
+  // The same bubble reviewed and saved again: the exercises are the owner's now, and every row is matched to them.
+  await page.goBack();
+  await expect(entry(page, 0).getByTestId('coach-routine')).toHaveCount(1);
+  await entry(page, 0).getByTestId('coach-review').click();
+  await expect(review.getByTestId('paste-row')).toHaveCount(2);
+  await expect(review.getByTestId('paste-change')).toHaveCount(2);
+  await expect(review.getByTestId('library-label')).toHaveCount(0);
+  await expect(review.getByTestId('paste-choose')).toHaveCount(0);
+  await review.getByTestId('paste-save').click();
+  await expect(page).toHaveURL(/\/routines\/[0-9a-f-]+$/);
+  const second = await savedState(page);
+  expect(second.exercises.map((e) => e.id).sort()).toEqual(first.exercises.map((e) => e.id).sort());
+  expect(second.routines).toHaveLength(2);
+  expect(second.routines.map((r) => r.exerciseIds)).toEqual([first.routines[0]!.exerciseIds, first.routines[0]!.exerciseIds]);
+
+  // Built afresh, the routine is made of the owner's own two exercises: no New mark, nothing from the library, and saved it adds none.
+  await page.goBack();
+  await say(page, 'give me an adductor routine');
+  await expect(page.getByTestId('coach-routine')).toHaveCount(2);
+  await idle(page);
+  expect([...(await rowNames(entry(page, 1)))].sort()).toEqual([...built].sort());
+  await expect(entry(page, 1).getByTestId('coach-new')).toHaveCount(0);
+  expect(await whyLines(entry(page, 1))).not.toContainEqual(expect.stringMatching(/^From the library/));
+  await entry(page, 1).getByTestId('coach-review').click();
+  await expect(review.getByTestId('paste-row')).toHaveCount(2);
+  await expect(review.getByTestId('paste-change')).toHaveCount(2);
+  await review.getByTestId('paste-save').click();
+  await expect(page).toHaveURL(/\/routines\/[0-9a-f-]+$/);
+  const third = await savedState(page);
+  expect(third.exercises.map((e) => e.id).sort()).toEqual(first.exercises.map((e) => e.id).sort());
+  for (const d of ADDUCTOR_DIAGRAMS) expect(third.exercises.filter((e) => e.demo === d.slug), d.slug).toHaveLength(1);
+  expect(third.routines).toHaveLength(3);
+  expect(await modelLog(page)).toEqual(NO_CALLS);
+});
+
+test('a fresh install, with nothing logged yet, is offered the library\'s cable exercises, because its routines use cables', async ({ page }) => {
+  await fakeModel(page);
+  // The app's own seed: 27 exercises and five routines on barbells, dumbbells, machines and cables, and not one set logged.
+  await fresh(page);
+  expect((await readRawIron(page)).tables.setLogs).toEqual([]);
+  await openCoach(page);
+
+  await say(page, 'give me a cable routine for 3d shoulders');
+  await expect(page.getByTestId('coach-routine')).toHaveCount(1);
+  await idle(page);
+  const names = await rowNames(entry(page, 0));
+  // Their one cable exercise for these muscles is the Face Pull. Counted on equipment they had logged,
+  // that was all of it: cable was not theirs, and the library had no cable exercise to add.
+  expect(names).toContain('Face Pull');
+  expect(names).toHaveLength(4);
+  await expect(entry(page, 0).getByTestId('coach-new')).toHaveCount(3);
+  for (const known of await lookup(page, names)) expect(known.equipment, known.name).toBe('cable');
+  expect(await groupsOf(page, names)).toEqual(expect.arrayContaining(['shoulders', 'rear delts']));
+  expect(await modelLog(page)).toEqual(NO_CALLS);
+});
+
+test('Review saves the very exercise the builder took, and not another of the owner\'s with the same name', async ({ page }) => {
+  await fakeModel(page);
+  // Two exercises of one name, as an import or two adds can leave: only the dumbbell one can be in a dumbbell routine.
+  const twin = (id: string, equipment: string) => exercise(id, 'Twin Raise', { muscleGroup: 'calves', equipment });
+  await seedOwner(page, { exercises: [twin('twin-a', 'barbell'), twin('twin-b', 'dumbbell')], routines: false });
+  await openCoach(page);
+
+  await say(page, 'give me a dumbbell calf routine');
+  await expect(page.getByTestId('coach-routine')).toHaveCount(1);
+  await idle(page);
+  const built = await rowNames(entry(page, 0));
+  expect(built.filter((n) => n === 'Twin Raise')).toHaveLength(1);
+
+  const review = page.getByRole('dialog').filter({ hasText: 'Review routine' });
+  await entry(page, 0).getByTestId('coach-review').click();
+  await expect(review.getByTestId('paste-row')).toHaveCount(built.length);
+  // Every row resolved, with no row left to choose: each library row says so, and the owner's own is a row that can be changed.
+  await expect(review.getByTestId('library-label')).toHaveCount(built.length - 1);
+  await expect(review.getByTestId('paste-change')).toHaveCount(built.length);
+  await expect(review.getByTestId('paste-choose')).toHaveCount(0);
+  await review.getByTestId('paste-save').click();
+  await expect(page).toHaveURL(/\/routines\/[0-9a-f-]+$/);
+
+  const { exercises, routines } = await savedState(page);
+  // The row for Twin Raise is the dumbbell one the builder took, and no third exercise of that name was made.
+  const twins = routines[0]!.exerciseIds.filter((id) => id === 'twin-a' || id === 'twin-b');
+  expect(twins).toEqual(['twin-b']);
+  expect(exercises.filter((e) => e.name === 'Twin Raise').map((e) => e.id).sort()).toEqual(['twin-a', 'twin-b']);
+  expect(exercises).toHaveLength(2 + (built.length - 1));
 });
 
 test('Clear empties the conversation, a build and an answer alike', async ({ page }) => {

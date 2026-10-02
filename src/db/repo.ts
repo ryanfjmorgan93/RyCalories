@@ -5,7 +5,6 @@
 import { backupBeforeDestructiveOp } from './autoBackup';
 import { db } from './db';
 import { SEED_BODYWEIGHT_KG, SEED_EXERCISES, SEED_ROUTINES, SEED_ROUTINE_EXERCISES } from './seed';
-import { isCatalogueDemo } from '@/domain/catalogue';
 import { nowIso, toDateKey } from '@/domain/dates';
 import {
   decide,
@@ -507,9 +506,9 @@ export async function startSession(routineId: string, opts?: { deload?: boolean 
  * Delete a session together with its sets and decisions. Stored weights are left as they are. A
  * quick session also takes its hidden routine and that routine's rows: nothing else can ever point
  * at them, and left behind they would count as routines the owner never made. It takes the
- * catalogue exercises its own Start made, too, once nothing else uses them: the owner never chose
- * those, and left behind they would sit in the library as their own, outside the Include new
- * switch and its two-new cap. Every route to a delete (live discard, Summary discard, History)
+ * library exercises its own Start made, too (a catalogue entry or a diagram), once nothing else uses
+ * them: the owner never chose those, and left behind they would sit in the library as their own,
+ * outside the Include new switch and its two-new cap. Every route to a delete (live discard, Summary discard, History)
  * comes through here.
  */
 export async function deleteSession(id: string): Promise<void> {
@@ -530,7 +529,8 @@ export async function deleteSession(id: string): Promise<void> {
     if (session?.quick) {
       // Start stamps the exercises it creates with the session's own startedAt (one `now`), which
       // is what tells them from one the owner added from the library, however recently.
-      const made = await db.exercises.where('createdAt').equals(session.startedAt).filter((e) => isCatalogueDemo(e.demo)).toArray();
+      // Only an exercise with a picture key (`cat:<slug>`, or a diagram's slug) is one a library row made.
+      const made = await db.exercises.where('createdAt').equals(session.startedAt).filter((e) => e.demo !== undefined).toArray();
       for (const e of made) {
         const used = (await db.setLogs.where('exerciseId').equals(e.id).count()) + (await db.routineExercises.where('exerciseId').equals(e.id).count());
         if (used === 0) await db.exercises.delete(e.id);
