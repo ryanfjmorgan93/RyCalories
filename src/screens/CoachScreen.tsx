@@ -14,9 +14,9 @@ import { useNanoDownloadPercent } from '@/ui/useNanoDownload';
 /**
  * The coach: one box. Asking for a routine builds one, at once, from the owner's own exercises and
  * the library, with no model involved; so does a change to the routine on screen ("add biceps",
- * "swap the front raise", "make it shorter"); anything else is a question for the phone's own Gemini
- * Nano (the fuller variant), which reads the conversation, the routine just built and why, and the
- * owner's data. Answers only what is asked; no greeting, no suggested questions. A built routine goes
+ * "swap the front raise", "make it shorter"); anything else is a question for the phone's own
+ * on-device model (the fuller variant), which reads the conversation, the routine just built and why,
+ * and the owner's data. Answers only what is asked; no greeting, no suggested questions. A built routine goes
  * through the same review and save as Paste a routine. Stop ends what is going on and keeps what is
  * on screen; Clear ends it and empties the screen.
  */

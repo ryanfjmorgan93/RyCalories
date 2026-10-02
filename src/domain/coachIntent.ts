@@ -369,6 +369,12 @@ export function readEdit(text: string): EditIntent | null {
 
   const intent: EditIntent = { extras: {} };
 
+  // What the typed words say to the request parser, whole. Whatever it reads beyond the fields this module names is the
+  // request's own (a movement ruled out, say), and a "no front raises" it reads that way is that, not a row to drop.
+  const parsed = parseQuickRequest(t.join(' '));
+  const fresh = routineRequestFrom(parsed);
+  const extras = Object.entries(fresh).filter(([key, value]) => !HANDLED.has(key) && value !== undefined && !(Array.isArray(value) && value.length === 0));
+
   // "Something else instead of the press": a swap, said with any verb.
   const insteadOf = indexOfPair(t, 'instead', 'of');
   // The verb of a swap or a removal, past the "no" and "I want to" that may be before it.
@@ -377,7 +383,8 @@ export function readEdit(text: string): EditIntent | null {
   const swapVerb = SWAP_VERBS.has(t[v] ?? '');
   const phrasalRemove = REMOVE_PHRASES.some(([a, b]) => t[v] === a && t[v + 1] === b);
   const removeVerb = REMOVE_VERBS.has(t[v] ?? '') || phrasalRemove;
-  const negationRemove = NEGATION_LEADS.has(t[at === 0 ? 0 : at - 1] ?? '') && at > 0 && t[at - 1] !== 'not';
+  // A "no" or "without" that opens the message, or ends the run of "no, …" that does.
+  const negation = t.slice(0, at + 1).findIndex((w) => NEGATION_LEADS.has(w));
 
   const sets = t.includes('sets') || t.includes('volume') || t.includes('intense') || t.includes('intensity');
 
@@ -423,7 +430,7 @@ export function readEdit(text: string): EditIntent | null {
     return intent;
   }
 
-  if (removeVerb && !sets) {
+  if (removeVerb && !sets && extras.length === 0) {
     let from = v + (phrasalRemove ? 2 : 1);
     if (t[from] === 'out' || t[from] === 'off') from++;
     const words = rowWords(t.slice(from));
@@ -447,11 +454,10 @@ export function readEdit(text: string): EditIntent | null {
   }
 
   // "no front raises", "without the face pull": a negation and what is not a muscle names a row.
-  const parsed = parseQuickRequest(t.join(' '));
-  if (negationRemove || NEGATION_LEADS.has(t[0] ?? '')) {
-    const lead = NEGATION_LEADS.has(t[0] ?? '') ? 0 : at - 1;
-    const rest = rowWords(t.slice(lead + 1).filter((w) => !FILLERS.has(w) && !FOLLOW_UP_WORDS.has(w)));
+  if (negation >= 0) {
+    const rest = rowWords(t.slice(negation + 1).filter((w) => !FILLERS.has(w) && !FOLLOW_UP_WORDS.has(w)));
     if (
+      extras.length === 0 &&
       rest.length > 0 &&
       (parsed.options.exclude?.length ?? 0) === 0 &&
       (parsed.options.equipment?.length ?? 0) === 0 &&
@@ -478,7 +484,6 @@ export function readEdit(text: string): EditIntent | null {
   }
 
   // From here on the typed request parser reads the muscles, a split, equipment, a count and a length.
-  const fresh = routineRequestFrom(parsed);
   const focus = parsed.options.focus ?? [];
   const exclude = parsed.options.exclude ?? [];
   const split = parsed.split;
@@ -526,7 +531,6 @@ export function readEdit(text: string): EditIntent | null {
   if ((parsed.options.equipment?.length ?? 0) > 0) intent.equipment = { list: parsed.options.equipment!, add: addCue };
 
   // What the request parser read beyond what is named here travels with the edit, and joins what the routine already holds.
-  const extras = Object.entries(fresh).filter(([key, value]) => !HANDLED.has(key) && value !== undefined && !(Array.isArray(value) && value.length === 0));
   const negated = NEGATION_LEADS.has(t[0] ?? '') || removeVerb;
   const hasPart = Object.keys(intent).some((key) => key !== 'extras');
   if (extras.length > 0 && (hasPart || negated)) intent.extras = Object.fromEntries(extras);

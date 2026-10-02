@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { cand, miniInput, seededInput } from '../test/routineFixtures';
-import { applyEdit, buildCoach, buildEdit, mergeExtras, routineMinutes, type CoachRequest, type EditPlan } from './coachBuild';
+import { applyEdit, applyIntensity, buildCoach, buildEdit, fitMinutes, mergeExtras, routineMinutes, type CoachRequest, type EditPlan } from './coachBuild';
 import { readEdit } from './coachIntent';
 import { MAX_NEW_EXERCISES, buildRoutines, routineRequestFrom, type BuiltRoutine, type RoutineInput, type RoutineRequest } from './routineBuilder';
 import { parseQuickRequest } from './quickRequest';
@@ -214,6 +214,73 @@ describe('applyEdit: what each kind of message makes of the request', () => {
     applyEdit(previous, before, 'no legs', 7);
     applyEdit(previous, before, 'add biceps', 7);
     expect(JSON.stringify(previous)).toBe(frozen);
+  });
+});
+
+describe('applyIntensity and fitMinutes: sets more or fewer, and a length held to', () => {
+  const rows = (...tiers: ('primary' | 'secondary' | 'isolation')[]) =>
+    buildCoach(INPUT, { focus: ['shoulders', 'rear delts'], count: 6 }, 7)[0]!.rows.slice(0, tiers.length).map((r, i) => ({ ...r, tier: tiers[i]!, sets: 3 }));
+  const routineOf = (rs: ReturnType<typeof rows>): BuiltRoutine => ({ ...buildCoach(INPUT, SHOULDERS, 7)[0]!, rows: rs });
+
+  it('harder is a set more on the main and secondary lifts, up to five, and the isolation lifts only once those are as far as they go', () => {
+    const r = routineOf(rows('primary', 'secondary', 'isolation', 'isolation'));
+    const one = applyIntensity(r, 1, INPUT).routine.rows.map((x) => x.sets);
+    expect(one).toEqual([4, 4, 3, 3]);
+    expect(applyIntensity(r, 2, INPUT).routine.rows.map((x) => x.sets)).toEqual([5, 5, 3, 3]);
+    // The third step finds the main and secondary lifts as far as they go, and takes the isolation lifts a set.
+    const three = applyIntensity(r, 3, INPUT).routine.rows.map((x) => x.sets);
+    expect(three).toEqual([5, 5, 4, 4]);
+    // However many are asked for, three is the most.
+    expect(applyIntensity(r, 9, INPUT).routine.rows.map((x) => x.sets)).toEqual(three);
+    const capped = routineOf(rows('primary', 'secondary', 'isolation', 'isolation').map((x) => ({ ...x, sets: x.tier === 'isolation' ? 3 : 5 })));
+    expect(applyIntensity(capped, 1, INPUT).routine.rows.map((x) => x.sets)).toEqual([5, 5, 4, 4]);
+  });
+
+  it('easier is a set fewer on every lift, down to two and no lower', () => {
+    const r = routineOf(rows('primary', 'secondary', 'isolation'));
+    expect(applyIntensity(r, -1, INPUT).routine.rows.map((x) => x.sets)).toEqual([2, 2, 2]);
+    expect(applyIntensity(r, -3, INPUT).routine.rows.map((x) => x.sets)).toEqual([2, 2, 2]);
+  });
+
+  it('leaves reps, weights and which exercises alone, works the minutes out again, and says what it did', () => {
+    const base = buildCoach(INPUT, SHOULDERS, 7)[0]!;
+    const harder = applyIntensity(base, 2, INPUT);
+    expect(harder.routine.rows.map((r) => [r.name, r.repMin, r.repMax, r.weightKg])).toEqual(base.rows.map((r) => [r.name, r.repMin, r.repMax, r.weightKg]));
+    expect(harder.routine.estimateMinutes).toBe(routineMinutes(harder.routine.rows, INPUT));
+    expect(harder.routine.estimateMinutes).toBeGreaterThan(base.estimateMinutes);
+    expect(harder.fact).toMatch(/^Harder: \d+ sets? more, on /);
+    expect(harder.routine.reasonLines.filter((l) => l.startsWith('About '))).toEqual([`About ${harder.routine.estimateMinutes} min at your pace`]);
+    expect(harder.routine.reasonLines).toContain(harder.fact);
+  });
+
+  it('does nothing to no steps, and nothing to a routine with nothing in it', () => {
+    const base = buildCoach(INPUT, SHOULDERS, 7)[0]!;
+    expect(applyIntensity(base, 0, INPUT)).toEqual({ routine: base, fact: null });
+    expect(applyIntensity(base, Number.NaN, INPUT)).toEqual({ routine: base, fact: null });
+    const none = { ...base, rows: [] };
+    expect(applyIntensity(none, 2, INPUT)).toEqual({ routine: none, fact: null });
+  });
+
+  it('fitMinutes drops finishers until the routine is near the length, never a main lift and never below two exercises', () => {
+    const base = buildCoach(INPUT, { focus: ['shoulders', 'rear delts'], count: 8 }, 7)[0]!;
+    const fit = fitMinutes(base, base.estimateMinutes - 15, INPUT);
+    expect(fit.rows.length).toBeLessThan(base.rows.length);
+    expect(fit.estimateMinutes).toBeLessThanOrEqual(base.estimateMinutes - 15);
+    expect(fit.rows.filter((r) => r.tier === 'primary')).toEqual(base.rows.filter((r) => r.tier === 'primary'));
+    expect(fit.reasonLines.some((l) => /^Dropped .* to come nearer the \d+ min asked$/.test(l))).toBe(true);
+    expect(fit.reasonLines[fit.reasonLines.length - 1]).toBe(`About ${fit.estimateMinutes} min at your pace`);
+    expect(fitMinutes(base, 1, INPUT).rows.length).toBeGreaterThanOrEqual(2);
+    // Under the length already: untouched.
+    expect(fitMinutes(base, 200, INPUT)).toBe(base);
+  });
+
+  it('a harder routine asked to stay at a length is held to it, and a shuffle of it too', () => {
+    const request: CoachRequest = { focus: ['shoulders', 'rear delts'], minutes: 35, intensity: 2 };
+    for (const seed of [1, 2, 3, 4]) {
+      const [r] = buildCoach(INPUT, request, seed);
+      expect(r!.estimateMinutes, `seed ${seed}`).toBeLessThanOrEqual(35);
+      expect(r!.estimateMinutes).toBe(routineMinutes(r!.rows, INPUT));
+    }
   });
 });
 

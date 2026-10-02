@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { routeCoachMessage, type CoachRoute } from './coachIntent';
+import { readEdit, routeCoachMessage, type CoachRoute } from './coachIntent';
 
 /**
  * [what was typed, whether a routine the coach built is the subject, where it goes].
@@ -368,6 +368,89 @@ const TABLE: [string, boolean, CoachRoute][] = [
   ['hello', false, 'ask'],
   ['\u0000\u0001', false, 'ask'],
 ];
+
+/** What each kind of message is read to ask of the routine on screen: the parts of it, and nothing more. */
+describe('readEdit: what a change asks for', () => {
+  const LEGS = ['quads', 'hamstrings', 'glutes', 'adductors', 'calves'];
+  const ROWS: [string, object][] = [
+    ['add biceps', { muscles: { add: ['biceps'] } }],
+    ['also chest', { muscles: { add: ['chest'] } }],
+    ['more rear delts', { muscles: { add: ['rear delts'] } }],
+    ['extra calves', { muscles: { add: ['calves'] } }],
+    ['include triceps', { muscles: { add: ['triceps'] } }],
+    ['no legs', { muscles: { exclude: LEGS } }],
+    ['drop the legs', { muscles: { exclude: LEGS } }],
+    ['without legs', { muscles: { exclude: LEGS } }],
+    ['skip legs', { muscles: { exclude: LEGS } }],
+    ['lose the legs', { muscles: { exclude: LEGS } }],
+    ['just chest', { muscles: { replace: ['chest'] } }],
+    ['actually 3d shoulders', { muscles: { replace: ['shoulders', 'rear delts'] } }],
+    ['swap it for 3d shoulders', { muscles: { replace: ['shoulders', 'rear delts'] } }],
+    ['switch to legs', { muscles: { replace: LEGS } }],
+    ['make it a push day', { muscles: { replace: ['chest', 'shoulders', 'triceps'] } }],
+    ['make it push pull legs', { split: 'ppl' }],
+    ['swap legs for arms', { muscles: { out: LEGS, add: ['biceps', 'triceps', 'forearms'] } }],
+    ['make it 5 exercises', { count: { to: 5 } }],
+    ['only 4 exercises', { count: { to: 4 } }],
+    ['make it 12 exercises', { count: { to: 12 } }],
+    ['fewer', { count: { by: -1 } }],
+    ['more', { count: { by: 1 } }],
+    ['two more', { count: { by: 2 } }],
+    ['4 fewer', { count: { by: -4 } }],
+    ['add another exercise', { count: { by: 1 } }],
+    ['drop one', { count: { by: -1 } }],
+    ['lose a couple', { count: { by: -2 } }],
+    ['make it shorter', { minutes: { by: 'shorter' } }],
+    ['quicker', { minutes: { by: 'shorter' } }],
+    ['cut it down', { minutes: { by: 'shorter' } }],
+    ['make it longer', { minutes: { by: 'longer' } }],
+    ['30 mins', { minutes: { to: 30 } }],
+    ['half an hour', { minutes: { to: 30 } }],
+    ['make it 45 minutes', { minutes: { to: 45 } }],
+    ['an hour', { minutes: { to: 60 } }],
+    ['harder', { effort: 1 }],
+    ['make this routine harder', { effort: 1 }],
+    ['more sets', { effort: 1 }],
+    ['heavier', { effort: 1 }],
+    ['easier', { effort: -1 }],
+    ['fewer sets', { effort: -1 }],
+    ['less volume', { effort: -1 }],
+    ['lighter', { effort: -1 }],
+    ['give me another one', { shuffle: true }],
+    ['try again', { shuffle: true }],
+    ['something else', { shuffle: true }],
+    ['switch it up', { shuffle: true }],
+    ['swap the front raise', { swap: { target: ['front', 'raise'], replacement: [] } }],
+    ['swap the front raise for something else', { swap: { target: ['front', 'raise'], replacement: ['something', 'else'] } }],
+    ['replace the press with a cable one', { swap: { target: ['press'], replacement: ['a', 'cable', 'one'] } }],
+    ['give me something else instead of the press', { swap: { target: ['press'], replacement: ['give', 'me', 'something', 'else'] } }],
+    ['remove the front raise', { remove: { target: ['front', 'raise'] } }],
+    ['drop the face pull', { remove: { target: ['face', 'pull'] } }],
+    ['no front raises', { remove: { target: ['front', 'raises'] } }],
+    ['take out the front raise', { remove: { target: ['front', 'raise'] } }],
+    ['dumbbells only', { equipment: { list: ['dumbbell'], add: false } }],
+    ['no barbell', { equipment: { list: ['dumbbell', 'machine', 'cable', 'bodyweight', 'kettlebell', 'other'], add: false } }],
+    ['take out the barbell', { equipment: { list: ['dumbbell', 'machine', 'cable', 'bodyweight', 'kettlebell', 'other'], add: false } }],
+    ['add biceps and make it 8 exercises', { muscles: { add: ['biceps'] }, count: { to: 8 } }],
+    ['make it shorter and easier', { minutes: { by: 'shorter' }, effort: -1 }],
+    ['no legs, 30 mins', { muscles: { exclude: LEGS }, minutes: { to: 30 } }],
+  ];
+
+  it.each(ROWS)('%j', (text, expected) => {
+    expect(readEdit(text)).toMatchObject(expected);
+  });
+
+  it('reads a message with several parts into all of them, and one with none into nothing', () => {
+    expect(readEdit('add biceps and make it 8 exercises')).toMatchObject({ muscles: { add: ['biceps'] }, count: { to: 8 } });
+    for (const text of ['why', 'what does a lateral raise work', 'my shoulders are sore', 'hello', '', 'thanks', 'is it too long', 'chest volume', 'give me a chest routine', "Doesn't matter, I want 3d shoulders"]) {
+      expect(readEdit(text), text).toBeNull();
+    }
+  });
+
+  it('never throws, whatever it is given', () => {
+    for (const text of [undefined, null, 42, {}, [], 'x'.repeat(5000), '💪'.repeat(100), 'swap '.repeat(300), 'no '.repeat(300)]) expect(() => readEdit(text as never)).not.toThrow();
+  });
+});
 
 describe('routeCoachMessage', () => {
   it('has the owner\'s four messages, every phrase the review turned up, and at least eighty distinct real phrases', () => {
