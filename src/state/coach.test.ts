@@ -288,9 +288,13 @@ describe('coach store: building', () => {
   it('a request the rules read is never offered to the assistant, however many words are left over', async () => {
     const { intent, calls } = fakeIntent({ ready: true });
     const { store } = setup({}, intent);
-    await store.getState().send(SHOULDERS);
+    // "doesn't" and "matter" are not read, and "3d shoulders" is: the rules have what they need.
+    const text = "Doesn't matter, I want 3d shoulders";
+    expect(parseQuickRequest(text).residue.length).toBeGreaterThan(0);
+    await store.getState().send(text);
     expect(builds(store)[0]!.unread).toEqual([]);
     expect(calls.ready).toBe(0);
+    expect(calls.read).toEqual([]);
   });
 
   it('a split is one routine a day, and the line names them', async () => {
