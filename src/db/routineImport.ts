@@ -4,7 +4,7 @@
  * routine-exercises all land together or not at all.
  */
 import { db } from './db';
-import { BODYWEIGHT_PLUS_TITLE_RE, CARRY_TITLE_RE, COMPOUND, guessIncrement, guessMuscle, LOWER } from './hevy';
+import { CARRY_TITLE_RE, COMPOUND, guessIncrement, guessMuscle, LOWER } from './hevy';
 import { createExercise, createRoutine, defaultRoutineExercise, normaliseName } from './repo';
 import { catalogueDemoKey, exerciseFromCatalogue, type CatalogueEntry } from '@/domain/catalogue';
 import { exerciseFromDemo, findExistingExercise, type DemoLike } from '@/domain/library';
@@ -29,16 +29,71 @@ export interface ImportRow {
 }
 
 /**
+ * Bodyweight with weight added, by name: pull-ups, chin-ups, push-ups and dips, in the plural
+ * people write them ("Pull ups", "Press-ups", "Dips"). `BODYWEIGHT_PLUS_TITLE_RE` in `./hevy` is
+ * the same idea read off Hevy's singular titles; this one also takes the plural and leaves a hip
+ * dip alone.
+ */
+const BODYWEIGHT_PLUS_NAME_RE = /hyperextension|back extension|(?<!hip\s)\bdips?\b|pull.?up|chin.?up|push.?up|press.?up/i;
+
+/**
  * `guessExercise` in `./hevy` reads `HevyExerciseStat` fields (`hasDistance`, `hasDuration`,
  * `bodyweightOnly`) a pasted line has no equivalent of, so this mirrors it using only the name —
  * `opts.timed` stands in for that stat-derived signal (a line parsed as seconds, e.g. "Plank
- * 3x30s") rather than trying to infer duration from the name alone.
+ * 3x30s") rather than trying to infer duration from the name alone. A line in seconds is timed
+ * before anything else, a carry included: only a timed exercise keeps the numbers.
  */
 function guessKindFromName(name: string, timed: boolean | undefined): ExerciseKind {
-  if (CARRY_TITLE_RE.test(name)) return 'carry';
   if (timed) return 'timed';
-  if (BODYWEIGHT_PLUS_TITLE_RE.test(name)) return 'bodyweight_plus';
+  if (CARRY_TITLE_RE.test(name)) return 'carry';
+  if (BODYWEIGHT_PLUS_NAME_RE.test(name)) return 'bodyweight_plus';
   return 'reps';
+}
+
+/**
+ * The exercise a library entry becomes when a pasted line is what asked for it. The diagrams carry
+ * no exercise type, so every one is made as a plain reps exercise, and a line landed on it lost
+ * what it said: "Plank 3x45s" came out as 3 x 10-12 reps (only a timed exercise keeps seconds) and
+ * "Pull-ups 3x8" as plain reps at no weight. So an entry made as reps takes the kind the line
+ * implies: timed for seconds, bodyweight with weight added for a bodyweight pull-up, chin-up, dip
+ * or push-up. The entry's own name says which, not the line's wording (a line may be "Strict
+ * chins", or an inverted row done on a pull-up bar), and only a bodyweight entry counts, so a
+ * "Dip Machine" is not a bodyweight dip. An entry the catalogue types itself (a carry, a hold)
+ * keeps its type.
+ */
+export function exerciseForLine(made: Omit<Exercise, 'id' | 'createdAt'>, line: Pick<ParsedRoutineLine, 'seconds'>): Omit<Exercise, 'id' | 'createdAt'> {
+  if (made.kind !== 'reps') return made;
+  if (line.seconds) return { ...made, kind: 'timed' };
+  if (made.equipment === 'bodyweight' && BODYWEIGHT_PLUS_NAME_RE.test(made.name)) return { ...made, kind: 'bodyweight_plus' };
+  return made;
+}
+
+/**
+ * Whether a line's numbers are written to the routine for an exercise of this kind. A seconds line
+ * ("Plank 3x30s") only means "the numbers are seconds" when it landed on a timed exercise. Matched
+ * against a non-timed one (an existing exercise the owner picked, say), the numbers aren't reps for
+ * that exercise either, so they are dropped and the exercise's own default rep range stands rather
+ * than writing 30 reps. A line the owner typed is never dropped without saying so: the Review row
+ * asks this too, before Save.
+ */
+export function keepsNumbers(line: Pick<ParsedRoutineLine, 'seconds'>, kind: ExerciseKind): boolean {
+  return !(line.seconds && kind !== 'timed');
+}
+
+/**
+ * The kind of the exercise a choice stands for, as Save will have it: the owner's own exercise as it
+ * is, a library entry as it will be made for this line, a new exercise as it will be guessed.
+ * undefined when it is not known (an exercise of theirs that has not loaded).
+ */
+export function kindOfChoice(choice: ImportChoice, line: Pick<ParsedRoutineLine, 'name' | 'seconds'>, owned: ReadonlyMap<string, Pick<Exercise, 'kind'>>): ExerciseKind | undefined {
+  switch (choice.kind) {
+    case 'existing':
+      return owned.get(choice.exerciseId)?.kind;
+    case 'new':
+      return guessKindFromName(line.name, line.seconds);
+    default:
+      return exerciseForLine(libraryChoice(choice).input, line).kind;
+  }
 }
 
 export function guessExerciseFromName(name: string, opts?: { timed?: boolean }): Omit<Exercise, 'id' | 'createdAt'> {
@@ -129,7 +184,7 @@ async function writeRoutine(
       // The row the owner already has for this movement, else a new one: the same rule as adding it from the list.
       const { pictureKey, name: entryName, input } = libraryChoice(row.choice);
       const have = findExistingExercise(await db.exercises.toArray(), pictureKey, entryName);
-      exercise = await withPastedName(have ?? (await createExercise(input)), row.line.name);
+      exercise = await withPastedName(have ?? (await createExercise(exerciseForLine(input, row.line))), row.line.name);
     } else {
       const cached = exercisesById.get(row.choice.exerciseId);
       const existing = cached ?? (await db.exercises.get(row.choice.exerciseId));
@@ -149,11 +204,8 @@ async function writeRoutine(
     const patch: Partial<RoutineExercise> = {};
     if (line.sets !== undefined) patch.targetSets = line.sets;
     if (line.repMin !== undefined && line.repMax !== undefined) {
-      // A seconds line ("Plank 3x30s") only means "the numbers are seconds" when it actually
-      // landed on a timed exercise. Matched against a non-timed one (an existing exercise the
-      // owner picked, say), the numbers aren't reps for that exercise either, so they are
-      // dropped and the exercise's own default rep range stands rather than writing 30 reps.
-      if (!(line.seconds && exercise.kind !== 'timed')) {
+      // The Review row says so when this is about to happen (`keepsNumbers`), so it is never silent.
+      if (keepsNumbers(line, exercise.kind)) {
         patch.repMin = line.repMin;
         patch.repMax = line.repMax;
       }

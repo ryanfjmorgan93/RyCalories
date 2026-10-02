@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { saveParsedRoutines, type ImportChoice, type ImportRow } from '@/db/routineImport';
+import { keepsNumbers, kindOfChoice, saveParsedRoutines, type ImportChoice, type ImportRow } from '@/db/routineImport';
 import { matchExercise, normaliseName, type ExerciseMatch } from '@/domain/exerciseMatch';
 import { fmtNum, fmtRange } from '@/domain/format';
 import { candidatesFromRows, findExistingExercise, type ExerciseListRow } from '@/domain/library';
@@ -214,6 +214,9 @@ export function PasteRoutineSheet({
                 const matched = row.choice !== undefined && row.choice.kind !== 'new';
                 const renamed = matched && name.toLowerCase() !== row.line.name.toLowerCase();
                 const fromLibrary = row.choice?.kind === 'catalogue' || row.choice?.kind === 'demo';
+                // Seconds are only kept by a timed exercise: say so when the line's numbers will not be written.
+                const kind = row.choice ? kindOfChoice(row.choice, row.line, byId) : undefined;
+                const notUsed = kind !== undefined && row.line.repMin !== undefined && !keepsNumbers(row.line, kind);
                 return (
                   <div key={row.key}>
                     {ei > 0 && <Divider />}
@@ -227,6 +230,7 @@ export function PasteRoutineSheet({
                         </div>
                         <div className="mt-0.5 truncate text-sm text-muted">
                           {prescription(row.line)}
+                          {notUsed ? ` · ${fmtRange(row.line.repMin!, row.line.repMax ?? row.line.repMin!, 's')} not used` : ''}
                           {renamed ? ` · from “${row.line.name}”` : ''}
                           {row.choice?.kind === 'new' ? ' · new exercise' : ''}
                         </div>
