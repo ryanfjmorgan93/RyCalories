@@ -579,9 +579,12 @@ describe('buildEdit: the routine an edit comes to, built by the generator from t
 
   it('the minutes the routine says are the minutes the generator works out, for what it made', () => {
     const requests: RoutineRequest[] = [SHOULDERS, { focus: ['chest'], count: 5 }, { focus: [], split: 'ppl' }, { focus: ['biceps', 'triceps'], minutes: 30 }];
-    for (const request of requests) {
-      for (const seed of [1, 2, 3, 4]) {
-        for (const r of buildRoutines(INPUT, request, seed)) expect(routineMinutes(r.rows, INPUT), `${r.name} seed ${seed}`).toBe(r.estimateMinutes);
+    // At the owner's own pace, whatever it is, and with their own rest times.
+    for (const input of [INPUT, { ...INPUT, pace: 1.3 }, { ...INPUT, pace: 0.8 }, { ...INPUT, settings: { ...INPUT.settings, restCompoundSec: 200, restIsolationSec: 45 } }]) {
+      for (const request of requests) {
+        for (const seed of [1, 2, 3, 4]) {
+          for (const r of buildRoutines(input, request, seed)) expect(routineMinutes(r.rows, input), `${r.name} seed ${seed} pace ${input.pace}`).toBe(r.estimateMinutes);
+        }
       }
     }
   });
