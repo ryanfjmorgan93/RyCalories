@@ -41,6 +41,15 @@ describe('parseRoutineText: a qualifier that is part of the exercise name surviv
     expect(first('Squat 5x5 - go heavy').name).toBe('Squat');
   });
 
+  it('keeps the qualifier when a dash, a colon or a comma stands between the name and its numbers', () => {
+    expect(first('Bench Press (Barbell) - 3x8-10 @ 60kg').name).toBe('Bench Press (Barbell)');
+    expect(first('Bench Press (Barbell): 3x8-10').name).toBe('Bench Press (Barbell)');
+    expect(first('Bench Press (Barbell), 3x8-10').name).toBe('Bench Press (Barbell)');
+    expect(first('Bench Press (Barbell) - 3x8-10 @ 60kg').weightKg).toBe(60);
+    // And a note about the set in the same position is still a note.
+    expect(first('Lateral raise (each side) - 3x12-15').name).toBe('Lateral raise');
+  });
+
   it('keeps the qualifier on an open-ended set count too', () => {
     const e = first('Pull-up (Assisted) 3xAMRAP');
     expect(e.name).toBe('Pull-up (Assisted)');

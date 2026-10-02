@@ -336,6 +336,47 @@ describe('buildRoutines: other muscles over 500 seeds with the real library', ()
   });
 });
 
+describe('buildRoutines: a movement is repeated only when nothing else is left', () => {
+  const TYPED: [string, MuscleGroup[]][] = [
+    ['chest', ['chest']],
+    ['shoulders', ['shoulders']],
+    ['3D shoulders', ['shoulders', 'rear delts']],
+    ['biceps', ['biceps']],
+    ['triceps', ['triceps']],
+    ['arms', [...MACRO_MUSCLES.arms]],
+    ['legs', [...MACRO_MUSCLES.legs]],
+    ['back', ['lats', 'upper back']],
+    ['core', [...MACRO_MUSCLES.core]],
+    ['quads', ['quads']],
+  ];
+
+  it('by a pool that has another movement for the muscles the routine is for, over 120 seeds of each request', () => {
+    let repeated = 0;
+    for (const [label, focus] of TYPED) {
+      // Every movement the owner's list and the library could still offer for these muscles.
+      const offered = new Set(
+        REAL.candidates
+          .filter((c) => focus.includes(c.muscleGroup) && c.kind !== 'carry' && c.kind !== 'timed' && !(c.origin === 'catalogue' && c.level === 'expert'))
+          .map((c) => movementPattern(c.name, c.muscleGroup))
+          .filter((p) => !NON_ROUTINE_PATTERNS.has(p)),
+      );
+      for (const seed of SEEDS.slice(0, 120)) {
+        const r = one(buildRoutines(REAL, { focus }, seed));
+        const used = r.rows.map((x) => x.pattern);
+        if (new Set(used).size === used.length) continue;
+        repeated++;
+        const left = [...offered].filter((p) => !used.includes(p));
+        const capReached = r.rows.filter((x) => x.origin === 'catalogue').length === MAX_NEW_EXERCISES;
+        expect(left.length === 0 || capReached, `${label}, seed ${seed}: repeated while ${left.join(', ')} were left`).toBe(true);
+        // And a repeat says so.
+        expect(r.reasonLines.some((l) => l.startsWith('A second ')), `${label}, seed ${seed}`).toBe(true);
+      }
+    }
+    // The property has been tried on routines that did repeat.
+    expect(repeated).toBeGreaterThan(100);
+  });
+});
+
 describe('buildRoutines: splits', () => {
   const PPL_DAYS: Record<string, MuscleGroup[]> = {
     Push: ['chest', 'shoulders', 'triceps'],

@@ -102,10 +102,11 @@ const MAX_SETS = 4;
 const MIN_SETS = 2;
 /** Weekly sets a muscle is held up against when the owner has set no target for it. */
 const DEFAULT_WEEKLY_REFERENCE = 10;
-/** A muscle named on its own, or two together, gets this many working sets in one routine; a day of a split or a spread gets the second window per muscle. */
+/** Working sets one muscle gets in a routine: a muscle named on its own, or two together, take the first window; a day of a split or a spread, or three or more named, the second. */
 const NAMED_WINDOW: [number, number] = [9, 15];
 const DAY_WINDOW: [number, number] = [4, 9];
-const NEW_EXERCISE_TIME_FLOOR = 2;
+/** A duration asked for never trims a routine below this many exercises. */
+const TRIM_FLOOR = 2;
 
 /** Bigger first: the order muscles are listed in when nothing else decides. */
 const BIG_FIRST: MuscleGroup[] = [
@@ -284,8 +285,6 @@ interface Info {
 
 interface Chosen {
   info: Info;
-  /** The muscle whose share this exercise was taken for. */
-  owner: MuscleGroup;
   /** The movement was already in the routine: nothing else was left. */
   repeat: boolean;
 }
@@ -591,7 +590,7 @@ function buildDay(sh: Shared, day: DaySpec, rng: () => number): BuiltRoutine {
   };
 
   const commit = (info: Info, owner: MuscleGroup): void => {
-    picks.push({ info, owner, repeat: usedPatterns.has(info.pattern) });
+    picks.push({ info, repeat: usedPatterns.has(info.pattern) });
     used.add(info.c.id);
     usedPatterns.add(info.pattern);
     if (info.c.origin === 'catalogue') newCount++;
@@ -760,7 +759,7 @@ function buildDay(sh: Shared, day: DaySpec, rng: () => number): BuiltRoutine {
   const dropped: Work[] = [];
   const asked = sh.request.minutes;
   if (finite(asked) && asked > 0) {
-    while (minutesOf(works) > asked && works.length > NEW_EXERCISE_TIME_FLOOR) {
+    while (minutesOf(works) > asked && works.length > TRIM_FLOOR) {
       // A second exercise for a part of a muscle goes before the only exercise for another part; then the last finisher.
       let victim = -1;
       for (let k = works.length - 1; k >= 0; k--) {

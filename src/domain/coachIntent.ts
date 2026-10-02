@@ -169,7 +169,7 @@ export function routeCoachMessage(text: string, ctx: CoachRouteContext): CoachRo
   }
 
   // After a routine: "more rear delts", "shoulders", "add calves", "no legs".
-  if (ctx.lastWasRoutine && (r.muscles || r.split || (r.parsed.options.exclude?.length ?? 0) > 0)) {
+  if (ctx.lastWasRoutine && !possessive && (r.muscles || r.split || (r.parsed.options.exclude?.length ?? 0) > 0)) {
     const extra = r.parsed.residue.filter((w) => !FOLLOW_UP_WORDS.has(w));
     if (extra.length === 0) return 'build';
   }

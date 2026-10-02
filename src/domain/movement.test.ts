@@ -143,6 +143,7 @@ describe('movementPattern: real names from the diagrams and the catalogue', () =
     ['Chin-up', 'biceps', 'pull-up'],
     ['Straight-Arm Pulldown', 'lats', 'pullover'],
     ['Bent-Arm Dumbbell Pullover', 'lats', 'pullover'],
+    ['Cable Incline Pushdown', 'lats', 'pullover'],
     ['Seated Cable Row', 'upper back', 'row'],
     ['T-Bar Row', 'upper back', 'row'],
     ['Chest Supported Row', 'upper back', 'row'],
@@ -211,6 +212,7 @@ describe('movementPattern: real names from the diagrams and the catalogue', () =
     ['Kettlebell Turkish Get-Up (Squat style)', 'shoulders', 'strongman'],
     ['Sled Push', 'quads', 'strongman'],
     ['Farmer Carry', 'forearms', 'carry'],
+    ['Neck Curl (Plate)', 'neck', 'neck'],
   ];
 
   it.each(TABLE)('%s (%s) is %s', (name, group, pattern) => {

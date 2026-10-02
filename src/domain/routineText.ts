@@ -176,7 +176,8 @@ const DASH_QUALIFIER = '\u0003';
  * the way to put it back.
  */
 function setAsideQualifier(before: string): { text: string; restore: (name: string) => string } {
-  const trimmed = before.replace(/\s+$/, '');
+  // "Bench Press (Barbell) - 3x8": the dash before the numbers is a separator, not part of the name.
+  const trimmed = before.replace(/[\s\-:,;.]+$/, '');
   const paren = /\s*\(([^()]*)\)$/.exec(trimmed);
   if (paren && !NOTE_PAREN_RE.test(paren[1]!)) {
     return { text: `${trimmed.slice(0, paren.index)} ${PAREN_OPEN}${paren[1]}${PAREN_CLOSE}`, restore: restoreQualifier };

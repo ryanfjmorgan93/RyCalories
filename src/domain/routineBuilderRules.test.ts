@@ -345,6 +345,33 @@ describe('rule: the week around it', () => {
     }
   });
 
+  it('a muscle the week leaves short takes a second exercise before one it does not', () => {
+    const push = miniInput(
+      [
+        cand('Bench Press (Barbell)', 'chest', { compound: true, equipment: 'barbell', weight: 60 }),
+        cand('Incline DB Press', 'chest', { compound: true, weight: 20 }),
+        cand('DB Shoulder Press', 'shoulders', { compound: true, weight: 18 }),
+        cand('Lateral Raise', 'shoulders', { weight: 8 }),
+        cand('Overhead Triceps Extension', 'triceps', { equipment: 'cable', weight: 20 }),
+        cand('Triceps Pushdown', 'triceps', { equipment: 'cable', weight: 25 }),
+      ],
+      { context: context({ routines: [routine('Heavy', [['Bench Press (Barbell)', 'chest', 12, 6, 8], ['DB Shoulder Press', 'shoulders', 12, 6, 8]])] }) },
+    );
+    for (const seed of SEEDS_100) {
+      const r = one(buildRoutines(push, { focus: [], split: 'ppl', count: 5 }, seed));
+      expect(r.name).toBe('Push');
+      expect(r.rows.filter((x) => x.muscleGroup === 'triceps'), `seed ${seed}`).toHaveLength(2);
+      expect(r.rows.filter((x) => x.muscleGroup === 'chest'), `seed ${seed}`).toHaveLength(2);
+      expect(r.rows.filter((x) => x.muscleGroup === 'shoulders'), `seed ${seed}`).toHaveLength(1);
+    }
+    // Control: with the week unread, the shoulders are the bigger muscle and take the second.
+    const unread = miniInput(push.candidates);
+    for (const seed of SEEDS_100.slice(0, 30)) {
+      const r = one(buildRoutines(unread, { focus: [], split: 'ppl', count: 5 }, seed));
+      expect(r.rows.filter((x) => x.muscleGroup === 'shoulders'), `seed ${seed}`).toHaveLength(2);
+    }
+  });
+
   it('says it as a fact, for each muscle the routine trains', () => {
     const r = one(buildRoutines(pool({ context: context({ routines: [crowded] }) }), { focus: [], count: 2 }, 1));
     expect(r.reasonLines).toContain('shoulders get 0 sets a week in your routines; this routine adds 4');
@@ -834,6 +861,23 @@ describe('rule: time', () => {
     }
   });
 
+  it('drops the second exercise for a part of a muscle, not the last finisher, when the last finisher is the only one for its part', () => {
+    const pool = miniInput([
+      cand('DB Shoulder Press', 'shoulders', { compound: true, weight: 18 }),
+      cand('Lateral Raise', 'shoulders', { weight: 8 }),
+      cand('Front Raise', 'shoulders', { weight: 6 }),
+      cand('Rear Delt Fly (Machine)', 'rear delts', { equipment: 'machine', weight: 30 }),
+    ]);
+    const request: RoutineRequest = { focus: ['shoulders', 'rear delts'], count: 4 };
+    const full = one(buildRoutines(pool, request, 1));
+    // The last finisher is the rear fly: the only exercise for the rear delt. The front raise is the second for the front.
+    expect(full.rows[full.rows.length - 1]!.name).toBe('Rear Delt Fly (Machine)');
+    const asked = one(buildRoutines(pool, { ...request, minutes: full.estimateMinutes - 1 }, 1));
+    expect(asked.rows).toHaveLength(3);
+    expect(asked.rows.map((x) => x.name).sort()).toEqual(['DB Shoulder Press', 'Lateral Raise', 'Rear Delt Fly (Machine)']);
+    expect(asked.reasonLines).toContain(`Dropped Front Raise to come nearer the ${full.estimateMinutes - 1} min asked`);
+  });
+
   it('never goes below two exercises, and never clamps the time to the minutes asked', () => {
     const tiny = one(buildRoutines(REAL, { ...SHOULDERS, minutes: 5 }, 1));
     expect(tiny.rows).toHaveLength(2);
@@ -1033,5 +1077,42 @@ describe('rule: library exercises a routine would not start with are drawn less'
     const pool = miniInput([cand('Neck Press', 'chest', { compound: true, equipment: 'barbell' }), cand('Dumbbell Bench Press', 'chest', { compound: true })]);
     const neck = SEEDS_400.filter((seed) => one(buildRoutines(pool, { focus: ['chest'], count: 1 }, seed)).rows[0]!.name === 'Neck Press').length;
     expect(neck / SEEDS_400.length).toBeGreaterThan(0.4);
+  });
+});
+
+describe('rule: a movement nothing can place is the last resort', () => {
+  it('is drawn after one that can be placed, when both would only be a repeat', () => {
+    const pool = miniInput([
+      cand('DB Shoulder Press', 'shoulders', { compound: true }),
+      cand('Arnold Press', 'shoulders', { compound: true }),
+      cand('Zxqv One', 'shoulders'),
+      cand('Zxqv Two', 'shoulders'),
+    ]);
+    // A press, then one unplaceable one; the third is a second press or the second unplaceable one.
+    const press = SEEDS_400.filter((seed) => {
+      const r = one(buildRoutines(pool, { focus: ['shoulders'], count: 3 }, seed));
+      return r.rows.filter((x) => x.pattern === 'press-vertical').length === 2;
+    }).length;
+    expect(press / SEEDS_400.length).toBeGreaterThan(0.7);
+    expect(press / SEEDS_400.length).toBeLessThan(0.95);
+  });
+});
+
+describe('what is not a lift is never in a routine', () => {
+  it('a stretch, a jump, a burpee, a get-up and a power clean are left out whatever else the pool holds', () => {
+    const pool = miniInput([
+      cand('Bench Press (Barbell)', 'chest', { compound: true, equipment: 'barbell', weight: 60 }),
+      cand('Doorway Chest Stretch', 'chest', { equipment: 'bodyweight' }),
+      cand('Explosive Push-up', 'chest', { equipment: 'bodyweight', compound: true }),
+      cand('Burpee', 'quads', { equipment: 'bodyweight', compound: true }),
+      cand('Kettlebell Turkish Get-Up (Squat style)', 'shoulders', { equipment: 'kettlebell', compound: true }),
+      cand('Power Clean', 'full body', { equipment: 'barbell', compound: true }),
+      cand('External Rotation with Cable', 'shoulders', { equipment: 'cable' }),
+    ]);
+    for (const request of [{ focus: ['chest', 'quads', 'shoulders'], count: 6 }, { focus: [], count: 6 }, { focus: [], split: 'ppl' as const }] as RoutineRequest[]) {
+      for (const seed of SEEDS_100.slice(0, 20)) {
+        for (const r of buildRoutines(pool, request, seed)) expect(names(r).filter((n) => n !== 'Bench Press (Barbell)'), `seed ${seed}`).toEqual([]);
+      }
+    }
   });
 });
