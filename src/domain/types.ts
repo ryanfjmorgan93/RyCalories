@@ -365,6 +365,12 @@ export interface Settings {
   weeklySessionTarget?: number;
   /** Weekly set targets per muscle group. Absent means no target set for that group — no default. */
   weeklySetTargets?: Partial<Record<MuscleGroup, number>>;
+  /**
+   * Local-notification reminders (food, training, weigh-in). Absent on rows written before they
+   * existed, and read through `resolveReminders` (src/domain/reminders.ts), which fills in
+   * `DEFAULT_REMINDERS` — deliberately not part of `DEFAULT_SETTINGS`.
+   */
+  reminders?: import('./reminders').ReminderPrefs;
 }
 
 export const DEFAULT_SETTINGS: Omit<Settings, 'id' | 'createdAt'> = {

@@ -25,6 +25,21 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Share target for the InBody app's CSV export: Iron appears in the share sheet for
+                 CSV and plain-text files, and src/platform/shareTarget.ts reads what arrives.
+                 One SEND filter with several mime types, as @capgo/capacitor-share-target's
+                 README sets out (it customises `mimeType` to the content wanted). Guarded by
+                 src/platform/shareTarget.test.ts. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/csv" />
+                <data android:mimeType="text/comma-separated-values" />
+                <data android:mimeType="application/csv" />
+                <data android:mimeType="application/vnd.ms-excel" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+
         </activity>
 
         <provider
