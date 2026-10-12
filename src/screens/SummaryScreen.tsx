@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { backupAfterSessionFinish } from '@/db/historySafety';
 import { buildSummary, discardSession, finishSession, type SessionSummary, type SummaryItem } from '@/db/repo';
-import { decisionLine, fmtDate, fmtDuration, fmtKg, fmtNum, fmtWeight, legDayProteinLabel, plural } from '@/domain/format';
+import { decisionLine, effortReason, fmtDate, fmtDuration, fmtKg, fmtNum, fmtWeight, legDayProteinLabel, plural } from '@/domain/format';
 import { lockInBlocked, type Suggestion } from '@/domain/engine';
 import type { PersonalRecord } from '@/domain/records';
 import { NIGGLE_TAGS, type Niggle, type NiggleTag } from '@/domain/types';
@@ -435,7 +435,9 @@ function DecisionCard({
   const d = item.decision!;
   const kind = item.exercise.kind;
   const c: Choice = choice ?? { mode: 'accept', overrideTo: d.toWeight, lockIn: item.lockIn !== null, lockInAt: item.lockIn?.suggested ?? null };
-  const isWeightDecision = d.rule === 'increase' || d.rule === 'hold' || d.rule === 'hold_missing_sets';
+  const isWeightDecision = d.rule === 'increase' || d.rule === 'hold' || d.rule === 'hold_missing_sets' || d.rule === 'hold_hard';
+  // Why the weight moved the way it did, when the effort chip had a say ("Marked Hard, so 60 kg again").
+  const reason = effortReason(d, kind);
   // Chip and colour follow what actually happens to the prescription, not the rule name:
   // lifting below the prescribed weight can make an "increase" a net drop.
   const direction = !isWeightDecision ? 'none' : d.toWeight > d.fromWeight ? 'up' : d.toWeight < d.fromWeight ? 'down' : 'hold';
@@ -449,6 +451,11 @@ function DecisionCard({
           <div className={`num mt-0.5 text-base font-semibold ${tone}`} data-testid="decision-line">
             {decisionLine(d, kind)}
           </div>
+          {reason && (
+            <div className="mt-0.5 text-sm text-muted" data-testid="decision-reason">
+              {reason}
+            </div>
+          )}
         </div>
         {direction === 'up' && <Chip tone="ok" size="sm">up</Chip>}
         {direction === 'down' && <Chip tone="warn" size="sm">down</Chip>}
@@ -574,18 +581,6 @@ function recordChipLabel(r: PersonalRecord): string {
 }
 
 function SuggestionRow({ s, kind, onUse }: { s: Suggestion; kind: SummaryItem['exercise']['kind']; onUse: (w: number) => void }) {
-  if (s.kind === 'double_increment') {
-    return (
-      <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-ok/40 bg-ok/10 px-3 py-2 text-sm">
-        <span>
-          Every set felt easy. Double increment: <b className="num">{fmtWeight(kind, s.toWeight)}</b>
-        </span>
-        <Button size="sm" variant="ok" onClick={() => onUse(s.toWeight)}>
-          Use
-        </Button>
-      </div>
-    );
-  }
   if (s.kind === 'regression') {
     return (
       <div className="mt-2 rounded-xl border border-warn/40 bg-warn/10 px-3 py-2 text-sm">

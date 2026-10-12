@@ -65,6 +65,8 @@ function reasonFor(lastOutcome: SessionOutcome | null | undefined): string {
       return 'held last time';
     case 'hold_missing_sets':
       return 'held: missed sets last time';
+    case 'hold_hard':
+      return 'held: marked Hard last time';
     case 'deload':
       return 'deload last time';
     case 'lock_in':

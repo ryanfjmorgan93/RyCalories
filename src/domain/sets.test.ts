@@ -76,20 +76,23 @@ describe('set types', () => {
 });
 
 describe('feel', () => {
-  it('offers Easy/Good/Hard/Maxed at RIR 3/2/1/0', () => {
+  it('offers three chips, Easy/Good/Hard, at RIR 3/2/1', () => {
     expect(FEEL_OPTIONS).toEqual([
       { rir: 3, label: 'Easy' },
       { rir: 2, label: 'Good' },
       { rir: 1, label: 'Hard' },
-      { rir: 0, label: 'Maxed' },
     ]);
   });
 
   it('labels a logged RIR as the matching feel word', () => {
-    expect(feelLabel(0)).toBe('Maxed');
     expect(feelLabel(1)).toBe('Hard');
     expect(feelLabel(2)).toBe('Good');
     expect(feelLabel(3)).toBe('Easy');
+  });
+
+  it('reads the retired Maxed answer (RIR 0, or Hevy\'s 0) as Hard: Maxed merged into Hard', () => {
+    expect(feelLabel(0)).toBe('Hard');
+    expect(feelLabel(-1)).toBe('Hard');
   });
 
   it('reads a Hevy 4 or 5 as Easy, not a fifth chip', () => {

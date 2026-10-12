@@ -1,4 +1,5 @@
-import { FEEL_OPTIONS } from '@/domain/sets';
+import type { ReactNode } from 'react';
+import { FEEL_OPTIONS, feelLabel } from '@/domain/sets';
 import { fmtWeight } from '@/domain/format';
 import type { Exercise } from '@/domain/types';
 import { Button, IconButton } from '@/ui/components/Button';
@@ -32,6 +33,7 @@ export function DoneCard({
   isCurrent,
   dimmed,
   testId,
+  todayLine,
 }: {
   exerciseName: string;
   doneLine: string;
@@ -53,6 +55,8 @@ export function DoneCard({
   isCurrent: boolean;
   dimmed: boolean;
   testId: string;
+  /** The "Today: …" line shown while this exercise's plan is changed for today. */
+  todayLine?: ReactNode;
 }) {
   return (
     <div
@@ -87,6 +91,7 @@ export function DoneCard({
 
       {!reopened && (
         <div className="flex flex-col gap-3 px-4 pb-4">
+          {todayLine}
           {verdictLine && (
             <div
               data-testid="verdict-line"
@@ -117,21 +122,25 @@ export function DoneCard({
           {showFeel && (
             <div className="flex flex-col gap-1.5">
               <span className="text-xs text-muted">How did that feel?</span>
-              <div className="grid grid-cols-4 gap-1.5">
-                {FEEL_OPTIONS.map((f) => (
-                  <button
-                    key={f.label}
-                    type="button"
-                    data-testid={`feel-${f.label}`}
-                    aria-pressed={selectedFeel === f.rir}
-                    onClick={() => onPickFeel(f.rir)}
-                    className={`h-11 rounded-control border text-sm font-bold ${
-                      selectedFeel === f.rir ? 'border-fg bg-fg text-bg' : 'border-line bg-surface-2 text-muted'
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
+              <div className="grid grid-cols-3 gap-1.5">
+                {FEEL_OPTIONS.map((f) => {
+                  // By chip, not by number: an older answer (a Maxed 0, an import's 4) lands on the chip it now reads as.
+                  const pressed = feelLabel(selectedFeel ?? undefined) === f.label;
+                  return (
+                    <button
+                      key={f.label}
+                      type="button"
+                      data-testid={`feel-${f.label}`}
+                      aria-pressed={pressed}
+                      onClick={() => onPickFeel(f.rir)}
+                      className={`h-11 rounded-control border text-sm font-bold ${
+                        pressed ? 'border-fg bg-fg text-bg' : 'border-line bg-surface-2 text-muted'
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}

@@ -50,7 +50,7 @@ describe('nextSessionPlan', () => {
     const settings = (await db.settings.get('settings'))!;
     const plan = await nextSessionPlan(HINGE, settings);
     const item = plan!.items.find((i) => i.exercise.id === RDL)!;
-    // The last set carried RIR 2 ("Good"), not the first set's RIR 0 ("Maxed").
+    // The last set carried RIR 2 ("Good"), not the first set's RIR 0 ("Hard").
     expect(item.lastTime!.feel).toBe('Good');
   });
 

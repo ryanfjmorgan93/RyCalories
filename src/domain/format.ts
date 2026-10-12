@@ -105,6 +105,8 @@ export function decisionLine(d: Decision, kind: ExerciseKind): string {
       return `${reps} at ${w(at)} → hold ${w(d.toWeight)}${was}`;
     case 'hold_missing_sets':
       return `${d.workingSets}/${d.targetSets} sets (${reps}) at ${w(at)} → hold ${w(d.toWeight)}${was}`;
+    case 'hold_hard':
+      return `${reps} at ${w(at)} → hold ${w(d.toWeight)}${was}`;
     case 'calibrating':
       return 'calibrating — no decision';
     case 'not_applicable':
@@ -117,6 +119,20 @@ export function decisionLine(d: Decision, kind: ExerciseKind): string {
       return `deload · ${setsByReps} at ${w(at)} · stays ${w(d.toWeight)}`;
     }
   }
+}
+
+/**
+ * Why the weight moved the way it did, when the slot's effort chip had a say: "Felt easy: up 5 kg"
+ * (Easy, every set at the top), "Felt good: up 2.5 kg", "Marked Hard, so 60 kg again". Null when
+ * the chip changed nothing (below the top of the range, a missed set, no chip, calibrating, a
+ * deload). The Summary and the live verdict both quote it.
+ */
+export function effortReason(d: Decision, kind: ExerciseKind): string | null {
+  if (d.rule === 'hold_hard') return `Marked Hard, so ${fmtWeight(kind, d.toWeight)} again`;
+  if (d.rule !== 'increase' || !d.effort) return null;
+  const up = Math.round((d.toWeight - (d.sessionWeight ?? d.fromWeight)) * 100) / 100;
+  if (up <= 0) return null;
+  return `${d.effort === 'easy' ? 'Felt easy' : 'Felt good'}: up ${fmtKg(up)}`;
 }
 
 /** A logged set, loose enough to accept a `SetLog` or any equivalent shape. */

@@ -10,6 +10,8 @@ import {
   removeExtraExercise,
   setSessionLockIn,
   clearSessionLockIn,
+  keepOverrideInRoutine,
+  setPlanOverride,
   setSkipped,
   setSlotFeel,
   swapExercise,
@@ -21,12 +23,13 @@ import {
 import { fmtSetsLine, targetLine } from '@/domain/format';
 import { lockInBlocked, suggestedLockInWeight } from '@/domain/engine';
 import { DEFAULT_PLATES, plateLabel, platesPerSide } from '@/domain/plates';
+import { describeOverride, judgedRx, overrideFor } from '@/domain/planOverride';
 import { prescribe } from '@/domain/prescription';
 import type { PersonalRecord } from '@/domain/records';
 import type { RestGroupMember } from '@/domain/rest';
 import { restSecondsFor, shouldStartRest } from '@/domain/rest';
 import { completionOf, justCompleted, planRows, type PendingRow, type SetTableRx, type WarmupGhostRow } from '@/domain/setTable';
-import { countsForProgression, feelOf } from '@/domain/sets';
+import { countsForProgression, feelLabel, feelOf } from '@/domain/sets';
 import type { Exercise, Session, SetLog, Settings } from '@/domain/types';
 import { liveVerdict } from '@/domain/verdict';
 import { flashAmbient } from '@/state/ambient';
@@ -44,10 +47,12 @@ import { EditSetSheet } from '@/ui/EditSetSheet';
 import { ExerciseDemo } from '@/ui/ExerciseDemo';
 import { PlateSheet } from '@/ui/PlateSheet';
 import { SwapExerciseSheet } from '@/ui/SwapExerciseSheet';
+import { TodayPlanSheet } from '@/ui/TodayPlanSheet';
 import { CompletionMoment } from './CompletionMoment';
 import { DoneCard } from './DoneCard';
 import { ChevronIcon, PencilIcon } from './icons';
 import { SetTable } from './SetTable';
+import { TodayPlanLine } from './TodayPlanLine';
 import type { Draft, Slot } from './types';
 
 /** "4 × 6–8 @ 110 kg" → "4 sets of 6–8 · 110 kg" — the card's own phrasing (§5), built from the
@@ -303,7 +308,12 @@ export function ExerciseCard({
   const swappedToId = rx ? session.swaps?.[rx.id] : undefined;
   const swappedExercise = useLiveQuery(() => (swappedToId ? db.exercises.get(swappedToId) : undefined), [swappedToId]);
 
-  const engineRx = useMemo(() => (rx ? toEngine(rx, exercise) : null), [rx, exercise]);
+  // The engine judges today's sets and rep range against the SAVED weight (see `judgedRx`).
+  const planOverrides = session.planOverrides;
+  const engineRx = useMemo(
+    () => (rx ? toEngine(judgedRx(slot.savedRx ?? rx, { planOverrides }), exercise) : null),
+    [rx, slot.savedRx, planOverrides, exercise],
+  );
   // A quick session decides no weight, so there is no verdict to show and nothing to lock in.
   const quick = !!session.quick;
   const verdict = useMemo(
@@ -314,8 +324,21 @@ export function ExerciseCard({
 
   const selectedFeel = kind === 'reps' || kind === 'bodyweight_plus' ? feelOf(sets) : null;
   const handlePickFeel = async (rir: number) => {
-    await setSlotFeel(session.id, rx?.id ?? null, exercise.id, selectedFeel === rir ? null : rir);
+    // Same chip again clears it. Compared by chip, not number: an older answer (a Maxed 0, an
+    // import's 4) sits on the Hard / Easy chip it now reads as.
+    await setSlotFeel(session.id, rx?.id ?? null, exercise.id, feelLabel(selectedFeel ?? undefined) === feelLabel(rir) ? null : rir);
   };
+
+  // "Today: …" with Keep in routine / Undo, while this slot's plan is changed for today.
+  const override = rx ? overrideFor(rx.id, session) : undefined;
+  const todayLine =
+    rx && override ? (
+      <TodayPlanLine
+        text={describeOverride(rx, override, kind)}
+        onKeep={() => void keepOverrideInRoutine(session.id, rx.id)}
+        onUndo={() => void setPlanOverride(session.id, rx.id, null)}
+      />
+    ) : null;
 
   const pendingLockIn = rx ? session.lockIns?.[rx.id] : undefined;
   const lockInSuggested = rx?.mode === 'calibrating' ? suggestedLockInWeight(sets) : null;
@@ -556,6 +579,7 @@ export function ExerciseCard({
           isCurrent={isCurrent}
           dimmed={dimmed}
           testId={testId}
+          todayLine={todayLine}
         />
         <CardMenuAndSheets
           session={session}
@@ -630,6 +654,8 @@ export function ExerciseCard({
             <span>{rx.cue}</span>
           </div>
         )}
+
+        {todayLine && <div className="px-4 pt-1">{todayLine}</div>}
 
         <div className="px-3 pb-3 pt-2">
           <SetTable
@@ -745,6 +771,7 @@ function CardMenuAndSheets({
   const nav = useNavigate();
   const { rx } = slot;
   const swappedToId = rx ? session.swaps?.[rx.id] : undefined;
+  const [todayOpen, setTodayOpen] = useState(false);
   return (
     <>
       <Sheet open={menuOpen} onClose={() => setMenuOpen(false)} title={exercise.name}>
@@ -780,6 +807,19 @@ function CardMenuAndSheets({
               }}
             >
               How to
+            </Button>
+          )}
+          {rx && (
+            <Button
+              full
+              size="lg"
+              data-testid="change-today"
+              onClick={() => {
+                setMenuOpen(false);
+                setTodayOpen(true);
+              }}
+            >
+              Change today
             </Button>
           )}
           {rx && !swappedToId && (
@@ -859,6 +899,10 @@ function CardMenuAndSheets({
             void swapExercise(session.id, rx.id, picked.id);
           }}
         />
+      )}
+
+      {rx && slot.savedRx && (
+        <TodayPlanSheet open={todayOpen} onClose={() => setTodayOpen(false)} session={session} saved={slot.savedRx} today={rx} exercise={exercise} />
       )}
 
       {exercise.demo && (

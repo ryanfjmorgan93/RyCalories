@@ -12,7 +12,6 @@ import {
   lockInBlocked,
   resolveWeight,
   roundKg,
-  suggestDoubleIncrement,
   suggestRegression,
   suggestedLockInWeight,
   type Decision,
@@ -22,6 +21,7 @@ import {
 } from '@/domain/engine';
 import { normaliseName } from '@/domain/exerciseMatch';
 import { uuid } from '@/domain/ids';
+import { applyOverride, isEmptyOverride, judgedRx, mergeOverride, pruneOverride } from '@/domain/planOverride';
 import type { PersonalRecord } from '@/domain/records';
 import { countsForProgression, countsForRecords, countsForVolume } from '@/domain/sets';
 import {
@@ -29,6 +29,7 @@ import {
   type Bodyweight,
   type Exercise,
   type Niggle,
+  type PlanOverride,
   type ProgressionDecision,
   type Routine,
   type RoutineExercise,
@@ -545,6 +546,56 @@ export async function updateSession(id: string, patch: Partial<Omit<Session, 'id
   await db.sessions.update(id, patch);
 }
 
+/**
+ * Change one routine-exercise's plan for this session only ("Change today": sets, rep range,
+ * weight). `patch` is merged into what is already set: a number sets that field, a key given as
+ * `undefined` removes it, a key left out is untouched. `null`, an empty `{}`, or a result that no
+ * longer differs from the saved routine clears the override. Fields equal to the routine are
+ * dropped, so an override only ever holds a real difference. Nothing here touches the routine
+ * (that is `keepOverrideInRoutine`); a finished session is left as it was.
+ */
+export async function setPlanOverride(sessionId: string, routineExerciseId: string, patch: PlanOverride | null): Promise<void> {
+  await db.transaction('rw', [db.sessions, db.routineExercises], async () => {
+    const session = await db.sessions.get(sessionId);
+    if (!session || session.endedAt) return;
+    const all = { ...(session.planOverrides ?? {}) };
+    if (patch === null || Object.keys(patch).length === 0) {
+      delete all[routineExerciseId];
+    } else {
+      const rx = await db.routineExercises.get(routineExerciseId);
+      if (!rx) return;
+      const next = pruneOverride(rx, mergeOverride(all[routineExerciseId], patch));
+      if (isEmptyOverride(next)) delete all[routineExerciseId];
+      else all[routineExerciseId] = next;
+    }
+    await db.sessions.update(sessionId, { planOverrides: Object.keys(all).length > 0 ? all : undefined });
+  });
+}
+
+/**
+ * "Keep in routine": write this session's override for a routine-exercise into the saved routine
+ * through `updateRoutineExercise` (so a linked exercise's weight is mirrored as it always is),
+ * then clear the override. An override that changes nothing is simply cleared.
+ */
+export async function keepOverrideInRoutine(sessionId: string, routineExerciseId: string): Promise<void> {
+  const [session, rx] = await Promise.all([db.sessions.get(sessionId), db.routineExercises.get(routineExerciseId)]);
+  const override = session?.planOverrides?.[routineExerciseId];
+  if (!session || session.endedAt || !override) return;
+  if (rx) {
+    const eff = applyOverride(rx, override);
+    const patch: Partial<Omit<RoutineExercise, 'id' | 'routineId'>> = {};
+    if (eff.targetSets !== rx.targetSets || eff.targetSetsMax !== rx.targetSetsMax) {
+      patch.targetSets = eff.targetSets;
+      patch.targetSetsMax = eff.targetSetsMax;
+    }
+    if (eff.repMin !== rx.repMin) patch.repMin = eff.repMin;
+    if (eff.repMax !== rx.repMax) patch.repMax = eff.repMax;
+    if (eff.currentWeight !== rx.currentWeight) patch.currentWeight = eff.currentWeight;
+    if (Object.keys(patch).length > 0) await updateRoutineExercise(routineExerciseId, patch);
+  }
+  await setPlanOverride(sessionId, routineExerciseId, null);
+}
+
 export async function setSkipped(sessionId: string, routineExerciseId: string, skipped: boolean): Promise<void> {
   const s = await db.sessions.get(sessionId);
   if (!s) return;
@@ -691,8 +742,8 @@ export async function updateSet(
  * Write a feel (as RIR) across every counted set in one slot of this session — the "How did that
  * feel?" answer at completion, and what re-answering it or clearing it (`rir: null`) does to sets
  * already logged. A `failure` set is left alone: it keeps `effortRir`'s implicit RIR 0 regardless
- * of the slot's answer, so it can never feed `suggestDoubleIncrement`. Warm-up and drop sets are
- * never counted, so they are left alone too. One transaction.
+ * of the slot's answer, and `decide` (`slotEffort`) never lets a slot holding one read as Easy.
+ * Warm-up and drop sets are never counted, so they are left alone too. One transaction.
  */
 export async function setSlotFeel(
   sessionId: string,
@@ -838,7 +889,8 @@ export async function buildSummary(sessionId: string, now = nowIso()): Promise<S
         items.push({ rx, exercise, sets, status: skipped.has(rx.id) ? 'skipped' : 'not_done', decision: null, suggestions: [], lockIn: null, records: [] });
         continue;
       }
-      const engineRx = toEngine(rx, exercise);
+      // Judged against today's plan: a lift cut to two sets today is not a miss for doing two.
+      const engineRx = toEngine(judgedRx(rx, session), exercise);
       if (session.quick) {
         const decision = rx.mode === 'calibrating' ? decide(engineRx, sets) : null;
         const records = await recordsForNewSets(exercise.id, sessionId, sets, { calibrating: rx.mode === 'calibrating' });
@@ -847,8 +899,6 @@ export async function buildSummary(sessionId: string, now = nowIso()): Promise<S
       }
       const decision = decide(engineRx, sets, { deload: !!session.deload });
       const suggestions: Suggestion[] = [];
-      const dbl = suggestDoubleIncrement(engineRx, decision, sets);
-      if (dbl) suggestions.push(dbl);
       const prev = await previousSets(rx.id, exercise.id, sessionId);
       const reg = suggestRegression(engineRx, sets, prev?.sets ?? null);
       if (reg) suggestions.push(reg);

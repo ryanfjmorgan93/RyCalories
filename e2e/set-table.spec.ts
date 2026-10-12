@@ -274,11 +274,11 @@ test.describe('set table', () => {
     expect(after.filter((s) => s.type === 'working').map((s) => s.rir)).toEqual([3, 3]);
   });
 
-  test('a lift whose sets all hit the top of the range surfaces the double-increment suggestion on Summary when answered Easy, and none when answered Good', async ({ page }) => {
-    // Positive case first, so the negative case (no such line) is actually meaningful.
+  test('a lift whose sets all hit the top of the range goes up two increments on Summary when answered Easy, one when answered Good', async ({ page }) => {
+    // The chip decides the step by itself now: there is no opt-in "Use" row any more.
     await fresh(page);
     await page.getByTestId('start-Upper (Push)').click();
-    const bench = page.getByTestId('exercise-card-Bench Press (Barbell)'); // 65 kg, 4 × 6–8
+    const bench = page.getByTestId('exercise-card-Bench Press (Barbell)'); // 65 kg, 4 × 6–8, +2.5
     await logFour(page, bench, 65, 8); // every set at repMax
     await waitForCompletionCollapse(page);
     const easy = bench.getByTestId('feel-Easy');
@@ -292,11 +292,12 @@ test.describe('set table', () => {
     // Wait for Summary's own decision card before asserting anything about it — it's built only
     // once records/decisions are fully computed.
     await expect(decision).toBeVisible();
-    await expect(decision).toContainText('Every set felt easy');
-    await expect(decision).toContainText('70 kg'); // 65 + 2.5 increment × 2
+    await expect(decision.getByTestId('decision-line')).toHaveText('8/8/8/8 at 65 kg → 70 kg next time'); // 65 + 2 × 2.5
+    await expect(decision.getByTestId('decision-reason')).toHaveText('Felt easy: up 5 kg');
+    await expect(decision).not.toContainText('Every set felt easy');
+    await expect(decision.getByRole('button', { name: 'Use', exact: true })).toHaveCount(0);
 
-    // A second, clean session where the same lift is instead answered Good (RIR 2) — no set was
-    // "easy", so no double-increment suggestion should appear at all.
+    // A second, clean session where the same lift is instead answered Good (RIR 2): one increment.
     await fresh(page);
     await page.getByTestId('start-Upper (Push)').click();
     const bench2 = page.getByTestId('exercise-card-Bench Press (Barbell)');
@@ -311,7 +312,8 @@ test.describe('set table', () => {
     await expect(page).toHaveURL(/\/summary$/);
     const decision2 = page.getByTestId('decision-Bench Press (Barbell)');
     await expect(decision2).toBeVisible();
-    await expect(decision2).not.toContainText('Every set felt easy');
+    await expect(decision2.getByTestId('decision-line')).toHaveText('8/8/8/8 at 65 kg → 67.5 kg next time');
+    await expect(decision2.getByTestId('decision-reason')).toHaveText('Felt good: up 2.5 kg');
   });
 
   test('an extra set added after the feel answer inherits it', async ({ page }) => {

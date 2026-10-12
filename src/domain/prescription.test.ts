@@ -173,6 +173,13 @@ describe('prescribe — reason from lastOutcome', () => {
     expect(prescribe({ ...base, lastOutcome }).reason).toBe('held last time');
   });
 
+  it('hold_hard → "held: marked Hard last time", with no weight chip', () => {
+    const lastOutcome: SessionOutcome = { fromWeight: 100, appliedWeight: 100, rule: 'hold_hard' };
+    const p = prescribe({ ...base, lastOutcome });
+    expect(p.reason).toBe('held: marked Hard last time');
+    expect(p.weightDelta).toBeNull();
+  });
+
   it('hold_missing_sets → "held: missed sets last time"', () => {
     const lastOutcome: SessionOutcome = { fromWeight: 100, appliedWeight: 100, rule: 'hold_missing_sets' };
     expect(prescribe({ ...base, lastOutcome }).reason).toBe('held: missed sets last time');
@@ -297,9 +304,8 @@ describe('prescribe — flags from stall', () => {
     expect(prescribe({ ...base, stall }).flags).toEqual(['regression']);
   });
 
-  it('a double_increment suggestion carries no flag', () => {
-    const stall: Suggestion = { kind: 'double_increment', toWeight: 120, minRir: 3 };
-    expect(prescribe({ ...base, stall }).flags).toEqual([]);
+  it('no suggestion carries no flag', () => {
+    expect(prescribe({ ...base, stall: null }).flags).toEqual([]);
   });
 
   it('every flag combines in calibrating, stalled, deload, regression order', () => {

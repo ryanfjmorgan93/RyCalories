@@ -166,3 +166,33 @@ describe('liveVerdict — bodyweight_plus formatting', () => {
     expect(v.line).toBe('Holding bodyweight');
   });
 });
+
+describe('liveVerdict — the effort chip on a finished slot', () => {
+  const marked = (rir: number) => [s(110, 8), s(110, 8), s(110, 8), s(110, 8)].map((set) => ({ ...set, rir }));
+
+  it('Easy: the ok line shows the two-increment weight', () => {
+    const v = liveVerdict(rx, marked(3));
+    expect(v.decision.rule).toBe('increase');
+    expect(v.line).toBe('→ 120 kg next time');
+    expect(v.tone).toBe('ok');
+  });
+
+  it('Good: one increment, as with no chip', () => {
+    expect(liveVerdict(rx, marked(2)).line).toBe('→ 115 kg next time');
+  });
+
+  it('Hard: the weight is held on purpose and the line says why', () => {
+    const v = liveVerdict(rx, marked(1));
+    expect(v.decision.rule).toBe('hold_hard');
+    expect(v.line).toBe('Marked Hard, so 110 kg again');
+    expect(v.tone).toBe('muted');
+    expect(v.repsToGoUp).toBeNull();
+  });
+
+  it('a target raised after the slot was answered projects the rest with the same answer', () => {
+    // Two of four logged, both Easy and at the top: finishing at the top would be two increments.
+    const v = liveVerdict(rx, [s(110, 8), s(110, 8)].map((set) => ({ ...set, rir: 3 })));
+    expect(v.decision.rule).toBe('hold_missing_sets');
+    expect(v.line).toBe('2 more at 8 → 120 kg');
+  });
+});

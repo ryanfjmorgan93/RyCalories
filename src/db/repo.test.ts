@@ -431,14 +431,15 @@ describe('sessions and progression (acceptance §11)', () => {
     expect(item.suggestions).toContainEqual({ kind: 'regression', holdWeight: 110, dropWeight: 105, setsBelowMin: 2 });
   });
 
-  it('suggests a double increment when every set hit repMax at RIR ≥ 3', async () => {
+  it('every set at repMax marked Easy (RIR 3) decides two increments by itself, with no opt-in suggestion', async () => {
     const session = await startSession(HINGE);
     const rx = await rxFor(HINGE, RDL);
     for (let i = 0; i < 4; i++) await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 110, reps: 8, rir: 3 });
     const summary = await buildSummary(session.id);
     const item = summary.items.find((i) => i.exercise.id === RDL)!;
-    expect(item.suggestions).toContainEqual({ kind: 'double_increment', toWeight: 120, minRir: 3 });
-    await finishSession(session.id, { choices: [{ routineExerciseId: rx.id, overrideTo: 120 }] });
+    expect(item.decision).toMatchObject({ rule: 'increase', toWeight: 120, effort: 'easy' });
+    expect(item.suggestions).toEqual([]);
+    await finishSession(session.id, { choices: [{ routineExerciseId: rx.id }] });
     expect((await rxFor(HINGE, RDL)).currentWeight).toBe(120);
   });
 
@@ -827,21 +828,52 @@ describe('setSlotFeel (Phase 3 feel)', () => {
     expect((await db.setLogs.get(s2.id))?.rir).toBeUndefined();
   });
 
-  it('surfaces the double-increment suggestion once every working set is answered Easy (RIR 3)', async () => {
+  it('answering Easy at the top of the range makes the decision two increments (110 + 2×5)', async () => {
     const session = await startSession(HINGE);
     const rx = await rxFor(HINGE, RDL);
     for (const r of [8, 8, 8, 8]) await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 110, reps: r });
 
-    await setSlotFeel(session.id, rx.id, RDL, 3);
+    // No chip yet: today's one increment.
+    let item = (await buildSummary(session.id)).items.find((i) => i.exercise.id === RDL)!;
+    expect(item.decision).toMatchObject({ rule: 'increase', toWeight: 115 });
 
-    const summary = await buildSummary(session.id);
-    const item = summary.items.find((i) => i.exercise.id === RDL)!;
-    expect(item.decision).toMatchObject({ rule: 'increase' });
-    // Double increment is base weight + 2×increment (110 + 2×5), distinct from the plain +1×increment hold-line above.
-    expect(item.suggestions).toContainEqual({ kind: 'double_increment', toWeight: 120, minRir: 3 });
+    await setSlotFeel(session.id, rx.id, RDL, 3);
+    item = (await buildSummary(session.id)).items.find((i) => i.exercise.id === RDL)!;
+    expect(item.decision).toMatchObject({ rule: 'increase', toWeight: 120, effort: 'easy' });
+    expect(item.suggestions.find((s) => s.kind !== 'stalled' && s.kind !== 'regression')).toBeUndefined();
   });
 
-  it('does not surface double-increment when one of the slot\'s counted sets was a failure', async () => {
+  it('answering Good keeps one increment; answering Hard holds the weight (hold_hard) and finishing stores it', async () => {
+    const session = await startSession(HINGE);
+    const rx = await rxFor(HINGE, RDL);
+    for (const r of [8, 8, 8, 8]) await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 110, reps: r });
+
+    await setSlotFeel(session.id, rx.id, RDL, 2);
+    let item = (await buildSummary(session.id)).items.find((i) => i.exercise.id === RDL)!;
+    expect(item.decision).toMatchObject({ rule: 'increase', toWeight: 115, effort: 'good' });
+
+    await setSlotFeel(session.id, rx.id, RDL, 1);
+    item = (await buildSummary(session.id)).items.find((i) => i.exercise.id === RDL)!;
+    expect(item.decision).toMatchObject({ rule: 'hold_hard', toWeight: 110, effort: 'hard' });
+
+    await finishSession(session.id, { choices: [{ routineExerciseId: rx.id }] });
+    expect((await rxFor(HINGE, RDL)).currentWeight).toBe(110);
+    const stored = await db.decisions.where('sessionId').equals(session.id).toArray();
+    expect(stored.find((d) => d.routineExerciseId === rx.id)).toMatchObject({ rule: 'hold_hard', fromWeight: 110, toWeight: 110, accepted: true });
+  });
+
+  it('the chip changes nothing below the top of the range', async () => {
+    const session = await startSession(HINGE);
+    const rx = await rxFor(HINGE, RDL);
+    for (const r of [8, 8, 8, 7]) await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 110, reps: r });
+    for (const rir of [3, 2, 1]) {
+      await setSlotFeel(session.id, rx.id, RDL, rir);
+      const item = (await buildSummary(session.id)).items.find((i) => i.exercise.id === RDL)!;
+      expect(item.decision).toMatchObject({ rule: 'hold', toWeight: 110 });
+    }
+  });
+
+  it('a slot holding a failure set is never Easy: one increment, not two', async () => {
     const session = await startSession(HINGE);
     const rx = await rxFor(HINGE, RDL);
     for (const r of [8, 8, 8]) await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 110, reps: r });
@@ -852,8 +884,7 @@ describe('setSlotFeel (Phase 3 feel)', () => {
 
     const summary = await buildSummary(session.id);
     const item = summary.items.find((i) => i.exercise.id === RDL)!;
-    expect(item.decision).toMatchObject({ rule: 'increase' });
-    expect(item.suggestions.find((s) => s.kind === 'double_increment')).toBeUndefined();
+    expect(item.decision).toMatchObject({ rule: 'increase', toWeight: 115 });
   });
 });
 

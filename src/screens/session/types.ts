@@ -20,7 +20,10 @@ export interface Draft {
 /** One card in the session: a routine-exercise, or a session-only extra (rx null). */
 export interface Slot {
   key: string;
+  /** Today's plan: the saved routine-exercise with this session's override applied (`effectiveRx`). */
   rx: RoutineExercise | null;
+  /** The routine-exercise as saved, before today's override. Absent for an extra. */
+  savedRx?: RoutineExercise;
   exercise: Exercise;
   optional: boolean;
 }
