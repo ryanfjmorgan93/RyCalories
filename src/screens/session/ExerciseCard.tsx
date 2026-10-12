@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
+import type { MomentFacts } from '@/ai/moments';
 import { db } from '@/db/db';
 import { recordsForNewSets } from '@/db/recordsQueries';
 import {
@@ -20,7 +21,7 @@ import {
   updateSet,
   type PreviousSets,
 } from '@/db/repo';
-import { fmtSetsLine, targetLine } from '@/domain/format';
+import { decisionLine, effortReason, fmtSetsLine, targetLine } from '@/domain/format';
 import { lockInBlocked, suggestedLockInWeight } from '@/domain/engine';
 import { DEFAULT_PLATES, plateLabel, platesPerSide } from '@/domain/plates';
 import { describeOverride, judgedRx, overrideFor } from '@/domain/planOverride';
@@ -33,6 +34,7 @@ import { countsForProgression, feelLabel, feelOf } from '@/domain/sets';
 import type { Exercise, Session, SetLog, Settings } from '@/domain/types';
 import { liveVerdict } from '@/domain/verdict';
 import { flashAmbient } from '@/state/ambient';
+import { setMomentFacts, useCoachMoments } from '@/state/coachMoments';
 import { success, tap, warning } from '@/state/haptics';
 import { primeAudio, requestNotificationsOnce } from '@/state/notify';
 import { draftSlotKey, hasTypedValue, readSlotDraft, useSessionDraft } from '@/state/sessionDraft';
@@ -321,6 +323,23 @@ export function ExerciseCard({
   const doneLine = sets.length ? fmtSetsLine(sets, kind) : '';
 
   const selectedFeel = kind === 'reps' || kind === 'bodyweight_plus' ? feelOf(sets) : null;
+  // What the coach is told when this exercise is done (the sets, what they decide, and why the effort
+  // answer moved it), and when to ask: once the effort question has been answered, or at once for an
+  // exercise that has none. Only built for the done card.
+  const exerciseFacts = useMemo<MomentFacts | null>(() => {
+    if (!complete) return null;
+    const decision = verdict?.decision;
+    return {
+      exercise: exercise.name,
+      target: rx ? cardMeta(targetLine(rx, kind)) : null,
+      sets: doneLine,
+      decision: decision ? decisionLine(decision, kind) : null,
+      effort: feelLabel(selectedFeel ?? undefined),
+      effortReason: decision ? effortReason(decision, kind) : null,
+    };
+  }, [complete, verdict, exercise.name, rx, kind, doneLine, selectedFeel]);
+  const askExerciseLine = kind !== 'reps' && kind !== 'bodyweight_plus' ? true : selectedFeel !== null;
+
   const handlePickFeel = async (rir: number) => {
     // Same chip again clears it. Compared by chip, not number: an older answer (a Maxed 0, an
     // import's 4) sits on the Hard / Easy chip it now reads as.
@@ -381,6 +400,23 @@ export function ExerciseCard({
       const counted = s.key === slot.key ? base + (countsForProgression(newSet.type) ? 1 : 0) : base;
       return { key: s.key, targetSets: s.rx?.targetSets ?? 3, skipped: memberSkipped, counted };
     });
+    // What the coach may say about this set, in the rest bar while the rest runs (src/ui/RestTimerBar.tsx).
+    // Written before the timer starts, so the bar never shows a rest without it.
+    const countedAfter = countedBefore + (countsForProgression(newSet.type) ? 1 : 0);
+    const existingFeel = newSet.type === 'working' ? feelOf(sets) : null;
+    useCoachMoments.getState().noteSet(
+      setMomentFacts({
+        exercise,
+        set: newSet,
+        setNumber: countedAfter,
+        of: rx ? target : undefined,
+        repMin: rx?.repMin,
+        repMax: rx?.repMax,
+        previous: prev?.sets,
+        effortRir: existingFeel,
+      }),
+    );
+
     if (shouldStartRest(members, slot.key, { type: newSet.type })) {
       timer.start(restSecondsFor(rx, exercise, settings), exercise.name);
     }
@@ -393,15 +429,11 @@ export function ExerciseCard({
 
     // A set logged into a slot that already has a feel answer inherits it — otherwise one late
     // extra set would silently look unanswered next to the rest.
-    if (newSet.type === 'working') {
-      const existingFeel = feelOf(sets);
-      if (existingFeel !== null) await updateSet(newSet.id, { rir: existingFeel });
-    }
+    if (existingFeel !== null) await updateSet(newSet.id, { rir: existingFeel });
 
     // One fewer pending "Add a set" slot once a post-target set actually lands.
     if (countedBefore >= target && extraRows > 0) setExtraRows((n) => Math.max(0, n - 1));
 
-    const countedAfter = countedBefore + (countsForProgression(newSet.type) ? 1 : 0);
     if (justCompleted(countedBefore, countedAfter, target)) {
       setCelebrating(true);
       setReopened(false);
@@ -557,6 +589,8 @@ export function ExerciseCard({
           dimmed={dimmed}
           testId={testId}
           todayLine={todayLine}
+          coachFacts={exerciseFacts}
+          coachAsk={askExerciseLine}
         />
         <CardMenuAndSheets
           session={session}

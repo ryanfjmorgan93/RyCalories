@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { db } from '@/db/db';
 import { createRoutine, deleteRoutine, duplicateRoutine, listArchivedRoutines, reorderRoutines, restoreRoutine } from '@/db/repo';
 import type { Routine } from '@/domain/types';
+import { openCoach } from '@/state/coachSheet';
 import { Button, IconButton } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row } from '@/ui/components/Card';
 import { Toggle } from '@/ui/components/Chip';
@@ -245,7 +246,7 @@ function NewRoutineSheet({ open, onClose }: { open: boolean; onClose: () => void
         onClick={() => {
           reset();
           onClose();
-          nav('/coach?mode=routine');
+          openCoach('', { build: true });
         }}
         data-testid="draft-with-coach"
       >

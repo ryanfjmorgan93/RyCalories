@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import type { MomentFacts } from '@/ai/moments';
 import { backupAfterSessionFinish } from '@/db/historySafety';
 import { buildSummary, discardSession, finishSession, type SessionSummary, type SummaryItem } from '@/db/repo';
 import { decisionLine, effortReason, fmtDate, fmtDuration, fmtKg, fmtNum, fmtWeight, legDayProteinLabel, plural } from '@/domain/format';
@@ -16,6 +17,7 @@ import { NumberField, TextInput } from '@/ui/components/NumberField';
 import { Confirm } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { TopBar } from '@/ui/components/TopBar';
+import { CoachLine } from '@/ui/CoachLine';
 import { useSettings } from '@/ui/hooks';
 
 interface Choice {
@@ -185,6 +187,25 @@ export function SummaryScreen() {
     return () => clearTimeout(t);
   }, [summaryReady, reducedMotion, confettiPieces]);
 
+  // What the coach is told about the session: the time, the sets, the records, and what each exercise
+  // decided for next time (with the effort that moved it).
+  const sessionFacts = useMemo<MomentFacts | null>(() => {
+    if (!summary) return null;
+    return {
+      session: summary.session.title,
+      duration: fmtDuration(summary.durationSec),
+      sets: summary.workingSetsDone,
+      kgLifted: Math.round(volumeKg),
+      deload: summary.session.deload ? true : null,
+      records: heroRecords.flatMap(({ name, records }) => records.map((r) => `${name}: ${recordChipLabel(r)}`)),
+      nextTime: decided.map((item) => {
+        const d = item.decision!;
+        const reason = effortReason(d, item.exercise.kind);
+        return `${item.exercise.name}: ${decisionLine(d, item.exercise.kind)}${reason ? ` (${reason})` : ''}`;
+      }),
+    };
+  }, [summary, volumeKg, heroRecords, decided]);
+
   if (!summary) {
     return (
       <div>
@@ -264,6 +285,9 @@ export function SummaryScreen() {
           <HeroStat testId="summary-sets" value={String(Math.round(summary.workingSetsDone * revealT))} label="Sets" bordered />
           <HeroStat testId="summary-kg" value={fmtNum(Math.round(volumeKg * revealT))} label="kg lifted" bordered />
         </div>
+
+        {/* What the coach makes of the session: nothing at all unless it has something to say. */}
+        {sessionFacts && <CoachLine moment="session" facts={sessionFacts} className="mt-4" />}
 
         {heroRecords.length > 0 && (
           <div className="mt-5 flex flex-col gap-2">

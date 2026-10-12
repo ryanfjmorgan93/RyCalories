@@ -5,9 +5,9 @@ import { notificationPermission, requestNotifications } from '@/state/notify';
 
 /**
  * What a notification-permission row knows: the phone's answer (asked of the plugin, so `loading`
- * first) or the browser's. The same logic the Rest card in Settings has used since the rest-over
- * notification was added; written out here so the Reminders card can use it without reaching into
- * SettingsScreen. A later change can point the Rest card at this too.
+ * first) or the browser's. In the APK the web Notification API is not what shows a notification
+ * (LocalNotifications is), so the row asks the plugin; in a browser it keeps asking the browser.
+ * The Rest card and the Reminders card in Settings both read it from here.
  */
 export type PermissionView = NotificationPermissionStatus | 'loading';
 

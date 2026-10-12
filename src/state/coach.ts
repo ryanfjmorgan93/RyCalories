@@ -1,15 +1,17 @@
 /**
- * Coach store: one box for the owner's messages. A message that asks for a routine is built by the
- * app itself, from the owner's own exercises and the library, with no model involved, and so is a
- * change to the routine on screen. Anything else is a free question, answered by a `CoachBackend`
- * with the conversation so far. No backend is plugged in yet (Claude is the one to come): until
- * there is one, a question is answered with one plain line. In memory only: nothing here persists,
- * and nothing opens by itself.
+ * The rules-based coach: builds and edits routines from the owner's own exercises and the library,
+ * with no model involved. A message that asks for a routine is built by the app itself, and so is a
+ * change to the routine on screen. In the app this is what answers those two kinds of message when
+ * Claude cannot be called (no key, no signal, the spend cap: src/ui/useCoachConversation.ts routes
+ * them here); a question is Claude's alone, and goes to the conversation in src/ai/chat.ts. A
+ * question sent to this store is answered by a `CoachBackend` when one is plugged in (the app plugs
+ * none in) and otherwise with one plain line. In memory only: nothing here persists, and nothing
+ * opens by itself.
  */
 import { create } from 'zustand';
 import { loadRoutineInput } from '../db/routineBuildQueries';
 import { getSettings } from '../db/repo';
-import { toDateKey } from '../domain/dates';
+import { nowIso, toDateKey } from '../domain/dates';
 import type { CoachTurn } from '../domain/coach';
 import { applyEdit, buildCoach, buildEdit, builtTurn, describeRead, requestUsable, reshuffle, type CoachRequest } from '../domain/coachBuild';
 import { routeCoachMessage, type CoachRoute } from '../domain/coachIntent';
@@ -40,6 +42,8 @@ interface EntryBase {
   id: number;
   /** What the owner typed. */
   question: string;
+  /** ISO time the entry was added: what places it among the Claude conversation's turns on screen. */
+  at: string;
 }
 
 /** A question, and its answer. */
@@ -199,7 +203,7 @@ export function createCoachStore({ backend, loadBuildInput, newSeed = randomSeed
         const { pending, entries } = get();
         if (pending || !question) return 'ignored';
         if (!backend) {
-          set({ entries: [...entries, { id: nextId++, mode: 'ask', question, answer: NO_BACKEND_REPLY }], error: null });
+          set({ entries: [...entries, { id: nextId++, at: nowIso(), mode: 'ask', question, answer: NO_BACKEND_REPLY }], error: null });
           return 'sent';
         }
 
@@ -213,7 +217,7 @@ export function createCoachStore({ backend, loadBuildInput, newSeed = randomSeed
             set({ pending: null, error: NO_ANSWER });
             return 'error';
           }
-          set({ entries: [...get().entries, { id: nextId++, mode: 'ask', question, answer }], pending: null });
+          set({ entries: [...get().entries, { id: nextId++, at: nowIso(), mode: 'ask', question, answer }], pending: null });
           return 'sent';
         } catch (e) {
           if (!current()) return 'stopped';
@@ -237,6 +241,7 @@ export function createCoachStore({ backend, loadBuildInput, newSeed = randomSeed
           const routines = buildCoach(input, request, seed);
           const entry: BuildEntry = {
             id: nextId++,
+            at: nowIso(),
             mode: 'build',
             question: text,
             routines,
@@ -277,6 +282,7 @@ export function createCoachStore({ backend, loadBuildInput, newSeed = randomSeed
           const built = buildEdit(input, plan, subject.routines, newSeed);
           const entry: BuildEntry = {
             id: nextId++,
+            at: nowIso(),
             mode: 'build',
             question: text,
             routines: built.routines,
