@@ -13,6 +13,7 @@ import { strengthLevel, type StrengthLevel } from '@/domain/standards';
 import { e1rmChange } from '@/domain/strength';
 import { averagesAreMeaningful, type Average, type Trend } from '@/domain/trends';
 import type { Bodyweight, Exercise, MuscleGroup, Settings } from '@/domain/types';
+import { scansFromPhoto } from '@/state/inbodyPhoto';
 import { BodyCompositionCard } from '@/ui/BodyCompositionCard';
 import { BodyMap } from '@/ui/components/BodyMap';
 import { Button, IconButton } from '@/ui/components/Button';
@@ -121,7 +122,7 @@ export function ProgressScreen() {
             <BodyweightCard data={data} settings={settings!} today={today} />
 
             <SectionTitle>Body</SectionTitle>
-            <BodyCompositionCard />
+            <BodyCompositionCard onPhoto={scansFromPhoto} />
 
             <SectionTitle>Eating</SectionTitle>
             <EatingCard trend={data.trend} />

@@ -48,10 +48,16 @@ export interface AddFoodContext {
  * button is rendered only when its handler is passed. The sheet closes after calling one: the
  * handler owns what follows (the camera, the answer, the log), and logs through
  * `logItemsToSlot(ctx.date, ctx.slot, items)` so the photo and the chip write the same kind of item.
- * `onSnapLabel` is offered only on the unknown-barcode screen.
+ * A handler that cannot start (no key, no signal) returns `false` to keep the sheet open under its
+ * explanation. `onSnapLabel` is offered only on the unknown-barcode screen.
+ *
+ * `slot` and `start` reopen the sheet where a reader left off: on the slot already chosen, and, for
+ * a label Claude has just read, straight on the amount step ("Whole pack · Half · Some").
  */
 export function AddFoodSheet({
   date,
+  slot: startSlot,
+  start,
   onClose,
   onPhoto,
   onDescribe,
@@ -59,10 +65,14 @@ export function AddFoodSheet({
   onLogged,
 }: {
   date: string;
+  /** The slot to open on, when the sheet is reopened by a reader; otherwise the clock decides. */
+  slot?: MealSlot;
+  /** A label to open on the amount step of, e.g. one Claude has just read from a photo. */
+  start?: LabelNutrition;
   onClose: () => void;
-  onPhoto?: (ctx: AddFoodContext) => void;
-  onDescribe?: (ctx: AddFoodContext) => void;
-  onSnapLabel?: (ctx: AddFoodContext & { barcode?: string }) => void;
+  onPhoto?: (ctx: AddFoodContext) => void | false;
+  onDescribe?: (ctx: AddFoodContext) => void | false;
+  onSnapLabel?: (ctx: AddFoodContext & { barcode?: string }) => void | false;
   /** After an item is logged, before the sheet closes. */
   onLogged?: (logged: LoggedItems, item: NewMealItem) => void;
 }) {
@@ -72,8 +82,8 @@ export function AddFoodSheet({
   const lookupEnabled = useSettings()?.productLookup !== false;
   const online = useOnline();
 
-  const [slot, setSlot] = useState<MealSlot>(() => defaultSlot());
-  const [step, setStep] = useState<Step>({ kind: 'search' });
+  const [slot, setSlot] = useState<MealSlot>(() => startSlot ?? defaultSlot());
+  const [step, setStep] = useState<Step>(() => (start ? { kind: 'amount', choice: choiceFromLabel(start) } : { kind: 'search' }));
   const [q, setQ] = useState('');
   const deferredQ = useDeferredValue(q);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -187,10 +197,9 @@ export function AddFoodSheet({
     }
   };
 
-  /** Hand over to a Claude-backed reader, which owns everything from here. */
-  const handOff = (handler: (c: AddFoodContext) => void) => {
-    handler(ctx);
-    onClose();
+  /** Hand over to a Claude-backed reader, which owns everything from here (unless it declines to start). */
+  const handOff = (handler: (c: AddFoodContext) => void | false) => {
+    if (handler(ctx) !== false) onClose();
   };
 
   const hooks = [onPhoto, onDescribe].filter(Boolean).length;
@@ -302,7 +311,7 @@ export function AddFoodSheet({
                 })
               }
               onScanAgain={() => setScannerOpen(true)}
-              onSnap={onSnapLabel ? () => { onSnapLabel({ ...ctx, ...(step.barcode ? { barcode: step.barcode } : {}) }); onClose(); } : undefined}
+              onSnap={onSnapLabel ? () => handOff(() => onSnapLabel({ ...ctx, ...(step.barcode ? { barcode: step.barcode } : {}) })) : undefined}
             />
           )}
         </div>

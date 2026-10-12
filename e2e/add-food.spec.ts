@@ -218,7 +218,8 @@ test.describe('add food', () => {
     await scanCode(page, UNKNOWN_CODE);
 
     await expect(page.getByTestId('barcode-line')).toHaveText('Not in the database.');
-    await expect(page.getByTestId('snap-label')).toHaveCount(0);
+    // Snapping the label is offered beside typing it (the snap itself is in claude-food.spec.ts).
+    await expect(page.getByTestId('snap-label')).toBeVisible();
     await page.getByTestId('type-label').click();
 
     await page.getByTestId('food-name').fill('Mystery bar');
@@ -262,12 +263,17 @@ test.describe('add food', () => {
     expect(items[0]).toMatchObject({ name: 'Nairn Oat Bar', source: 'user' });
   });
 
-  test('the Camera and Describe buttons are not there until something is wired to them', async ({ page }) => {
+  test('the Food screen puts Camera and Describe beside Barcode, each a full-size tap target', async ({ page }) => {
     await page.goto('/food');
     await page.getByTestId('add-food-button').click();
-    await expect(page.getByTestId('add-food-scan')).toBeVisible();
-    await expect(page.getByTestId('add-food-photo')).toHaveCount(0);
-    await expect(page.getByTestId('add-food-describe')).toHaveCount(0);
+    for (const id of ['add-food-scan', 'add-food-photo', 'add-food-describe']) {
+      await expect(page.getByTestId(id)).toBeVisible();
+      expect((await page.getByTestId(id).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
+    // Beside one another, in a row.
+    const [a, b, c] = await Promise.all(['add-food-scan', 'add-food-photo', 'add-food-describe'].map((id) => page.getByTestId(id).boundingBox()));
+    expect(Math.abs(a!.y - b!.y)).toBeLessThan(2);
+    expect(Math.abs(b!.y - c!.y)).toBeLessThan(2);
   });
 
   test('"Some" of an item is a count to step to: four eggs', async ({ page }) => {

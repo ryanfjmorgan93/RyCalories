@@ -150,6 +150,21 @@ async function remember(key: string, label: LabelNutrition | null): Promise<void
 }
 
 /**
+ * Keep a label that was read from a photo against its barcode, so the next scan of that pack finds
+ * it in the cache, offline too. It replaces whatever the cache held for the code, a cached miss
+ * above all: that miss is why the owner had to photograph the label. False when there is no usable
+ * barcode or the cache could not be written.
+ */
+export async function rememberBarcodeLabel(code: string, label: LabelNutrition): Promise<boolean> {
+  const digits = barcodeDigits(code);
+  if (!digits) return false;
+  const key = barcodeKey(digits);
+  await remember(key, { ...label, code: digits });
+  const row = await db.productCache.get(key).catch(() => undefined);
+  return row !== undefined && row.per100 !== null;
+}
+
+/**
  * GET JSON with a timeout. Returns null on any failure at all, deliberately.
  *
  * `notFoundIsAnswer` reads a 404's body instead of discarding it, for the one endpoint whose 404 is
