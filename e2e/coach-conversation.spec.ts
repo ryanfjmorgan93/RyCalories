@@ -530,6 +530,21 @@ test('the owner\'s conversation carried on: "add biceps", "swap the front raise"
   await say(page, SHOULDERS);
   await expect(page.getByTestId('coach-routine')).toHaveCount(1);
   await idle(page);
+  // The build is seeded at random, and a 3D-shoulders routine may cover the front delts with
+  // something other than a front raise (an upright row, a press). The conversation below swaps the
+  // front raise, so shuffle until the routine has one: the edits under test, not the draw, are what
+  // this test is about. Bounded, so a builder that never picks one still fails here, plainly.
+  let hasFrontRaise = false;
+  for (let tries = 0; tries < 12 && !hasFrontRaise; tries++) {
+    const reasons = await whyLines(entry(page, 0));
+    hasFrontRaise = reasons.some((line) => /front raise/.test(line));
+    await entry(page, 0).getByTestId('coach-why').first().click(); // close it again
+    if (!hasFrontRaise) {
+      await entry(page, 0).getByTestId('coach-shuffle').click();
+      await idle(page);
+    }
+  }
+  expect(hasFrontRaise, 'a shuffle of 3D shoulders includes a front raise').toBe(true);
   const first = await rowNames(entry(page, 0));
   expect(first).toHaveLength(6);
 
