@@ -3,7 +3,12 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
 import { addDays, isoToDateKey } from '@/domain/dates';
 import { fmtDayKey, fmtKcal, fmtTime, plural } from '@/domain/format';
+import { ESTIMATE_MARK, isEstimate } from '@/domain/claudeFood';
 import { ZERO } from '@/domain/food';
+import type { LabelNutrition } from '@/domain/products';
+import type { MealSlot } from '@/domain/types';
+import { sweepKeptPhotos } from '@/state/claudeFood';
+import { noteMealLogged } from '@/state/mealMoment';
 import { dayView } from '@/db/todayQueries';
 import { copyDay, deleteMeal, mealCountOnDay, repeatMeal, type MealWithItems } from '@/db/foodRepo';
 import { Button, IconButton } from '@/ui/components/Button';
@@ -13,8 +18,10 @@ import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { BackIcon, ChevronIcon, MoreIcon, TopBar } from '@/ui/components/TopBar';
 import { AddFoodSheet } from '@/ui/AddFoodSheet';
+import { FoodCoachLines } from '@/ui/FoodCoachLines';
 import { FoodWeekStrip } from '@/ui/FoodWeekStrip';
 import { useDayMeals, useRecentMeals, useSettings, useToday } from '@/ui/hooks';
+import { useClaudeFood } from '@/ui/useClaudeFood';
 
 /**
  * The day's food. Deliberately the whole feature on one screen: what the target is, what has
@@ -28,7 +35,18 @@ export function FoodScreen() {
   const [deleteFor, setDeleteFor] = useState<MealWithItems | null>(null);
   const [copying, setCopying] = useState(false);
   const [repeatOpen, setRepeatOpen] = useState(false);
-  const [addFoodOpen, setAddFoodOpen] = useState(false);
+  // The Add food sheet: closed (null), or open. A reader (photo, label) that closed it brings it back
+  // on the same slot, and a label it read opens straight on the amount step.
+  const [addFood, setAddFood] = useState<{ slot?: MealSlot; label?: LabelNutrition } | null>(null);
+  const claude = useClaudeFood({
+    reopen: (ctx) => setAddFood({ slot: ctx.slot }),
+    onLabel: (ctx, label) => setAddFood({ slot: ctx.slot, label }),
+  });
+
+  // Kept meal photos whose meal is gone (undone or deleted) are tidied away when the screen opens.
+  useEffect(() => {
+    void sweepKeptPhotos();
+  }, []);
 
   // Roll the view onto the new day if the app is left open past midnight, but only while
   // looking at today — never yank the screen away from a day being edited.
@@ -103,6 +121,7 @@ export function FoodScreen() {
             NOT keyed: it reads a window ending on the day, and keeping it mounted lets it move from
             one window to the next without blanking. */}
         <DaySummary key={`summary-${date}`} date={date} today={today} />
+        <FoodCoachLines date={date} today={today} />
         <div className="h-4" />
         <FoodWeekStrip date={date} today={today} onPick={setDate} />
         <div className="h-4" />
@@ -121,7 +140,7 @@ export function FoodScreen() {
         )}
         {/* One button for the usual case: search or scan, tap an amount, done. Meals stay the
             grouping — Add meal is still here, for composing one by hand. */}
-        <Button size="lg" variant="primary" full onClick={() => setAddFoodOpen(true)} data-testid="add-food-button">
+        <Button size="lg" variant="primary" full onClick={() => setAddFood({})} data-testid="add-food-button">
           Add food
         </Button>
         <div className="mt-3 grid grid-cols-3 gap-3">
@@ -140,7 +159,19 @@ export function FoodScreen() {
         <div className="h-8" />
       </div>
 
-      {addFoodOpen && <AddFoodSheet date={date} onClose={() => setAddFoodOpen(false)} />}
+      {addFood && (
+        <AddFoodSheet
+          date={date}
+          {...(addFood.slot ? { slot: addFood.slot } : {})}
+          {...(addFood.label ? { start: addFood.label } : {})}
+          onClose={() => setAddFood(null)}
+          onPhoto={claude.onPhoto}
+          onDescribe={claude.onDescribe}
+          onSnapLabel={claude.onSnapLabel}
+          onLogged={(logged) => noteMealLogged({ mealId: logged.mealId, itemIds: logged.itemIds })}
+        />
+      )}
+      {claude.host}
 
       <RepeatSheet open={repeatOpen} date={date} onClose={() => setRepeatOpen(false)} />
 
@@ -268,7 +299,10 @@ function DayMeals({ date, isToday, onMenu }: { date: string; isToday: boolean; o
                 right={
                   <div className="flex items-center gap-1">
                     <div className="text-right">
-                      <div className="num font-extrabold tabular-nums">{fmtKcal(m.macros.kcal)}</div>
+                      <div className="num font-extrabold tabular-nums">
+                        {m.items.some(isEstimate) ? `${ESTIMATE_MARK} ` : ''}
+                        {fmtKcal(m.macros.kcal)}
+                      </div>
                       <MacroLine m={m.macros} className="text-[11px] text-muted" />
                     </div>
                     <IconButton label={`More for ${m.meal.name}`} onClick={() => onMenu(m)} data-testid={`meal-more-${m.meal.name}`}>

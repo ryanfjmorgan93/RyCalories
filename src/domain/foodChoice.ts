@@ -16,7 +16,7 @@ import { searchFoods, type FoodAlias, type IngredientCandidate, type TableFood }
 import { displayName, type LabelNutrition } from './products';
 import type { FoodMemory, ItemUnits } from './types';
 
-export type ChoiceOrigin = 'memory' | 'table' | 'label';
+export type ChoiceOrigin = 'memory' | 'table' | 'label' | 'model';
 
 export interface FoodChoice {
   /** Identity within a result list. */

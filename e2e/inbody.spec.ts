@@ -50,8 +50,9 @@ test.describe('InBody import', () => {
 
   test('the 44-column file: preview, save, then the latest figures and what moved', async ({ page }) => {
     await expect(page.getByTestId('body-empty')).toHaveText('No InBody scans yet.');
-    // The photo route is a later wave's reader; with none passed in there is no button for it.
-    await expect(page.getByTestId('inbody-photo')).toHaveCount(0);
+    // Progress passes the card Claude's reader for the printed sheet, so the photo route is offered
+    // beside the file one (the photo flow itself is in claude-food.spec.ts).
+    await expect(page.getByTestId('inbody-photo')).toHaveText('Photo of the sheet');
     await expect(page.getByTestId('inbody-import')).toHaveText('Import InBody file');
 
     await chooseFile(page, FULL);

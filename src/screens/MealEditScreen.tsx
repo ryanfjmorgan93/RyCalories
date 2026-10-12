@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { addItem, addMeal, deleteItem, deleteMeal, updateItem, updateMeal, sumItems, type NewMealItem } from '@/db/foodRepo';
 import { logShare, shareItem } from '@/db/recipeRepo';
+import { ESTIMATE_MARK, isEstimate } from '@/domain/claudeFood';
 import { toDateKey } from '@/domain/dates';
 import { displayMacros, type Macros } from '@/domain/food';
 import { fmtDayKey, fmtGrams, fmtKcal } from '@/domain/format';
 import { defaultSlot } from '@/domain/mealSlot';
 import { MEAL_SLOTS, type MealItem, type MealSlot } from '@/domain/types';
+import { noteMealLogged } from '@/state/mealMoment';
 import { Button } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row } from '@/ui/components/Card';
 import { Chip } from '@/ui/components/Chip';
@@ -88,6 +90,7 @@ function NewMeal() {
     setSaving(true);
     try {
       const mealId = await addMeal({ name: name.trim() || fallbackName(slot), date, slot }, items);
+      noteMealLogged({ mealId });
       toast('Meal logged');
       nav(`/food/${mealId}`, { replace: true });
     } catch {
@@ -366,6 +369,8 @@ function ItemList({
         // Display precision, matching the Total row below, so the column adds up.
         const m = displayMacros(item.nutrition);
         const grams = item.nutrition.basis === 'weighed' ? item.nutrition.grams : null;
+        // Claude's figures or amounts are estimates, and the row says so rather than looking measured.
+        const approx = isEstimate(item);
         return (
           <div key={`${item.name}-${i}`}>
             {i > 0 && <Divider />}
@@ -377,7 +382,10 @@ function ItemList({
               subtitle={grams !== null ? (item.portion.includes(fmtGrams(grams)) ? item.portion : fmtGrams(grams)) : item.portion}
               right={
                 <div className="text-right">
-                  <div className="num font-extrabold tabular-nums">{fmtKcal(m.kcal)}</div>
+                  <div className="num font-extrabold tabular-nums">
+                    {approx ? `${ESTIMATE_MARK} ` : ''}
+                    {fmtKcal(m.kcal)}
+                  </div>
                   <MacroLine m={m} className="text-[11px] text-muted" />
                 </div>
               }
@@ -390,6 +398,7 @@ function ItemList({
         <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Total</span>
         <div className="text-right">
           <div className="num font-extrabold tabular-nums" data-testid="meal-total">
+            {items.some(isEstimate) ? `${ESTIMATE_MARK} ` : ''}
             {fmtKcal(macros.kcal)}
           </div>
           <MacroLine m={macros} className="text-[11px] text-muted" />
