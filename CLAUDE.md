@@ -37,49 +37,54 @@ The owner does not check on device. Correctness has to come from the code and th
 
 ## Product rules that are part of correctness
 
-- Kilograms only, British English, dark mode default, phone-first with big tap targets.
-- **Nothing in this app lectures the user.** No tips, motivational copy, coaching prose or
-  explanatory hand-holding. Empty states and warnings state a fact or offer an action, nothing more.
-  The only prose in a session is the user's own exercise cue. One exception, by the owner's own
-  request (September 2026): the streak line on the Home and Progress calendars may carry one short
-  sentence of encouragement, chosen deterministically by streak length from the fixed list in
-  `src/domain/calendar.ts`. Never a toast, never a notification, nowhere else. The assistant box
-  answers only what the user asked and never opens itself. The technique text in
-  `src/data/exerciseInstructions.json` (including its "Tip:" lines), and the same dataset's steps
-  in `src/data/exerciseCatalogueSteps.json` (extended to the catalogue with the owner's approval of
-  the plan, September 2026), is a second, narrower carve-out the owner confirmed in September 2026:
-  it is third-party dataset content rather than copy this app wrote, and in a session it appears
-  only behind a "How to" the user taps open. Leave it alone; it is not an oversight.
-- Must work fully offline. Three things leave the device, all listed in Settings → About: the
-  Open Food Facts label lookup (switchable off; the barcode scan is the same lookup), the Video link
-  on an exercise (a user tap that opens the browser), and Google's ML Kit usage statistics while the
-  on-device assistant runs (the model itself runs on the phone through AICore). Nothing else.
+- Kilograms only, British English, dark only (the light theme was removed at the owner's request,
+  October 2026), phone-first with big tap targets.
+- **The coach may speak first; nothing else lectures.** Since October 2026 (docs/adr/0002) the
+  coach (Claude) speaks at defined moments (CONTEXT.md: Moment) like a good personal trainer:
+  to the point, encouraging, the odd motivational line, now and then asking how the owner is
+  doing. It says nothing when it has nothing useful, and nothing at all offline, without a key or
+  over the spend cap. The rest of the app's copy still states facts and offers actions, with no
+  tips or hand-holding; the streak line's fixed sentences in `src/domain/calendar.ts` remain. The
+  technique text in `src/data/exerciseInstructions.json` and `exerciseCatalogueSteps.json` is
+  third-party dataset content shown only behind a "How to" tap; leave it alone. Phone
+  notifications are deterministic and limited to the food reminder, the training nudge and the
+  Monday weigh-in (`src/domain/reminders.ts`).
+- Tracking must work fully offline. Three things leave the device, all listed in Settings → About:
+  Claude API calls (only with the owner's key: what they send the coach, a summary of their
+  training and food, and photos they choose), the Open Food Facts label lookup (switchable off; the
+  barcode scan is the same lookup), and the Video link on an exercise (a user tap that opens the
+  browser). Nothing else.
+- The Claude key lives only in `localStorage` (`src/ai/key.ts`), never in the Settings row, a
+  backup, a CSV or a log (docs/adr/0003). Spending is capped in the app (`src/ai/spend.ts`).
+- Claude's figures are estimates (docs/adr/0004): stored with the `model` source, shown with ≈,
+  never overwriting a figure from the owner, a label or the UK table. Training weights come only
+  from the owner's own numbers, never from a model.
 - Never show a number that flatters: no clamping an overage to zero, no average that silently
   counts unlogged days, no rounding that makes a column stop adding up.
 
 ## Layout
 
 - `src/domain/` — pure functions, no IO, no clock, no database. Tested directly. `sets.ts` is the
-  one place that says what each set type counts for; `engine.ts` decides; `prescription.ts`,
-  `records.ts`, `strength.ts`, `volume.ts`, `calendar.ts`, `plates.ts`, `warmup.ts` are the
-  progressive-overload maths.
-  `claudeSummary.ts`, `routineText.ts` and `exerciseMatch.ts` are the Claude bridge: a text
-  summary the owner copies into their own Claude app, and a pasted reply read back as routines.
-  The app never calls Claude; Copy and Share hand text to the OS and send nothing themselves.
-  `coach.ts` is the coach: which of the owner's data a question reads, fitted to the on-device
-  model's token limit. It runs on the same AICore Nano (the fuller variant), so nothing new
-  leaves the device.
-  `recipe.ts`, `mealAnalysis.ts`, `mealText.ts` and `ingredientMatch.ts` are cooked meals: the
-  AI only names ingredients (on the phone, from a photo); amounts come from the user and figures
-  from a scanned pack, a food logged before, or the bundled UK table — never from the model.
+  one place that says what each set type counts for (only working sets are logged now; warm-up,
+  failure and drop rows survive in old data); `engine.ts` decides, using the effort chip at the top
+  of the rep range; `prescription.ts`, `records.ts`, `strength.ts`, `volume.ts`, `calendar.ts` and
+  `plates.ts` are the progressive-overload maths.
+  `planOverride.ts` is today's plan for one exercise (a plan override); `routineOrder.ts` orders
+  routines by how long their regions have rested.
+  `claudeSummary.ts` builds the text summary of the owner's training and food that the coach's
+  context reuses. `routineText.ts` and `exerciseMatch.ts` read a routine written as text (the
+  review before a drafted routine is saved).
+  `recipe.ts`, `mealText.ts`, `ingredientMatch.ts`, `foodUnits.ts` and `foodChoice.ts` are food:
+  natural units, matching to remembered foods and the UK table, and the one item shape every way of
+  logging produces.
+  `inbody.ts` reads body-scan exports; `reminders.ts` plans the local notifications.
   `energy.ts` is the maintenance estimate (with `energyText.ts` for its wording): intake over
   logged days only, weight change between week-means, three gates, shown with its counts or not at
   all.
   `quickRequest.ts`, `quickSession.ts`, `quickDraft.ts` and `quickInput.ts` are the short session:
   a typed request read by rules, and a seeded generator that builds 30 to 45 minutes from the
   owner's own exercises, recency and weights. Every weight comes from the owner's numbers, never
-  from a model; the phone's assistant, on an explicit tap, may only fill request options (count,
-  minutes, effort, muscles), never exercises or weights. `catalogue.ts` holds the extra exercises
+  from a model. `catalogue.ts` holds the extra exercises
   that sit beside the database: they become a row only when added or used.
 - `src/data/exerciseCatalogue.json`, `exerciseCatalogueSteps.json` and `assets/catalogue-frames/`
   are free-exercise-db (Unlicense) and are generated by hand with
@@ -87,13 +92,16 @@ The owner does not check on device. Correctness has to come from the code and th
   lazy-loaded; `scripts/exercise-media.mjs` copies the frames to the gitignored `public/catalogue/`.
 - `src/data/ukFoodTable.json` and `ukFoodAliases.json` are CoFID 2021 (Open Government Licence),
   generated by hand with `scripts/uk-food-table.py` and committed; per-item weights (one egg, one
-  rasher) are the app's own estimates, shown with "≈" and editable. Lazy-loaded by the recipe
-  builder only.
+  rasher) are the app's own estimates, shown with "≈" and editable. Lazy-loaded by the Add food
+  search and the recipe builder.
 - `src/data/exerciseDemos.ts` is generated by `scripts/exercise-media.mjs` (run on every build);
   the frames it points at are gitignored and rebuilt from the `@bryllim/workout-guide` package.
-- `android/app/src/main/java/.../NanoPlugin.java` is the only native code: Gemini Nano through ML
-  Kit's GenAI Prompt API, Java only, compiled by CI. It cannot be exercised in the sandbox; the
-  Settings → Assistant card's status and Test button are how the owner checks it on the phone.
+- `src/ai/` — the coach: Claude through `@anthropic-ai/sdk` (key, spend cap, context, persona,
+  tools, chat, moments, photo and label readers). Sonnet for conversation, tools and photos; Haiku
+  for coach lines; never Opus. Tests never call the real API: unit tests use
+  `src/test/fakeClaude.ts`, e2e intercepts `api.anthropic.com` with `page.route`.
+- `src/platform/` — share-sheet import (InBody files) and local reminders. There is no custom
+  native code; plugins come from npm and `npx cap sync` wires them.
 - `src/db/` — Dexie schema and every write. `todayQueries.ts` and `trendQueries.ts` are the
   cross-domain joins between training and nutrition.
 - `src/screens/`, `src/ui/` — React. `e2e/` — Playwright against the built app.
