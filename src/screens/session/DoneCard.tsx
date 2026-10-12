@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react';
+import type { MomentFacts } from '@/ai/moments';
 import { FEEL_OPTIONS, feelLabel } from '@/domain/sets';
 import { fmtWeight } from '@/domain/format';
 import type { Exercise } from '@/domain/types';
+import { CoachLine } from '@/ui/CoachLine';
 import { Button, IconButton } from '@/ui/components/Button';
 import { MoreIcon } from '@/ui/components/TopBar';
 import { ChevronIcon } from './icons';
@@ -34,6 +36,8 @@ export function DoneCard({
   dimmed,
   testId,
   todayLine,
+  coachFacts,
+  coachAsk = true,
 }: {
   exerciseName: string;
   doneLine: string;
@@ -57,6 +61,10 @@ export function DoneCard({
   testId: string;
   /** The "Today: …" line shown while this exercise's plan is changed for today. */
   todayLine?: ReactNode;
+  /** What the coach is told about this exercise, for its line under the effort chips (nothing shows unless it has something to say). */
+  coachFacts?: MomentFacts | null;
+  /** Whether to ask the coach now: false while the effort question is still open. */
+  coachAsk?: boolean;
 }) {
   return (
     <div
@@ -144,6 +152,8 @@ export function DoneCard({
               </div>
             </div>
           )}
+
+          {coachFacts && <CoachLine moment="exercise" facts={coachFacts} ask={coachAsk} />}
         </div>
       )}
     </div>

@@ -30,8 +30,11 @@ export function AboutCard() {
         </div>
       ))}
       <Divider />
-      <div className="py-3 text-sm text-muted">
-        Leaves the device: Open Food Facts lookups (switchable above) and the Video link (opens the browser).
+      <div className="space-y-2 py-3 text-sm text-muted" data-testid="about-leaves-device">
+        <p>Leaves the device: Open Food Facts lookups (switchable above) and the Video link (opens the browser).</p>
+        <p data-testid="about-claude-line">
+          With a Claude key set, what you send to the coach, a summary of your training and food, and any photos you choose go to Anthropic&apos;s API.
+        </p>
       </div>
     </Card>
   );

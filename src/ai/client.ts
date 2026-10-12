@@ -30,7 +30,7 @@ export const CLAUDE_ERROR_MESSAGES: Record<ClaudeErrorKind, string> = {
   no_key: 'Add your Claude key in Settings to use the coach.',
   offline: 'No connection. The coach needs the internet.',
   bad_key: "Claude didn't accept the key. Check it in Settings.",
-  over_cap: "Claude is paused until the 1st: this month's limit is reached.",
+  over_cap: "The coach is paused until the 1st: this month's cap is reached.",
   busy: 'Claude is busy at the moment. Try again in a minute.',
   refused: "Claude couldn't help with that one.",
   other: 'Something went wrong talking to Claude. Try again.',

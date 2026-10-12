@@ -2,44 +2,52 @@ import { expect, test } from '@playwright/test';
 import { fresh } from './fresh';
 
 /**
- * The coach (src/screens/CoachScreen.tsx) and the way into it. There is one box: a request for a
- * routine is built by the app with no model, and so is a change to the routine on screen; anything
- * else is a question for Claude, which is not set up yet, so it is answered with one plain line.
- * The conversation across both (the routine, why, a new routine) is coach-conversation.spec.ts;
- * this file is the way into the screen.
+ * The coach, and the ways into it: the sheet (src/ui/CoachSheet.tsx, opened from Progress, Routines
+ * and the session) and the same conversation full screen (src/screens/CoachScreen.tsx, /coach).
+ * There is one box. With Claude out of reach (no key here) a request for a routine is built by the
+ * app with no model, and so is a change to the routine on screen; a question gets the reason, in one
+ * plain line, and what was typed stays in the box. The conversation across both (the routine, why,
+ * a new routine) is coach-conversation.spec.ts; Claude's own side is coach-claude.spec.ts. This
+ * file is the way in.
  */
 
-const NO_CLAUDE = "Questions go to Claude, which isn't set up yet.";
+const NO_KEY = 'Add your Claude key in Settings to use the coach.';
 
-test('a question is answered with one plain line while Claude is not set up', async ({ page }) => {
+test('Coach on Progress opens the sheet, and a question gets the reason in one plain line while there is no key', async ({ page }) => {
   await fresh(page);
   await page.goto('/progress');
   await page.getByTestId('coach-open').click();
-  await expect(page).toHaveURL(/\/coach$/);
+  await expect(page).toHaveURL(/\/progress$/);
+  const sheet = page.getByRole('dialog').filter({ has: page.getByTestId('coach-thread') });
+  await expect(sheet).toBeVisible();
+  // Why it is quiet is said before a word is typed.
+  await expect(page.getByTestId('coach-unavailable')).toContainText(NO_KEY);
+
   await page.getByTestId('coach-input').fill('Why has my RDL stalled?');
   await expect(page.getByTestId('coach-send')).toBeEnabled();
   await page.getByTestId('coach-send').click();
 
-  await expect(page.getByTestId('coach-answer')).toHaveText(NO_CLAUDE);
-  await expect(page.getByTestId('coach-partial')).toHaveCount(0);
-  await expect(page.getByTestId('coach-error')).toHaveCount(0);
-  await expect(page.getByTestId('coach-input')).toHaveValue('');
+  await expect(page.getByTestId('coach-error')).toHaveText(NO_KEY);
+  // Nothing was sent or kept: the words are still in the box to send later.
+  await expect(page.getByTestId('coach-input')).toHaveValue('Why has my RDL stalled?');
+  await expect(page.getByTestId('coach-bubble')).toHaveCount(0);
+  await expect(page.getByTestId('coach-user-bubble')).toHaveCount(0);
   // Nothing about a model, a download or an assistant is on the screen.
   await expect(page.getByTestId('coach-status')).toHaveCount(0);
   await expect(page.getByTestId('coach-download')).toHaveCount(0);
 });
 
-test('Draft with coach opens the box on a build: its first message is built by the app with no model, opens in the review, matched, and saves as a routine', async ({ page }) => {
+test('Draft with coach opens the sheet on a build: its first message is built by the app with no model, opens in the review, matched, and saves as a routine', async ({ page }) => {
   // "Draft with coach" makes the first message a build, whatever it says.
   await fresh(page);
   await page.goto('/routines');
   await page.getByTestId('new-routine').click();
   await page.getByTestId('draft-with-coach').click();
-  await expect(page).toHaveURL(/\/coach\?mode=routine$/);
+  await expect(page).toHaveURL(/\/routines$/);
   await expect(page.getByTestId('coach-input')).toBeVisible();
   await expect(page.getByRole('radio')).toHaveCount(0);
 
-  // Worded as a request for nothing in particular, so only the deep link makes it a build.
+  // Worded as a request for nothing in particular, so only the opening makes it a build.
   await page.getByTestId('coach-input').fill('One upper day, 45 minutes');
   await page.getByTestId('coach-send').click();
   await expect(page.getByTestId('coach-routine')).toHaveCount(1);
@@ -63,6 +71,24 @@ test('Draft with coach opens the box on a build: its first message is built by t
   for (const name of built) await expect(page.getByTestId(`rx-card-${name}`)).toBeVisible();
 });
 
+test('the sheet opens the same conversation full screen, and a routine built in one is on the other', async ({ page }) => {
+  await fresh(page);
+  await page.goto('/progress');
+  await page.getByTestId('coach-open').click();
+  await page.getByTestId('coach-input').fill('Give me a chest routine');
+  await page.getByTestId('coach-send').click();
+  await expect(page.getByTestId('coach-routine')).toHaveCount(1);
+  await expect(page.getByTestId('coach-send')).toHaveText('Send');
+
+  await page.getByTestId('coach-fullscreen').click();
+  await expect(page).toHaveURL(/\/coach$/);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  // The routine built in the sheet is here, not rebuilt: it is the same conversation.
+  await expect(page.getByTestId('coach-routine')).toHaveCount(1);
+  await expect(page.getByTestId('coach-read')).toHaveText(/^Read: chest · \d+ exercises$/);
+  await expect(page.getByTestId('coach-input')).toBeVisible();
+});
+
 test('a routine can be built and a question can be sent, with no model on the phone to download or wait for', async ({ page }) => {
   await fresh(page);
   await page.goto('/coach');
@@ -77,7 +103,8 @@ test('a routine can be built and a question can be sent, with no model on the ph
   await page.getByTestId('coach-input').fill('How was last week?');
   await expect(page.getByTestId('coach-send')).toBeEnabled();
   await page.getByTestId('coach-send').click();
-  await expect(page.getByTestId('coach-answer')).toHaveText(NO_CLAUDE);
+  await expect(page.getByTestId('coach-error')).toHaveText(NO_KEY);
+  await expect(page.getByTestId('coach-input')).toHaveValue('How was last week?');
 });
 
 test('the Progress header shows Coach as a word, and the title keeps its room at 360 px', async ({ page }) => {

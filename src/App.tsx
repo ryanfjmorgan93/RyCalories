@@ -1,12 +1,14 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { takeOverCapNotice } from './ai/spend';
 import { fmtDuration } from './domain/format';
 import { isStaleSession, startedHoursAgoLabel } from './domain/session';
 import { useNow, useSessionDock } from './ui/hooks';
+import { useClaudeSpend } from './state/claudeCoach';
 import { useTimer } from './state/timer';
 import { Ambient } from './ui/Ambient';
 import { BottomNav } from './ui/components/BottomNav';
-import { ToastHost } from './ui/components/Toast';
+import { toast, ToastHost } from './ui/components/Toast';
 import { RestTimerBar } from './ui/RestTimerBar';
 import { HomeScreen } from './screens/HomeScreen';
 import { RoutinesScreen } from './screens/RoutinesScreen';
@@ -29,6 +31,21 @@ import { RecipeBuilderScreen } from './screens/RecipeBuilderScreen';
 import { useAndroidBackButton } from './ui/useAndroidBackButton';
 import { ShareTargetListener } from './platform/shareTarget';
 import { CoachSheetHost } from './ui/CoachSheetHost';
+
+/**
+ * Says once a month that the coach is paused: when the spend cap is reached (in the middle of a
+ * session, or found already reached on opening the app) a toast says until when and that tracking
+ * carries on. Nothing here is drawn; the mark that it has been said is kept by `takeOverCapNotice`.
+ */
+function CapNotice() {
+  const spend = useClaudeSpend();
+  useEffect(() => {
+    if (!spend.over || !takeOverCapNotice()) return;
+    const cap = Number.isInteger(spend.cap) ? `$${spend.cap}` : `$${spend.cap.toFixed(2)}`;
+    toast(`The coach is paused until the 1st: this month's ${cap} cap is reached. Tracking carries on.`, 'neutral', { label: 'OK', onClick: () => undefined });
+  }, [spend.over, spend.cap]);
+  return null;
+}
 
 function Shell() {
   const dock = useSessionDock();
@@ -155,6 +172,7 @@ export function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <RestTimerBar />
+      <CapNotice />
       <ToastHost />
     </BrowserRouter>
   );

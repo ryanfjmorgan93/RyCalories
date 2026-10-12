@@ -13,6 +13,7 @@ import { strengthLevel, type StrengthLevel } from '@/domain/standards';
 import { e1rmChange } from '@/domain/strength';
 import { averagesAreMeaningful, type Average, type Trend } from '@/domain/trends';
 import type { Bodyweight, Exercise, MuscleGroup, Settings } from '@/domain/types';
+import { openCoach } from '@/state/coachSheet';
 import { scansFromPhoto } from '@/state/inbodyPhoto';
 import { BodyCompositionCard } from '@/ui/BodyCompositionCard';
 import { BodyMap } from '@/ui/components/BodyMap';
@@ -104,7 +105,7 @@ export function ProgressScreen() {
         title="Progress"
         right={
           <div className="mr-1 flex gap-0.5">
-            <Button size="md" variant="ghost" onClick={() => nav('/coach')} data-testid="coach-open">
+            <Button size="md" variant="ghost" onClick={() => openCoach()} data-testid="coach-open">
               Coach
             </Button>
           </div>

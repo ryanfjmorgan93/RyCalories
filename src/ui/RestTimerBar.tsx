@@ -1,9 +1,11 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { SET_MOMENT_FRESH_MS, useCoachMoments } from '@/state/coachMoments';
 import { restDone } from '@/state/notify';
 import { remainingSec, useTimer } from '@/state/timer';
 import { fmtDuration } from '@/domain/format';
 import { shouldNotifyRestEnd } from '@/domain/rest';
+import { CoachLine } from './CoachLine';
 import { useNow, useSessionDock, useSettings } from './hooks';
 
 // The draining ring: same geometry as the approved mockup (r=20 on a 48×48 viewBox), so the
@@ -28,6 +30,10 @@ export function RestTimerBar() {
   const dockShowing = useSessionDock() !== null;
   const active = endsAt !== null;
   const now = useNow(250, active);
+
+  // The set just logged, for the coach's line: shown for as long as the rest is, and only while it is fresh.
+  const lastSet = useCoachMoments((s) => s.lastSet);
+  const setFacts = lastSet && now - lastSet.at < SET_MOMENT_FRESH_MS ? lastSet.facts : null;
 
   const notifyOnEnd = shouldNotifyRestEnd(settings);
   const remaining = remainingSec(endsAt, now);
@@ -59,6 +65,8 @@ export function RestTimerBar() {
       className={`content-max fixed inset-x-0 z-40 mx-auto px-3 ${inSession ? 'bottom-0 pb-safe' : dockShowing ? 'bottom-above-dock' : 'bottom-nav'}`}
       data-testid="rest-timer"
     >
+      {/* What the coach says about the set just logged: nothing at all unless it has something to say. */}
+      {setFacts && <CoachLine moment="set" facts={setFacts} className="mb-2" />}
       {/* The shared real-glass layer (src/index.css .glass-fixed), so a Claude Design pass on the
           tokens reaches the pill too; only its border takes the rest/done tint. */}
       <div

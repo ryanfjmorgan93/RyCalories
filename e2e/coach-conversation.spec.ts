@@ -11,11 +11,11 @@ import { createRawIronDb, fresh, IRON_SCHEMA_V3, readRawIron } from './fresh';
  * The coach as one box, on the built app. The owner's conversation from their screenshots, and the
  * rules that make a routine smarter than a list of exercises: everything is real, the owner's data
  * read from IndexedDB, the generator, the review and the save. A routine is built, and changed, by
- * the app with no model; a question is for Claude, which is not set up yet, so it is answered with
- * one plain line.
+ * the app with no model; a question needs Claude, which has no key here, so it gets the reason in
+ * one plain line and what was typed stays in the box.
  */
 
-const NO_CLAUDE = "Questions go to Claude, which isn't set up yet.";
+const NO_KEY = 'Add your Claude key in Settings to use the coach.';
 const SHOULDERS = 'Give me a routine solely designed to build 3D shoulders';
 
 // ---------------------------------------------------------------------------
@@ -168,7 +168,7 @@ async function whyLines(where: Locator): Promise<string[]> {
 
 // ---------------------------------------------------------------------------
 
-test('the owner\'s conversation: a routine built with no model, a question answered with one line, a new routine, a shuffle and a review', async ({ page }) => {
+test('the owner\'s conversation: a routine built with no model, a question given the reason, a new routine, a shuffle and a review', async ({ page }) => {
   await seedOwner(page);
   await openCoach(page);
 
@@ -196,14 +196,14 @@ test('the owner\'s conversation: a routine built with no model, a question answe
     expect(firstReasons).toContain('Focus: shoulders and rear delts, as asked');
   });
 
-  await test.step('Why have you chosen this? is a question: answered with one line, and no second routine', async () => {
+  await test.step('Why have you chosen this? is a question: it needs Claude, so it gets the reason, stays in the box, and builds no second routine', async () => {
     await say(page, 'Why have you chosen this?');
-    await expect(entry(page, 1).getByTestId('coach-answer')).toHaveText(NO_CLAUDE);
+    await expect(page.getByTestId('coach-error')).toHaveText(NO_KEY);
+    await expect(page.getByTestId('coach-input')).toHaveValue('Why have you chosen this?');
     await idle(page);
-    // Counted after the answer is on screen, so a second routine would be here.
+    // Counted after the reason is on screen, so a second routine would be here.
     await expect(page.getByTestId('coach-routine')).toHaveCount(1);
-    // The answer carries no "Read:" line: there is nothing it was given to read.
-    await expect(entry(page, 1).getByTestId('coach-read')).toHaveCount(0);
+    await expect(page.getByTestId('coach-entry')).toHaveCount(1);
   });
 
   let second: string[] = [];
@@ -211,7 +211,7 @@ test('the owner\'s conversation: a routine built with no model, a question answe
     await say(page, "Doesn't matter, I want 3d shoulders");
     await expect(page.getByTestId('coach-routine')).toHaveCount(2);
     await idle(page);
-    second = await rowNames(entry(page, 2));
+    second = await rowNames(entry(page, 1));
     expect(second).toHaveLength(6);
     expect(new Set(second).size).toBe(6);
     expect(await groupsOf(page, second)).toEqual(expect.arrayContaining(['shoulders', 'rear delts']));
@@ -220,7 +220,7 @@ test('the owner\'s conversation: a routine built with no model, a question answe
   let shuffled: string[] = [];
   await test.step('Shuffle replaces that routine in place with another', async () => {
     const before = second.join('|');
-    const target = entry(page, 2);
+    const target = entry(page, 1);
     for (let press = 0; press < 5; press++) {
       await target.getByTestId('coach-shuffle').click();
       const changed = await expect
@@ -240,16 +240,16 @@ test('the owner\'s conversation: a routine built with no model, a question answe
     // In place: still two routines, and the first untouched.
     await expect(page.getByTestId('coach-routine')).toHaveCount(2);
     expect(await rowNames(entry(page, 0))).toEqual(first);
-    await expect(entry(page, 2).getByTestId('coach-read')).toHaveText('Read: shoulders, rear delts · 6 exercises');
+    await expect(entry(page, 1).getByTestId('coach-read')).toHaveText('Read: shoulders, rear delts · 6 exercises');
   });
 
   await test.step('Review routine opens what is on screen: a row for each, and the owner\'s own exercises under their own names', async () => {
-    await entry(page, 2).getByTestId('coach-review').click();
+    await entry(page, 1).getByTestId('coach-review').click();
     const review = page.getByRole('dialog').filter({ hasText: 'Review routine' });
     await expect(review.getByTestId('paste-row')).toHaveCount(shuffled.length);
     // A row of the routine that is not a library one is the owner's own exercise, and the review reads it as that exercise.
     // One that is a library one is matched to the library's entry: the Library mark is on exactly those rows.
-    const rows = entry(page, 2).getByTestId('coach-row');
+    const rows = entry(page, 1).getByTestId('coach-row');
     let fromLibrary = 0;
     for (let i = 0; i < shuffled.length; i++) {
       if ((await rows.nth(i).getByTestId('coach-new').count()) > 0) {
@@ -470,23 +470,24 @@ test('Review saves the very exercise the builder took, and not another of the ow
   expect(exercises).toHaveLength(2 + (built.length - 1));
 });
 
-test('Clear empties the conversation, a build and an answer alike', async ({ page }) => {
+test('Clear empties the routines built and the problem with them', async ({ page }) => {
   await seedOwner(page);
   await openCoach(page);
   await say(page, 'Give me a chest routine');
   await expect(page.getByTestId('coach-routine')).toHaveCount(1);
   await say(page, 'Why have you chosen this?');
-  await expect(page.getByTestId('coach-answer')).toHaveCount(1);
+  await expect(page.getByTestId('coach-error')).toHaveText(NO_KEY);
   await idle(page);
   await page.getByTestId('coach-clear').click();
   await expect(page.getByTestId('coach-entry')).toHaveCount(0);
+  await expect(page.getByTestId('coach-error')).toHaveCount(0);
   await expect(page.getByTestId('coach-clear')).toHaveCount(0);
 
-  // The conversation starts again: a question after Clear is the only entry on screen.
-  await say(page, 'How was last week?');
-  await expect(page.getByTestId('coach-answer')).toHaveText(NO_CLAUDE);
+  // The conversation starts again: a routine after Clear is the only entry on screen.
+  await say(page, 'Give me a chest routine');
+  await expect(page.getByTestId('coach-routine')).toHaveCount(1);
   await expect(page.getByTestId('coach-entry')).toHaveCount(1);
-  await expect(page.getByTestId('coach-routine')).toHaveCount(0);
+  await expect(entry(page, 0).getByTestId('coach-read')).toHaveText(/^Read: chest · \d+ exercises$/);
 });
 
 test('Draft with coach: the first message is a build even when it reads like a question, and the next is routed as usual', async ({ page }) => {
@@ -499,7 +500,7 @@ test('Draft with coach: the first message is a build even when it reads like a q
   await expect(entry(page, 0).getByTestId('coach-read')).toHaveText(/^Read: chest · \d+ exercises$/);
 
   await say(page, 'Why have you chosen this?');
-  await expect(page.getByTestId('coach-answer')).toHaveText(NO_CLAUDE);
+  await expect(page.getByTestId('coach-error')).toHaveText(NO_KEY);
   await idle(page);
   await expect(page.getByTestId('coach-routine')).toHaveCount(1);
 });
@@ -578,9 +579,9 @@ test('the owner\'s conversation carried on: "add biceps", "swap the front raise"
     for (const name of shorter) expect(swapped).toContain(name);
   });
 
-  await test.step('why have you chosen this? is answered with one line, and is not another routine', async () => {
+  await test.step('why have you chosen this? gets the reason, and is not another routine', async () => {
     await say(page, 'Why have you chosen this?');
-    await expect(entry(page, 4).getByTestId('coach-answer')).toHaveText(NO_CLAUDE);
+    await expect(page.getByTestId('coach-error')).toHaveText(NO_KEY);
     await idle(page);
     await expect(page.getByTestId('coach-routine')).toHaveCount(4);
   });
@@ -606,11 +607,11 @@ test('an error keeps what was typed in the box, can be cleared, and goes with th
   await expect(page.getByTestId('coach-entry')).toHaveCount(0);
   await expect(page.getByTestId('coach-input')).toHaveValue(change);
 
-  // Sent again with no routine on screen, the same words are only a question, and the box is empty after them.
+  // Sent again with no routine on screen, the same words are only a question: it gets the reason, and stays in the box.
   await page.getByTestId('coach-send').click();
-  await expect(page.getByTestId('coach-answer')).toHaveText(NO_CLAUDE);
-  await expect(page.getByTestId('coach-error')).toHaveCount(0);
-  await expect(page.getByTestId('coach-input')).toHaveValue('');
+  await expect(page.getByTestId('coach-error')).toHaveText(NO_KEY);
+  await expect(page.getByTestId('coach-entry')).toHaveCount(0);
+  await expect(page.getByTestId('coach-input')).toHaveValue(change);
 });
 
 test('an error goes with the next message sent, whatever kind it is', async ({ page }) => {
@@ -621,10 +622,14 @@ test('an error goes with the next message sent, whatever kind it is', async ({ p
   await idle(page);
   await say(page, 'swap the leg press');
   await expect(page.getByTestId('coach-error')).toBeVisible();
-  // A new message, of another kind: the answer is given, and the error is gone with it.
+  // A new message, of another kind: a question gets its own reason in place of the error before it...
   await page.getByTestId('coach-input').fill('How was last week?');
   await page.getByTestId('coach-send').click();
-  await expect(page.getByTestId('coach-answer')).toHaveText(NO_CLAUDE);
+  await expect(page.getByTestId('coach-error')).toHaveText(NO_KEY);
+  // ...and a routine is built, and the error is gone with it.
+  await page.getByTestId('coach-input').fill('Give me a chest routine');
+  await page.getByTestId('coach-send').click();
+  await expect(page.getByTestId('coach-routine')).toHaveCount(2);
   await expect(page.getByTestId('coach-error')).toHaveCount(0);
 });
 
@@ -645,7 +650,7 @@ test('a routine that comes to nothing is said to be nothing: the fact, no minute
   await expect(entry(page, 0).getByTestId('coach-review')).toHaveCount(0);
 });
 
-test('with Claude not set up, a change to the routine is made, and a question is answered with one line', async ({ page }) => {
+test('with Claude not set up, a change to the routine is made, and a question gets the reason', async ({ page }) => {
   await seedOwner(page);
   await openCoach(page);
   await say(page, SHOULDERS);
@@ -660,12 +665,12 @@ test('with Claude not set up, a change to the routine is made, and a question is
   await idle(page);
   for (const name of first) expect(await rowNames(entry(page, 1))).toContain(name);
 
-  // A question can be sent, and is answered with the one plain line.
+  // A question can be sent, and gets the reason in one plain line; it is not built into anything.
   await page.getByTestId('coach-input').fill('Why have you chosen this?');
   await expect(page.getByTestId('coach-send')).toBeEnabled();
   await page.getByTestId('coach-send').click();
-  await expect(entry(page, 2).getByTestId('coach-answer')).toHaveText(NO_CLAUDE);
-  await expect(page.getByTestId('coach-error')).toHaveCount(0);
+  await expect(page.getByTestId('coach-error')).toHaveText(NO_KEY);
+  await expect(page.getByTestId('coach-entry')).toHaveCount(2);
 });
 
 // ---------------------------------------------------------------------------

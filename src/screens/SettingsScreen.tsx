@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { BUILD_LABEL } from '@/buildInfo';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { backupFilename, csvFilename, deliverFile, exportBackup, exportBodyweightCsv, exportCsv, isBackup, type Backup } from '@/db/backup';
@@ -10,11 +10,10 @@ import { dateKeyToDate, toDateKey } from '@/domain/dates';
 import { fmtNum } from '@/domain/format';
 import { calorieTargetOn } from '@/domain/nutrition';
 import { MUSCLE_GROUPS, type MuscleGroup, type Settings } from '@/domain/types';
-import type { NotificationPermissionStatus } from '@/domain/rest';
-import { cancelRestNotification, isNative, nativeNotificationPermission, requestNativeNotifications } from '@/state/native';
-import { notificationPermission, requestNotifications } from '@/state/notify';
+import { cancelRestNotification } from '@/state/native';
 import { AboutCard } from '@/ui/AboutCard';
 import { BackupsCard } from '@/ui/BackupsCard';
+import { ClaudeSettingsCard } from '@/ui/ClaudeSettingsCard';
 import { Button } from '@/ui/components/Button';
 import { Card, Divider, SectionTitle, Stat } from '@/ui/components/Card';
 import { Chip, Toggle } from '@/ui/components/Chip';
@@ -23,8 +22,10 @@ import { HoldToConfirm } from '@/ui/components/HoldToConfirm';
 import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { ChevronIcon, TopBar } from '@/ui/components/TopBar';
+import { RemindersCard } from '@/ui/RemindersCard';
 import { RestoreSheet } from '@/ui/RestoreSheet';
 import { useSettings } from '@/ui/hooks';
+import { canAskForPermission, permissionLabel, useNotificationPermission } from '@/ui/useNotificationPermission';
 
 const PLATE_SIZES = [25, 20, 15, 10, 5, 2.5, 1.25, 0.5];
 
@@ -87,6 +88,9 @@ export function SettingsScreen() {
     <div>
       <TopBar title="Settings" />
       <div className="px-4">
+        <SectionTitle>Coach</SectionTitle>
+        <ClaudeSettingsCard />
+
         <SectionTitle>Data</SectionTitle>
         <DataCard />
 
@@ -98,6 +102,9 @@ export function SettingsScreen() {
           <>
             <SectionTitle>Targets</SectionTitle>
             <TargetsCard settings={settings} />
+
+            <SectionTitle>Reminders</SectionTitle>
+            <RemindersCard settings={settings} />
 
             <SectionTitle>About</SectionTitle>
             <AboutCard />
@@ -383,63 +390,6 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 // ---------------------------------------------------------------------------
 // Rest timer
 
-/** What the permission row knows: the phone's answer (async, so `loading` first) or the browser's. */
-type PermissionView = NotificationPermissionStatus | 'loading';
-
-function webPermissionView(): PermissionView {
-  const p = notificationPermission();
-  return p === 'default' ? 'prompt' : p;
-}
-
-function permissionLabel(perm: PermissionView, native: boolean): string {
-  switch (perm) {
-    case 'loading':
-      return 'Checking…';
-    case 'granted':
-      return 'Allowed';
-    case 'denied':
-      return native ? 'Blocked in system settings' : 'Blocked in browser settings';
-    case 'prompt':
-      return 'Not asked yet';
-    case 'unsupported':
-      return 'Not supported here';
-  }
-}
-
-/**
- * The notification permission for the row in the Rest card. In the APK the web Notification API is
- * not the thing that shows the rest-over notification (LocalNotifications is), so the row asks the
- * plugin; in a browser it keeps asking the browser. Re-read when the app comes back to the front,
- * because the user may have changed it in system settings in between.
- */
-function useNotificationPermission(): { perm: PermissionView; native: boolean; request: () => Promise<void> } {
-  const native = isNative();
-  const [perm, setPerm] = useState<PermissionView>(() => (native ? 'loading' : webPermissionView()));
-  useEffect(() => {
-    if (!native) return;
-    let live = true;
-    const read = () => void nativeNotificationPermission().then((p) => live && setPerm(p));
-    read();
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') read();
-    };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      live = false;
-      document.removeEventListener('visibilitychange', onVisible);
-    };
-  }, [native]);
-  const request = async () => {
-    if (native) {
-      setPerm(await requestNativeNotifications());
-      return;
-    }
-    await requestNotifications();
-    setPerm(webPermissionView());
-  };
-  return { perm, native, request };
-}
-
 const REST_OWNED_KEYS: (keyof Settings)[] = ['restCompoundSec', 'restIsolationSec', 'restCarrySec'];
 
 function RestCard({ settings }: { settings: Settings }) {
@@ -542,7 +492,7 @@ function RestCard({ settings }: { settings: Settings }) {
             </div>
           </div>
           {/* On the phone a refusal can only be undone in system settings, so the button is for 'prompt' only. */}
-          {(perm === 'prompt' || (perm === 'denied' && !native)) && (
+          {canAskForPermission(perm, native) && (
             <Button size="md" variant="outline" onClick={() => void requestPermission()}>
               Allow notifications
             </Button>
