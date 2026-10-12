@@ -1,86 +1,44 @@
 import { useRef, useState, type ReactNode } from 'react';
-import {
-  checkAtwater,
-  fromPer100,
-  fromPortion,
-  macrosOf,
-  type FoodSource,
-  type Macros,
-  type Nutrition,
-} from '@/domain/food';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { checkAtwater, macrosOf } from '@/domain/food';
 import { fmtGrams, fmtKcal } from '@/domain/format';
 import { useFoodSuggestions, useSettings } from './hooks';
 import { lookupBarcode, lookupName } from '@/db/productRepo';
-import { forgetFood } from '@/db/foodRepo';
-import { barcodeDigits, displayName, portionGrams, portionLabel, type LabelNutrition } from '@/domain/products';
+import { forgetFood, memoryFor } from '@/db/foodRepo';
+import { barcodeDigits, displayName, type LabelNutrition } from '@/domain/products';
 import { normalise } from '@/domain/foodMemory';
+import {
+  applyLabel as labelOnto,
+  applyMemory,
+  blankDraft,
+  draftFrom,
+  draftToItem,
+  editAmount,
+  editNutrition,
+  macrosFrom,
+  nutritionFrom,
+  type Basis,
+  type Draft,
+  type NutritionField,
+} from '@/domain/foodDraft';
+import { amountChips, defaultUnit, unitOptions, type UnitOption } from '@/domain/foodUnits';
 import type { FoodMemory } from '@/domain/types';
 import type { NewMealItem } from '@/db/foodRepo';
 import { BarcodeScanner } from './BarcodeScanner';
 import { Button, IconButton } from './components/Button';
-import { Segmented } from './components/Chip';
+import { Chip, Segmented } from './components/Chip';
 import { NumberInput, TextInput } from './components/NumberField';
 import { Sheet } from './components/Sheet';
 import { TrashIcon } from './components/TopBar';
-
-type Basis = 'weighed' | 'portion';
-
-interface Draft {
-  name: string;
-  portion: string;
-  basis: Basis;
-  brand?: string;
-  product?: string;
-  /** Where these numbers came from. Carried through so the trust hierarchy still applies. */
-  source?: FoodSource;
-  /**
-   * The name and figures on screen are a label's — a product's, not the user's. Not the same as
-   * `source === 'label'`: changing only the weight marks the draft as the user's (the portion is
-   * theirs), but the name and the per-100 g figures are still that one product's.
-   */
-  fromLabel?: boolean;
-  grams: number | null;
-  /** Per 100 g when weighed; for the whole serving when not. */
-  kcal: number | null;
-  protein: number | null;
-  carbs: number | null;
-  fat: number | null;
-}
-
-function draftFrom(item?: NewMealItem): Draft {
-  if (!item) {
-    return { name: '', portion: '', basis: 'weighed', grams: 100, kcal: null, protein: null, carbs: null, fat: null };
-  }
-  const n = item.nutrition;
-  const m = n.basis === 'weighed' ? n.per100 : n.macros;
-  return {
-    name: item.name,
-    portion: item.portion,
-    basis: n.basis,
-    ...(item.brand ? { brand: item.brand } : {}),
-    ...(item.product ? { product: item.product } : {}),
-    ...(item.source ? { source: item.source } : {}),
-    ...(item.source === 'label' ? { fromLabel: true } : {}),
-    grams: n.basis === 'weighed' ? n.grams : null,
-    kcal: m.kcal,
-    protein: m.protein,
-    carbs: m.carbs,
-    fat: m.fat,
-  };
-}
-
-function macrosFrom(d: Draft): Macros {
-  return { kcal: d.kcal ?? 0, protein: d.protein ?? 0, carbs: d.carbs ?? 0, fat: d.fat ?? 0 };
-}
-
-function nutritionFrom(d: Draft): Nutrition {
-  return d.basis === 'weighed' ? fromPer100(macrosFrom(d), d.grams ?? 0) : fromPortion(macrosFrom(d));
-}
 
 /**
  * Add or edit one food. Numbers are entered in whichever form the packet or the kitchen scale
  * gives them — per 100 g against a weight, or for the whole serving — and the eaten total is
  * shown live underneath, so the figure being committed is never a surprise.
+ *
+ * The amount can be tapped in the food's own units (a whole pack, half, two eggs) as well as typed
+ * in grams. Changing the amount never changes whose figures these are: only editing the nutrition
+ * does (see `domain/foodDraft.ts`).
  */
 export function FoodItemSheet({
   open,
@@ -88,6 +46,8 @@ export function FoodItemSheet({
   onClose,
   onSave,
   onDelete,
+  title,
+  prefill,
 }: {
   open: boolean;
   /** Absent for a new food. */
@@ -95,13 +55,30 @@ export function FoodItemSheet({
   onClose: () => void;
   onSave: (item: NewMealItem) => void;
   onDelete?: () => void;
+  /** Overrides "Add food" / "Edit food". */
+  title?: string;
+  /**
+   * A new food that starts from something already known: the name (and brand) a barcode lookup
+   * found without figures, and the barcode to remember the food against once it is typed in. Only
+   * read when mounted, like `item`.
+   */
+  prefill?: { name?: string; brand?: string; product?: string; barcode?: string };
 }) {
   // Seeded once. There is deliberately no reset effect: the parent rebuilds its item objects on
   // every render, so an effect keyed on the `item` prop fires whenever anything else re-renders
   // the screen and throws away half-entered input — and a focused number field goes on showing
   // the number the user typed while the draft behind it has reverted, so Save writes a different
   // value than the one on screen. The sheet is instead remounted per edit target with a `key`.
-  const [d, setD] = useState<Draft>(() => draftFrom(item));
+  const [d, setD] = useState<Draft>(() => {
+    const base = draftFrom(item);
+    if (!prefill || item) return base;
+    return {
+      ...base,
+      ...(prefill.name ? { name: prefill.name } : {}),
+      ...(prefill.brand ? { brand: prefill.brand } : {}),
+      ...(prefill.product ? { product: prefill.product } : {}),
+    };
+  });
   // 'searching' is a name lookup and 'scanning' a barcode one: each says "Looking up…" on its own
   // button. Scanning used to share 'searching', whose only visible sign was on the name-lookup
   // button — hidden until three letters are typed and again once a label is applied, which is
@@ -115,7 +92,7 @@ export function FoodItemSheet({
   // scan replaces it, and handed to the save so the food is remembered against that pack: the next
   // scan of it then fills from memory. Never set for a code that was not a barcode, and never
   // for a scan that filled the sheet — that pack is the database's, not the user's to type in.
-  const [scannedCode, setScannedCode] = useState<string | undefined>(undefined);
+  const [scannedCode, setScannedCode] = useState<string | undefined>(() => (prefill?.barcode ? (barcodeDigits(prefill.barcode) ?? undefined) : undefined));
   // The reasons Save can be grey, said where the eye is (see `needsName`): the user has done
   // something to the sheet by hand, so an empty name is no longer just a sheet that has not been used.
   const [typedFigure, setTypedFigure] = useState(false);
@@ -129,6 +106,16 @@ export function FoodItemSheet({
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
 
   /**
+   * Change the amount: the weight, or a unit chip. The food is unchanged, so its source is too.
+   *
+   * It used to go through the same setter as the nutrition fields, which flipped `source` to
+   * 'user' on ANY edit — so a scanned label eaten at 250 g instead of 100 g was saved as the
+   * user's own data, and the trust hierarchy, working as designed, then refused every later and
+   * better label for it.
+   */
+  const setAmount = (grams: number | null, unitKey: string) => setD((p) => editAmount(p, { grams, unitKey }));
+
+  /**
    * Set a figure the user has typed, and record that they typed it.
    *
    * Without this the draft kept whatever source the lookup or the suggestion put there, so a
@@ -136,9 +123,9 @@ export function FoodItemSheet({
    * designed, then let the next label lookup overwrite the correction with the figures the user
    * had gone back and fixed.
    */
-  const setOwn = <K extends keyof Draft>(k: K, v: Draft[K]) => {
+  const setNutrition = (k: NutritionField, v: number | null) => {
     setTypedFigure(true);
-    setD((p) => ({ ...p, [k]: v, source: 'user', fromLabel: k === 'grams' ? p.fromLabel : false }));
+    setD((p) => editNutrition(p, k, v));
   };
 
   /** Changing what is being searched for invalidates whatever the last search said about it. */
@@ -158,6 +145,22 @@ export function FoodItemSheet({
   // without a flag to get out of step with what is on screen.
   const suggestions = all.filter((m) => normalise(m.name) !== normalise(d.name)).slice(0, 5);
 
+  // The units this food is counted in: the pack and serving a label stated, and whatever has been
+  // remembered for it (a corrected egg weight, the unit last used). Looked up by the same key the
+  // food is filed under, so it follows the name as it is typed.
+  const memory = useLiveQuery(
+    () => (d.name.trim() ? memoryFor({ name: d.name, brand: d.brand, product: d.product }) : undefined),
+    [d.name, d.brand, d.product],
+  );
+  const unitSource = {
+    ...(d.packGrams ? { packGrams: d.packGrams } : {}),
+    ...(d.servingGrams ? { servingGrams: d.servingGrams } : {}),
+    ...(memory ? { memory } : {}),
+  };
+  const options = unitOptions(unitSource);
+  const countable = options.filter((o) => o.kind !== 'grams');
+  const unit = options.find((o) => o.key === d.unitKey && o.kind !== 'grams') ?? defaultUnit(countable.length > 0 ? countable : options, unitSource);
+
   /**
    * Put a label's figures on the sheet.
    *
@@ -166,23 +169,8 @@ export function FoodItemSheet({
    * as Trek. A name lookup keeps the fallback: there the brand is the one the user typed.
    */
   const applyLabel = (l: LabelNutrition, opts?: { fromScan?: boolean }) => {
-    const grams = portionGrams(l, d.grams ?? undefined);
     setLookup('idle');
-    setD((p) => ({
-      ...p,
-      name: displayName(l) || p.name,
-      brand: opts?.fromScan ? l.brand || undefined : l.brand || p.brand,
-      product: opts?.fromScan ? l.name || undefined : l.name || p.product,
-      basis: 'weighed',
-      grams,
-      portion: portionLabel(l, grams),
-      kcal: l.per100.kcal,
-      protein: l.per100.protein,
-      carbs: l.per100.carbs,
-      fat: l.per100.fat,
-      source: 'label',
-      fromLabel: true,
-    }));
+    setD((p) => labelOnto(p, l, opts));
   };
 
   const runLookup = async () => {
@@ -215,7 +203,7 @@ export function FoodItemSheet({
    */
   const scanMissed = (outcome: 'offline' | 'invalid' | 'notfound' | 'unavailable') => {
     setLookup(outcome);
-    setD((p) => (p.fromLabel ? draftFrom() : p));
+    setD((p) => (p.fromLabel ? blankDraft() : p));
   };
 
   /**
@@ -226,7 +214,7 @@ export function FoodItemSheet({
   const scanPartial = (partial: { name: string; brand?: string }) => {
     setLookup('nofigures');
     setD((p) => {
-      const base = p.fromLabel ? draftFrom() : p;
+      const base = p.fromLabel ? blankDraft() : p;
       if (base.name.trim()) return base;
       const brand = partial.brand ?? '';
       return {
@@ -278,22 +266,7 @@ export function FoodItemSheet({
   };
 
   const usePrevious = (m: FoodMemory) => {
-    setD({
-      name: m.name,
-      portion: '',
-      basis: 'weighed',
-      grams: m.typicalGrams ?? 100,
-      kcal: m.per100.kcal,
-      protein: m.per100.protein,
-      carbs: m.per100.carbs,
-      fat: m.per100.fat,
-      brand: m.brand,
-      product: m.product,
-      // Carried across, so a remembered label keeps its standing and a remembered guess does not
-      // acquire one it never had.
-      source: m.source,
-      fromLabel: m.source === 'label',
-    });
+    setD(applyMemory(m));
   };
   const eaten = macrosOf(nutritionFrom(d));
   const check = checkAtwater(macrosFrom(d));
@@ -313,7 +286,7 @@ export function FoodItemSheet({
       <Sheet
         open={open}
         onClose={onClose}
-        title={item ? 'Edit food' : 'Add food'}
+        title={title ?? (item ? 'Edit food' : 'Add food')}
         footer={
           <div className="grid grid-cols-2 gap-3">
             {onDelete ? (
@@ -330,17 +303,7 @@ export function FoodItemSheet({
               variant="primary"
               disabled={!canSave}
               data-testid="save-food"
-              onClick={() =>
-                onSave({
-                  name: d.name.trim(),
-                  portion: d.portion.trim() || (d.basis === 'weighed' ? `${d.grams ?? 0} g` : '1 serving'),
-                  nutrition: nutritionFrom(d),
-                  source: d.source ?? 'user',
-                  ...(d.brand ? { brand: d.brand } : {}),
-                  ...(d.product ? { product: d.product } : {}),
-                  ...(scannedCode ? { barcode: scannedCode } : {}),
-                })
-              }
+              onClick={() => onSave(draftToItem(d, { options, ...(scannedCode ? { barcode: scannedCode } : {}) }))}
             >
               Save
             </Button>
@@ -454,9 +417,20 @@ export function FoodItemSheet({
           />
 
           {d.basis === 'weighed' ? (
-            <Field label="Weight">
-              <NumberInput value={d.grams} onChange={(v) => setOwn('grams', v)} mode="numeric" min={0} placeholder="100" testId="food-grams" />
-            </Field>
+            <div className="grid gap-3">
+              {countable.length > 0 && (
+                <UnitChips
+                  countable={countable}
+                  unit={unit}
+                  grams={d.grams}
+                  onPick={(grams, key) => setAmount(grams, key)}
+                  onUnit={(key) => set('unitKey', key)}
+                />
+              )}
+              <Field label="Weight">
+                <NumberInput value={d.grams} onChange={(v) => setAmount(v, 'g')} mode="numeric" min={0} placeholder="100" testId="food-grams" />
+              </Field>
+            </div>
           ) : (
             <Field label="Portion">
               <TextInput value={d.portion} onChange={(v) => set('portion', v)} placeholder="1 bowl" testId="food-portion" />
@@ -467,16 +441,16 @@ export function FoodItemSheet({
             <div className="mb-2 px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Nutrition {per}</div>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Calories">
-                <NumberInput value={d.kcal} onChange={(v) => setOwn('kcal', v)} mode="numeric" min={0} placeholder="0" testId="food-kcal" />
+                <NumberInput value={d.kcal} onChange={(v) => setNutrition('kcal', v)} mode="numeric" min={0} placeholder="0" testId="food-kcal" />
               </Field>
               <Field label="Protein (g)">
-                <NumberInput value={d.protein} onChange={(v) => setOwn('protein', v)} min={0} placeholder="0" testId="food-protein" />
+                <NumberInput value={d.protein} onChange={(v) => setNutrition('protein', v)} min={0} placeholder="0" testId="food-protein" />
               </Field>
               <Field label="Carbs (g)">
-                <NumberInput value={d.carbs} onChange={(v) => setOwn('carbs', v)} min={0} placeholder="0" testId="food-carbs" />
+                <NumberInput value={d.carbs} onChange={(v) => setNutrition('carbs', v)} min={0} placeholder="0" testId="food-carbs" />
               </Field>
               <Field label="Fat (g)">
-                <NumberInput value={d.fat} onChange={(v) => setOwn('fat', v)} min={0} placeholder="0" testId="food-fat" />
+                <NumberInput value={d.fat} onChange={(v) => setNutrition('fat', v)} min={0} placeholder="0" testId="food-fat" />
               </Field>
             </div>
           </div>
@@ -485,7 +459,7 @@ export function FoodItemSheet({
           {!check.ok && (
             <button
               type="button"
-              onClick={() => setOwn('kcal', Math.round(check.implied))}
+              onClick={() => setNutrition('kcal', Math.round(check.implied))}
               className="rounded-xl border border-warn/40 bg-warn/10 px-3 py-3 text-left text-sm text-warn"
               data-testid="atwater-warning"
             >
@@ -504,6 +478,46 @@ export function FoodItemSheet({
       </Sheet>
       <BarcodeScanner open={scannerOpen} onClose={() => setScannerOpen(false)} onCode={(code) => void onScanCode(code)} />
     </>
+  );
+}
+
+/**
+ * The amount in the food's own units: which unit (when it has more than one) and the chips for it.
+ * Tapping a chip sets the weight; the weight field below stays the source of truth and can still
+ * be typed over.
+ */
+function UnitChips({
+  countable,
+  unit,
+  grams,
+  onPick,
+  onUnit,
+}: {
+  countable: UnitOption[];
+  unit: UnitOption;
+  grams: number | null;
+  onPick: (grams: number, unitKey: string) => void;
+  onUnit: (key: string) => void;
+}) {
+  return (
+    <div className="grid gap-2" data-testid="unit-chips">
+      {countable.length > 1 && (
+        <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Count in">
+          {countable.map((o) => (
+            <Chip key={o.key} active={o.key === unit.key} onClick={() => onUnit(o.key)} testId={`unit-${o.key}`}>
+              {o.label[0]!.toUpperCase() + o.label.slice(1)}
+            </Chip>
+          ))}
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2">
+        {amountChips(unit).map((c) => (
+          <Chip key={c.id} size="lg" active={grams !== null && Math.abs(grams - c.grams) < 0.05} onClick={() => onPick(c.grams, unit.key)} testId={`amount-${c.id}`}>
+            {c.label}
+          </Chip>
+        ))}
+      </div>
+    </div>
   );
 }
 

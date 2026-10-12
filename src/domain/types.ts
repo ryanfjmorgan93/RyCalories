@@ -446,6 +446,27 @@ export interface MealItem {
   recipeId?: string;
 }
 
+/** A count-style unit of a food as it is stored: grams in ONE of it, and what it is called. */
+export interface FoodUnitSpec {
+  label: string;
+  plural?: string;
+  grams: number;
+}
+
+/**
+ * What the amount step knew about a food when an item was logged, handed to `rememberFood` so
+ * the next time the same chips are there. NOT persisted on the `MealItem` row: like `unit` and
+ * `barcode` on `NewMealItem` it exists only to teach `FoodMemory`.
+ */
+export interface ItemUnits {
+  packGrams?: number;
+  servingGrams?: number;
+  /** Count-style units to remember beyond the one that produced the weight (that goes in `unit`). */
+  extra?: FoodUnitSpec[];
+  /** Key of the unit the amount was chosen in — see `FoodMemory.lastUnit`. */
+  lastUnit?: string;
+}
+
 /**
  * Remembered nutrition for a food eaten before, stored per 100 g so any portion is derivable.
  * Written on every logged item by `foodRepo.rememberFood` (create, edit and recipe-share alike),
@@ -468,6 +489,26 @@ export interface FoodMemory {
    * remembered count reads "3 rashers" rather than borrowing the food's own name. */
   unitLabel?: string;
   unitPlural?: string;
+  /**
+   * The whole-pack and stated-serving weights of the pack this food was last logged from, in
+   * grams. Kept so the "Whole pack" and "1 serving" amount chips are still offered offline next
+   * time, when the label lookup that first supplied them cannot be asked again. Facts about the
+   * pack rather than figures, so (like `barcodes`) the trust rule does not gate them; the most
+   * recent logging wins. Not indexed.
+   */
+  packGrams?: number;
+  servingGrams?: number;
+  /**
+   * Further count-style units for this food beyond the single `unitGrams` one ("slice", "rasher"),
+   * each an estimate or a correction of grams per one. They follow the trust rule like `unitGrams`
+   * does. Not indexed. See `unitOptions` in `domain/foodUnits.ts` for how they are offered.
+   */
+  units?: FoodUnitSpec[];
+  /**
+   * The key of the unit the amount was last chosen in — 'pack', 'serving', 'g' or an item label
+   * such as 'egg' — so the same food opens on the same unit next time. Not indexed.
+   */
+  lastUnit?: string;
   /**
    * The pack's barcode (digits only), when the food was typed in after a scan the database could
    * not fill, so the next scan of that pack fills from here instead of asking again. Absent on

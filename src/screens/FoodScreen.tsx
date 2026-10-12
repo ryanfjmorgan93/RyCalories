@@ -12,6 +12,8 @@ import { MacroLine, MacroSplit, TargetBar } from '@/ui/components/MacroBar';
 import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { BackIcon, ChevronIcon, MoreIcon, TopBar } from '@/ui/components/TopBar';
+import { AddFoodSheet } from '@/ui/AddFoodSheet';
+import { FoodWeekStrip } from '@/ui/FoodWeekStrip';
 import { useDayMeals, useRecentMeals, useSettings, useToday } from '@/ui/hooks';
 
 /**
@@ -26,6 +28,7 @@ export function FoodScreen() {
   const [deleteFor, setDeleteFor] = useState<MealWithItems | null>(null);
   const [copying, setCopying] = useState(false);
   const [repeatOpen, setRepeatOpen] = useState(false);
+  const [addFoodOpen, setAddFoodOpen] = useState(false);
 
   // Roll the view onto the new day if the app is left open past midnight, but only while
   // looking at today — never yank the screen away from a day being edited.
@@ -96,8 +99,14 @@ export function FoodScreen() {
         {/* Keyed by the day. dexie-react-hooks keeps its previous result across a dependency
             change, so without a remount the old day's meals, calories and protein paint under the
             new day's heading until IndexedDB answers — and the Loading branch, which exists to say
-            exactly that, never shows after first mount. */}
-        <DayBody key={date} date={date} today={today} isToday={isToday} onMenu={setMenuFor} />
+            exactly that, never shows after first mount. The week strip between the two halves is
+            NOT keyed: it reads a window ending on the day, and keeping it mounted lets it move from
+            one window to the next without blanking. */}
+        <DaySummary key={`summary-${date}`} date={date} today={today} />
+        <div className="h-4" />
+        <FoodWeekStrip date={date} today={today} onPick={setDate} />
+        <div className="h-4" />
+        <DayMeals key={`meals-${date}`} date={date} isToday={isToday} onMenu={setMenuFor} />
 
         <div className="h-4" />
         {copyable > 0 && (
@@ -110,21 +119,28 @@ export function FoodScreen() {
             </Button>
           </div>
         )}
-        <div className="grid grid-cols-[1fr_auto_auto] gap-3">
-          <Button size="lg" variant="primary" full onClick={() => nav(`/food/new?date=${date}`)} data-testid="add-meal-button">
+        {/* One button for the usual case: search or scan, tap an amount, done. Meals stay the
+            grouping — Add meal is still here, for composing one by hand. */}
+        <Button size="lg" variant="primary" full onClick={() => setAddFoodOpen(true)} data-testid="add-food-button">
+          Add food
+        </Button>
+        <div className="mt-3 grid grid-cols-3 gap-3">
+          <Button size="lg" variant="secondary" full onClick={() => nav(`/food/new?date=${date}`)} data-testid="add-meal-button">
             Add meal
           </Button>
           {/* Most food is repeat food. Composing yesterday's breakfast again from scratch is six
               taps; this is two. */}
-          <Button size="lg" variant="secondary" onClick={() => setRepeatOpen(true)} data-testid="repeat-meal">
+          <Button size="lg" variant="secondary" full onClick={() => setRepeatOpen(true)} data-testid="repeat-meal">
             Repeat
           </Button>
-          <Button size="lg" variant="secondary" onClick={() => nav(`/food/recipes?date=${date}`)} data-testid="recipes-button">
+          <Button size="lg" variant="secondary" full onClick={() => nav(`/food/recipes?date=${date}`)} data-testid="recipes-button">
             Recipes
           </Button>
         </div>
         <div className="h-8" />
       </div>
+
+      {addFoodOpen && <AddFoodSheet date={date} onClose={() => setAddFoodOpen(false)} />}
 
       <RepeatSheet open={repeatOpen} date={date} onClose={() => setRepeatOpen(false)} />
 
@@ -192,23 +208,11 @@ function capitalise(s: string): string {
 }
 
 /**
- * Everything that depends on which day is shown. Mounted with `key={date}` so its live queries
- * start clean on every day change rather than replaying the previous day's answer.
+ * The day's targets and what has been eaten against them. Mounted with `key` by the day, so its
+ * live queries start clean on every day change rather than replaying the previous day's answer.
  */
-function DayBody({
-  date,
-  today,
-  isToday,
-  onMenu,
-}: {
-  date: string;
-  today: string;
-  isToday: boolean;
-  onMenu: (m: MealWithItems) => void;
-}) {
-  const nav = useNavigate();
+function DaySummary({ date, today }: { date: string; today: string }) {
   const settings = useSettings();
-  const meals = useDayMeals(date);
   const view = useLiveQuery(async () => (settings ? dayView(date, settings, today) : undefined), [date, settings, today]);
   const eaten = view?.eaten ?? ZERO;
 
@@ -239,9 +243,17 @@ function DayBody({
           )}
         </div>
       </Card>
+    </>
+  );
+}
 
-      <div className="h-4" />
+/** The day's meals, each one tap from being edited. Keyed by the day, like `DaySummary`. */
+function DayMeals({ date, isToday, onMenu }: { date: string; isToday: boolean; onMenu: (m: MealWithItems) => void }) {
+  const nav = useNavigate();
+  const meals = useDayMeals(date);
 
+  return (
+    <>
       {meals === undefined && <div className="py-8 text-center text-sm text-muted">Loading…</div>}
       {meals && meals.length === 0 && <EmptyState>Nothing logged{isToday ? ' today' : ''}.</EmptyState>}
       {meals && meals.length > 0 && (
