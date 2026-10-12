@@ -1,7 +1,10 @@
 import Dexie, { type EntityTable } from 'dexie';
 import { installLossGuardMiddleware } from './lossGuard';
 import type {
+  BodyScan,
   Bodyweight,
+  CoachMessage,
+  CoachNote,
   Exercise,
   FoodMemory,
   Meal,
@@ -30,7 +33,7 @@ import type {
  * pre-migration backup silently never fires for that upgrade. `src/db/db.test.ts` asserts this
  * against the live `db.verno` so the two cannot drift apart unnoticed.
  */
-export const DB_VERSION = 3;
+export const DB_VERSION = 4;
 
 /** The IndexedDB database name, exported so callers that must talk to it raw (recovery, the
  * pre-migration backup) do not each hardcode it. src/boot/recovery.ts keeps its own copy
@@ -52,6 +55,9 @@ export class IronDB extends Dexie {
   productCache!: EntityTable<ProductCacheEntry, 'key'>;
   phases!: EntityTable<Phase, 'id'>;
   recipes!: EntityTable<Recipe, 'id'>;
+  bodyScans!: EntityTable<BodyScan, 'id'>;
+  coachMessages!: EntityTable<CoachMessage, 'id'>;
+  coachNotes!: EntityTable<CoachNote, 'id'>;
 
   constructor(name = DB_NAME) {
     super(name);
@@ -92,6 +98,14 @@ export class IronDB extends Dexie {
     this.version(3).stores({
       recipes: 'id, name, updatedAt',
     });
+
+    // Version 4 adds body scans (InBody) and the coach's conversation and notes. Additive DELTA
+    // with no upgrade callback, for the same reasons as versions 2 and 3 above.
+    this.version(4).stores({
+      bodyScans: 'id, date',
+      coachMessages: 'id, at',
+      coachNotes: 'id, createdAt',
+    });
   }
 }
 
@@ -120,5 +134,8 @@ export const TABLE_NAMES = [
   'productCache',
   'phases',
   'recipes',
+  'bodyScans',
+  'coachMessages',
+  'coachNotes',
 ] as const;
 export type TableName = (typeof TABLE_NAMES)[number];

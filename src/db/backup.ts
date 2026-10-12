@@ -6,6 +6,9 @@ import { nowIso } from '@/domain/dates';
 import { DEFAULT_SETTINGS } from '@/domain/types';
 import { isNative, shareTextFile } from '@/state/native';
 import type {
+  BodyScan,
+  CoachMessage,
+  CoachNote,
   Bodyweight,
   Exercise,
   FoodMemory,
@@ -23,12 +26,12 @@ import type {
 } from '@/domain/types';
 
 /** Bumped whenever the set of tables changes, so a restore can reason about what it is holding.
- * 1 = workouts only (pre-merge). 2 = +nutrition. 3 = +recipes. */
-export const BACKUP_VERSION = 3;
+ * 1 = workouts only (pre-merge). 2 = +nutrition. 3 = +recipes. 4 = +body scans and the coach. */
+export const BACKUP_VERSION = 4;
 
 export interface Backup {
   app: 'iron';
-  /** 1 = workouts only (pre-merge). 2 = workouts and nutrition. 3 = +recipes. */
+  /** 1 = workouts only (pre-merge). 2 = workouts and nutrition. 3 = +recipes. 4 = +body scans and the coach. */
   version: number;
   exportedAt: string;
   tables: {
@@ -48,12 +51,16 @@ export interface Backup {
     phases?: Phase[];
     // Recipes. Optional so a version 1/2 backup still satisfies the type and can be restored.
     recipes?: Recipe[];
+    // Body scans and the coach. Optional so a version 1–3 backup still satisfies the type.
+    bodyScans?: BodyScan[];
+    coachMessages?: CoachMessage[];
+    coachNotes?: CoachNote[];
   };
 }
 
 /** Full JSON backup of every table. */
 export async function exportBackup(): Promise<Backup> {
-  const [exercises, routines, routineExercises, sessions, setLogs, decisions, bodyweight, settings, meals, mealItems, foods, productCache, phases, recipes] =
+  const [exercises, routines, routineExercises, sessions, setLogs, decisions, bodyweight, settings, meals, mealItems, foods, productCache, phases, recipes, bodyScans, coachMessages, coachNotes] =
     await Promise.all([
       db.exercises.toArray(),
       db.routines.toArray(),
@@ -69,6 +76,9 @@ export async function exportBackup(): Promise<Backup> {
       db.productCache.toArray(),
       db.phases.toArray(),
       db.recipes.toArray(),
+      db.bodyScans.toArray(),
+      db.coachMessages.toArray(),
+      db.coachNotes.toArray(),
     ]);
   return {
     app: 'iron',
@@ -89,6 +99,9 @@ export async function exportBackup(): Promise<Backup> {
       productCache,
       phases,
       recipes,
+      bodyScans,
+      coachMessages,
+      coachNotes,
     },
   };
 }

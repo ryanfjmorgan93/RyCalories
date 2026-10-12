@@ -245,6 +245,65 @@ export interface Bodyweight {
   note?: string;
 }
 
+/**
+ * One body-composition scan (an InBody result). Every measure is optional because the phone
+ * export, the gym's file and a photo of the printed sheet each carry a different subset. Masses
+ * are kilograms; a file in pounds is converted on import. Segmental values are keyed by limb.
+ */
+export interface BodyScan {
+  id: string;
+  /** ISO date (YYYY-MM-DD) of the scan. One scan per date; re-importing the same date replaces it. */
+  date: string;
+  /** Full timestamp when the source carries one. */
+  takenAt?: string;
+  source: 'csv' | 'photo' | 'manual';
+  weightKg?: number;
+  skeletalMuscleKg?: number;
+  bodyFatKg?: number;
+  bodyFatPct?: number;
+  leanMassKg?: number;
+  totalBodyWaterL?: number;
+  bmrKcal?: number;
+  visceralFatLevel?: number;
+  ecwRatio?: number;
+  inbodyScore?: number;
+  phaseAngle?: number;
+  segmentalLeanKg?: Partial<Record<BodyLimb, number>>;
+  segmentalFatKg?: Partial<Record<BodyLimb, number>>;
+  importedAt: string;
+}
+
+export type BodyLimb = 'rightArm' | 'leftArm' | 'trunk' | 'rightLeg' | 'leftLeg';
+
+/** One turn of the conversation with the coach, kept so the thread survives a restart. */
+export interface CoachMessage {
+  id: string;
+  /** ISO timestamp. */
+  at: string;
+  role: 'user' | 'coach';
+  text: string;
+  /** Which proactive moment produced it, when the coach spoke first. Absent for chat turns. */
+  moment?: CoachMoment;
+  /** Short descriptions of what the coach changed in this turn ("Bench press: 3 sets today"). */
+  actions?: string[];
+}
+
+export type CoachMoment =
+  | 'open'
+  | 'set'
+  | 'exercise'
+  | 'session'
+  | 'meal'
+  | 'day'
+  | 'week';
+
+/** Something the coach was asked, or decided, to remember about the owner (a niggle, a preference). */
+export interface CoachNote {
+  id: string;
+  createdAt: string;
+  text: string;
+}
+
 export interface Settings {
   id: 'settings';
   units: 'kg';

@@ -29,6 +29,9 @@ const TABLE_LABELS: Record<TableName, string> = {
   productCache: 'Cached products',
   phases: 'Phases',
   recipes: 'Recipes',
+  bodyScans: 'Body scans',
+  coachMessages: 'Coach messages',
+  coachNotes: 'Coach notes',
 };
 
 /**
