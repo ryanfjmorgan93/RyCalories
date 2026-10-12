@@ -3,13 +3,18 @@ import { createRoot } from 'react-dom/client';
 import { registerSW } from 'virtual:pwa-register';
 import './index.css';
 import { App } from './App';
-import { ensureSeeded, isSeeded, migrateSeed } from './db/repo';
+import { ensureSeeded, isSeeded, migrateSeed, setPlanOverride } from './db/repo';
+import { configureClaudeCoach } from './state/claudeCoach';
 import { backupBeforeMigrationIfNeeded, checkForHistoryLoss, maybeAutoBackupAtBoot, requestPersistentStorage } from './db/historySafety';
 import { useHistoryNoticeStore } from './state/historyNotice';
 import { isNative } from './state/native';
 import { startReminders } from './platform/reminders';
 import { DB_VERSION } from './db/db';
 import { renderRecovery } from './boot/recovery';
+
+// The coach's edit_session tool changes today's plan through the same function the "Change today"
+// sheet uses, so a change by voice and a change by hand are one thing.
+configureClaudeCoach({ setPlanOverride });
 
 async function boot() {
   // Must run before Dexie ever opens the database — see historySafety.ts.

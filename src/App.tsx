@@ -28,6 +28,7 @@ import { RecipesScreen } from './screens/RecipesScreen';
 import { RecipeBuilderScreen } from './screens/RecipeBuilderScreen';
 import { useAndroidBackButton } from './ui/useAndroidBackButton';
 import { ShareTargetListener } from './platform/shareTarget';
+import { CoachSheetHost } from './ui/CoachSheetHost';
 
 function Shell() {
   const dock = useSessionDock();
@@ -121,6 +122,7 @@ export function App() {
       <ScrollToTop />
       <AndroidBackButton />
       <ShareTargetListener />
+      <CoachSheetHost />
       <Ambient />
       <Routes>
         <Route element={<Shell />}>
