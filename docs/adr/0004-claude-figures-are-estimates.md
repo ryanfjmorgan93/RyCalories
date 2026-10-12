@@ -1,0 +1,3 @@
+# Claude's figures are estimates, trusted least
+
+Iron used to forbid any number from a model: the on-device AI could only name ingredients, and amounts and figures came from the owner, a label or the UK table. The owner now wants Claude to log a meal from a photo or a description with as little typing as possible, which means Claude supplies amounts and nutrition. Those figures are stored with the `model` source (the lowest trust), shown with ≈, and never overwrite a figure from the owner, a label or the table; foods the app already knows are matched first and keep their own figures. Training weights still come only from the owner's own numbers.

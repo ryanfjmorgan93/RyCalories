@@ -1,0 +1,3 @@
+# The coach speaks first
+
+Iron was built on two rules: nothing lectures the user, and the assistant never opens itself. In October 2026 the owner reversed both: they want the coach "just running with me", speaking up like a good personal trainer during the session, after meals and once a week, with encouragement, the odd motivational line and an occasional question about how they are doing. The coach now speaks at defined moments, and says nothing when it has nothing useful; a forgotten coach line is preferable to noise, so every moment returns nothing on doubt, offline or over the spend cap. Phone notifications stay deterministic (no AI, no cost) and are limited to the food reminder, the training nudge and the Monday weigh-in.
