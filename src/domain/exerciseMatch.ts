@@ -28,7 +28,7 @@ export const EXERCISE_MATCH_THRESHOLD = 0.5;
 /**
  * Case/whitespace-insensitive match key. Lives here (not `src/db/repo.ts`) so this stays a pure
  * domain module with no database dependency; `repo.ts` imports and re-exports this one function so
- * every caller — including the Hevy importer — keeps exactly the same behaviour.
+ * every caller keeps exactly the same behaviour.
  */
 export function normaliseName(s: string): string {
   return s

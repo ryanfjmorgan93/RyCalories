@@ -51,9 +51,8 @@ async function finishToSummary(page: Page) {
 test.describe('Phase 1 acceptance', () => {
   test('#2 RDL 110 × 8,8,8,8 → 115 proposed, accepted, prescribed next session', async ({ page }) => {
     await fresh(page);
-    await expect(page.getByTestId('next-up')).toContainText('Lower (Hinge)');
-    await page.getByTestId('start-session').click();
-    await expect(page).toHaveURL(/\/session\//);
+    await expect(page.getByTestId('routines-list')).toContainText('Lower (Hinge)');
+    await startRoutine(page, 'Lower (Hinge)');
     const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
     await expect(card).toContainText('4 sets of 6–8 · 110 kg');
     await expect(card).toContainText('Straps. 3-sec lower. Depth over load.');
@@ -88,7 +87,7 @@ test.describe('Phase 1 acceptance', () => {
 
   test('#3 RDL 110 × 8,8,7,6 → hold 110', async ({ page }) => {
     await fresh(page);
-    await page.getByTestId('start-session').click();
+    await startRoutine(page, 'Lower (Hinge)');
     await logSets(page, 'Romanian Deadlift (Barbell)', 110, [8, 8, 7, 6]);
     await finishToSummary(page);
     const decision = page.getByTestId('decision-Romanian Deadlift (Barbell)');
@@ -100,7 +99,7 @@ test.describe('Phase 1 acceptance', () => {
 
   test('#4 override 115 → 112.5 is prescribed and logged as an override', async ({ page }) => {
     await fresh(page);
-    await page.getByTestId('start-session').click();
+    await startRoutine(page, 'Lower (Hinge)');
     await logSets(page, 'Romanian Deadlift (Barbell)', 110, [8, 8, 8, 8]);
     await finishToSummary(page);
     const decision = page.getByTestId('decision-Romanian Deadlift (Barbell)');
@@ -156,15 +155,9 @@ test.describe('Phase 1 acceptance', () => {
     await expect(page.getByTestId('exercise-card-Barbell Back Squat')).toContainText('80 kg');
   });
 
-  test('warm-ups are ignored and a missing set holds', async ({ page }) => {
+  test('a missing set holds', async ({ page }) => {
     await fresh(page);
-    await page.getByTestId('start-session').click();
-    const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
-    // Warm-up ghost rows log themselves directly, at their own suggested weight/reps — there is
-    // no separate confirm step (§1).
-    await expect(card.getByTestId('warmup-done-0')).toBeVisible();
-    await card.getByTestId('warmup-done-0').click();
-    await page.getByTestId('rest-timer').getByRole('button', { name: 'Skip' }).click();
+    await startRoutine(page, 'Lower (Hinge)');
     await logSets(page, 'Romanian Deadlift (Barbell)', 110, [8, 8, 8]);
     await finishToSummary(page);
     const decision = page.getByTestId('decision-Romanian Deadlift (Barbell)');
@@ -173,7 +166,7 @@ test.describe('Phase 1 acceptance', () => {
 
   test('session survives a reload and the rest timer runs from a deadline', async ({ page }) => {
     await fresh(page);
-    await page.getByTestId('start-session').click();
+    await startRoutine(page, 'Lower (Hinge)');
     const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
     await card.getByTestId('weight-input').fill('110');
     await card.getByTestId('reps-input').fill('8');

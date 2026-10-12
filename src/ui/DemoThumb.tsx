@@ -24,6 +24,6 @@ export function DemoThumb({ demo, size = 'md', className = '' }: { demo: string 
   if (!pic || !src) return null;
   const box = pic.shape === 'wide' ? SIZES[size].wide : SIZES[size].square;
   if (failed === src) return <span data-testid="demo-missing" aria-hidden="true" className={`${box} block shrink-0 rounded-lg bg-surface-2 ${className}`} />;
-  // A catalogue photograph is shown whole on the box's surface colour; line art is too, and is inverted for the light theme.
+  // A catalogue photograph is shown whole on the box's surface colour; line art is too.
   return <img src={src} alt="" loading="lazy" onError={() => setFailed(src)} className={`${box} shrink-0 rounded-lg bg-surface-2 ${pictureFitClass(pic)} ${className}`} />;
 }

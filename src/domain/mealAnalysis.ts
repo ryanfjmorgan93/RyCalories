@@ -1,7 +1,7 @@
 /**
- * Parsing the on-device model's answer to "what's in this photo?". Pure functions only — no IO,
- * no clock, no database, and this file never calls the model itself (that is `NanoPlugin` /
- * `src/state/nano.ts`).
+ * Parsing a model's answer to "what's in this photo?". Pure functions only — no IO, no clock, no
+ * database, and this file never calls the model itself (it was written for the on-device model that
+ * has since been removed, and is kept for Claude's photo reader).
  *
  * The model only ever names ingredients — never amounts, never nutrition: the numbers come from a
  * scanned pack, a food logged before, or the bundled UK food table, never the AI. This file's whole job is turning whatever text the model produced into a small, bounded

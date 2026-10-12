@@ -144,7 +144,7 @@ test.describe('upgrade safety', () => {
     await createRawIronDb(page, 40, IRON_SCHEMA_V4, fixture);
 
     await page.goto('/');
-    await expect(page.getByTestId('next-up')).toBeVisible();
+    await expect(page.getByTestId('routines-list')).toBeVisible();
     await waitForHistoryCheckSettled(page);
 
     // No loss notice on an ordinary boot at the current shape.
@@ -175,7 +175,7 @@ test.describe('upgrade safety', () => {
     await createRawIronDb(page, 20, IRON_SCHEMA_V2, fixture);
 
     await page.goto('/');
-    await expect(page.getByTestId('next-up')).toBeVisible();
+    await expect(page.getByTestId('routines-list')).toBeVisible();
     await waitForHistoryCheckSettled(page);
 
     const files = await readBackupFiles(page);
@@ -228,7 +228,7 @@ test.describe('backup, loss and restore', () => {
     );
 
     await page.goto('/');
-    await expect(page.getByTestId('next-up')).toBeVisible();
+    await expect(page.getByTestId('routines-list')).toBeVisible();
     await waitForHistoryCheckSettled(page);
 
     const notice = page.getByTestId('history-notice');
@@ -244,7 +244,7 @@ test.describe('backup, loss and restore', () => {
 
     // After a restore the notice must not come back on its own.
     await page.goto('/');
-    await expect(page.getByTestId('next-up')).toBeVisible();
+    await expect(page.getByTestId('routines-list')).toBeVisible();
     await waitForHistoryCheckSettled(page);
     expect(await storedNotice(page)).toBeNull();
     await expect(page.getByTestId('history-notice')).toHaveCount(0);
@@ -277,7 +277,7 @@ test.describe('backup, loss and restore', () => {
       .toBe(0);
 
     await page.goto('/');
-    await expect(page.getByTestId('next-up')).toBeVisible();
+    await expect(page.getByTestId('routines-list')).toBeVisible();
     await waitForHistoryCheckSettled(page);
     expect(await storedNotice(page)).toBeNull();
     await expect(page.getByTestId('history-notice')).toHaveCount(0);
@@ -307,7 +307,7 @@ test.describe('backup, loss and restore', () => {
     );
 
     await page.goto('/');
-    await expect(page.getByTestId('next-up')).toBeVisible();
+    await expect(page.getByTestId('routines-list')).toBeVisible();
     await waitForHistoryCheckSettled(page);
 
     const notice = page.getByTestId('history-notice');

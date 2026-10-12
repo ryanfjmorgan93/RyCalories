@@ -31,8 +31,7 @@ export function AboutCard() {
       ))}
       <Divider />
       <div className="py-3 text-sm text-muted">
-        Leaves the device: Open Food Facts lookups (switchable above), the Video link (opens the browser), and Google&apos;s ML Kit
-        statistics when the assistant runs.
+        Leaves the device: Open Food Facts lookups (switchable above) and the Video link (opens the browser).
       </div>
     </Card>
   );

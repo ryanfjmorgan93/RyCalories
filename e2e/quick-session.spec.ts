@@ -345,36 +345,31 @@ test('Shuffle draws another plan from the same options, and never writes anythin
   await expectNoQuickRows(page, seeded);
 });
 
-test('a quick session does not move the rotation, and a quick lower session counts as a lower day', async ({ page }) => {
+test('a quick lower session counts as a lower day: picking a lower routine by hand asks first', async ({ page }) => {
   test.setTimeout(180_000);
   await fresh(page);
-  const nextUp = page.getByTestId('next-up').locator('.text-3xl');
 
-  // Lower (Hinge) for real: the week moves on to Upper (Push).
-  await page.getByTestId('start-session').click();
+  // Lower (Hinge) for real.
+  await page.getByTestId('start-Lower (Hinge)').click();
   await expect(page).toHaveURL(/\/session\//);
   await completeSession(page);
-  await expect(nextUp).toHaveText('Upper (Push)');
 
-  // A quick session after it, whatever it is made of: Next up is still Upper (Push). Read again from
-  // scratch, so a stale first render cannot stand in for the settled one.
+  // A quick session after it, whatever it is made of.
   await openSheet(page);
   await page.getByTestId('quick-start').click();
   await expect(page).toHaveURL(/\/session\//);
   await completeSession(page);
   await expect(page.getByText(/^Quick session · /).first()).toBeVisible();
   await page.reload({ waitUntil: 'load' });
-  await expect(nextUp).toHaveText('Upper (Push)');
 
-  // Upper (Push) for real, so the last real session is not a lower day; then the week says Lower (Squat).
+  // Upper (Push) for real, so the last session is not a lower day: Lower (Squat) starts at once.
   await page.getByTestId('start-Upper (Push)').click();
   await expect(page).toHaveURL(/\/session\//);
   await completeSession(page);
   await page.reload({ waitUntil: 'load' });
-  await expect(nextUp).toHaveText('Lower (Squat)');
+  await expect(page.getByTestId('routines-list')).toBeVisible();
 
-  // A quick session on legs only: a lower day. It does not move the rotation, but the week will not
-  // put a second lower day straight after it: Next up steps over Lower (Squat).
+  // A quick session on legs only: a lower day.
   await openSheet(page);
   await page.getByTestId('quick-request').fill('legs');
   await expectPressed(page, 'quick-focus-legs');
@@ -385,7 +380,6 @@ test('a quick session does not move the rotation, and a quick lower session coun
   await expect(page).toHaveURL(/\/session\//);
   await completeSession(page);
   await page.reload({ waitUntil: 'load' });
-  await expect(nextUp).toHaveText('Upper (Pull)');
 
   // And picking Lower (Squat) by hand asks first: the last session was a lower day.
   await page.getByTestId('start-Lower (Squat)').click();
@@ -664,8 +658,8 @@ test('with no routines at all, Short session is still there and starts a session
     settings: [rawSettings(day)],
   });
   await page.goto('/');
-  await expect(page.getByText('No routines yet')).toBeVisible();
-  await expect(page.getByTestId('start-session')).toHaveCount(0);
+  await expect(page.getByTestId('routines-list')).toContainText('No routines');
+  await expect(page.locator('[data-testid^="start-"]')).toHaveCount(0);
 
   await openSheet(page);
   // Nothing of theirs has a weight: every row says so.
@@ -727,6 +721,6 @@ test('with a session running, Home has no Short session button', async ({ page }
   // The dock is only there once the live session has been read, so what follows is not a screen still loading.
   await expect(page.getByTestId('live-banner')).toBeVisible();
   await expect(page.getByTestId('short-session')).toHaveCount(0);
-  await expect(page.getByTestId('next-up')).toHaveCount(0);
+  await expect(page.locator('[data-testid^="start-"]')).toHaveCount(0);
   expect((await table(page, 'sessions')).length).toBe(1);
 });

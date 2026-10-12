@@ -12,7 +12,7 @@ export interface DemoPicture {
   /** The slug behind the key: the diagram's own, or the catalogue entry's. */
   slug: string;
   frames: number;
-  /** A real photograph: never inverted for the light theme (see pictureFitClass for how it fills its box). */
+  /** A real photograph (see pictureFitClass for how it fills its box). */
   photo: boolean;
   /** The box the picture is drawn in: 'wide' is 3:2, 'square' is 1:1. */
   shape: 'square' | 'wide';
@@ -33,12 +33,12 @@ export function demoPicture(demo: string | undefined): DemoPicture | undefined {
  * How a picture fills its fixed box. A catalogue photograph is shown whole, letterboxed on the
  * box's surface colour: the dataset's photos are 3:2 for nine in ten, but the rest are portrait or
  * 16:9, and filling the box would cut a third to a half of those off, head and feet first. Line art
- * is shown whole too, and inverted for the light theme. Only a bundled square photograph (the neck
- * demo) fills its square box, which crops nothing.
+ * is shown whole too. Only a bundled square photograph (the neck demo) fills its square box, which
+ * crops nothing.
  */
 export function pictureFitClass(pic: DemoPicture): string {
   if (pic.kind === 'catalogue') return 'object-contain';
-  return pic.photo ? 'object-cover' : 'demo-frame object-contain';
+  return pic.photo ? 'object-cover' : 'object-contain';
 }
 
 /** URL of frame `frame` (1-based) of a demo key's picture; undefined when there is no such picture or frame. */

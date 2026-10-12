@@ -81,7 +81,7 @@ export class IronDB extends Dexie {
     // There is no upgrade callback on purpose. Adding one that awaits crypto.subtle (as
     // stableUuid does) would raise TransactionInactiveError on a real WebView while passing
     // under fake-indexeddb — a test that goes green on a pattern that bricks the phone. Any
-    // future upgrade here must mint every id BEFORE opening the transaction, as hevy.ts does.
+    // future upgrade here must mint every id BEFORE opening the transaction, as the old Hevy importer did.
     this.version(2).stores({
       meals: 'id, date, loggedAt, [date+loggedAt]',
       mealItems: 'id, mealId, name, [mealId+index]',

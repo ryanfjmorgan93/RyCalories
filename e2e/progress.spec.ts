@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { clickIfPresent, fresh } from './fresh';
+import { clickIfPresent, fresh, openAdvanced } from './fresh';
 
 /**
  * The Progress screen's calendar, body map, weekly-sets table, strength card and recent PRs,
@@ -73,10 +73,12 @@ test.describe('Progress', () => {
 
     // Settings: a plates toggle persists across a reload (a real write, not a mocked one).
     await page.goto('/settings');
+    await openAdvanced(page);
     const halfKgChip = page.getByTestId('plates-card').getByRole('button', { name: '0.5 kg', exact: true });
     await halfKgChip.click();
     await expect(halfKgChip).toHaveClass(/bg-fg/);
     await page.reload();
+    await openAdvanced(page);
     await expect(page.getByTestId('plates-card').getByRole('button', { name: '0.5 kg', exact: true })).toHaveClass(/bg-fg/);
 
     // Exercise detail: chart mode switches to e1RM and the records card shows a best.

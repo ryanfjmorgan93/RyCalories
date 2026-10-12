@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { fresh, waitForServiceWorker } from './fresh';
+import { fresh, openAdvanced, waitForServiceWorker } from './fresh';
 
 /**
  * Manual nutrition logging through the real UI. This is the path that has to work before the
@@ -185,6 +185,7 @@ test.describe('nutrition', () => {
     await page.waitForURL(/\/food\/[0-9a-f-]+$/);
 
     await page.goto('/settings');
+    await openAdvanced(page);
     // The line to check on the phone after a schema bump: history intact, version current.
     // Singular: this line used to render "1 meals" regardless of count. Meals is the final
     // segment, so anchor to the end to tell "1 meal" apart from "1 meals".
@@ -379,6 +380,7 @@ test.describe('nutrition', () => {
     });
 
     await page.goto('/settings');
+    await openAdvanced(page);
     await page.getByRole('switch', { name: /Look up labels online/ }).click();
     await expect(page.getByText('Off.')).toBeVisible();
 

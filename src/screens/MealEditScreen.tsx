@@ -24,18 +24,16 @@ export function MealEditScreen() {
   return id ? <ExistingMeal id={id} /> : <NewMeal />;
 }
 
-/** The ways to add to a meal: always "Add food", plus "From a recipe" and "Estimate" while the
+/** The ways to add to a meal: always "Add food", plus "From a recipe" while the
  * meal is still empty — once it has an item, only "Add food" is offered. */
 function MealActionGrid({
   showRecipeActions,
   onAddFood,
   onFromRecipe,
-  onEstimate,
 }: {
   showRecipeActions: boolean;
   onAddFood: () => void;
   onFromRecipe: () => void;
-  onEstimate: () => void;
 }) {
   if (!showRecipeActions) {
     return (
@@ -45,15 +43,12 @@ function MealActionGrid({
     );
   }
   return (
-    <div className="grid grid-cols-3 gap-2">
+    <div className="grid grid-cols-2 gap-2">
       <Button size="md" variant="secondary" full onClick={onAddFood} data-testid="add-food">
         Add food
       </Button>
       <Button size="md" variant="secondary" full onClick={onFromRecipe} data-testid="from-recipe">
         From a recipe
-      </Button>
-      <Button size="md" variant="secondary" full onClick={onEstimate} data-testid="estimate-meal">
-        Estimate
       </Button>
     </div>
   );
@@ -130,7 +125,6 @@ function NewMeal() {
           showRecipeActions={items.length === 0}
           onAddFood={() => setEditing('new')}
           onFromRecipe={() => setRecipePickerOpen(true)}
-          onEstimate={() => nav(`/food/recipes/new?start=estimate&date=${date}`)}
         />
         <div className="h-4" />
         <Button size="lg" variant="primary" full disabled={items.length === 0 || saving} onClick={() => void save()} data-testid="save-meal">
@@ -247,7 +241,6 @@ function ExistingMeal({ id }: { id: string }) {
           showRecipeActions
           onAddFood={() => setEditing('new')}
           onFromRecipe={() => setRecipePickerOpen(true)}
-          onEstimate={() => nav(`/food/recipes/new?start=estimate&meal=${id}`)}
         />
         <div className="h-8" />
       </div>

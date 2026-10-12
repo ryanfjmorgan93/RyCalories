@@ -4,12 +4,10 @@ import { loadQuickInput } from '@/db/quickQueries';
 import { startQuickSession } from '@/db/quickRepo';
 import { fmtRange, fmtWeight, plural } from '@/domain/format';
 import {
-  aiFills,
   EMPTY_DRAFT,
   quickChips,
   quickOptions,
   removeExcluded,
-  setAi,
   tapCount,
   tapEffort,
   tapEquipment,
@@ -22,8 +20,6 @@ import {
 } from '@/domain/quickDraft';
 import { MACRO_MUSCLES, parseQuickRequest } from '@/domain/quickRequest';
 import { generateQuickSession, type QuickRow } from '@/domain/quickSession';
-import { useAssistant } from '@/state/assistant';
-import { useQuickIntent } from '@/state/quickIntent';
 import { Button } from './components/Button';
 import { Chip, Toggle } from './components/Chip';
 import { TextInput } from './components/NumberField';
@@ -32,9 +28,6 @@ import { toast } from './components/Toast';
 import { useSettings, useToday } from './hooks';
 
 type Loaded = Awaited<ReturnType<typeof loadQuickInput>>;
-
-/** What the owner's last tap on "Read with assistant" came to, for the text now in the box. */
-type Reading = { kind: 'filled' } | { kind: 'nothing' } | { kind: 'error'; message: string };
 
 /** The seed is drawn here, at the edge: the generator is pure and never reads a random source. */
 function newSeed(): number {
@@ -70,27 +63,7 @@ function QuickSessionBody({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const starting = useRef(false);
 
-  const [reading, setReading] = useState<Reading | null>(null);
-  const assistantStatus = useAssistant((s) => s.status);
-  const refreshStatus = useAssistant((s) => s.refreshStatus);
-  const intentBusy = useQuickIntent((s) => s.busy);
-  // The draft as last rendered, for the assistant's answer to be checked against when it arrives.
-  const latest = useRef(draft);
-  useEffect(() => {
-    latest.current = draft;
-  });
-
   const residue = useMemo(() => parseQuickRequest(draft.text).residue, [draft.text]);
-  const hasResidue = residue.length > 0;
-
-  // The assistant's state is asked about once, the first time there is something the rules could not
-  // read: not on opening, not on every keystroke, and nothing is sent to the model.
-  const askedStatus = useRef(false);
-  useEffect(() => {
-    if (!hasResidue || askedStatus.current) return;
-    askedStatus.current = true;
-    void refreshStatus();
-  }, [hasResidue, refreshStatus]);
 
   const options = useMemo(() => quickOptions(draft), [draft]);
   const chips = useMemo(() => quickChips(draft), [draft]);
@@ -117,26 +90,7 @@ function QuickSessionBody({ onClose }: { onClose: () => void }) {
 
   const change = (next: (d: QuickDraft) => QuickDraft) => setDraft((d) => next(d));
 
-  // What the assistant read belongs to the text it read: typing drops it, and what it came to.
-  const type = (text: string) => {
-    setReading(null);
-    change((d) => typeText(d, text));
-  };
-
-  /** One call to the model, on the tap: the typed text goes in once, and only options come back. */
-  const readWithAssistant = async () => {
-    const asked = draft.text;
-    const result = await useQuickIntent.getState().read(asked);
-    const now = latest.current;
-    if (now.text !== asked) return; // the text it read is gone
-    const { error } = useQuickIntent.getState();
-    if (!result) {
-      setReading(error ? { kind: 'error', message: error } : { kind: 'nothing' });
-      return;
-    }
-    change((d) => setAi(d, result));
-    setReading({ kind: aiFills(setAi(now, result)).length > 0 ? 'filled' : 'nothing' });
-  };
+  const type = (text: string) => change((d) => typeText(d, text));
 
   const start = async () => {
     if (starting.current || !plan || !loaded || plan.rows.length === 0) return;
@@ -275,16 +229,9 @@ function QuickSessionBody({ onClose }: { onClose: () => void }) {
 
       <Toggle checked={chips.includeNew} onChange={() => change(tapIncludeNew)} label="Include new" testId="quick-include-new" />
 
-      {hasResidue && reading?.kind !== 'filled' && (
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-          <div className={`text-sm ${reading?.kind === 'error' ? 'font-semibold text-warn' : 'text-muted'}`} data-testid="quick-not-read">
-            {reading?.kind === 'error' ? reading.message : reading?.kind === 'nothing' ? 'Nothing more read' : `Not read: ${residue.join(', ')}`}
-          </div>
-          {assistantStatus?.state === 'ready' && reading?.kind !== 'nothing' && (
-            <Button size="sm" variant="ghost" disabled={intentBusy} onClick={() => void readWithAssistant()} data-testid="quick-read-assistant">
-              {intentBusy ? 'Reading…' : 'Read with assistant'}
-            </Button>
-          )}
+      {residue.length > 0 && (
+        <div className="mt-3 text-sm text-muted" data-testid="quick-not-read">
+          Not read: {residue.join(', ')}
         </div>
       )}
 

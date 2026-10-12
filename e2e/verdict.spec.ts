@@ -25,7 +25,7 @@ async function waitForCompletionCollapse(page: import('@playwright/test').Page) 
 test.describe('the completion verdict', () => {
   test('every set at the top of the range collapses into the ok increase line, on the moment and the done card alike', async ({ page }) => {
     await fresh(page);
-    await page.getByTestId('start-session').click();
+    await page.getByTestId('start-Lower (Hinge)').click();
     const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
     await expect(card).toBeVisible();
 
@@ -44,7 +44,7 @@ test.describe('the completion verdict', () => {
 
   test('a set below the top of the range collapses into "Holding", never a promise of an increase', async ({ page }) => {
     await fresh(page);
-    await page.getByTestId('start-session').click();
+    await page.getByTestId('start-Lower (Hinge)').click();
     const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
     await expect(card).toBeVisible();
 
@@ -100,7 +100,7 @@ test.describe('locking in from the done card', () => {
 test.describe('collapsed cards', () => {
   test('a non-current card is collapsed and expands on tap; a finished card collapses into its done summary and can still be reopened', async ({ page }) => {
     await fresh(page);
-    await page.getByTestId('start-session').click();
+    await page.getByTestId('start-Lower (Hinge)').click();
     // Lower (Hinge): Romanian Deadlift (order 0) is current; Hip Thrust (order 1) is not.
     const rdl = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
     const hipThrust = page.getByTestId('exercise-card-Hip Thrust (Barbell)');

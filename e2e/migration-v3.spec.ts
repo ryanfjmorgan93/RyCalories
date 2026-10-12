@@ -10,7 +10,7 @@ import { backupsOfKind, createRawIronDb, IRON_SCHEMA_V2, readBackupFiles, readRa
  * technique e2e/history-safety.spec.ts uses, via the shared helpers in ./fresh.ts. Loads the real
  * app, waits on the one positive signal a test can rely on here (main.tsx's
  * `data-history-check="done"`, set once per load after the boot-time checks have actually
- * finished — never a sleep, and never the `next-up` render alone, which can be satisfied by a
+ * finished — never a sleep, and never the Home render alone, which can be satisfied by a
  * PREVIOUS load's history check on a reload), then checks:
  *
  *   - the on-disk version is now 30 (Dexie schema v3);
@@ -122,7 +122,7 @@ test.describe('v2 → v3 migration (recipes)', () => {
     await createRawIronDb(page, 20, IRON_SCHEMA_V2, data);
 
     await page.goto('/');
-    await expect(page.getByTestId('next-up')).toBeVisible();
+    await expect(page.getByTestId('routines-list')).toBeVisible();
     await waitForHistoryCheckSettled(page);
 
     // The schema: Dexie's raw version is its declared version ×10. A version-2 install opening

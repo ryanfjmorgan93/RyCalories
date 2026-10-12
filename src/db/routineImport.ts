@@ -1,15 +1,14 @@
 /**
- * Saves a pasted routine (see `@/domain/routineText`) once its exercise lines have been matched
- * or assigned to new exercises. One atomic write: new exercises, the routine, and its
+ * Saves a routine written as text (see `@/domain/routineText`) once its exercise lines have been
+ * matched or assigned to new exercises. One atomic write: new exercises, the routine, and its
  * routine-exercises all land together or not at all.
  */
 import { db } from './db';
-import { CARRY_TITLE_RE, COMPOUND, guessIncrement, guessMuscle, LOWER } from './hevy';
 import { createExercise, createRoutine, defaultRoutineExercise, normaliseName } from './repo';
 import { catalogueDemoKey, exerciseFromCatalogue, type CatalogueEntry } from '@/domain/catalogue';
 import { exerciseFromDemo, findExistingExercise, type DemoLike } from '@/domain/library';
 import type { ParsedRoutineLine } from '@/domain/routineText';
-import type { Exercise, ExerciseKind, Routine, RoutineExercise } from '@/domain/types';
+import type { Exercise, ExerciseKind, MuscleGroup, Routine, RoutineExercise } from '@/domain/types';
 
 /**
  * What a pasted line becomes. `demo` and `catalogue` are library entries the owner has not added:
@@ -28,20 +27,58 @@ export interface ImportRow {
   choice: ImportChoice;
 }
 
+// ---------------------------------------------------------------------------
+// Guessing attributes for a brand-new exercise, from its name alone
+
+const LOWER = /squat|leg|calf|calves|hip|deadlift|lunge|glute|hamstring|adduct|abduct|thrust|rdl|step.?up|extension \(machine\)|back extension|hyperextension/i;
+const COMPOUND = /press|squat|deadlift|row|pulldown|pull.?up|chin.?up|thrust|lunge|dip|shrug|clean|snatch/i;
+const CARRY_TITLE_RE = /walk|carry/i;
+
+function guessMuscle(title: string): MuscleGroup {
+  const t = title.toLowerCase();
+  const rules: [RegExp, MuscleGroup][] = [
+    [/hamstring|leg curl|romanian|rdl|good morning/, 'hamstrings'],
+    [/glute|hip thrust|kickback/, 'glutes'],
+    [/squat|leg press|leg extension|lunge|hack/, 'quads'],
+    [/adduct/, 'adductors'],
+    [/calf|calves/, 'calves'],
+    [/back extension|hyperextension|deadlift/, 'lower back'],
+    [/bench|chest|fly|push.?up|pec/, 'chest'],
+    [/shoulder|overhead|lateral raise|military|arnold/, 'shoulders'],
+    [/tricep|pushdown|skull|dip/, 'triceps'],
+    [/bicep|curl(?!.*leg)/, 'biceps'],
+    [/forearm|wrist/, 'forearms'],
+    [/pulldown|pull.?up|chin.?up|lat /, 'lats'],
+    [/row|rear delt|reverse fly|face pull/, 'upper back'],
+    [/shrug|trap/, 'traps'],
+    [/crunch|ab |abs|plank|leg raise|sit.?up/, 'abs'],
+    [/neck/, 'neck'],
+    [/walk|carry/, 'full body'],
+  ];
+  for (const [re, g] of rules) if (re.test(t)) return g;
+  return 'other';
+}
+
+function guessIncrement(title: string, isLower: boolean): number {
+  const t = title.toLowerCase();
+  if (/dumbbell|\bdb\b/.test(t)) return 2;
+  if (/machine|cable|smith/.test(t)) return 5;
+  if (/barbell/.test(t)) return isLower ? 5 : 2.5;
+  return isLower ? 5 : 2.5;
+}
+
 /**
  * Bodyweight with weight added, by name: pull-ups, chin-ups, push-ups and dips, in the plural
- * people write them ("Pull ups", "Press-ups", "Dips"). `BODYWEIGHT_PLUS_TITLE_RE` in `./hevy` is
- * the same idea read off Hevy's singular titles; this one also takes the plural and leaves a hip
- * dip alone.
+ * people write them ("Pull ups", "Press-ups", "Dips") as well as the singular, and a hip dip left
+ * alone.
  */
 const BODYWEIGHT_PLUS_NAME_RE = /hyperextension|back extension|(?<!hip\s)\bdips?\b|pull.?up|chin.?up|push.?up|press.?up/i;
 
 /**
- * `guessExercise` in `./hevy` reads `HevyExerciseStat` fields (`hasDistance`, `hasDuration`,
- * `bodyweightOnly`) a pasted line has no equivalent of, so this mirrors it using only the name —
- * `opts.timed` stands in for that stat-derived signal (a line parsed as seconds, e.g. "Plank
- * 3x30s") rather than trying to infer duration from the name alone. A line in seconds is timed
- * before anything else, a carry included: only a timed exercise keeps the numbers.
+ * Only the name is known, so the kind is read off it — `timed` stands in for a signal the name
+ * cannot give (a line parsed as seconds, e.g. "Plank 3x30s") rather than trying to infer duration
+ * from the name alone. A line in seconds is timed before anything else, a carry included: only a
+ * timed exercise keeps the numbers.
  */
 function guessKindFromName(name: string, timed: boolean | undefined): ExerciseKind {
   if (timed) return 'timed';

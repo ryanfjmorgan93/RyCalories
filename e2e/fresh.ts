@@ -10,7 +10,7 @@ import { expect, type Browser, type BrowserContext, type CDPSession, type Locato
  * That was observed: a screen assertion failed twice against stale assets and then passed
  * unchanged. Any suite that only clears IndexedDB is not testing what it thinks it is.
  */
-export async function fresh(page: Page, ready = 'next-up'): Promise<void> {
+export async function fresh(page: Page, ready = 'routines-list'): Promise<void> {
   await page.goto('/');
   await page.evaluate(async () => {
     if ('serviceWorker' in navigator) {
@@ -39,6 +39,18 @@ export async function fresh(page: Page, ready = 'next-up'): Promise<void> {
   // Bypass the HTTP cache as well, so the reload cannot pick up a memory-cached bundle.
   await page.reload({ waitUntil: 'load' });
   await expect(page.getByTestId(ready)).toBeVisible();
+}
+
+/**
+ * Open Settings → Advanced, where the rarely-touched cards live (rest timer, food lookup, plates,
+ * progression, developer). It is closed on every visit to the screen, so a test that reloads has
+ * to open it again. Safe to call when it is already open.
+ */
+export async function openAdvanced(page: Page): Promise<void> {
+  const toggle = page.getByTestId('advanced-toggle');
+  await expect(toggle).toBeVisible();
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+  await expect(page.getByTestId('advanced')).toBeVisible();
 }
 
 /**

@@ -3,26 +3,24 @@ import { useSearchParams } from 'react-router-dom';
 import { emptyReasonLines, nothingFact } from '@/domain/coachBuild';
 import { fmtKg, fmtRange } from '@/domain/format';
 import { aboutMinutes, builtRowKeys, routineToText, type BuiltRoutine } from '@/domain/routineBuilder';
-import { routeOf, useCoach, type AskEntry, type BuildEntry } from '@/state/coach';
+import { useCoach, type AskEntry, type BuildEntry } from '@/state/coach';
 import { PasteRoutineSheet } from '@/ui/PasteRoutineSheet';
 import { Button } from '@/ui/components/Button';
 import { Chip } from '@/ui/components/Chip';
 import { TextInput } from '@/ui/components/NumberField';
 import { TopBar } from '@/ui/components/TopBar';
-import { useNanoDownloadPercent } from '@/ui/useNanoDownload';
 
 /**
  * The coach: one box. Asking for a routine builds one, at once, from the owner's own exercises and
  * the library, with no model involved; so does a change to the routine on screen ("add biceps",
- * "swap the front raise", "make it shorter"); anything else is a question for the phone's own
- * on-device model (the fuller variant), which reads the conversation, the routine just built and why,
- * and the owner's data. Answers only what is asked; no greeting, no suggested questions. A built routine goes
- * through the same review and save as Paste a routine. Stop ends what is going on and keeps what is
- * on screen; Clear ends it and empties the screen.
+ * "swap the front raise", "make it shorter"); anything else is a free question, which goes to
+ * Claude once it is set up. A built routine goes through Review routine, which matches each row to
+ * the owner's exercises and saves it. Stop ends what is going on and keeps what is on screen; Clear
+ * ends it and empties the screen.
  */
 export function CoachScreen() {
   const [params] = useSearchParams();
-  const { status, entries, pending, working, error, refreshStatus, send, shuffle, readWithAssistant, download, cancel, reset } = useCoach();
+  const { entries, pending, working, error, send, shuffle, cancel, reset } = useCoach();
   const [text, setText] = useState('');
   // Set by Clear, so a message it cut short is not put back in the box as a Stop would put it.
   const cleared = useRef(false);
@@ -32,26 +30,17 @@ export function CoachScreen() {
   const [openingBuild, setOpeningBuild] = useState(params.get('mode') === 'routine');
   const newest = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    void refreshStatus();
-  }, [refreshStatus]);
-  const downloadPercent = useNanoDownloadPercent('full', refreshStatus);
-
   // A new message or reply is brought into view, below the bar: what it adds sits above the box.
   useEffect(() => {
     newest.current?.scrollIntoView({ block: 'start' });
   }, [entries.length, pending?.question]);
 
   const busy = pending !== null || working !== null;
-  const ready = status?.state === 'ready';
-  const message = text.trim();
-  // A build or a change needs no model; a question does.
-  const route = message ? routeOf(message, entries, openingBuild) : null;
-  const canSend = message !== '' && !busy && (route !== 'ask' || ready);
+  const canSend = text.trim() !== '' && !busy;
 
   const submit = async () => {
     if (!canSend) return;
-    const sent = message;
+    const sent = text.trim();
     const build = openingBuild;
     setText('');
     setOpeningBuild(false);
@@ -86,27 +75,6 @@ export function CoachScreen() {
         }
       />
       <div className="flex flex-col gap-3 px-4">
-        {status && !ready && (
-          <div className="rounded-xl border border-line bg-surface-2 px-3 py-3" data-testid="coach-status">
-            <div className="text-sm text-muted">
-              {status.state === 'unavailable' ? 'On-device model unavailable.' : downloadPercent !== null ? `Downloading ${downloadPercent} %` : 'Model not downloaded.'}
-            </div>
-            <div className="num mt-1 text-xs text-dim">{status.detail}</div>
-            {status.state !== 'unavailable' && (
-              <Button
-                variant="secondary"
-                size="sm"
-                className="mt-2"
-                disabled={status.state === 'downloading' || downloadPercent !== null}
-                onClick={() => void download()}
-                data-testid="coach-download"
-              >
-                {status.state === 'downloading' || downloadPercent !== null ? 'Downloading…' : 'Download'}
-              </Button>
-            )}
-          </div>
-        )}
-
         {entries.map((e, i) => (
           <div key={e.id} ref={i === last && !pending ? newest : undefined} className="flex scroll-mt-20 flex-col gap-1.5" data-testid="coach-entry">
             <UserBubble>{e.question}</UserBubble>
@@ -115,11 +83,9 @@ export function CoachScreen() {
             ) : (
               <BuildView
                 entry={e}
-                working={working}
                 busy={busy}
                 onShuffle={() => void shuffle(e.id)}
                 onReview={() => setReview({ text: routineToText(e.routines), known: builtRowKeys(e.routines) })}
-                onAssist={() => void readWithAssistant(e.id)}
               />
             )}
           </div>
@@ -128,12 +94,7 @@ export function CoachScreen() {
         {pending && (
           <div ref={newest} className="flex scroll-mt-20 flex-col gap-1.5" data-testid="coach-pending">
             <UserBubble>{pending.question}</UserBubble>
-            {pending.mode === 'ask' && (
-              <>
-                <Bubble testId="coach-partial">{pending.partial || '…'}</Bubble>
-                {pending.label && <div className="px-1 text-xs text-muted">Reading: {pending.label}</div>}
-              </>
-            )}
+            {pending.mode === 'ask' && <Bubble testId="coach-partial">…</Bubble>}
           </div>
         )}
 
@@ -185,34 +146,23 @@ function Bubble({ children, testId }: { children: ReactNode; testId?: string }) 
   );
 }
 
-/** A question's answer, and what the model was given to read. */
+/** A question's answer. */
 function AskView({ entry }: { entry: AskEntry }) {
-  return (
-    <>
-      <Bubble testId="coach-answer">{entry.answer}</Bubble>
-      <div className="px-1 text-xs text-muted" data-testid="coach-read">
-        Read: {entry.label}
-      </div>
-    </>
-  );
+  return <Bubble testId="coach-answer">{entry.answer}</Bubble>;
 }
 
-/** A built routine or routines, what the rules read, and the three things to do with it. */
+/** A built routine or routines, what the rules read, and the two things to do with it. */
 function BuildView({
   entry,
-  working,
   busy,
   onShuffle,
   onReview,
-  onAssist,
 }: {
   entry: BuildEntry;
-  working: number | null;
   /** Something is being answered, built or shuffled: what would start another does nothing, and says so by being off. */
   busy: boolean;
   onShuffle: () => void;
   onReview: () => void;
-  onAssist: () => void;
 }) {
   const built = entry.routines.some((r) => r.rows.length > 0);
   return (
@@ -226,18 +176,11 @@ function BuildView({
         </div>
       )}
       <div className="px-1 text-xs text-muted" data-testid="coach-read">
-        {entry.by === 'assistant' ? 'Read with assistant' : 'Read'}: {entry.read}
+        Read: {entry.read}
       </div>
       {entry.unread.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className={`text-sm ${entry.assist?.kind === 'error' ? 'font-semibold text-warn' : 'text-muted'}`} data-testid="coach-not-read">
-            {entry.assist?.kind === 'error' ? entry.assist.message : entry.assist?.kind === 'nothing' ? 'Nothing more read' : `Not read: ${entry.unread.join(', ')}`}
-          </div>
-          {entry.assist?.kind !== 'nothing' && (
-            <Button size="sm" variant="ghost" disabled={busy} onClick={onAssist} data-testid="coach-read-assistant">
-              {working === entry.id ? 'Reading…' : 'Read with assistant'}
-            </Button>
-          )}
+        <div className="text-sm text-muted" data-testid="coach-not-read">
+          Not read: {entry.unread.join(', ')}
         </div>
       )}
       {built && (

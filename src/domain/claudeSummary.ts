@@ -1,12 +1,10 @@
 /**
- * "Copy for Claude" plain-text export (see docs/MERGE_PLAN.md). Pure: builds the export text from
- * data the screen has already loaded — no IO, no clock. `asOf` is passed in throughout.
+ * The owner's training, food, bodyweight and routines as plain text (see docs/MERGE_PLAN.md). Pure:
+ * builds the text from data already loaded — no IO, no clock. `asOf` is passed in throughout.
  *
- * Nothing here leaves the device on its own: the screen puts this text on the clipboard or hands
- * it to the Android share sheet, same as every other export in the app.
+ * It was the "Copy for Claude" export; the coach's context is built from the same blocks.
  */
-import { fmtDateKey, inWindow, windowStart } from './checkin';
-import { addDays } from './dates';
+import { addDays, fmtDateKey, inWindow, windowStart } from './dates';
 import { ZERO, addMacros, type Macros } from './food';
 import { fmtNum, fmtSetsLine, plural } from './format';
 import { countsForVolume } from './sets';
@@ -122,8 +120,8 @@ function filteredBodyweight(input: ClaudeSummaryInput): Bodyweight[] {
 }
 
 /**
- * The section builders below are shared with the on-device coach (`./coach`), which reads the same
- * data in the same words but has to fit it into a few thousand tokens: `heading` names a training
+ * The section builders below are shared with the coach (`./coach`), which reads the same
+ * data in the same words but has to fit it into a small prompt: `heading` names a training
  * block narrowed to some exercises, and `detail` drops per-day lines while keeping the counts that
  * say what an average covers.
  */

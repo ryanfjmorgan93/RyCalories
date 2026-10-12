@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { keepsNumbers, kindOfChoice, saveParsedRoutines, type ImportChoice, type ImportRow } from '@/db/routineImport';
 import { matchExercise, normaliseName, type ExerciseMatch } from '@/domain/exerciseMatch';
@@ -7,7 +7,6 @@ import { candidatesFromRows, CATALOGUE_NOT_LOADED, findExistingExercise, type Ex
 import { parseRoutineText, type ParsedRoutineLine } from '@/domain/routineText';
 import { Button } from './components/Button';
 import { Card, Divider } from './components/Card';
-import { TextInput } from './components/NumberField';
 import { Sheet } from './components/Sheet';
 import { toast } from './components/Toast';
 import { ExercisePicker } from './ExercisePicker';
@@ -39,10 +38,11 @@ function rowKey(ri: number, ei: number, line: ParsedRoutineLine): string {
 }
 
 /**
- * Paste a routine someone (or Claude) wrote; each exercise is matched to the owner's exercises and
- * the library (theirs win a tie), anything it is not sure of waits for a choice, and nothing is
- * saved until Save. A line matched to a library entry is marked Library and the exercise is made
- * when the routine is saved, so a paste that is cancelled adds nothing.
+ * Review a routine written as text (the coach's built routine) before it is saved; each exercise is
+ * matched to the owner's exercises and the library (theirs win a tie), anything it is not sure of
+ * waits for a choice, and nothing is saved until Save. A line matched to a library entry is marked
+ * Library and the exercise is made when the routine is saved, so a review that is cancelled adds
+ * nothing. The text itself is not editable here.
  *
  * A routine the app built itself comes with `preMatched`: it already knows which exercise each of
  * its rows is, so those lines are not matched by name at all.
@@ -52,11 +52,11 @@ export function PasteRoutineSheet({
   onClose,
   initialText,
   preMatched,
-  title = 'Paste a routine',
+  title = 'Review routine',
 }: {
   open: boolean;
   onClose: () => void;
-  /** Text to start from — the coach's drafted routine — instead of an empty box. */
+  /** The routine to review, as `routineToText` writes it. */
   initialText?: string;
   /**
    * What the lines of `initialText` are, by name (`normaliseName`): the exercise-list key of each
@@ -69,11 +69,7 @@ export function PasteRoutineSheet({
 }) {
   const nav = useNavigate();
   const { rows: listRows, exercises, status } = useLibrary(open);
-  const [text, setText] = useState(initialText ?? '');
-  // Each time the sheet opens on a different draft, start from that draft.
-  useEffect(() => {
-    if (open && initialText !== undefined) setText(initialText);
-  }, [open, initialText]);
+  const text = initialText ?? '';
   const [overrides, setOverrides] = useState<Record<string, ImportChoice>>({});
   const [pickerFor, setPickerFor] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -129,7 +125,6 @@ export function PasteRoutineSheet({
   const catalogueMissing = status === 'failed' && total > 0;
 
   const reset = () => {
-    setText('');
     setOverrides({});
     setPickerFor(null);
   };
@@ -145,7 +140,7 @@ export function PasteRoutineSheet({
     if (saving || pending > 0 || total === 0) return;
     setSaving(true);
     try {
-      // All routines of the paste in one transaction: all saved, or none (and Save can be retried).
+      // All routines of the review in one transaction: all saved, or none (and Save can be retried).
       const saved = await saveParsedRoutines(
         parsed.routines.map((routine, ri) => ({
           name: routine.name,
@@ -193,8 +188,6 @@ export function PasteRoutineSheet({
           </div>
         }
       >
-        <TextInput multiline value={text} onChange={setText} placeholder={'Upper A\nBench press 4x6-8 @ 80kg\nLat pulldown 3x10-12'} testId="paste-text" />
-
         {(pending > 0 || parsed.ignored.length > 0 || catalogueMissing) && (
           <div className="mt-2 px-1 text-sm text-muted" data-testid="paste-facts">
             {[

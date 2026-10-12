@@ -1,5 +1,6 @@
 /**
- * Assembles `AssistantContext` from live data for the on-device assistant. Read-only.
+ * Assembles `AssistantContext` from live data: the owner's exercise, session, plan, bodyweight and
+ * nutrition as pure data, for a model's context to be built from. Read-only.
  */
 import { db } from './db';
 import { nextSessionPlan } from './planQueries';

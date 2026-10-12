@@ -1,7 +1,8 @@
 /**
- * Pure prompt-building for the on-device assistant (Gemini Nano). No IO, no clock: every input
- * the caller needs is passed in explicitly so this stays trivially testable and the prompt sent
- * to the model is fully deterministic for a given input.
+ * Pure context-building: the owner's data for one exercise, session or day, as a compact block of
+ * labelled lines. No IO, no clock: every input the caller needs is passed in explicitly so this
+ * stays trivially testable and the text is fully deterministic for a given input. The on-device
+ * model it was first written for is gone; the builders stay for Claude's context to reuse.
  */
 
 export interface AssistantContext {

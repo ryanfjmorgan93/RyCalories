@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { fresh } from './fresh';
+import { fresh, openAdvanced } from './fresh';
 
 /**
  * SettingsScreen.tsx's drafted cards (Targets, Rest timer, Progression) build their save patch by
@@ -27,17 +27,17 @@ test('blanking a Settings target field and saving keeps the intended value, hone
   // reseed — masking the bug below by accident. Saving once first rules that out, so the second
   // save below exercises the ordinary steady-state case.
   await page.getByRole('button', { name: 'Save targets' }).click();
-  await expect(page.getByText('Saved')).toBeVisible();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
   // Wait for this toast to clear before the next save, or the second "Saved" assertion below can
   // be satisfied by this one still on screen and prove nothing about the save that matters.
-  await expect(page.getByText('Saved')).toBeHidden();
+  await expect(page.getByText('Saved', { exact: true })).toBeHidden();
 
   await field.fill('');
   await expect(field).toHaveValue('');
 
   // Clicking Save moves focus off the field — the real blur a person triggers by tapping Save.
   await page.getByRole('button', { name: 'Save targets' }).click();
-  await expect(page.getByText('Saved')).toBeVisible();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
 
   // The box shows its real value again instead of sitting blank while claiming success — Save
   // cannot have quietly dropped it, because the field was never blank at Save time.
@@ -51,6 +51,7 @@ test('blanking a Settings target field and saving keeps the intended value, hone
 test('blanking a rest-timer field and saving does not revert it to some other value', async ({ page }) => {
   await fresh(page);
   await page.goto('/settings');
+  await openAdvanced(page);
 
   const isolation = page.getByTestId('rest-isolation');
   await expect(isolation).toBeVisible();
@@ -59,35 +60,39 @@ test('blanking a rest-timer field and saving does not revert it to some other va
 
   await isolation.fill('');
   await page.getByTestId('rest-card').getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(page.getByText('Saved')).toBeVisible();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
   await expect(isolation).toHaveValue(before);
 
   await page.reload();
+  await openAdvanced(page);
   await expect(page.getByTestId('rest-isolation')).toHaveValue(before);
 });
 
 test("blanking one weekly set target does not delete another group's saved target", async ({ page }) => {
   await fresh(page);
   await page.goto('/settings');
+  await openAdvanced(page);
 
   // Give two muscle groups a target and save for real, so both exist in the saved settings.
   await page.getByTestId('set-target-chest').fill('12');
   await page.getByTestId('set-target-lats').fill('10');
   await page.getByTestId('progression-card').getByRole('button', { name: 'Save' }).click();
-  await expect(page.getByText('Saved')).toBeVisible();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
 
   await page.reload();
+  await openAdvanced(page);
   await expect(page.getByTestId('set-target-chest')).toHaveValue('12');
   await expect(page.getByTestId('set-target-lats')).toHaveValue('10');
 
   // Blank just one of them and save.
   await page.getByTestId('set-target-lats').fill('');
   await page.getByTestId('progression-card').getByRole('button', { name: 'Save' }).click();
-  await expect(page.getByText('Saved')).toBeVisible();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
 
   // Neither group's target was wiped out by the blank one — the blanked one kept its old number,
   // and the untouched one was never at risk from the same save's whole-map replace.
   await page.reload();
+  await openAdvanced(page);
   await expect(page.getByTestId('set-target-chest')).toHaveValue('12');
   await expect(page.getByTestId('set-target-lats')).toHaveValue('10');
 });

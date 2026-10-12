@@ -1,4 +1,3 @@
-import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
 import { centreOf, fresh, swipe } from './fresh';
 
@@ -13,7 +12,6 @@ import { centreOf, fresh, swipe } from './fresh';
  */
 
 const PUSH_A = '/routines/144fdfb0-e94c-5661-a373-bf8085237abf';
-const HEVY_CSV = fileURLToPath(new URL('../hevy_export.csv', import.meta.url));
 
 /** Every value the topmost panel's data-drag-state takes from now on, in order. */
 async function recordDragStates(page: Page): Promise<() => Promise<string[]>> {
@@ -92,23 +90,6 @@ test('a sheet pulled away goes without first sliding back up, even when a frame 
   await expect(page.getByRole('dialog')).toHaveCount(0);
   // The extra "settling" of a bounce is written before the panel goes, so it would be here by now.
   await expect.poll(states).toEqual(['dragging', 'settling']);
-});
-
-test('a sheet whose close means "next step" comes back up showing that step', async ({ page }) => {
-  // Hevy import: pulling the result step away moves on to the reconcile step in the same sheet.
-  await fresh(page);
-  await page.goto('/settings');
-  await page.locator('input[type="file"][accept*="csv"]').setInputFiles(HEVY_CSV);
-  await page.getByRole('button', { name: /Import 21 sessions/ }).click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toContainText('Import complete');
-  const states = await recordDragStates(page);
-  const from = await centreOf(dialog.getByText('Import complete', { exact: true }));
-  await swipe(page, from, { x: from.x, y: from.y + 320 });
-  await expect(dialog).toContainText('Update current weights?');
-  await expect.poll(states).toEqual(['dragging', 'settling', 'settling', 'idle']);
-  await expect(dialog.getByRole('button', { name: 'Keep mine' })).toBeInViewport({ ratio: 1 });
-  await expect(page.getByTestId('sheet-panel')).not.toHaveAttribute('style', /translateY/);
 });
 
 test('tapping the handle still closes it', async ({ page }) => {

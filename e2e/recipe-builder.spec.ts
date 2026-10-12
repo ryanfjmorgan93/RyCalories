@@ -1,109 +1,17 @@
 import { expect, test, type Page } from '@playwright/test';
-import { denyCamera, fresh } from './fresh';
+import { denyCamera, fresh, openAdvanced } from './fresh';
 import { FIXTURE_CODE } from './fixtures/ean13';
 
 /**
- * Cooked meals: photo → ingredients → amounts → a saved recipe.
+ * Cooked meals: typed or picked ingredients → amounts → a saved recipe.
  *
- * FAKED, at the system boundary: the on-device model (`window.__ironNanoFake`, the same seam
- * `assistant-diagnostics.spec.ts` uses) and Open Food Facts (`page.route`, with the service's real
- * status codes — see `barcode.spec.ts`'s note on why a miss is HTTP 404, never 200).
+ * FAKED, at the system boundary: Open Food Facts (`page.route`, with the service's real status codes
+ * — see `barcode.spec.ts`'s note on why a miss is HTTP 404, never 200).
  *
  * REAL, exercised end to end: the whole builder UI, `matchIngredient`/`searchFoods` against the
- * real bundled UK food table, `preparePhoto`'s downscale-and-write through the real Capacitor
- * Filesystem web plugin (IndexedDB `Disc`), and every Dexie write.
+ * real bundled UK food table, and every Dexie write. The start phase offers two ways in, Type it and
+ * Add ingredients; the photo and "Estimate a meal out" options went with the on-device model.
  */
-
-/** A JPEG built at runtime in the page, so no binary fixture is needed. */
-async function makeJpegBuffer(page: Page): Promise<Buffer> {
-  const dataUrl = await page.evaluate(() => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 32;
-    canvas.height = 24;
-    const ctx = canvas.getContext('2d')!;
-    ctx.fillStyle = '#4488ff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL('image/jpeg');
-  });
-  return Buffer.from(dataUrl.split(',')[1]!, 'base64');
-}
-
-/**
- * Every file the Capacitor Filesystem web plugin has under `meal-photos/` in any directory —
- * `preparePhoto`/`sweepMealPhotos` write to `Directory.Cache`, which the plugin's web
- * implementation namespaces as `/CACHE/…`, but this matches on the folder name alone so it does
- * not have to reproduce that mapping. Reads the plugin's OWN IndexedDB store ('Disc'), the same
- * technique `e2e/fresh.ts`'s `readBackupFiles` uses for `Directory.Documents`.
- */
-async function readMealPhotoFiles(page: Page): Promise<{ path: string }[]> {
-  return page.evaluate(async () => {
-    const dbs = (await indexedDB.databases?.()) ?? [];
-    if (!dbs.some((d) => d.name === 'Disc')) return [];
-    const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const req = indexedDB.open('Disc');
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-    const entries = await new Promise<Array<{ type: string; path: string }>>((resolve, reject) => {
-      const r = db.transaction('FileStorage', 'readonly').objectStore('FileStorage').getAll();
-      r.onsuccess = () => resolve(r.result);
-      r.onerror = () => reject(r.error);
-    });
-    db.close();
-    return entries.filter((e) => e.type === 'file' && typeof e.path === 'string' && e.path.includes('/meal-photos/'));
-  });
-}
-
-/**
- * Install a fake Nano whose `analyzeMeal` confirms — INSIDE THE PAGE, before returning — that the
- * file at `opts.path` (exactly the string the app passed, whatever that is) really exists in the
- * Filesystem store, and records the answer on `window` for the test to read afterwards.
- * `dish`/`ingredients` are fixed to the omelette the tests below answer.
- *
- * This looks the file up the way native actually resolves it, not by scanning for "any file under
- * meal-photos": @capacitor/filesystem's web plugin (node_modules/@capacitor/filesystem/dist/esm/web.js)
- * keys its `FileStorage` object store on `path` (`keyPath: 'path'`), and `writeFile` returns
- * `{ uri: pathObj.path }` — the SAME string as that key (`getPath(Directory.Cache, "meal-photos/x.jpg")`
- * = "/CACHE/meal-photos/x.jpg"). So `store.get(opts.path)` is a direct key lookup: it only finds the
- * file when `opts.path` is that exact resolved uri/key. `preparePhoto`'s OTHER value, the
- * Directory.Cache-relative `path` ("meal-photos/x.jpg"), is not a key in the store at all, so
- * `store.get` on it comes back `undefined` — exactly the on-device failure mode (`Uri.parse(path)
- * .getPath()` in NanoPlugin.java resolves a relative string to itself, not the app's cache dir, so
- * `BitmapFactory.decodeFile` can't find the file either). A test that instead scanned every entry
- * under "meal-photos/" would find the file under either value and never catch this.
- */
-async function installPhotoFake(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    (window as unknown as { __ironNanoFake?: unknown }).__ironNanoFake = {
-      status: { state: 'ready', detail: 'ready' },
-      generate: async () => ({ text: '' }),
-      analyzeMeal: async (opts: { path: string }) => {
-        let existed = false;
-        try {
-          const dbs = (await indexedDB.databases?.()) ?? [];
-          if (dbs.some((d) => d.name === 'Disc')) {
-            const db = await new Promise<IDBDatabase>((resolve, reject) => {
-              const req = indexedDB.open('Disc');
-              req.onsuccess = () => resolve(req.result);
-              req.onerror = () => reject(req.error);
-            });
-            const entry = await new Promise<{ type: string; path: string } | undefined>((resolve, reject) => {
-              const r = db.transaction('FileStorage', 'readonly').objectStore('FileStorage').get(opts.path);
-              r.onsuccess = () => resolve(r.result);
-              r.onerror = () => reject(r.error);
-            });
-            db.close();
-            existed = entry !== undefined && entry.type === 'file';
-          }
-        } catch {
-          existed = false;
-        }
-        (window as unknown as { __recipePhotoExisted?: boolean }).__recipePhotoExisted = existed;
-        return { text: '{"dish":"Omelette","ingredients":["egg","cheddar","bacon"]}' };
-      },
-    };
-  });
-}
 
 /** Click the actual clickable row, scoped to its wrapper — a Review or Recipes row's `right` slot
  * (a kcal figure, or a More button) sits outside the row's own `<button>`, so a raw click on the
@@ -112,28 +20,8 @@ async function clickRow(page: Page, testId: string): Promise<void> {
   await page.getByTestId(testId).getByRole('button').first().click();
 }
 
-/**
- * Install a fake Nano whose `generate` answers "Estimate a meal out" with a fixed JSON estimate —
- * the `window.__ironNanoFake` seam `Nano.generate` reads, same as `installPhotoFake` does for
- * `analyzeMeal`. Every `part` name here is one this repo's REAL bundled UK table/alias data
- * actually resolves (via a curated alias, exact word match), so the review that follows is exercising
- * real `matchIngredient` against real data, not a name chosen to merely look plausible.
- */
-async function installEstimateFake(page: Page, parts: { name: string; grams?: number }[], dish?: string): Promise<void> {
-  await page.addInitScript(
-    ({ parts, dish }) => {
-      (window as unknown as { __ironNanoFake?: unknown }).__ironNanoFake = {
-        status: { state: 'ready', detail: 'ready' },
-        generate: async () => ({ text: JSON.stringify({ ...(dish ? { dish } : {}), parts }) }),
-        analyzeMeal: async () => ({ text: '{"ingredients":[]}' }),
-      };
-    },
-    { parts, dish },
-  );
-}
-
 test.describe('recipe builder', () => {
-  test('manual floor: search the table, set an amount by hand, save and log — no Nano involved', async ({ page }) => {
+  test('manual floor: search the table, set an amount by hand, save and log — no model involved', async ({ page }) => {
     await fresh(page);
     await page.goto('/food');
     await page.getByTestId('recipes-button').click();
@@ -158,47 +46,6 @@ test.describe('recipe builder', () => {
     await page.getByTestId('recipe-save-log').click();
     await page.waitForURL(/\/food\/[0-9a-f-]+$/);
     await expect(page.getByTestId('meal-total')).toContainText('197 kcal');
-  });
-
-  test('photo path: recognise, answer one ingredient at a time, save and log — the temp photo is gone after', async ({ page }) => {
-    // Install the fake BEFORE fresh() navigates, so it is already on `window` the moment the app
-    // boots and calls Nano.status() on mount.
-    await installPhotoFake(page);
-    await fresh(page);
-    await page.goto('/food/recipes/new');
-    await expect(page.getByTestId('recipe-take-photo')).toBeEnabled();
-
-    const buffer = await makeJpegBuffer(page);
-    await page.getByTestId('recipe-photo-input').setInputFiles({ name: 'meal.jpg', mimeType: 'image/jpeg', buffer });
-
-    await expect(page.getByTestId('question-name')).toHaveText('Egg');
-    await page.getByTestId('question-count').fill('3');
-    await page.getByTestId('question-next').click();
-
-    await expect(page.getByTestId('question-name')).toHaveText('Cheddar');
-    await page.getByTestId('question-grams').fill('30');
-    await page.getByTestId('question-next').click();
-
-    await expect(page.getByTestId('question-name')).toHaveText('Bacon');
-    await page.getByTestId('question-count').fill('2');
-    await page.getByTestId('question-next').click(); // last ingredient: "Done" → review
-
-    await expect(page.getByTestId('recipe-name')).toHaveValue('Omelette');
-
-    const existed = await page.evaluate(() => (window as unknown as { __recipePhotoExisted?: boolean }).__recipePhotoExisted);
-    expect(existed).toBe(true);
-
-    // Egg 150 g @ 131 kcal/100g = 196.5 → 197; cheddar 30 g @ 416 = 124.8 → 125; bacon 50 g @ 215
-    // = 107.5 → 108. Round each row then sum (197 + 125 + 108 = 430) — never sum then round.
-    await expect(page.getByTestId('review-total-kcal')).toHaveText('430 kcal');
-
-    await page.getByTestId('recipe-save-log').click();
-    await page.waitForURL(/\/food\/[0-9a-f-]+$/);
-    // Eating the whole recipe logs the total the review showed — 430, not the unrounded 428.8
-    // (which would read 429 beside a review that said 430).
-    await expect(page.getByTestId('meal-total')).toContainText('430 kcal');
-
-    await expect.poll(async () => (await readMealPhotoFiles(page)).length, { timeout: 10_000 }).toBe(0);
   });
 
   test('scan the bacon pack: the source line and the share kcal both pick up the label', async ({ page, browser, context }) => {
@@ -299,20 +146,16 @@ test.describe('recipe builder', () => {
     await expect(page.getByTestId('question-source')).toHaveText('Your food');
   });
 
-  test('Nano unavailable: Take a photo is disabled with the state shown, but typing still works end to end', async ({ page }) => {
-    await page.addInitScript(() => {
-      (window as unknown as { __ironNanoFake?: unknown }).__ironNanoFake = {
-        status: { state: 'unavailable', detail: 'UNAVAILABLE · test fixture' },
-        generate: async () => ({ text: '' }),
-      };
-    });
+  test('the start phase offers Type it and Add ingredients, and typing works end to end', async ({ page }) => {
     await fresh(page);
     await page.goto('/food/recipes/new');
 
-    await expect(page.getByTestId('recipe-take-photo')).toBeDisabled();
-    await expect(page.getByTestId('recipe-assistant-state')).toContainText('unavailable');
-    // "Estimate a meal out" is gated on the exact same Nano status as "Take a photo".
-    await expect(page.getByTestId('recipe-start-estimate')).toBeDisabled();
+    await expect(page.getByTestId('recipe-type-it')).toBeVisible();
+    await expect(page.getByTestId('recipe-add-ingredients')).toBeVisible();
+    // The photo and the meal-out estimate went with the on-device model.
+    await expect(page.getByTestId('recipe-take-photo')).toHaveCount(0);
+    await expect(page.getByTestId('recipe-start-estimate')).toHaveCount(0);
+    await expect(page.getByTestId('recipe-assistant-state')).toHaveCount(0);
 
     await page.getByTestId('recipe-type-it').click();
     await page.getByTestId('recipe-typed-text').fill('3 eggs, 30g cheddar');
@@ -329,27 +172,6 @@ test.describe('recipe builder', () => {
     await expect(page.getByTestId('review-total-kcal')).toBeVisible();
     await page.getByTestId('recipe-save').click();
     await page.waitForURL(/\/food\/recipes$/);
-  });
-
-  test('unparseable model output lands on recognise-none, never a stuck zero-ingredient card', async ({ page }) => {
-    await page.addInitScript(() => {
-      (window as unknown as { __ironNanoFake?: unknown }).__ironNanoFake = {
-        status: { state: 'ready', detail: 'ready' },
-        generate: async () => ({ text: '' }),
-        analyzeMeal: async () => ({ text: 'Sorry.' }),
-      };
-    });
-    await fresh(page);
-    await page.goto('/food/recipes/new');
-    await expect(page.getByTestId('recipe-take-photo')).toBeEnabled();
-
-    const buffer = await makeJpegBuffer(page);
-    await page.getByTestId('recipe-photo-input').setInputFiles({ name: 'meal.jpg', mimeType: 'image/jpeg', buffer });
-
-    // Lands on the review, with a factual line — not a question card frozen on 0 of 0.
-    await expect(page.getByTestId('recognise-none')).toBeVisible();
-    await expect(page.getByTestId('question-card')).toHaveCount(0);
-    await expect(page.getByTestId('recipe-add-ingredient')).toBeVisible();
   });
 
   test('a saved recipe is logged from Recipes in one tap plus Log', async ({ page }) => {
@@ -508,6 +330,7 @@ test.describe('recipe builder', () => {
 
     await fresh(page);
     await page.goto('/settings');
+    await openAdvanced(page);
     await page.getByRole('switch', { name: /Look up labels online/ }).click();
     await expect(page.getByText('Off.')).toBeVisible();
 
@@ -723,225 +546,5 @@ test.describe('recipe builder', () => {
     await page.reload();
     await expect(page.getByRole('button', { name: /Three eggs/ })).toBeVisible();
     await expect(page.getByTestId('meal-total')).toContainText('197 kcal');
-  });
-
-  test('Cancel during photo recognition returns to the start phase, and the temp photo is still cleaned up once the stale call resolves', async ({ page }) => {
-    await page.addInitScript(() => {
-      let release: (() => void) | undefined;
-      const gate = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      (window as unknown as { __releaseAnalyze?: () => void }).__releaseAnalyze = () => release?.();
-      (window as unknown as { __ironNanoFake?: unknown }).__ironNanoFake = {
-        status: { state: 'ready', detail: 'ready' },
-        generate: async () => ({ text: '' }),
-        analyzeMeal: async () => {
-          await gate; // holds its answer until the test releases it
-          return { text: '{"dish":"Omelette","ingredients":["egg"]}' };
-        },
-      };
-    });
-    await fresh(page);
-    await page.goto('/food/recipes/new');
-    await expect(page.getByTestId('recipe-take-photo')).toBeEnabled();
-
-    const buffer = await makeJpegBuffer(page);
-    await page.getByTestId('recipe-photo-input').setInputFiles({ name: 'meal.jpg', mimeType: 'image/jpeg', buffer });
-    await expect(page.getByTestId('recipe-recognising')).toBeVisible();
-
-    // The photo really is on disk before Cancel — so waiting for it to disappear, later, is
-    // actually waiting on something, not vacuously already true.
-    await expect.poll(async () => (await readMealPhotoFiles(page)).length, { timeout: 10_000 }).toBe(1);
-
-    await page.getByTestId('recipe-recognise-cancel').click();
-    // Positive signal: back on the start phase (not merely "recognising is no longer shown").
-    await expect(page.getByTestId('recipe-take-photo')).toBeVisible();
-
-    // Release the stale in-flight call, then wait for a positive signal that its `finally` ran —
-    // the temp photo actually being deleted — before checking anything about the resulting state.
-    // Never asserted on a bare "nothing changed": a toast repeats verbatim and a poll can pass on
-    // its first sample before the real work is done.
-    await page.evaluate(() => (window as unknown as { __releaseAnalyze?: () => void }).__releaseAnalyze?.());
-    await expect.poll(async () => (await readMealPhotoFiles(page)).length, { timeout: 10_000 }).toBe(0);
-
-    await expect(page.getByTestId('question-card')).toHaveCount(0);
-    await expect(page.getByTestId('recipe-take-photo')).toBeVisible();
-  });
-});
-
-test.describe('estimate a meal out', () => {
-  test('typed description → five estimated parts straight to Review, rows sum to the total, save and log', async ({ page }) => {
-    await installEstimateFake(
-      page,
-      [
-        { name: 'beef mince', grams: 300 }, // "patties" — one entry for the whole dish, not two
-        { name: 'bread', grams: 90 }, // "bun"
-        { name: 'cheddar', grams: 40 },
-        { name: 'bacon', grams: 50 }, // has a unit (rasher, 25 g) — still shown as "≈ 50 g · est."
-        { name: 'mayonnaise', grams: 20 },
-      ],
-      'Five Guys double bacon cheeseburger',
-    );
-    await fresh(page);
-    await page.goto('/food/recipes/new');
-    await expect(page.getByTestId('recipe-start-estimate')).toBeEnabled();
-    await page.getByTestId('recipe-start-estimate').click();
-    await page.getByTestId('recipe-estimate-text').fill('Five Guys double bacon cheeseburger');
-    await page.getByTestId('recipe-estimate-submit').click();
-
-    // Straight to Review — no one-at-a-time question-card walk in between.
-    await expect(page.getByTestId('question-card')).toHaveCount(0);
-    await expect(page.getByTestId('recipe-name')).toHaveValue('Five Guys double bacon cheeseburger');
-    for (let i = 0; i < 5; i++) {
-      await expect(page.getByTestId(`review-row-${i}`)).toBeVisible();
-      await expect(page.getByTestId(`review-estimated-${i}`)).toContainText('est.');
-    }
-    await expect(page.getByTestId('review-estimate')).toBeVisible();
-
-    // Beef mince 300g @ 225 = 675; bread 90g @ 219 = 197.1 → 197; cheddar 40g @ 416 = 166.4 → 166;
-    // bacon 50g @ 215 = 107.5 → 108; mayonnaise 20g @ 686 = 137.2 → 137. Round each row then sum:
-    // 675 + 197 + 166 + 108 + 137 = 1283 — the real bundled CoFID figures, not hand-picked ones.
-    await expect(page.getByTestId('review-total-kcal')).toHaveText('1283 kcal');
-
-    await page.getByTestId('recipe-save-log').click();
-    await page.waitForURL(/\/food\/[0-9a-f-]+$/);
-    await expect(page.getByTestId('meal-total')).toContainText('1283 kcal');
-  });
-
-  test('editing an amount clears its "est." marker; the Estimate label stays until every amount is edited', async ({ page }) => {
-    await installEstimateFake(
-      page,
-      [
-        { name: 'beef mince', grams: 300 },
-        { name: 'bread', grams: 90 },
-        { name: 'cheddar', grams: 40 },
-        { name: 'bacon', grams: 50 },
-        { name: 'mayonnaise', grams: 20 },
-      ],
-      'Five Guys double bacon cheeseburger',
-    );
-    await fresh(page);
-    await page.goto('/food/recipes/new');
-    await page.getByTestId('recipe-start-estimate').click();
-    await page.getByTestId('recipe-estimate-text').fill('Five Guys double bacon cheeseburger');
-    await page.getByTestId('recipe-estimate-submit').click();
-    await expect(page.getByTestId('review-estimate')).toBeVisible();
-
-    // Edit only the first row's amount.
-    await clickRow(page, 'review-row-0');
-    await expect(page.getByTestId('question-grams')).toHaveValue('300');
-    await page.getByTestId('question-grams').fill('350');
-    await page.getByTestId('question-next').click();
-
-    await expect(page.getByTestId('review-estimated-0')).toHaveCount(0);
-    // The other four rows are still estimated, so the label stays.
-    await expect(page.getByTestId('review-estimate')).toBeVisible();
-
-    // Edit the remaining four amounts, one at a time.
-    await clickRow(page, 'review-row-1'); // bread: also a count-style unit ("slice")
-    await expect(page.getByTestId('question-count')).toBeVisible();
-    await page.getByTestId('question-count').fill('2');
-    await page.getByTestId('question-next').click();
-
-    await clickRow(page, 'review-row-2');
-    await page.getByTestId('question-grams').fill('45');
-    await page.getByTestId('question-next').click();
-
-    await clickRow(page, 'review-row-3'); // bacon: a count-style unit, not a plain grams field
-    await expect(page.getByTestId('question-count')).toBeVisible();
-    await page.getByTestId('question-count').fill('3');
-    await page.getByTestId('question-next').click();
-    await expect(page.getByTestId('review-estimated-3')).toHaveCount(0);
-    // Three of five edited so far — the label is still up.
-    await expect(page.getByTestId('review-estimate')).toBeVisible();
-
-    await clickRow(page, 'review-row-4');
-    await page.getByTestId('question-grams').fill('25');
-    await page.getByTestId('question-next').click();
-
-    // Every amount has now been edited — the factual "Estimate" label is gone.
-    await expect(page.getByTestId('review-estimate')).toHaveCount(0);
-    await expect(page.locator('[data-testid^="review-estimated-"]')).toHaveCount(0);
-  });
-
-  test('Nano unavailable: Estimate a meal out is disabled with the state shown, and the other start options still work', async ({ page }) => {
-    await page.addInitScript(() => {
-      (window as unknown as { __ironNanoFake?: unknown }).__ironNanoFake = {
-        status: { state: 'unavailable', detail: 'UNAVAILABLE · test fixture' },
-        generate: async () => ({ text: '' }),
-      };
-    });
-    await fresh(page);
-    await page.goto('/food/recipes/new');
-
-    await expect(page.getByTestId('recipe-start-estimate')).toBeDisabled();
-    await expect(page.getByTestId('recipe-assistant-state')).toContainText('unavailable');
-
-    // The other, non-Nano start option still completes a recipe end to end.
-    await page.getByTestId('recipe-add-ingredients').click();
-    await page.getByTestId('picker-search').fill('egg');
-    await page.getByTestId('picker-result-0').click();
-    await expect(page.getByTestId('review-row-0')).toBeVisible();
-  });
-
-  test('unparseable model output lands on recognise-none, never a stuck empty review with no explanation', async ({ page }) => {
-    await page.addInitScript(() => {
-      (window as unknown as { __ironNanoFake?: unknown }).__ironNanoFake = {
-        status: { state: 'ready', detail: 'ready' },
-        generate: async () => ({ text: 'Sorry, I cannot help with that.' }),
-      };
-    });
-    await fresh(page);
-    await page.goto('/food/recipes/new');
-    await page.getByTestId('recipe-start-estimate').click();
-    await page.getByTestId('recipe-estimate-text').fill('something unrecognisable');
-    await page.getByTestId('recipe-estimate-submit').click();
-
-    await expect(page.getByTestId('recognise-none')).toBeVisible();
-    await expect(page.getByTestId('question-card')).toHaveCount(0);
-    await expect(page.getByTestId('recipe-add-ingredient')).toBeVisible();
-  });
-
-  test('from an existing meal, Estimate opens the text box directly and the logged item is appended to that meal', async ({ page }) => {
-    await installEstimateFake(page, [{ name: 'cheddar', grams: 40 }], 'Cheese snack');
-    await fresh(page);
-
-    // Build an ordinary existing meal with one food item first, so there is a real meal id to
-    // navigate `estimate-meal` to.
-    await page.goto('/food/new');
-    await page.getByTestId('meal-name').fill('Snack');
-    await page.getByTestId('empty-add-food').click();
-    await page.getByTestId('food-name').fill('Toast');
-    await page.getByTestId('food-grams').fill('50');
-    await page.getByTestId('food-kcal').fill('250');
-    await page.getByTestId('food-protein').fill('8');
-    await page.getByTestId('food-carbs').fill('45');
-    await page.getByTestId('food-fat').fill('4');
-    await page.getByTestId('save-food').click();
-    await page.getByTestId('save-meal').click();
-    await page.waitForURL(/\/food\/[0-9a-f-]+$/);
-    const mealUrl = page.url();
-
-    await page.getByTestId('estimate-meal').click();
-    await expect(page).toHaveURL(/\/food\/recipes\/new\?start=estimate&meal=/);
-    // The text box opens directly — no need to tap "Estimate a meal out" first.
-    await expect(page.getByTestId('recipe-estimate-text')).toBeVisible();
-    await page.getByTestId('recipe-estimate-text').fill('a bit of cheese');
-    await page.getByTestId('recipe-estimate-submit').click();
-
-    await expect(page.getByTestId('review-row-0')).toContainText('Cheddar');
-    // 40 g @ 416 kcal/100g = 166.4 → 166, the real bundled CoFID figure.
-    await expect(page.getByTestId('review-total-kcal')).toHaveText('166 kcal');
-
-    await page.getByTestId('recipe-save-log').click();
-    // Back on the SAME meal, not a new one.
-    await page.waitForURL(mealUrl);
-    // The logged item takes the recipe/dish name ("Cheese snack"), the same as any other saved
-    // recipe's share — not the ingredient's own name. (Its kcal sits in the row's `right` slot,
-    // outside the row's own `<button>` — see `clickRow`'s doc comment above.)
-    const row = page.getByRole('button', { name: /Cheese snack/ });
-    await expect(row).toBeVisible();
-    await expect(row).toContainText('1 of 1 portion');
-    await expect(page.getByText('166 kcal')).toBeVisible();
   });
 });

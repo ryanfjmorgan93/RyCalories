@@ -13,7 +13,6 @@ import { strengthLevel, type StrengthLevel } from '@/domain/standards';
 import { e1rmChange } from '@/domain/strength';
 import { averagesAreMeaningful, type Average, type Trend } from '@/domain/trends';
 import type { Bodyweight, Exercise, MuscleGroup, Settings } from '@/domain/types';
-import { ClaudeSheet } from '@/ui/ClaudeSheet';
 import { BodyCompositionCard } from '@/ui/BodyCompositionCard';
 import { BodyMap } from '@/ui/components/BodyMap';
 import { Button, IconButton } from '@/ui/components/Button';
@@ -44,7 +43,6 @@ export function ProgressScreen() {
   const today = useToday();
   const settings = useSettings();
   const [window, setWindow] = useState<Window>('28');
-  const [claudeOpen, setClaudeOpen] = useState(false);
 
   const data = useLiveQuery(
     async () => (settings ? trendWindow(today, Number(window), settings) : undefined),
@@ -108,13 +106,9 @@ export function ProgressScreen() {
             <Button size="md" variant="ghost" onClick={() => nav('/coach')} data-testid="coach-open">
               Coach
             </Button>
-            <Button size="md" variant="ghost" onClick={() => setClaudeOpen(true)} data-testid="claude-open">
-              Claude
-            </Button>
           </div>
         }
       />
-      <ClaudeSheet open={claudeOpen} onClose={() => setClaudeOpen(false)} />
       <div className="px-4">
         <Segmented value={window} onChange={setWindow} options={WINDOWS} />
         <div className="h-4" />
