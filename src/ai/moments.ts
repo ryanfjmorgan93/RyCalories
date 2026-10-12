@@ -234,7 +234,7 @@ export async function weeklyReview(facts: MomentFacts = {}, opts: ReviewOptions 
   const message = await createMessage(
     {
       model: SONNET,
-      max_tokens: 2000,
+      max_tokens: 8000, // adaptive thinking counts toward it; only what is generated is billed
       output_config: { effort: 'medium', format: { type: 'json_schema', schema: REVIEW_SCHEMA } },
       system: [
         { type: 'text', text: `${personaWith(REVIEW_RULES)}\n\n${stable}`, cache_control: { type: 'ephemeral' } },

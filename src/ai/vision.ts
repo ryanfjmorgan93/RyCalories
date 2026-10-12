@@ -129,7 +129,9 @@ async function readStructured<S extends z.ZodType>(
   const message = await createMessage(
     {
       model: SONNET,
-      max_tokens: opts.maxTokens ?? 2000,
+      // Adaptive thinking counts toward max_tokens; a structured reply cut short is unreadable, and
+      // only the tokens generated are billed, so the ceiling is generous.
+      max_tokens: opts.maxTokens ?? 8000,
       output_config: { effort: opts.effort, format: { type: 'json_schema', schema: opts.json } },
       system: READER_RULES,
       messages: [{ role: 'user', content }],
@@ -197,7 +199,6 @@ export async function readLabelPhoto(jpegBase64: string, deps: CallDeps = {}): P
       prompt:
         'This is a photo of a food label or pack. Read the product name, the brand if shown, and the nutrition per 100 g (or 100 ml), with energy in kilocalories. If the label only gives per-serving values, convert them to per 100 g using the serving size. Give the serving size and the pack weight in grams only if they are printed.',
       effort: 'medium',
-      maxTokens: 800,
     },
     deps,
   );
@@ -246,7 +247,6 @@ export async function readInbodySheet(jpegBase64: string, deps: CallDeps = {}): 
       prompt:
         'This is a photo of an InBody body composition result sheet. Read only the values that are printed and legible; leave out any you cannot see rather than estimating. Weights are in kg. Give the test date as YYYY-MM-DD.',
       effort: 'medium',
-      maxTokens: 800,
     },
     deps,
   );

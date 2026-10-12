@@ -12,7 +12,7 @@ import { toDateKey } from '@/domain/dates';
 import type { CoachMessage } from '@/domain/types';
 import { fakeClaude, lastUserText, systemText, text, toolUse, type FakeRequest } from '@/test/fakeClaude';
 import { createCoachActions } from './actions';
-import { historyTurns, sendCoachMessage } from './chat';
+import { CHAT_MAX_TOKENS, historyTurns, sendCoachMessage } from './chat';
 import { CLAUDE_ERROR_MESSAGES } from './client';
 import { clearApiKey, setApiKey } from './key';
 import { setCap, spendThisMonth } from './spend';
@@ -71,7 +71,7 @@ describe('a turn where the coach uses a tool and then answers', () => {
       expect(req.url).toContain('/v1/messages');
       expect(req.headers['x-api-key']).toBe(KEY);
       expect(req.body.model).toBe('claude-sonnet-5-5');
-      expect(req.body.max_tokens).toBe(1500);
+      expect(req.body.max_tokens).toBe(CHAT_MAX_TOKENS);
       expect(req.body.output_config).toEqual({ effort: 'low' });
       // Sonnet 5.5 rejects both of these with a 400.
       expect(req.body.thinking).toBeUndefined();

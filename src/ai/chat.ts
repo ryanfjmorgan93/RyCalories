@@ -6,7 +6,7 @@
  *      reason with nothing written, so the sheet can keep what the owner typed;
  *   2. persists the owner's turn in `coachMessages`;
  *   3. builds the context (context.ts) and sends it, the last ~20 turns as plain text and the new
- *      message, to Sonnet 5.5 through the SDK's tool runner (max_tokens 1500, effort low, tool
+ *      message, to Sonnet 5.5 through the SDK's tool runner (max_tokens 4096, effort low, tool
  *      choice automatic), recording the spend of every request;
  *   4. persists the coach's reply with the lines for what its tools changed, and returns it.
  *
@@ -31,7 +31,9 @@ import { newTurnRecord, type TurnRecord } from './types';
 
 /** How many past turns are sent as history. */
 export const HISTORY_TURNS = 20;
-export const CHAT_MAX_TOKENS = 1500;
+// Room for Sonnet's adaptive thinking as well as the reply: thinking counts toward max_tokens, and a
+// reply cut off mid-tool-call is worse than a few unused tokens (only what is generated is billed).
+export const CHAT_MAX_TOKENS = 4096;
 
 export interface ChatOptions extends CallDeps {
   /** What the tools do. Defaults to the real actions with no way to change today's sets (see actions.ts). */
