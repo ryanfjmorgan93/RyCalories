@@ -14,6 +14,7 @@ import { e1rmChange } from '@/domain/strength';
 import { averagesAreMeaningful, type Average, type Trend } from '@/domain/trends';
 import type { Bodyweight, Exercise, MuscleGroup, Settings } from '@/domain/types';
 import { ClaudeSheet } from '@/ui/ClaudeSheet';
+import { BodyCompositionCard } from '@/ui/BodyCompositionCard';
 import { BodyMap } from '@/ui/components/BodyMap';
 import { Button, IconButton } from '@/ui/components/Button';
 import { CalendarHeatmap } from '@/ui/components/CalendarHeatmap';
@@ -124,6 +125,9 @@ export function ProgressScreen() {
           <>
             <SectionTitle>Bodyweight</SectionTitle>
             <BodyweightCard data={data} settings={settings!} today={today} />
+
+            <SectionTitle>Body</SectionTitle>
+            <BodyCompositionCard />
 
             <SectionTitle>Eating</SectionTitle>
             <EatingCard trend={data.trend} />

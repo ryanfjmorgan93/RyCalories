@@ -8,6 +8,7 @@ import { backupBeforeMigrationIfNeeded, checkForHistoryLoss, maybeAutoBackupAtBo
 import { useHistoryNoticeStore } from './state/historyNotice';
 import { applyTheme } from './ui/theme';
 import { isNative } from './state/native';
+import { startReminders } from './platform/reminders';
 import { DB_VERSION } from './db/db';
 import { renderRecovery } from './boot/recovery';
 
@@ -32,6 +33,7 @@ async function boot() {
   // After render, so none of this can slow down or block first paint. Each step guards its own
   // failures — nothing here may throw into the UI.
   void runHistorySafetyBoot(wasFreshInstall);
+  startReminders(); // plans now and on every background; a no-op off the phone (src/platform/reminders.ts)
 }
 
 async function runHistorySafetyBoot(wasFreshInstall: boolean): Promise<void> {
