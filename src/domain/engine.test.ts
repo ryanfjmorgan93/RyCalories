@@ -6,14 +6,15 @@ import {
   lockInBlocked,
   resolveWeight,
   roundKg,
-  suggestDoubleIncrement,
+  slotEffort,
+  effortOfRir,
   suggestRegression,
   suggestedLockInWeight,
   type EngineRoutineExercise,
   type EngineSet,
   type SessionOutcome,
 } from './engine';
-import { decisionLine, targetLine } from './format';
+import { decisionLine, effortReason, targetLine } from './format';
 import type { RoutineExercise } from './types';
 
 const rdl: EngineRoutineExercise = {
@@ -149,18 +150,20 @@ describe('failure and drop sets (domain/sets.ts helpers)', () => {
     expect(d.workingSets).toBe(3);
   });
 
-  it('double-increment refuses when a counted set is a failure with no RIR logged (reads as RIR 0)', () => {
+  it('a slot holding a failure set with no RIR logged (reads as RIR 0) is never Easy: one increment, not two', () => {
     const sets = [...working(110, [8, 8, 8], 4), failure(110, 8)];
     const d = decide(rdl, sets);
     expect(d.rule).toBe('increase');
-    expect(suggestDoubleIncrement(rdl, d, sets)).toBeNull();
+    expect(d.toWeight).toBe(115);
+    expect(d.effort).toBe('good');
   });
 
-  it('double-increment respects an explicit RIR logged on a failure set', () => {
+  it('an explicit RIR logged on a failure set is respected: Easy throughout still takes two increments', () => {
     const sets = [...working(110, [8, 8, 8], 4), failure(110, 8, 3)];
     const d = decide(rdl, sets);
     expect(d.rule).toBe('increase');
-    expect(suggestDoubleIncrement(rdl, d, sets)).toEqual({ kind: 'double_increment', toWeight: 120, minRir: 3 });
+    expect(d.toWeight).toBe(120);
+    expect(d.effort).toBe('easy');
   });
 });
 
@@ -410,31 +413,149 @@ describe('deviating from the prescribed weight', () => {
   });
 });
 
-describe('RIR double-increment suggestion (§4.3)', () => {
-  it('suggests +2 increments when every set hit repMax at RIR ≥ 3', () => {
-    const sets = working(110, [8, 8, 8, 8], 3);
-    const d = decide(rdl, sets);
-    const s = suggestDoubleIncrement(rdl, d, sets);
-    expect(s).toEqual({ kind: 'double_increment', toWeight: 120, minRir: 3 });
+describe('effort chips decide the step at the top of the range', () => {
+  // RDL 4 × 6–8 @ 110, +5 per increment.
+  const top = (rir?: number) => working(110, [8, 8, 8, 8], rir);
+
+  it('Easy (RIR 3) adds two increments', () => {
+    const d = decide(rdl, top(3));
+    expect(d.rule).toBe('increase');
+    expect(d.toWeight).toBe(120);
+    expect(d.effort).toBe('easy');
+    expect(d.changesWeight).toBe(true);
   });
 
-  it('does not suggest when any set was RIR < 3 or RIR is missing', () => {
-    const sets = working(110, [8, 8, 8, 8], 3);
-    sets[2] = { ...sets[2], rir: 2 };
-    expect(suggestDoubleIncrement(rdl, decide(rdl, sets), sets)).toBeNull();
-    const noRir = working(110, [8, 8, 8, 8], 4);
-    delete noRir[0].rir;
-    expect(suggestDoubleIncrement(rdl, decide(rdl, noRir), noRir)).toBeNull();
+  it('Good (RIR 2) adds one increment', () => {
+    const d = decide(rdl, top(2));
+    expect(d.rule).toBe('increase');
+    expect(d.toWeight).toBe(115);
+    expect(d.effort).toBe('good');
   });
 
-  it('never suggests on a hold', () => {
-    const sets = working(110, [8, 8, 8, 7], 5);
-    expect(suggestDoubleIncrement(rdl, decide(rdl, sets), sets)).toBeNull();
+  it('no chip counts as Good: one increment, and the decision carries no effort', () => {
+    const d = decide(rdl, top());
+    expect(d.rule).toBe('increase');
+    expect(d.toWeight).toBe(115);
+    expect(d.effort).toBeUndefined();
   });
 
-  it('ignores warm-up RIR', () => {
-    const sets = [{ ...warmup(60, 5), rir: 0 }, ...working(110, [8, 8, 8, 8], 4)];
-    expect(suggestDoubleIncrement(rdl, decide(rdl, sets), sets)?.kind).toBe('double_increment');
+  it('Hard (RIR 1) holds the weight one more session', () => {
+    const d = decide(rdl, top(1));
+    expect(d.rule).toBe('hold_hard');
+    expect(d.toWeight).toBe(110);
+    expect(d.effort).toBe('hard');
+    expect(d.changesWeight).toBe(false);
+  });
+
+  it('the three chips give three different outcomes at the top of the range', () => {
+    const to = [3, 2, 1].map((rir) => decide(rdl, top(rir)).toWeight);
+    expect(to).toEqual([120, 115, 110]);
+  });
+
+  it('a retired Maxed answer (RIR 0) reads as Hard, and an import\'s RIR 4 or 5 as Easy', () => {
+    expect(decide(rdl, top(0)).rule).toBe('hold_hard');
+    expect(decide(rdl, top(4)).toWeight).toBe(120);
+    expect(decide(rdl, top(5)).toWeight).toBe(120);
+  });
+
+  it('below the top of the range every chip holds the weight', () => {
+    for (const rir of [3, 2, 1, undefined]) {
+      const d = decide(rdl, working(110, [8, 8, 8, 7], rir));
+      expect(d.rule).toBe('hold');
+      expect(d.toWeight).toBe(110);
+    }
+  });
+
+  it('a missing set holds whatever the chip says', () => {
+    for (const rir of [3, 2, 1]) {
+      const d = decide(rdl, working(110, [8, 8, 8], rir));
+      expect(d.rule).toBe('hold_missing_sets');
+      expect(d.toWeight).toBe(110);
+    }
+  });
+
+  it('Easy steps from the weight actually lifted when every set agrees on a different one', () => {
+    const d = decide(rdl, working(105, [8, 8, 8, 8], 3));
+    expect(d.rule).toBe('increase');
+    expect(d.toWeight).toBe(115); // 105 + 2 × 5
+  });
+
+  it('Hard re-prescribes a deviated weight, like any hold', () => {
+    const d = decide(rdl, working(105, [8, 8, 8, 8], 1));
+    expect(d.rule).toBe('hold_hard');
+    expect(d.toWeight).toBe(105);
+    expect(d.changesWeight).toBe(true);
+  });
+
+  it('sets that disagree on the chip (or only some carry one) read as no chip: one increment', () => {
+    const mixed = top(3);
+    mixed[1] = { ...mixed[1], rir: 1 };
+    expect(decide(rdl, mixed).toWeight).toBe(115);
+    const some = top(3);
+    delete some[0].rir;
+    expect(decide(rdl, some).toWeight).toBe(115);
+  });
+
+  it('warm-up and drop sets, whatever RIR they carry, take no part in the chip', () => {
+    const sets = [{ ...warmup(60, 5), rir: 0 }, ...top(3), { ...drop(80, 20), rir: 0 }];
+    expect(decide(rdl, sets).toWeight).toBe(120);
+  });
+
+  it('a bodyweight_plus lift steps by its own increment too', () => {
+    const dip: EngineRoutineExercise = { ...rdl, kind: 'bodyweight_plus', currentWeight: 10, increment: 2.5 };
+    expect(decide(dip, working(10, [8, 8, 8, 8], 3)).toWeight).toBe(15);
+    expect(decide(dip, working(10, [8, 8, 8, 8], 1)).toWeight).toBe(10);
+  });
+
+  it('calibrating, deload and not-applicable exercises ignore the chip entirely', () => {
+    expect(decide({ ...rdl, mode: 'calibrating' }, top(3)).rule).toBe('calibrating');
+    expect(decide(rdl, top(3), { deload: true }).rule).toBe('deload');
+    expect(decide({ ...rdl, kind: 'timed' }, top(3)).rule).toBe('not_applicable');
+  });
+});
+
+describe('slotEffort', () => {
+  it('reads the shared RIR of the counted sets as Easy / Good / Hard', () => {
+    expect(slotEffort(working(110, [8, 8], 3))).toBe('easy');
+    expect(slotEffort(working(110, [8, 8], 2))).toBe('good');
+    expect(slotEffort(working(110, [8, 8], 1))).toBe('hard');
+    expect(slotEffort(working(110, [8, 8], 0))).toBe('hard');
+  });
+
+  it('is null when nothing was marked or the sets disagree', () => {
+    expect(slotEffort(working(110, [8, 8]))).toBeNull();
+    expect(slotEffort([])).toBeNull();
+    const mixed = working(110, [8, 8], 3);
+    mixed[0] = { ...mixed[0], rir: 2 };
+    expect(slotEffort(mixed)).toBeNull();
+  });
+
+  it('effortOfRir buckets the stored values', () => {
+    expect([5, 4, 3, 2, 1, 0].map(effortOfRir)).toEqual(['easy', 'easy', 'easy', 'good', 'hard', 'hard']);
+  });
+});
+
+describe('the reason the Summary quotes', () => {
+  const top = (rir?: number) => working(110, [8, 8, 8, 8], rir);
+
+  it('Hard: "Marked Hard, so 110 kg again"', () => {
+    const d = decide(rdl, top(1));
+    expect(effortReason(d, 'reps')).toBe('Marked Hard, so 110 kg again');
+    expect(decisionLine(d, 'reps')).toBe('8/8/8/8 at 110 kg → hold 110 kg');
+  });
+
+  it('Easy: "Felt easy: up 10 kg"', () => {
+    expect(effortReason(decide(rdl, top(3)), 'reps')).toBe('Felt easy: up 10 kg');
+  });
+
+  it('Good chip: "Felt good: up 5 kg"; no chip says nothing', () => {
+    expect(effortReason(decide(rdl, top(2)), 'reps')).toBe('Felt good: up 5 kg');
+    expect(effortReason(decide(rdl, top()), 'reps')).toBeNull();
+  });
+
+  it('says nothing when the chip changed nothing', () => {
+    expect(effortReason(decide(rdl, working(110, [8, 8, 8, 7], 1)), 'reps')).toBeNull();
+    expect(effortReason(decide(rdl, working(110, [8, 8, 8], 3)), 'reps')).toBeNull();
   });
 });
 

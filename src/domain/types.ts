@@ -192,6 +192,25 @@ export interface Session {
    * decides a weight (`finishSession`). Not indexed.
    */
   quick?: 'light' | 'normal';
+  /**
+   * Routine-exercise id → today's changes to its plan (sets, rep range, weight), for this session
+   * only. The saved routine is untouched until the owner chooses "Keep in routine"
+   * (`keepOverrideInRoutine`). Read through `effectiveRx` (`domain/planOverride.ts`). Not indexed;
+   * rides on the session row as-is, including through backups.
+   */
+  planOverrides?: Record<string, PlanOverride>;
+}
+
+/**
+ * A change to one routine-exercise's plan for a single session. Every field is optional: absent
+ * means "as the routine says". `weight` sets today's prescribed weight only; progression still
+ * decides from the sets actually logged.
+ */
+export interface PlanOverride {
+  targetSets?: number;
+  repMin?: number;
+  repMax?: number;
+  weight?: number;
 }
 
 export interface SetLog {
@@ -220,7 +239,9 @@ export type ProgressionRule =
   | 'calibrating'
   | 'not_applicable'
   | 'lock_in'
-  | 'deload';
+  | 'deload'
+  /** Every counted set reached the top of the range but the slot was marked Hard: the weight stays one more session. */
+  | 'hold_hard';
 
 export interface ProgressionDecision {
   id: string;

@@ -3,17 +3,20 @@
  *
  * Four set types (see `domain/sets.ts`): warm-up, working, failure, drop.
  *   - working and failure sets both drive progression (`countsForProgression`); a failure set
- *     with no RIR logged reads as RIR 0, so it never qualifies for the double-increment nudge.
+ *     with no RIR logged reads as RIR 0, so a slot holding one is never read as Easy (`slotEffort`).
  *   - warm-up and drop sets are ignored entirely by the engine.
  *
- * Double progression (§4.1):
- *   - every counted set ≥ repMax   → increase by `increment`
- *   - otherwise                    → hold
+ * Double progression (§4.1), with the slot's effort chip (Easy / Good / Hard) deciding the size
+ * of the step when every counted set reached the top of the range:
+ *   - every counted set ≥ repMax, marked Easy          → increase by two increments
+ *   - every counted set ≥ repMax, marked Good / no chip → increase by `increment`
+ *   - every counted set ≥ repMax, marked Hard          → hold the weight one more session (`hold_hard`)
+ *   - otherwise                                        → hold (the chip changes nothing below the top)
  *   - fewer counted sets than targetSets → hold (missing sets count as misses)
  *   - calibrating exercises produce no decision
  *   - carry / timed exercises never produce a weight decision
  */
-import { countsForProgression, effortRir } from './sets';
+import { countsForProgression, effortRir, feelOf } from './sets';
 import type { ExerciseKind, ProgressionMode, ProgressionRule, SetType } from './types';
 
 export interface EngineRoutineExercise {
@@ -36,6 +39,9 @@ export interface EngineSet {
   seconds?: number;
 }
 
+/** How the slot felt, read from the stored RIR: Easy 3+, Good 2, Hard 1 or less. */
+export type Effort = 'easy' | 'good' | 'hard';
+
 export interface Decision {
   routineExerciseId: string;
   rule: ProgressionRule;
@@ -51,10 +57,11 @@ export interface Decision {
   targetSets: number;
   /** True when the decision changes the prescription (increase, or a hold at a deviated weight). */
   changesWeight: boolean;
+  /** The slot's effort chip, when it carries one. Absent when nothing was marked (read as Good). */
+  effort?: Effort;
 }
 
 export type Suggestion =
-  | { kind: 'double_increment'; toWeight: number; minRir: number }
   | { kind: 'regression'; holdWeight: number; dropWeight: number; setsBelowMin: number }
   | { kind: 'stalled'; sessions: number; weight: number };
 
@@ -65,6 +72,25 @@ export function roundKg(n: number): number {
 
 export function workingSets(sets: EngineSet[]): EngineSet[] {
   return sets.filter((s) => countsForProgression(s.type));
+}
+
+/** The effort a stored RIR stands for: Easy at 3 or more, Good at 2, Hard at 1 or less. */
+export function effortOfRir(rir: number): Effort {
+  return rir >= 3 ? 'easy' : rir >= 2 ? 'good' : 'hard';
+}
+
+/**
+ * A slot's effort: the RIR its counted sets share (`feelOf`), as Easy / Good / Hard. Null when
+ * nothing was marked, or the sets disagree. A failure set reads as RIR 0 whatever the chip says
+ * (`effortRir`), so a slot holding one is never Easy — it falls back to Good, today's step.
+ */
+export function slotEffort(sets: EngineSet[]): Effort | null {
+  const working = workingSets(sets);
+  const shared = feelOf(working);
+  if (shared === null) return null;
+  const effort = effortOfRir(shared);
+  if (effort === 'easy' && working.some((s) => (effortRir(s) ?? 3) < 3)) return 'good';
+  return effort;
 }
 
 /** Kinds the engine will never write a weight decision for. */
@@ -85,6 +111,7 @@ export function decide(rx: EngineRoutineExercise, sets: EngineSet[], opts?: { de
   const sessionWeight =
     weights.length > 0 && weights.every((w) => w === weights[0]) ? weights[0] : null;
 
+  const effort = slotEffort(sets);
   const base: Omit<Decision, 'rule' | 'toWeight' | 'changesWeight'> = {
     routineExerciseId: rx.id,
     fromWeight: rx.currentWeight,
@@ -92,6 +119,7 @@ export function decide(rx: EngineRoutineExercise, sets: EngineSet[], opts?: { de
     workingReps: reps,
     workingSets: working.length,
     targetSets: rx.targetSets,
+    ...(effort ? { effort } : {}),
   };
 
   if (!producesWeightDecision(rx.kind)) {
@@ -116,7 +144,12 @@ export function decide(rx: EngineRoutineExercise, sets: EngineSet[], opts?: { de
 
   const allAtTop = reps.every((r) => r >= rx.repMax);
   if (allAtTop) {
-    const to = roundKg(baseWeight + rx.increment);
+    // The chip decides the step: Hard holds, Easy takes two increments, Good or none takes one.
+    if (effort === 'hard') {
+      const to = roundKg(baseWeight);
+      return { ...base, rule: 'hold_hard', toWeight: to, changesWeight: to !== rx.currentWeight };
+    }
+    const to = roundKg(baseWeight + rx.increment * (effort === 'easy' ? 2 : 1));
     return { ...base, rule: 'increase', toWeight: to, changesWeight: true };
   }
   const to = roundKg(baseWeight);
@@ -130,21 +163,6 @@ export function resolveWeight(decision: Decision, overrideTo?: number): number {
     return decision.fromWeight;
   }
   return decision.toWeight;
-}
-
-/**
- * §4.3 — all working sets hit repMax with RIR ≥ 3 on every set → suggest a double increment.
- * Every working set must carry an RIR value; a missing RIR means we can't claim it was easy.
- */
-export function suggestDoubleIncrement(rx: EngineRoutineExercise, decision: Decision, sets: EngineSet[]): Suggestion | null {
-  if (decision.rule !== 'increase') return null;
-  const working = workingSets(sets);
-  if (working.length === 0) return null;
-  const rirs = working.map((s) => effortRir(s));
-  if (!rirs.every((r) => typeof r === 'number' && r >= 3)) return null;
-  const minRir = Math.min(...(rirs as number[]));
-  const baseWeight = decision.sessionWeight ?? rx.currentWeight;
-  return { kind: 'double_increment', toWeight: roundKg(baseWeight + rx.increment * 2), minRir };
 }
 
 /** Number of working sets that fell below repMin. */

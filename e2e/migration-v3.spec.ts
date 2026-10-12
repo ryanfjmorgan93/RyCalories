@@ -13,7 +13,8 @@ import { backupsOfKind, createRawIronDb, IRON_SCHEMA_V2, readBackupFiles, readRa
  * finished — never a sleep, and never the `next-up` render alone, which can be satisfied by a
  * PREVIOUS load's history check on a reload), then checks:
  *
- *   - the on-disk version is now 30 (Dexie schema v3);
+ *   - the on-disk version is now 40: the app opens at its current schema (v4), so the v2 database
+ *     passes through v3 (recipes, what this spec is about) and v4 (e2e/migration-v4.spec.ts) in one go;
  *   - every seeded row survived unchanged;
  *   - the 'recipes' store exists;
  *   - a pre-migration backup was written, from the OLD (pre-upgrade) shape — the exact thing
@@ -116,7 +117,7 @@ function fixture() {
 }
 
 test.describe('v2 → v3 migration (recipes)', () => {
-  test('upgrades to version 30, keeps every seeded row, adds the recipes store, and writes a pre-migration backup', async ({ page }) => {
+  test('upgrades to the current version (40), keeps every seeded row, adds the recipes store, and writes a pre-migration backup', async ({ page }) => {
     await page.goto('/icons/icon-192.png'); // a static asset: no app JS runs, so nothing opens `iron` before this test does
     const data = fixture();
     await createRawIronDb(page, 20, IRON_SCHEMA_V2, data);
@@ -125,9 +126,10 @@ test.describe('v2 → v3 migration (recipes)', () => {
     await expect(page.getByTestId('next-up')).toBeVisible();
     await waitForHistoryCheckSettled(page);
 
-    // The schema: Dexie's raw version is its declared version ×10, so 30 is schema v3.
+    // The schema: Dexie's raw version is its declared version ×10, so 40 is schema v4 (the current
+    // one), which includes v3's recipes store.
     const raw = await readRawIron(page);
-    expect(raw.version).toBe(30);
+    expect(raw.version).toBe(40);
     expect(Object.keys(raw.tables)).toContain('recipes');
     expect(raw.tables.recipes).toEqual([]);
 

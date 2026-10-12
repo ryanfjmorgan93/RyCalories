@@ -264,6 +264,9 @@ function DecisionLine({ decision, kind }: { decision: ProgressionDecision; kind:
     case 'hold_missing_sets':
       text = `hold ${w(decision.toWeight)}`;
       break;
+    case 'hold_hard':
+      text = `marked Hard, so ${w(decision.toWeight)} again`;
+      break;
     case 'calibrating':
       text = 'calibrating';
       tone = 'text-info';

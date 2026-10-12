@@ -346,6 +346,7 @@ const RULE_LABEL: Record<ProgressionRule, string> = {
   increase: 'up',
   hold: 'hold',
   hold_missing_sets: 'hold (missed sets)',
+  hold_hard: 'hold (marked Hard)',
   calibrating: 'calibrating',
   not_applicable: 'no decision',
   lock_in: 'locked in',

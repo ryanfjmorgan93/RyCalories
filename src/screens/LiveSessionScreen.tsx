@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { db } from '@/db/db';
 import { addExtraExercise, discardSession } from '@/db/repo';
 import { mergeStableSlots } from '@/domain/mergeStableSlots';
+import { effectiveRx } from '@/domain/planOverride';
 import { isStaleSession, startedHoursAgoLabel } from '@/domain/session';
 import { countsForProgression } from '@/domain/sets';
 import type { Exercise, SetLog } from '@/domain/types';
@@ -56,13 +57,22 @@ export function LiveSessionScreen() {
     else if (session && session.endedAt) nav(`/history/${session.id}`, { replace: true });
   }, [session, nav]);
 
+  const planOverrides = session?.planOverrides;
   const slots: Slot[] = useMemo(() => {
-    const base = (items ?? []).map<Slot>((i) => ({ key: i.rx.id, rx: i.rx, exercise: i.exercise, optional: i.rx.optional }));
+    // The slot's rx is today's plan (the saved one with this session's override on it), so the
+    // prescription, set table, verdict, completion and rest below all see the same targets.
+    const base = (items ?? []).map<Slot>((i) => ({
+      key: i.rx.id,
+      rx: effectiveRx(i.rx, { planOverrides }),
+      savedRx: i.rx,
+      exercise: i.exercise,
+      optional: i.rx.optional,
+    }));
     const required = base.filter((s) => !s.optional);
     const optional = base.filter((s) => s.optional);
     const extra = (extras ?? []).map<Slot>((e) => ({ key: `x:${e.id}`, rx: null, exercise: e, optional: false }));
     return [...required, ...extra, ...optional];
-  }, [items, extras]);
+  }, [items, extras, planOverrides]);
 
   // Group adjacent required slots that share a supersetId into one bracket; everything else
   // (lone slots, extras, optional) stays a group of one.

@@ -8,7 +8,8 @@
  * No IO, no clock, no database.
  */
 import { decide, type Decision, type EngineRoutineExercise, type EngineSet } from './engine';
-import { fmtNum, fmtWeight } from './format';
+import { effortReason, fmtNum, fmtWeight } from './format';
+import { feelOf } from './sets';
 
 export interface Verdict {
   /** decide() on the sets logged so far — what the engine would decide if the session ended now. */
@@ -42,7 +43,10 @@ function projectFullTarget(
   const remaining = rx.targetSets - decision.workingSets;
   if (remaining <= 0) return decision;
   const padWeight = decision.sessionWeight ?? decision.fromWeight;
-  const pad: EngineSet[] = Array.from({ length: remaining }, () => ({ type: 'working', weight: padWeight, reps: rx.repMax }));
+  // The padding carries the effort the real sets already share, so a slot answered Easy or Hard
+  // before its target was raised is projected the way it will actually be decided.
+  const rir = feelOf(sets) ?? undefined;
+  const pad: EngineSet[] = Array.from({ length: remaining }, () => ({ type: 'working', weight: padWeight, reps: rx.repMax, rir }));
   return decide(rx, [...sets, ...pad], opts);
 }
 
@@ -73,6 +77,11 @@ export function liveVerdict(rx: EngineRoutineExercise, sets: EngineSet[], opts?:
       line: `${remaining} more at ${fmtNum(rx.repMax)} → ${w(projected.toWeight)}`,
       tone: 'accent',
     };
+  }
+
+  // Marked Hard at the top of the range: the weight is held on purpose, and the line says why.
+  if (decision.rule === 'hold_hard') {
+    return { decision, repsToGoUp: null, line: effortReason(decision, rx.kind), tone: 'muted' };
   }
 
   // Either a set already logged fell short of the top of the range, or there simply are not

@@ -97,7 +97,7 @@ export function formatEffort(rir: number, scale: EffortScale): string {
 // Feel — the plain-language replacement for RIR/RPE jargon. Every screen uses it; the RIR/RPE
 // helpers above are left for reading stored `rir` values, and no control offers the choice now.
 
-export type Feel = 'Easy' | 'Good' | 'Hard' | 'Maxed';
+export type Feel = 'Easy' | 'Good' | 'Hard';
 
 export interface FeelOption {
   /** Stored value: reps in reserve. */
@@ -105,24 +105,27 @@ export interface FeelOption {
   label: Feel;
 }
 
-/** The four feel chips, RIR 3 down to 0. */
+/**
+ * The three feel chips: Easy 3, Good 2, Hard 1. They decide next session's weight when every set
+ * reached the top of the range (`decide` in `domain/engine.ts`). What a chip stores is read back
+ * through `feelLabel`, so an older answer (a Maxed 0, or an import's 4–5) still lands on a chip.
+ */
 export const FEEL_OPTIONS: FeelOption[] = [
   { rir: 3, label: 'Easy' },
   { rir: 2, label: 'Good' },
   { rir: 1, label: 'Hard' },
-  { rir: 0, label: 'Maxed' },
 ];
 
 /**
  * The plain word for a logged RIR: Easy at 3 or above (a Hevy import can carry 4–5), Good at 2,
- * Hard at 1, Maxed at 0 or below. `undefined` (no RIR logged) is null, not a guess.
+ * Hard at 1 or below (the retired Maxed answer, RIR 0, counts as Hard). `undefined` (no RIR
+ * logged) is null, not a guess.
  */
 export function feelLabel(rir: number | undefined): Feel | null {
   if (typeof rir !== 'number' || !Number.isFinite(rir)) return null;
   if (rir >= 3) return 'Easy';
   if (rir >= 2) return 'Good';
-  if (rir >= 1) return 'Hard';
-  return 'Maxed';
+  return 'Hard';
 }
 
 /**
