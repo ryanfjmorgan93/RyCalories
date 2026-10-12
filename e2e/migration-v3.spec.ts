@@ -116,7 +116,7 @@ function fixture() {
 }
 
 test.describe('v2 → v3 migration (recipes)', () => {
-  test('upgrades to version 30, keeps every seeded row, adds the recipes store, and writes a pre-migration backup', async ({ page }) => {
+  test('upgrades through version 3 to the current schema, keeps every seeded row, adds the recipes store, and writes a pre-migration backup', async ({ page }) => {
     await page.goto('/icons/icon-192.png'); // a static asset: no app JS runs, so nothing opens `iron` before this test does
     const data = fixture();
     await createRawIronDb(page, 20, IRON_SCHEMA_V2, data);
@@ -125,9 +125,10 @@ test.describe('v2 → v3 migration (recipes)', () => {
     await expect(page.getByTestId('next-up')).toBeVisible();
     await waitForHistoryCheckSettled(page);
 
-    // The schema: Dexie's raw version is its declared version ×10, so 30 is schema v3.
+    // The schema: Dexie's raw version is its declared version ×10. A version-2 install opening
+    // this build upgrades straight through v3 to the current schema (v4 adds body scans and the coach).
     const raw = await readRawIron(page);
-    expect(raw.version).toBe(30);
+    expect(raw.version).toBe(40);
     expect(Object.keys(raw.tables)).toContain('recipes');
     expect(raw.tables.recipes).toEqual([]);
 
