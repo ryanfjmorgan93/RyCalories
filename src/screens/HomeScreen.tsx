@@ -1,17 +1,21 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
 import { db } from '@/db/db';
 import { logBodyweight, startSession } from '@/db/repo';
+import { loadHomeRoutines } from '@/db/homeQueries';
 import { dayView } from '@/db/todayQueries';
 import { acknowledgeFilePickerNotice, dismissHistoryNotice, restoreHistoryNotice } from '@/db/historySafety';
 import { isBackup, type Backup } from '@/db/backup';
 import { useHistoryNoticeStore } from '@/state/historyNotice';
 import { ZERO } from '@/domain/food';
 import { fmtDateTime, fmtKg, fmtMinutes, fmtNum, plural } from '@/domain/format';
-import { hasNoExercises, isConsecutiveLower } from '@/domain/schedule';
-import { dateKeyToDate } from '@/domain/dates';
+import { mostRestedRegion, openFacts } from '@/domain/homeToday';
+import { regionRecency } from '@/domain/routineOrder';
+import { isConsecutiveLower } from '@/domain/schedule';
+import { daysBetween, dateKeyToDate, isoToDateKey } from '@/domain/dates';
 import { weeklyDelta, bandStatus } from '@/domain/bodyweight';
+import { lastWeekReading, weighInDue } from '@/domain/weighIn';
 import type { Routine } from '@/domain/types';
 import { Button } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row, SectionTitle, Stat } from '@/ui/components/Card';
@@ -20,22 +24,26 @@ import { NumberInput } from '@/ui/components/NumberField';
 import { Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { ChevronIcon, TopBar } from '@/ui/components/TopBar';
+import { CoachLine } from '@/ui/CoachLine';
 import { QuickSessionSheet } from '@/ui/QuickSessionSheet';
 import { RestoreSheet } from '@/ui/RestoreSheet';
+import { RoutineCard } from '@/ui/RoutineCard';
+import { WeeklyReviewCard } from '@/ui/WeeklyReviewCard';
+import { WeighInCard } from '@/ui/WeighInCard';
 import {
   useActiveSession,
   useCalendar,
   useLastCompletedSession,
+  useMuscleRecency,
   useNextRoutineContext,
   useRecentSessions,
-  useRoutines,
   useSettings,
   useToday,
 } from '@/ui/hooks';
+import { useWeeklyReview } from '@/ui/useWeeklyReview';
 
 export function HomeScreen() {
   const nav = useNavigate();
-  const routines = useRoutines();
   const active = useActiveSession();
   const last = useLastCompletedSession();
   const rotation = useNextRoutineContext();
@@ -44,27 +52,28 @@ export function HomeScreen() {
   const [pending, setPending] = useState<Routine | null>(null);
   const [quickOpen, setQuickOpen] = useState(false);
 
-  const rxCounts = useLiveQuery(async () => {
-    const all = await db.routineExercises.toArray();
-    const m = new Map<string, number>();
-    for (const rx of all) m.set(rx.routineId, (m.get(rx.routineId) ?? 0) + 1);
-    return m;
-  }, []);
-
   // From the hook, never a bare toDateKey(): nothing on this screen is time-driven, so a plain
   // render-time read freezes on the day the screen mounted. Left open overnight it would show
   // yesterday's calories as today's progress, against yesterday's target.
   const todayKey = useToday();
   const calendar = useCalendar(12, todayKey, settings);
 
-  // A routine with no exercises has nothing to start; the buttons say so instead of opening an empty session.
-  const empty = (r: Routine) => hasNoExercises(rxCounts, r.id);
-  const exerciseCountText = (r: Routine) => (empty(r) ? 'No exercises' : `${rxCounts?.get(r.id) ?? 0} exercises`);
+  // Every routine, most rested first. The order is the whole suggestion: sessions are picked by feel.
+  const routines = useLiveQuery(() => loadHomeRoutines(todayKey), [todayKey]);
 
   const starting = useRef(false);
   const start = async (r: Routine) => {
-    if (starting.current || empty(r)) return;
-    if (rotation && isConsecutiveLower(routines ?? [], rotation.lastRoutineId, r.id, { lastWasLower: rotation.lastWasLower }) && pending?.id !== r.id) {
+    if (starting.current) return;
+    if (
+      rotation &&
+      isConsecutiveLower(
+        (routines ?? []).map((x) => x.routine),
+        rotation.lastRoutineId,
+        r.id,
+        { lastWasLower: rotation.lastWasLower },
+      ) &&
+      pending?.id !== r.id
+    ) {
       setPending(r);
       return;
     }
@@ -87,6 +96,31 @@ export function HomeScreen() {
   const kcal = view?.calories ?? null;
   const protein = view?.proteinTarget ?? null;
 
+  // The weekly weigh-in: due from Monday until a reading is logged in the week (the reminder's rule).
+  const readings = useLiveQuery(() => db.bodyweight.orderBy('date').toArray(), []);
+  // Null while the readings load, so neither the card nor the bodyweight section flashes in the wrong place.
+  const weighIn = readings ? weighInDue(readings.map((r) => r.date), todayKey) : null;
+
+  const review = useWeeklyReview(todayKey, settings);
+
+  // What the coach is told when the app opens. Held back until everything it names has loaded, so
+  // it is asked once, with the facts as they are, rather than once per query that arrives.
+  const recency = useMuscleRecency(todayKey);
+  const rested = useMemo(() => (recency ? mostRestedRegion(regionRecency(recency)) : null), [recency]);
+  const lastDay = last ? isoToDateKey(last.startedAt) : null;
+  const factsReady = !!settings && view !== undefined && recency !== undefined && last !== undefined && readings !== undefined;
+  const facts = openFacts({
+    weekday: new Intl.DateTimeFormat('en-GB', { weekday: 'long' }).format(dateKeyToDate(todayKey)),
+    hour: new Date().getHours(),
+    rested,
+    daysSinceSession: lastDay ? daysBetween(lastDay, todayKey) : null,
+    kcal: eaten.kcal,
+    protein: eaten.protein,
+    kcalTarget: kcal ? kcal.kcal : null,
+    proteinTarget: protein,
+    weighInDue: weighIn === true,
+  });
+
   return (
     <div>
       <TopBar
@@ -96,6 +130,12 @@ export function HomeScreen() {
       <div className="px-4">
         <HistoryNoticeCard />
 
+        <CoachLine moment="open" facts={facts} ask={factsReady} className="mt-3" />
+
+        {review && <WeeklyReviewCard review={review} />}
+
+        {weighIn === true && <WeighInCard today={todayKey} last={readings ? lastWeekReading(readings, todayKey) : null} />}
+
         {calendar && (
           <div className="mt-2 px-1 text-xs font-semibold text-muted" data-testid="streak-line">
             {calendar.streak > 0 ? `${calendar.streak} ${calendar.streak === 1 ? 'week' : 'weeks'} · ${calendar.line}` : `This week ${calendar.thisWeek} of ${calendar.weeklyTarget}`}
@@ -103,37 +143,12 @@ export function HomeScreen() {
         )}
 
         <SectionTitle right={<Button size="sm" variant="ghost" className="-mb-2 text-accent" onClick={() => nav('/routines')}>Edit</Button>}>Routines</SectionTitle>
-        <Card data-testid="routines-list">
-          {(routines ?? []).map((r, i) => (
-            <div key={r.id}>
-              {i > 0 && <Divider />}
-              <Row
-                onClick={() => nav(`/routines/${r.id}`)}
-                title={r.name}
-                subtitle={`${exerciseCountText(r)}${r.targetMinutes ? ` · ${r.targetMinutes} min` : ''}${r.isLowerBody ? ' · lower' : ''}`}
-                right={
-                  active ? (
-                    <ChevronIcon />
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      data-testid={`start-${r.name}`}
-                      disabled={empty(r)}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void start(r);
-                      }}
-                    >
-                      Start
-                    </Button>
-                  )
-                }
-              />
-            </div>
+        <div className="space-y-3" data-testid="routines-list">
+          {(routines ?? []).map((item) => (
+            <RoutineCard key={item.routine.id} item={item} settings={settings} active={!!active} onStart={() => void start(item.routine)} />
           ))}
-          {routines && routines.length === 0 && <div className="p-4"><EmptyState>No routines. Add one from the Routines tab.</EmptyState></div>}
-        </Card>
+          {routines && routines.length === 0 && <EmptyState>No routines. Add one from the Routines tab.</EmptyState>}
+        </div>
 
         {/* A short session needs no routine, so it is there with none. */}
         {!active && (
@@ -144,7 +159,7 @@ export function HomeScreen() {
 
         {settings && (kcal || protein !== null) && (
           // Eaten against target, and a tap through to the day. The targets alone were only ever
-          // half the number worth knowing.
+          // half the number worth knowing. The figures are as they are: over target reads as over.
           <Card className="mt-3">
             <button type="button" onClick={() => nav('/food')} className="flex w-full items-center gap-6 px-4 py-3 text-left active:bg-surface-2" data-testid="today-food">
               {kcal ? (
@@ -183,8 +198,13 @@ export function HomeScreen() {
           {recent && recent.length === 0 && <div className="p-4"><EmptyState>No sessions yet.</EmptyState></div>}
         </Card>
 
-        <SectionTitle>Bodyweight</SectionTitle>
-        <BodyweightQuickAdd />
+        {/* While the weigh-in card is up it is the one place to log; after it, this keeps the reading and the trend in view. */}
+        {weighIn === false && (
+          <>
+            <SectionTitle>Bodyweight</SectionTitle>
+            <BodyweightQuickAdd />
+          </>
+        )}
         <div className="h-6" />
       </div>
 
