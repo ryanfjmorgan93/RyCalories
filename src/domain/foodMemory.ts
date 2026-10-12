@@ -12,7 +12,7 @@
 
 import { gramsOf, isPackaged, macrosOf, mayOverwrite, scaleMacros, type Macros, type Nutrition } from './food';
 import type { LabelNutrition } from './products';
-import type { FoodMemory, MealItem } from './types';
+import type { FoodMemory, FoodUnitSpec, ItemUnits, MealItem } from './types';
 
 /** Text reduced to its identifying words, for keys and for search. */
 export function normalise(s: string): string {
@@ -62,9 +62,13 @@ export function memoryKey(item: Pick<MealItem, 'name' | 'brand' | 'product'>): s
  * `item.barcode` is the pack's barcode when the food was typed in after a scan the database could
  * not fill (see `NewMealItem.barcode`); it is remembered so the next scan of that pack fills from
  * here. A `MealItem` row never carries one.
+ *
+ * `item.units` (see `ItemUnits`) is what the amount step knew: the pack and serving weights, any
+ * further count-style units, and the unit the amount was chosen in. They are what makes the
+ * natural-unit chips come back next time, including offline. A `MealItem` row never carries one.
  */
 export function memoryFrom(
-  item: Pick<MealItem, 'name' | 'brand' | 'product' | 'source' | 'nutrition'> & { barcode?: string },
+  item: Pick<MealItem, 'name' | 'brand' | 'product' | 'source' | 'nutrition'> & { barcode?: string; units?: ItemUnits },
   unit?: { count: number; unitGrams: number; label?: string; plural?: string },
   opts?: { portion?: boolean },
 ): Omit<FoodMemory, 'id' | 'timesUsed' | 'lastUsedAt'> | null {
@@ -84,7 +88,43 @@ export function memoryFrom(
     ...(validUnit ? { unitGrams: unit.unitGrams } : {}),
     ...(validUnit && unit.label ? { unitLabel: unit.label, unitPlural: unit.plural || unit.label } : {}),
     ...(item.barcode ? { barcodes: [item.barcode] } : {}),
+    ...unitFields(item.units),
     source: item.source,
+  };
+}
+
+/** The key a unit is stored and matched under: its label, folded. 'Egg' and 'egg' are one unit. */
+export function unitKeyOf(label: string): string {
+  return normalise(label);
+}
+
+/** A weight that can be remembered: a finite number of grams above zero. */
+function usableGrams(n: number | undefined): n is number {
+  return n !== undefined && Number.isFinite(n) && n > 0;
+}
+
+/** Count-style units fit to store: sane weights, named, one per key (the first wins). */
+function cleanUnits(units: FoodUnitSpec[] | undefined): FoodUnitSpec[] {
+  const out: FoodUnitSpec[] = [];
+  const seen = new Set<string>();
+  for (const u of units ?? []) {
+    const key = unitKeyOf(u.label);
+    if (!key || !usableGrams(u.grams) || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ label: u.label.trim(), ...(u.plural ? { plural: u.plural.trim() } : {}), grams: u.grams });
+  }
+  return out;
+}
+
+/** What `ItemUnits` contributes to a new memory. Nothing at all when it holds nothing usable. */
+function unitFields(units: ItemUnits | undefined): Pick<FoodMemory, 'packGrams' | 'servingGrams' | 'units' | 'lastUnit'> {
+  if (!units) return {};
+  const extra = cleanUnits(units.extra);
+  return {
+    ...(usableGrams(units.packGrams) ? { packGrams: units.packGrams } : {}),
+    ...(usableGrams(units.servingGrams) ? { servingGrams: units.servingGrams } : {}),
+    ...(extra.length > 0 ? { units: extra } : {}),
+    ...(units.lastUnit ? { lastUnit: units.lastUnit } : {}),
   };
 }
 
@@ -158,9 +198,35 @@ export function mergeMemory(
     ...(incoming.unitGrams !== undefined && takeNumbers && incoming.unitLabel
       ? { unitLabel: incoming.unitLabel, unitPlural: incoming.unitPlural ?? incoming.unitLabel }
       : {}),
+    // Facts about the pack and about what happened, so the trust rule does not apply: the most
+    // recent pack is the one on the shelf, and the last unit used is the one to open on.
+    ...(incoming.packGrams !== undefined ? { packGrams: incoming.packGrams } : {}),
+    ...(incoming.servingGrams !== undefined ? { servingGrams: incoming.servingGrams } : {}),
+    ...(incoming.lastUnit ? { lastUnit: incoming.lastUnit } : {}),
+    ...mergedUnits(existing.units, incoming.units, takeNumbers),
     timesUsed: existing.timesUsed + 1,
     lastUsedAt: at,
   };
+}
+
+/**
+ * Count-style units from both sides, one per key. Grams per item is a figure, so it follows the
+ * trust rule like `unitGrams` does: a corrected "slice" weight is not replaced by a guess, but a
+ * unit the memory did not have yet is always welcome.
+ */
+function mergedUnits(
+  existing: FoodUnitSpec[] | undefined,
+  incoming: FoodUnitSpec[] | undefined,
+  takeNumbers: boolean,
+): Pick<FoodMemory, 'units'> {
+  if (!incoming || incoming.length === 0) return existing && existing.length > 0 ? { units: existing } : {};
+  const byKey = new Map<string, FoodUnitSpec>();
+  for (const u of existing ?? []) byKey.set(unitKeyOf(u.label), u);
+  for (const u of incoming) {
+    const key = unitKeyOf(u.label);
+    if (!byKey.has(key) || takeNumbers) byKey.set(key, u);
+  }
+  return { units: [...byKey.values()] };
 }
 
 /**

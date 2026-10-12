@@ -5,6 +5,7 @@ import { logShare, shareItem } from '@/db/recipeRepo';
 import { toDateKey } from '@/domain/dates';
 import { displayMacros, type Macros } from '@/domain/food';
 import { fmtDayKey, fmtGrams, fmtKcal } from '@/domain/format';
+import { defaultSlot } from '@/domain/mealSlot';
 import { MEAL_SLOTS, type MealItem, type MealSlot } from '@/domain/types';
 import { Button } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row } from '@/ui/components/Card';
@@ -274,7 +275,12 @@ function ExistingMeal({ id }: { id: string }) {
             // was silently dropped, and applying Trek's label to a row that still said brand
             // "Aldi" left the wrong identity on the row for ever — Dexie's update merges, so
             // nothing ever cleared it — and keyed the food memory off the stale pair.
-            if (row) await updateItem(row.id, itemPatch(item), item.barcode ? { barcode: item.barcode } : undefined);
+            if (row) {
+              await updateItem(row.id, itemPatch(item), {
+                ...(item.barcode ? { barcode: item.barcode } : {}),
+                ...(item.units ? { units: item.units } : {}),
+              });
+            }
           } else {
             await addItem(id, item);
           }
@@ -373,7 +379,9 @@ function ItemList({
             <Row
               onClick={() => onEdit(i)}
               title={item.name}
-              subtitle={grams !== null ? fmtGrams(grams) : item.portion}
+              // The natural phrase ("1 pack (400 g)", "2 eggs (100 g)") when it still agrees with the
+              // weight beside it; a portion text an earlier edit left behind must not outlive the weight.
+              subtitle={grams !== null ? (item.portion.includes(fmtGrams(grams)) ? item.portion : fmtGrams(grams)) : item.portion}
               right={
                 <div className="text-right">
                   <div className="num font-extrabold tabular-nums">{fmtKcal(m.kcal)}</div>
@@ -396,15 +404,6 @@ function ItemList({
       </div>
     </Card>
   );
-}
-
-/** Best guess at the slot from the clock. A guess, and one tap to change. */
-function defaultSlot(): MealSlot {
-  const h = new Date().getHours();
-  if (h < 11) return 'breakfast';
-  if (h < 15) return 'lunch';
-  if (h < 21) return 'dinner';
-  return 'snack';
 }
 
 function fallbackName(slot?: MealSlot): string {

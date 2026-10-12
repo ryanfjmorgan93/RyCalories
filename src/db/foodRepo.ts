@@ -9,8 +9,8 @@ import { db } from './db';
 import { nowIso, toDateKey } from '@/domain/dates';
 import { uuid } from '@/domain/ids';
 import { ZERO, addMacros, displayMacros, gramsOf, type FoodSource, type Macros, type Nutrition } from '@/domain/food';
-import { memoryFrom, mergeMemory, rankMemories } from '@/domain/foodMemory';
-import { MEAL_SLOTS, type FoodMemory, type Meal, type MealItem, type MealSlot } from '@/domain/types';
+import { memoryFrom, memoryKey, mergeMemory, rankMemories } from '@/domain/foodMemory';
+import { MEAL_SLOTS, type FoodMemory, type ItemUnits, type Meal, type MealItem, type MealSlot } from '@/domain/types';
 
 /** What a meal is made of, as the UI wants it: the meal plus its items in order. */
 export interface MealWithItems {
@@ -42,6 +42,13 @@ export interface NewMealItem {
    * from the food memory instead of asking again.
    */
   barcode?: string;
+  /**
+   * What the amount step knew about the food — pack and serving weights, further count-style
+   * units, the unit just used (see `ItemUnits`). Like `unit` and `barcode`, NOT persisted on the
+   * row: it exists only so `rememberFood` can teach `FoodMemory`, which is how the natural-unit
+   * chips come back next time, offline included.
+   */
+  units?: ItemUnits;
 }
 
 export interface NewMeal {
@@ -167,6 +174,98 @@ export async function addMeal(meal: NewMeal, items: NewMealItem[]): Promise<stri
   return id;
 }
 
+/**
+ * Where an item (or several) went, so it can be taken back out. `createdMeal` says the meal did not
+ * exist before the call: undoing then removes the meal too, provided nothing else has been put in
+ * it since.
+ */
+export interface LoggedItems {
+  mealId: string;
+  itemIds: string[];
+  createdMeal: boolean;
+}
+
+/** The meal-level extras a reader of a photo or a description can attach when it creates the slot's meal. */
+export type SlotMealExtras = Pick<NewMeal, 'photoPath' | 'enteredText' | 'confidence' | 'notes'>;
+
+/** A slot's name as a meal title: "Lunch". */
+function slotName(slot: MealSlot): string {
+  return slot[0]!.toUpperCase() + slot.slice(1);
+}
+
+/**
+ * Log food straight to a day: append `items` to that date's meal for `slot` — the most recently
+ * logged one when there are several — creating it if there is none. No "Add meal" step, which is
+ * the point: one tap from a chip is a logged food. `extras` (a photo path, the text a description
+ * came from, how sure the reader was) are written only when this call creates the meal; a meal
+ * that already exists keeps what it has.
+ *
+ * Found-or-created and appended in ONE transaction, so two quick logs cannot both decide the slot
+ * has no meal and write two. Remembering the foods happens after the commit, as in `addMeal`:
+ * a convenience that must not be able to fail the write the user asked for.
+ */
+export async function logItemsToSlot(
+  date: string,
+  slot: MealSlot,
+  items: NewMealItem[],
+  extras?: SlotMealExtras,
+): Promise<LoggedItems> {
+  const logged = await db.transaction('rw', [db.meals, db.mealItems], async (): Promise<LoggedItems> => {
+    const inSlot = (await db.meals.where('date').equals(date).toArray())
+      .filter((m) => m.slot === slot)
+      .sort((a, b) => a.loggedAt.localeCompare(b.loggedAt) || a.id.localeCompare(b.id));
+    let meal = inSlot[inSlot.length - 1];
+    const createdMeal = meal === undefined;
+    if (!meal) {
+      meal = {
+        id: uuid(),
+        date,
+        loggedAt: nowIso(),
+        name: slotName(slot),
+        slot,
+        ...(extras?.notes ? { notes: extras.notes } : {}),
+        ...(extras?.enteredText ? { enteredText: extras.enteredText } : {}),
+        ...(extras?.photoPath ? { photoPath: extras.photoPath } : {}),
+        ...(extras?.confidence ? { confidence: extras.confidence } : {}),
+      };
+      await db.meals.put(meal);
+    }
+    const existing = await db.mealItems.where('mealId').equals(meal.id).toArray();
+    const first = existing.reduce((max, i) => Math.max(max, i.index), -1) + 1;
+    const rows = items.map((it, n) => toItemRow(uuid(), meal.id, first + n, it));
+    if (rows.length) await db.mealItems.bulkPut(rows);
+    return { mealId: meal.id, itemIds: rows.map((r) => r.id), createdMeal };
+  });
+  // From the ORIGINAL items, not the rows: `toItemRow` drops `unit`, `units` and `barcode`, which
+  // are exactly what teach FoodMemory its unit weights, pack sizes and barcodes.
+  for (const it of items) await rememberFood(it);
+  return logged;
+}
+
+/** One item to a day's slot — see `logItemsToSlot`. */
+export function logItemToSlot(date: string, slot: MealSlot, item: NewMealItem, extras?: SlotMealExtras): Promise<LoggedItems> {
+  return logItemsToSlot(date, slot, [item], extras);
+}
+
+/**
+ * Take back what `logItemsToSlot` wrote. The items go; the meal goes with them only if the call
+ * created it and it is empty now — food put into it afterwards is the owner's, and survives.
+ * Remembered foods are left alone: choosing a food is a fact about what the owner eats, whether or
+ * not this particular log stood.
+ */
+export async function undoLoggedItems(logged: LoggedItems): Promise<void> {
+  await db.transaction('rw', [db.meals, db.mealItems], async () => {
+    await db.mealItems.bulkDelete(logged.itemIds);
+    const rest = (await db.mealItems.where('mealId').equals(logged.mealId).toArray()).sort((a, b) => a.index - b.index);
+    if (rest.length === 0 && logged.createdMeal) {
+      await db.meals.delete(logged.mealId);
+      return;
+    }
+    // Close the gap so indexes stay 0..n-1 and a later append cannot collide, as deleteItem does.
+    await db.mealItems.bulkPut(rest.map((r, index) => ({ ...r, index })));
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Food memory
 
@@ -207,6 +306,16 @@ export async function rememberFood(item: NewMealItem | MealItem, opts?: { portio
  */
 export async function forgetFood(id: string): Promise<void> {
   await db.foods.delete(id);
+}
+
+/** Every remembered food. The list is small (what one person has eaten), so search ranks it in memory. */
+export async function allFoods(): Promise<FoodMemory[]> {
+  return db.foods.toArray();
+}
+
+/** The remembered food an item would be filed under, when there is one. */
+export async function memoryFor(item: Pick<MealItem, 'name' | 'brand' | 'product'>): Promise<FoodMemory | undefined> {
+  return db.foods.where('key').equals(memoryKey(item)).first();
 }
 
 /** Remembered foods for the picker, ranked for `query` (empty = most eaten, most recent). */
@@ -254,14 +363,23 @@ export async function addItem(mealId: string, item: NewMealItem): Promise<string
 export async function updateItem(
   id: string,
   patch: Partial<Omit<MealItem, 'id' | 'mealId' | 'index'>>,
-  /** `barcode`: see `NewMealItem.barcode`. Remembered with the food, never written to the row. */
-  opts?: { barcode?: string },
+  /**
+   * `barcode`: see `NewMealItem.barcode`; `units`: see `NewMealItem.units`. Remembered with the
+   * food, never written to the row.
+   */
+  opts?: { barcode?: string; units?: ItemUnits },
 ): Promise<void> {
   await db.mealItems.update(id, patch);
   // A correction is the most valuable thing to remember: it is the number the user went back and
   // fixed, and the trust hierarchy will let it overwrite a guess.
   const row = await db.mealItems.get(id);
-  if (row) await rememberFood(opts?.barcode ? { ...row, barcode: opts.barcode } : row);
+  if (row) {
+    await rememberFood({
+      ...row,
+      ...(opts?.barcode ? { barcode: opts.barcode } : {}),
+      ...(opts?.units ? { units: opts.units } : {}),
+    });
+  }
 }
 
 /** Remove one food. Removing the last one leaves an empty meal rather than deleting it. */
