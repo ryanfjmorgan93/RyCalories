@@ -1,11 +1,10 @@
 /**
- * The on-device coach (Gemini Nano on the phone, the fuller variant — see docs/MERGE_PLAN.md P5d).
- * Pure: which of the owner's data goes into a question, and the words around it. No IO, no clock.
+ * The coach's question prompt, as built for the on-device model (since removed). Pure: which of the
+ * owner's data goes into a question, and the words around it. No IO, no clock.
  *
- * The model reads a few thousand tokens at most, so the data is offered as a ladder: the fullest
- * context first, then smaller ones. The caller counts each rung's tokens on the phone and sends
- * the first that fits. Every rung carries a label saying what it holds, so the screen can state
- * what the answer was based on rather than let a cut pass unseen.
+ * The data is offered as a ladder: the fullest context first, then smaller ones, each rung labelled
+ * with what it holds. The prompt-fitting helpers (`promptShapes`, `fitCoachPrompt`) were written to
+ * count tokens against the phone's small limit; the context builders are for Claude's to reuse.
  *
  * Numbers come from the owner's own log in the same words as Copy for Claude (`./claudeSummary`):
  * food is averaged over logged days only, with the count beside it.
@@ -20,7 +19,7 @@ import {
   type SummarySession,
   type SummarySet,
 } from './claudeSummary';
-import { windowStart } from './checkin';
+import { windowStart } from './dates';
 import { expandAbbreviations } from './exerciseMatch';
 import { fmtSetsLine } from './format';
 import { routineToText, type BuiltRoutine } from './routineBuilder';

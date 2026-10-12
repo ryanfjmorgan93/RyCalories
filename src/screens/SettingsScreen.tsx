@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { BUILD_LABEL } from '@/buildInfo';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useNavigate } from 'react-router-dom';
 import { backupFilename, csvFilename, deliverFile, exportBackup, exportBodyweightCsv, exportCsv, isBackup, type Backup } from '@/db/backup';
-import { parseHevyCsv, reconcileWeights, type HevyParsed, type WeightReconcileRow } from '@/db/hevy';
 import { resetToSeed, saveSettings, wipeAll } from '@/db/repo';
 import { applyRestDefaults, dataCounts } from '@/db/settingsQueries';
 import { clearProductCache } from '@/db/productRepo';
@@ -16,19 +14,16 @@ import type { NotificationPermissionStatus } from '@/domain/rest';
 import { cancelRestNotification, isNative, nativeNotificationPermission, requestNativeNotifications } from '@/state/native';
 import { notificationPermission, requestNotifications } from '@/state/notify';
 import { AboutCard } from '@/ui/AboutCard';
-import { AssistantSettingsCard } from '@/ui/AssistantSettingsCard';
 import { BackupsCard } from '@/ui/BackupsCard';
 import { Button } from '@/ui/components/Button';
-import { Card, Divider, Row, SectionTitle, Stat } from '@/ui/components/Card';
-import { Chip, Segmented, Toggle } from '@/ui/components/Chip';
+import { Card, Divider, SectionTitle, Stat } from '@/ui/components/Card';
+import { Chip, Toggle } from '@/ui/components/Chip';
 import { NumberField, NumberInput } from '@/ui/components/NumberField';
 import { HoldToConfirm } from '@/ui/components/HoldToConfirm';
 import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { ChevronIcon, TopBar } from '@/ui/components/TopBar';
-import { HevyImportSheet, ReconcileSheet } from '@/ui/HevyImportSheet';
 import { RestoreSheet } from '@/ui/RestoreSheet';
-import { applyTheme } from '@/ui/theme';
 import { useSettings } from '@/ui/hooks';
 
 const PLATE_SIZES = [25, 20, 15, 10, 5, 2.5, 1.25, 0.5];
@@ -37,7 +32,7 @@ const PLATE_SIZES = [25, 20, 15, 10, 5, 2.5, 1.25, 0.5];
 // Draft reseeding
 //
 // This screen mixes drafted cards (their own Save button) with instant-save controls elsewhere
-// on the same screen (toggles, plate chips, the theme segmented control). Every
+// on the same screen (toggles, plate chips). Every
 // write goes through `saveSettings`, which bumps `settings.savedAt` regardless of which fields it
 // touched — so reseeding a card whenever `settings` changes at all reverts a half-typed draft the
 // moment the user flips an unrelated toggle. A card must reseed only when the SAVED values of the
@@ -86,7 +81,6 @@ function useOwnedReseed<K extends keyof Settings>(settings: Settings, ownedKeys:
 }
 
 export function SettingsScreen() {
-  const nav = useNavigate();
   const settings = useSettings();
 
   return (
@@ -105,59 +99,10 @@ export function SettingsScreen() {
             <SectionTitle>Targets</SectionTitle>
             <TargetsCard settings={settings} />
 
-            <SectionTitle>Rest timer</SectionTitle>
-            <RestCard settings={settings} />
-
-            <SectionTitle>Appearance</SectionTitle>
-            <Card className="p-4">
-              <Segmented
-                value={settings.theme}
-                options={[
-                  { value: 'dark', label: 'Dark' },
-                  { value: 'light', label: 'Light' },
-                ]}
-                onChange={async (theme) => {
-                  applyTheme(theme);
-                  await saveSettings({ theme });
-                }}
-              />
-            </Card>
-
-            <SectionTitle>Food lookup</SectionTitle>
-            <Card className="px-4">
-              <Toggle
-                checked={settings.productLookup !== false}
-                onChange={async (productLookup) => {
-                  await saveSettings({ productLookup });
-                  if (!productLookup) {
-                    const n = await clearProductCache();
-                    toast(n ? `Off. ${n} cached ${n === 1 ? 'product' : 'products'} deleted.` : 'Off.');
-                  }
-                }}
-                label="Look up labels online"
-                sub="See About for everything that leaves the device."
-              />
-            </Card>
-
-            <SectionTitle>Check-in</SectionTitle>
-            <Card>
-              <Row title="Fortnightly check-in" subtitle="Current lifts, bodyweight trend, niggles" onClick={() => nav('/checkin')} right={<ChevronIcon />} />
-            </Card>
-
-            <SectionTitle>Plates</SectionTitle>
-            <PlatesCard settings={settings} />
-
-            <SectionTitle>Progression</SectionTitle>
-            <ProgressionCard settings={settings} />
-
-            <SectionTitle>Assistant</SectionTitle>
-            <AssistantSettingsCard />
-
             <SectionTitle>About</SectionTitle>
             <AboutCard />
 
-            <SectionTitle>Developer</SectionTitle>
-            <DeveloperCard />
+            <AdvancedSection settings={settings} />
           </>
         )}
         <div className="h-6" />
@@ -167,14 +112,100 @@ export function SettingsScreen() {
 }
 
 // ---------------------------------------------------------------------------
+// Advanced
+
+const ADVANCED_OPEN_KEY = 'iron.settings.advanced';
+
+/**
+ * Whether Advanced was left open this session. Closed by default; kept for the session only, so the
+ * reload that Reset and Wipe end in lands back on the Developer card it was started from. Storage
+ * may be missing or throw (a private window), and the screen reads closed then.
+ */
+function readAdvancedOpen(): boolean {
+  try {
+    return sessionStorage.getItem(ADVANCED_OPEN_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeAdvancedOpen(open: boolean): void {
+  try {
+    if (open) sessionStorage.setItem(ADVANCED_OPEN_KEY, '1');
+    else sessionStorage.removeItem(ADVANCED_OPEN_KEY);
+  } catch {
+    // Not remembered; nothing else depends on it.
+  }
+}
+
+/**
+ * What is rarely touched, behind one tap and closed by default: the rest timer, food lookup,
+ * plates, progression and the developer card. Each card keeps its own test ids; a test opens
+ * Advanced first.
+ */
+function AdvancedSection({ settings }: { settings: Settings }) {
+  const [open, setOpen] = useState(readAdvancedOpen);
+  const toggle = () => {
+    setOpen(!open);
+    writeAdvancedOpen(!open);
+  };
+  return (
+    <>
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        data-testid="advanced-toggle"
+        className="mt-5 flex min-h-14 w-full items-center justify-between gap-3 rounded-card border border-glass-border bg-glass-2 px-4 py-3 text-left active:bg-surface-2"
+      >
+        <span className="min-w-0">
+          <span className="block font-semibold leading-tight">Advanced</span>
+          <span className="mt-0.5 block text-sm text-muted">Rest timer, food lookup, plates, progression, developer</span>
+        </span>
+        <ChevronIcon className={`shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+      </button>
+
+      {open && (
+        <div data-testid="advanced">
+          <SectionTitle>Rest timer</SectionTitle>
+          <RestCard settings={settings} />
+
+          <SectionTitle>Food lookup</SectionTitle>
+          <Card className="px-4">
+            <Toggle
+              checked={settings.productLookup !== false}
+              onChange={async (productLookup) => {
+                await saveSettings({ productLookup });
+                if (!productLookup) {
+                  const n = await clearProductCache();
+                  toast(n ? `Off. ${n} cached ${n === 1 ? 'product' : 'products'} deleted.` : 'Off.');
+                }
+              }}
+              label="Look up labels online"
+              sub="See About for everything that leaves the device."
+            />
+          </Card>
+
+          <SectionTitle>Plates</SectionTitle>
+          <PlatesCard settings={settings} />
+
+          <SectionTitle>Progression</SectionTitle>
+          <ProgressionCard settings={settings} />
+
+          <SectionTitle>Developer</SectionTitle>
+          <DeveloperCard />
+        </div>
+      )}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Data
 
 function DataCard() {
   const restoreInput = useRef<HTMLInputElement>(null);
-  const hevyInput = useRef<HTMLInputElement>(null);
   const [backup, setBackup] = useState<Backup | null>(null);
-  const [parsed, setParsed] = useState<HevyParsed | null>(null);
-  const [reconcileRows, setReconcileRows] = useState<WeightReconcileRow[] | null>(null);
   const [busy, setBusy] = useState(false);
 
   const deliver = async (name: string, text: string, mime: string) => {
@@ -209,25 +240,6 @@ function DataCard() {
     setBackup(data);
   };
 
-  const onHevyFile = async (file: File | undefined) => {
-    if (!file) return;
-    const p = parseHevyCsv(await file.text());
-    if (p.kind === 'unknown') {
-      toast(p.warnings[0] ?? 'Not a Hevy export', 'danger');
-      return;
-    }
-    setParsed(p);
-  };
-
-  const reconcile = guarded(async () => {
-    const rows = await reconcileWeights();
-    if (rows.length === 0) {
-      toast('Weights already match');
-      return;
-    }
-    setReconcileRows(rows);
-  });
-
   return (
     <Card className="grid gap-2 p-4">
       <Button full disabled={busy} onClick={guarded(async () => deliver(backupFilename(), JSON.stringify(await exportBackup(), null, 2), 'application/json'))}>
@@ -242,12 +254,6 @@ function DataCard() {
       <Button full disabled={busy} onClick={() => restoreInput.current?.click()}>
         Restore JSON backup
       </Button>
-      <Button full variant="primary" disabled={busy} onClick={() => hevyInput.current?.click()}>
-        Import Hevy CSV
-      </Button>
-      <Button full variant="outline" disabled={busy} onClick={() => void reconcile()}>
-        Reconcile weights with history
-      </Button>
 
       <input
         ref={restoreInput}
@@ -260,21 +266,8 @@ function DataCard() {
           void onRestoreFile(f);
         }}
       />
-      <input
-        ref={hevyInput}
-        type="file"
-        accept=".csv,text/csv"
-        className="hidden"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          e.target.value = '';
-          void onHevyFile(f);
-        }}
-      />
 
       <RestoreSheet backup={backup} open={backup !== null} onClose={() => setBackup(null)} />
-      {parsed && <HevyImportSheet parsed={parsed} open onClose={() => setParsed(null)} onDone={() => setParsed(null)} />}
-      {reconcileRows && <ReconcileSheet rows={reconcileRows} open onClose={() => setReconcileRows(null)} />}
     </Card>
   );
 }

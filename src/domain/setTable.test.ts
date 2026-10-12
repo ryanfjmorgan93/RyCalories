@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { fmtSetsLine } from './format';
-import { DEFAULT_PLATES } from './plates';
 import { completionOf, justCompleted, planRows, type LoggedRow, type PendingRow, type PlanRowsInput, type SetTableRx } from './setTable';
 import type { SetLog, SetType } from './types';
 
@@ -32,12 +31,10 @@ const baseRx: SetTableRx = {
 function baseInput(over: Partial<PlanRowsInput> = {}): PlanRowsInput {
   return {
     kind: 'reps',
-    equipment: 'barbell',
     rx: baseRx,
     loggedSets: [],
     previousSets: [],
     prescribedWeight: 100,
-    warmup: DEFAULT_PLATES,
     extraRows: 0,
     ...over,
   };
@@ -159,51 +156,6 @@ describe('planRows: a deload-adjusted prescribed weight always wins', () => {
   });
 });
 
-describe('planRows: warm-up ghosts', () => {
-  it('show the full ramp before the first counted set of the slot', () => {
-    const rows = planRows(baseInput({ loggedSets: [], previousSets: [] }));
-    const ghosts = rows.filter((r) => r.kind === 'warmup-ghost');
-    expect(ghosts).toEqual([
-      { kind: 'warmup-ghost', weight: 20, reps: 10 },
-      { kind: 'warmup-ghost', weight: 50, reps: 5 },
-      { kind: 'warmup-ghost', weight: 70, reps: 3 },
-      { kind: 'warmup-ghost', weight: 90, reps: 1 },
-    ]);
-  });
-
-  it('a logged warm-up consumes the next ramp step', () => {
-    const loggedSets = [mkSet({ index: 0, type: 'warmup', weight: 20, reps: 10 }), mkSet({ index: 1, type: 'warmup', weight: 50, reps: 5 })];
-    const rows = planRows(baseInput({ loggedSets, previousSets: [] }));
-    const ghosts = rows.filter((r) => r.kind === 'warmup-ghost');
-    expect(ghosts).toEqual([
-      { kind: 'warmup-ghost', weight: 70, reps: 3 },
-      { kind: 'warmup-ghost', weight: 90, reps: 1 },
-    ]);
-    // The logged warm-ups still show as their own logged rows, badged 'W'.
-    expect(loggedRows(rows).map((r) => r.badge)).toEqual(['W', 'W']);
-  });
-
-  it('disappear entirely once the first counted set is logged, however many ramp steps were done', () => {
-    const loggedSets = [mkSet({ index: 0, type: 'working', weight: 100, reps: 6 })];
-    const rows = planRows(baseInput({ loggedSets, previousSets: [] }));
-    expect(rows.some((r) => r.kind === 'warmup-ghost')).toBe(false);
-  });
-
-  it('never appear for carry or timed kinds, even with a prescribed weight', () => {
-    const carryRows = planRows(baseInput({ kind: 'carry', prescribedWeight: 24, loggedSets: [], previousSets: [] }));
-    expect(carryRows.some((r) => r.kind === 'warmup-ghost')).toBe(false);
-    const timedRows = planRows(baseInput({ kind: 'timed', rx: { ...baseRx, repMin: 30, repMax: 60 }, loggedSets: [], previousSets: [] }));
-    expect(timedRows.some((r) => r.kind === 'warmup-ghost')).toBe(false);
-  });
-
-  it('never appear when there is no prescribed weight (calibrating) or it is 0', () => {
-    const calibrating = planRows(baseInput({ rx: { ...baseRx, mode: 'calibrating' }, prescribedWeight: null, loggedSets: [], previousSets: [] }));
-    expect(calibrating.some((r) => r.kind === 'warmup-ghost')).toBe(false);
-    const zero = planRows(baseInput({ kind: 'bodyweight_plus', prescribedWeight: 0, loggedSets: [], previousSets: [] }));
-    expect(zero.some((r) => r.kind === 'warmup-ghost')).toBe(false);
-  });
-});
-
 describe('planRows: a drop or warm-up set never advances the counted position', () => {
   it('the next target row still lands at position 0 after a drop and a warm-up are logged', () => {
     const loggedSets = [mkSet({ index: 0, type: 'drop', weight: 80, reps: 10 }), mkSet({ index: 1, type: 'warmup', weight: 50, reps: 5 })];
@@ -279,8 +231,6 @@ describe('planRows: bodyweight_plus with 0 kg added', () => {
     const rows = planRows(baseInput({ kind: 'bodyweight_plus', prescribedWeight: 0, loggedSets: [], previousSets }));
     const pending = pendingRows(rows);
     expect(pending[0].ghostWeight).toBe(0);
-    // 0 kg is not > 0, so no warm-up ramp is shown even though it's a weighted kind with no counted sets yet.
-    expect(rows.some((r) => r.kind === 'warmup-ghost')).toBe(false);
   });
 });
 

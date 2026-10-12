@@ -6,9 +6,8 @@ import type { Exercise, RoutineExercise } from '@/domain/types';
 
 /**
  * The live row's in-progress values. Distance/seconds are carry/timed only. Always logs as a
- * `working` set — there is no chip to pick a type before logging any more (a warm-up ghost row
- * logs itself directly, at its own fixed weight/reps); `failure`/`drop`/`warmup` are reached only
- * by retyping a logged set afterwards, in `EditSetSheet`.
+ * `working` set — there is no set type to pick, before logging or after. Rows already stored as
+ * `warmup`/`failure`/`drop` keep their type and their counting rules (`src/domain/sets.ts`).
  */
 export interface Draft {
   weight: number | null;

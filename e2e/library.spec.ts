@@ -4,8 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { clickIfPresent, expectClass, fresh, readRawIron } from './fresh';
 
 /**
- * The whole exercise library on show (src/screens/ExercisesScreen.tsx, src/ui/ExercisePicker.tsx,
- * src/ui/PasteRoutineSheet.tsx), against the built app, its real data and its real pictures.
+ * The whole exercise library on show (src/screens/ExercisesScreen.tsx, src/ui/ExercisePicker.tsx),
+ * against the built app, its real data and its real pictures.
  *
  * Nothing about the data is written here: the catalogue is read from the committed JSON, the
  * diagrams from the two manifests the build reads, and the owner's own exercises from the raw
@@ -565,223 +565,6 @@ test.describe("a routine's exercise picker", () => {
   });
 });
 
-test.describe('Paste a routine', () => {
-  /** A catalogue name the paste parser reads as a plain exercise line and the matcher can only answer with that entry. */
-  function pasteTargets(owned: RawExercise[]): CatalogueEntry[] {
-    const all = [...diagrams.map((d) => norm(d.name)), ...catalogue.map((e) => norm(e.name))];
-    const count = (n: string) => all.filter((x) => x === n).length;
-    return libraryEntries(owned).filter((e) => /^[A-Za-z][A-Za-z ]{8,40}$/.test(e.name) && !/warm|rest|superset|cool|note|set|rep|day|week|round|circuit/i.test(e.name) && count(norm(e.name)) === 1);
-  }
-
-  test('a line naming a catalogue exercise is matched as Library, the owner\'s own win, and Save makes the exercise', async ({ page }) => {
-    await fresh(page);
-    const owned = await exercisesInDb(page);
-    const [entry, chosen] = pasteTargets(owned);
-    expect(entry && chosen, 'two catalogue entries the paste can name').toBeTruthy();
-    await page.goto('/routines');
-    await page.getByTestId('new-routine').click();
-    await page.getByTestId('paste-routine').click();
-    await page.getByTestId('paste-text').fill(['Library day', `${entry!.name} 3x10-12`, 'Bench press 4x6-8 @ 80kg', 'Zzzq qqqx 3x8'].join('\n'));
-
-    const rows = page.getByTestId('paste-row');
-    await expect(rows).toHaveCount(3);
-    // The catalogue line is the entry, marked Library; it waited for the catalogue to load to say so.
-    await expect(rows.nth(0).getByTestId('paste-row-name')).toHaveText(entry!.name);
-    await expect(rows.nth(0).getByTestId('library-label')).toBeVisible();
-    // The owner's Bench Press wins its line: no label (the catalogue is in by now, so a library entry could have taken it).
-    await expect(rows.nth(1).getByTestId('paste-row-name')).toHaveText('Bench Press (Barbell)');
-    await expect(rows.nth(1).getByTestId('library-label')).toHaveCount(0);
-    // The line nothing matches still waits for a choice.
-    await expect(rows.nth(2).getByTestId('paste-choose')).toBeVisible();
-    await expect(page.getByTestId('paste-save')).toBeDisabled();
-    // Matching made nothing.
-    expect((await exercisesInDb(page)).filter((e) => e.demo === keyOf(entry!))).toHaveLength(0);
-
-    // Choose a library entry for the third line from the picker: it is marked Library too, and still not made.
-    await rows.nth(2).getByTestId('paste-choose').click();
-    const picker = page.getByRole('dialog').filter({ hasText: 'Choose exercise' });
-    await picker.getByTestId('picker-search').fill(chosen!.name);
-    await picker.getByTestId(`pick-${keyOf(chosen!)}`).click();
-    await expect(rows.nth(2).getByTestId('paste-row-name')).toHaveText(chosen!.name);
-    await expect(rows.nth(2).getByTestId('library-label')).toBeVisible();
-    expect((await exercisesInDb(page)).filter((e) => e.demo === keyOf(chosen!))).toHaveLength(0);
-
-    await expect(page.getByTestId('paste-save')).toBeEnabled();
-    await page.getByTestId('paste-save').click();
-    await expect(page).toHaveURL(/\/routines\/[0-9a-f-]+$/);
-
-    // Both library exercises exist now, once each, and the routine uses them.
-    const after = await readRawIron(page);
-    const exercises = after.tables.exercises as RawExercise[];
-    const made = (e: CatalogueEntry) => exercises.filter((x) => x.demo === keyOf(e));
-    expect(made(entry!)).toHaveLength(1);
-    expect(made(chosen!)).toHaveLength(1);
-    expect(exercises).toHaveLength(owned.length + 2);
-    const routine = (after.tables.routines as { id: string; name: string }[]).find((r) => r.name === 'Library day')!;
-    const used = (after.tables.routineExercises as { routineId: string; exerciseId: string; order: number }[])
-      .filter((r) => r.routineId === routine.id)
-      .sort((a, b) => a.order - b.order)
-      .map((r) => r.exerciseId);
-    expect(used).toHaveLength(3);
-    expect(used[0]).toBe(made(entry!)[0]!.id);
-    expect(used[2]).toBe(made(chosen!)[0]!.id);
-    await expect(page.getByTestId(`rx-card-${entry!.name}`)).toBeVisible();
-  });
-
-  test('a timed or bodyweight line keeps its kind and its numbers: Plank 3x45s, Pull-ups 3x8, Dips 3xAMRAP, Walking 1x20 min', async ({ page }) => {
-    await fresh(page);
-    const owned = await exercisesInDb(page);
-    const diagram = (slug: string) => diagrams.find((d) => d.slug === slug)!;
-    for (const slug of ['plank', 'pull-up', 'dip', 'walking']) {
-      expect(diagram(slug), slug).toBeDefined();
-      // Premise: the owner has none of these, so each line can only be matched to a bundled diagram.
-      expect(owned.some((e) => e.demo === slug)).toBe(false);
-    }
-    await page.goto('/routines');
-    await page.getByTestId('new-routine').click();
-    await page.getByTestId('paste-routine').click();
-    await page.getByTestId('paste-text').fill(['Holds and pulls', 'Plank 3x45s', 'Pull-ups 3x8', 'Dips 3xAMRAP', 'Walking 1x20 min'].join('\n'));
-
-    const rows = page.getByTestId('paste-row');
-    await expect(rows).toHaveCount(4);
-    // Each is the plain diagram, as a library match, and nothing says a number will not be used.
-    for (const [i, slug] of ['plank', 'pull-up', 'dip', 'walking'].entries()) {
-      await expect(rows.nth(i).getByTestId('paste-row-name')).toHaveText(diagram(slug).name);
-      await expect(rows.nth(i).getByTestId('library-label')).toBeVisible();
-      await expect(rows.nth(i)).not.toContainText('not used');
-    }
-    await expect(rows.nth(0)).toContainText('3 × 45 s');
-
-    await page.getByTestId('paste-save').click();
-    await expect(page).toHaveURL(/\/routines\/[0-9a-f-]+$/);
-
-    const raw = await readRawIron(page);
-    const exercises = raw.tables.exercises as { id: string; demo?: string; kind: string }[];
-    const routine = (raw.tables.routines as { id: string; name: string }[]).find((r) => r.name === 'Holds and pulls')!;
-    const rx = (raw.tables.routineExercises as { routineId: string; exerciseId: string; targetSets: number; repMin: number; repMax: number }[]).filter((r) => r.routineId === routine.id);
-    const of = (slug: string) => {
-      const ex = exercises.find((e) => e.demo === slug)!;
-      return { kind: ex.kind, rx: rx.find((r) => r.exerciseId === ex.id)! };
-    };
-    expect(of('plank').kind).toBe('timed');
-    expect(of('plank').rx).toMatchObject({ targetSets: 3, repMin: 45, repMax: 45 });
-    expect(of('pull-up').kind).toBe('bodyweight_plus');
-    expect(of('pull-up').rx).toMatchObject({ targetSets: 3, repMin: 8, repMax: 8 });
-    expect(of('dip').kind).toBe('bodyweight_plus');
-    expect(of('dip').rx.targetSets).toBe(3);
-    expect(of('walking').kind).toBe('timed');
-    expect(of('walking').rx).toMatchObject({ targetSets: 1, repMin: 1200, repMax: 1200 });
-  });
-
-  test('a seconds line on an exercise that is not timed says its seconds are not used, before Save', async ({ page }) => {
-    await fresh(page);
-    await page.goto('/routines');
-    await page.getByTestId('new-routine').click();
-    await page.getByTestId('paste-routine').click();
-    await page.getByTestId('paste-text').fill(['Day', 'Bench press 3x30s', 'Plank 3x30s'].join('\n'));
-
-    const rows = page.getByTestId('paste-row');
-    await expect(rows).toHaveCount(2);
-    // The owner's Bench Press is a reps exercise: its three sets are used and its 30 seconds are not.
-    await expect(rows.nth(0).getByTestId('paste-row-name')).toHaveText('Bench Press (Barbell)');
-    await expect(rows.nth(0)).toContainText('3 × 30 s · 30 s not used');
-    // The Plank is made timed, so nothing is dropped. The library match is what only a loaded diagram list gives.
-    await expect(rows.nth(1).getByTestId('library-label')).toBeVisible();
-    await expect(rows.nth(1)).not.toContainText('not used');
-  });
-
-  test('an exercise renamed after it was added from the library is still matched by the library\'s name, as the owner\'s own', async ({ page }) => {
-    await fresh(page);
-    const owned = await exercisesInDb(page);
-    const entry = libraryEntries(owned, 'rear delts')[0]!;
-    // Add it the way the owner does, from the list.
-    await openExercises(page, owned);
-    await page.getByTestId('exercise-search').fill(entry.name);
-    await page.getByTestId(`exercise-row-${keyOf(entry)}`).click();
-    await page.getByTestId('library-add').click();
-    await expect(page).toHaveURL(/\/exercises\/[0-9a-f-]{36}$/);
-    const id = page.url().split('/').pop()!;
-    // Rename it in the database, as the edit form would, and let the app read it afresh.
-    await page.evaluate(async (exerciseId) => {
-      const db = await new Promise<IDBDatabase>((resolve, reject) => {
-        const req = indexedDB.open('iron');
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-      });
-      await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction('exercises', 'readwrite');
-        const store = tx.objectStore('exercises');
-        const get = store.get(exerciseId);
-        get.onsuccess = () => store.put({ ...get.result, name: 'My reverse thing' });
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-      });
-      db.close();
-    }, id);
-    expect(((await exercisesInDb(page)) as RawExercise[]).find((e) => e.id === id)!.name).toBe('My reverse thing');
-
-    await page.goto('/routines');
-    await page.getByTestId('new-routine').click();
-    await page.getByTestId('paste-routine').click();
-    await page.getByTestId('paste-text').fill(`Day\n${entry.name} 3x12`);
-    const row = page.getByTestId('paste-row').first();
-    // The owner's exercise, by its new name, with no Library label: not a second one made from the entry.
-    await expect(row.getByTestId('paste-row-name')).toHaveText('My reverse thing');
-    await expect(row.getByTestId('library-label')).toHaveCount(0);
-    await expect(row).toContainText(`from “${entry.name}”`);
-
-    await page.getByTestId('paste-save').click();
-    await expect(page).toHaveURL(/\/routines\/[0-9a-f-]+$/);
-    const after = await readRawIron(page);
-    const exercises = after.tables.exercises as RawExercise[];
-    expect(exercises).toHaveLength(owned.length + 1);
-    expect(exercises.filter((e) => e.demo === keyOf(entry))).toHaveLength(1);
-    // The routine uses the owner's exercise, which has learned the wording.
-    const routine = (after.tables.routines as { id: string; name: string }[]).find((r) => r.name === 'Day')!;
-    const used = (after.tables.routineExercises as { routineId: string; exerciseId: string }[]).filter((r) => r.routineId === routine.id);
-    expect(used.map((r) => r.exerciseId)).toEqual([id]);
-    expect(exercises.find((e) => e.id === id)!.aliases).toEqual([entry.name]);
-  });
-
-  test('the Choose picker is drawn a page at a time as it is scrolled, with no tap on More', async ({ page }) => {
-    await fresh(page);
-    await page.goto('/routines');
-    await page.getByTestId('new-routine').click();
-    await page.getByTestId('paste-routine').click();
-    await page.getByTestId('paste-text').fill('Scroll day\nZzzq qqqx 3x8');
-    await page.getByTestId('paste-row').first().getByTestId('paste-choose').click();
-    const picker = page.getByRole('dialog').filter({ hasText: 'Choose exercise' });
-    const rows = picker.locator('[data-testid^="pick-"]');
-    await expect(rows).toHaveCount(60);
-    const list = picker.getByTestId('picker-list');
-    const scrollToEnd = async () => {
-      await list.evaluate((el) => {
-        el.scrollTop = el.scrollHeight;
-      });
-      return rows.count();
-    };
-    await expect.poll(scrollToEnd, { intervals: [150], timeout: 20_000 }).toBeGreaterThan(60);
-  });
-
-  test('a paste that is cancelled adds nothing', async ({ page }) => {
-    await fresh(page);
-    const owned = await exercisesInDb(page);
-    const entry = pasteTargets(owned)[0]!;
-    await page.goto('/routines');
-    await page.getByTestId('new-routine').click();
-    await page.getByTestId('paste-routine').click();
-    await page.getByTestId('paste-text').fill(`Cancelled day\n${entry.name} 3x10-12`);
-    // Matched as Library, which needs the catalogue: from here on it has had its chance to add something.
-    await expect(page.getByTestId('paste-row').first().getByTestId('library-label')).toBeVisible();
-    await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
-    await expect(page.getByTestId('paste-text')).toHaveCount(0);
-
-    const raw = await readRawIron(page);
-    expect(raw.tables.exercises).toHaveLength(owned.length);
-    expect((raw.tables.routines as { name: string }[]).some((r) => r.name === 'Cancelled day')).toBe(false);
-  });
-});
-
 /** The lazy chunk holding the catalogue index (the steps are a separate one). */
 const CATALOGUE_CHUNK = /\/assets\/exerciseCatalogue-[^/]+\.js$/;
 
@@ -839,19 +622,7 @@ test.describe('when the catalogue cannot be fetched', () => {
     await expect(picker.getByTestId('picker-status')).toHaveText('Catalogue not loaded');
   });
 
-  test('Paste says so with its other facts once there is a line to match', async ({ page }) => {
-    const asked = await refuseCatalogue(page);
-    await fresh(page);
-    await page.goto('/routines');
-    await page.getByTestId('new-routine').click();
-    await page.getByTestId('paste-routine').click();
-    await page.getByTestId('paste-text').fill('Day\nBench press 4x6-8 @ 80kg');
-    await expect(page.getByTestId('paste-row')).toHaveCount(1);
-    await expect(page.getByTestId('paste-facts')).toContainText('catalogue not loaded');
-    expect(asked()).toBeGreaterThan(0);
-  });
-
-  test('with the catalogue loaded, neither says anything about it', async ({ page }) => {
+  test('with the catalogue loaded, the picker says nothing about it', async ({ page }) => {
     await fresh(page);
     const owned = await exercisesInDb(page);
     const entry = libraryEntries(owned, 'rear delts')[0]!;
@@ -863,12 +634,5 @@ test.describe('when the catalogue cannot be fetched', () => {
     await picker.getByTestId('picker-search').fill(entry.name);
     await expect(picker.getByTestId(`pick-${keyOf(entry)}`)).toBeVisible();
     await expect(picker.getByTestId('picker-status')).toHaveCount(0);
-
-    await page.goto('/routines');
-    await page.getByTestId('new-routine').click();
-    await page.getByTestId('paste-routine').click();
-    await page.getByTestId('paste-text').fill(`Day\n${entry.name} 3x10`);
-    await expect(page.getByTestId('paste-row').first().getByTestId('library-label')).toBeVisible();
-    await expect(page.getByTestId('paste-facts')).toHaveCount(0);
   });
 });

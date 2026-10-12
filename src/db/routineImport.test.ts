@@ -56,7 +56,7 @@ describe('saveParsedRoutine', () => {
     expect(await db.exercises.get(exercise.id)).toBeTruthy();
   });
 
-  it('guessExerciseFromName mirrors hevy.ts guessing: carry, timed and bodyweight_plus by name/opts', () => {
+  it('guessExerciseFromName guesses from the name: carry, timed and bodyweight_plus by name/opts', () => {
     expect(guessExerciseFromName('Farmers walk').kind).toBe('carry');
     expect(guessExerciseFromName('Plank', { timed: true }).kind).toBe('timed');
     expect(guessExerciseFromName('Weighted pull up').kind).toBe('bodyweight_plus');

@@ -1,9 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { clickIfPresent, expectClass, fresh } from './fresh';
-import { fileURLToPath } from 'node:url';
-
-const HEVY_CSV = fileURLToPath(new URL('../hevy_export.csv', import.meta.url));
-const HEVY_MEASUREMENTS = fileURLToPath(new URL('../hevy_measurements.csv', import.meta.url));
+import { fresh } from './fresh';
 
 test.describe('Routines', () => {
   test('create a routine, add an exercise, set its weight, and it shows in a session', async ({ page }) => {
@@ -74,28 +70,6 @@ test.describe('Exercise library', () => {
     await page.getByTestId('lock-in-save').click();
     await expect(page.getByText('4 × 6–8 @ 82.5 kg')).toBeVisible();
   });
-
-  test('a photo demo does not get the light-theme line-art invert filter; a line-art demo does', async ({ page }) => {
-    // src/index.css puts `filter: invert(1)` on `.demo-frame` in light theme, correct for white
-    // line art drawn for the dark theme — but wrong for a real photograph, which it would render
-    // as a negative. src/ui/ExerciseDemo.tsx must withhold the class from a `photo: true` demo.
-    await fresh(page);
-
-    // Line art (@bryllim/workout-guide, via public/exercises/): carries demo-frame.
-    await page.goto('/exercises');
-    await page.getByTestId('exercise-search').fill('Back Squat');
-    await page.getByRole('button', { name: /Barbell Back Squat/ }).click();
-    await expect(page.getByRole('heading', { name: 'Barbell Back Squat' })).toBeVisible();
-    await expectClass(page.getByRole('img', { name: 'Barbell Back Squat', exact: true }), 'demo-frame', true);
-
-    // Photo (assets/custom-demos/neck/, free-exercise-db): must not carry demo-frame.
-    await page.goto('/exercises');
-    await page.getByTestId('exercise-search').fill('Neck');
-    // The list now holds the library too, and other library entries have "neck" in their names; the owner's own Neck row is listed first.
-    await page.getByRole('button', { name: /Neck/ }).first().click();
-    await expect(page.getByRole('heading', { name: 'Neck', exact: true })).toBeVisible();
-    await expectClass(page.getByRole('img', { name: 'Neck', exact: true }), 'demo-frame', false);
-  });
 });
 
 test.describe('Bodyweight', () => {
@@ -111,62 +85,6 @@ test.describe('Bodyweight', () => {
 });
 
 test.describe('Data', () => {
-  test('Hevy import through Settings is idempotent and feeds previous-session sets', async ({ page }) => {
-    await fresh(page);
-    await page.goto('/settings');
-    await page.locator('input[type="file"][accept*="csv"]').setInputFiles(HEVY_CSV);
-    await expect(page.getByRole('dialog')).toContainText('21 sessions');
-    // Pair-total halving is pre-ticked for the dumbbell presses, not curls.
-    await page.getByRole('button', { name: /Import 21 sessions/ }).click();
-    // Result step: reports the counts (facts only), then on to the reconcile step.
-    await expect(page.getByTestId('hevy-counts')).toContainText('21 new session');
-    await page.getByTestId('hevy-result-continue').click();
-    // Reconcile step: keep the brief's numbers.
-    await page.getByRole('button', { name: 'Keep mine' }).click();
-    await expect(page.getByRole('dialog')).toBeHidden();
-
-    await page.goto('/history');
-    await expect(page.getByText('Routine 2 - Upper (Push)').first()).toBeVisible();
-    const rows = page.getByRole('button', { name: /Routine \d - / });
-    await expect(rows).toHaveCount(21);
-
-    // Import again: same file, untouched since the first import — every session is unchanged and
-    // nothing is written, but it is still shown, and still 21 sessions in History.
-    await page.goto('/settings');
-    await page.locator('input[type="file"][accept*="csv"]').setInputFiles(HEVY_CSV);
-    await page.getByRole('button', { name: /Import 21 sessions/ }).click();
-    await expect(page.getByTestId('hevy-counts')).toContainText('21 session');
-    await expect(page.getByTestId('hevy-counts')).toContainText('unchanged');
-    // The reconcile step appears again on a re-import, once the import has actually run.
-    await page.getByTestId('hevy-result-continue').click();
-    await page.getByRole('button', { name: 'Keep mine' }).click();
-    await expect(page.getByRole('dialog')).toBeHidden();
-    await page.goto('/history');
-    await expect(page.getByRole('button', { name: /Routine \d - / })).toHaveCount(21);
-
-    // Next up follows the last Hevy session (Push on 8 Sep → Squat), and previous sets show in-session.
-    await page.goto('/');
-    await expect(page.getByTestId('next-up')).toContainText('Lower (Squat)');
-    await page.getByTestId('start-Lower (Hinge)').click();
-    await clickIfPresent(page.getByRole('button', { name: 'Start anyway' }));
-    const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
-    const previousCell = card.getByRole('button', { name: '90 × 8' }).first();
-    await expect(previousCell).toBeVisible();
-    // Tapping it copies the Hevy-imported previous set straight into the live row.
-    await previousCell.click();
-    await expect(card.getByTestId('weight-input')).toHaveValue('90');
-    await expect(card.getByTestId('reps-input')).toHaveValue('8');
-
-    // Measurements file adds one bodyweight reading.
-    await page.goto('/settings');
-    await page.locator('input[type="file"][accept*="csv"]').setInputFiles(HEVY_MEASUREMENTS);
-    await page.getByRole('button', { name: 'Import', exact: true }).click();
-    await page.getByTestId('hevy-result-continue').click(); // "Done" on the result step
-    await expect(page.getByRole('dialog')).toBeHidden();
-    await page.goto('/body');
-    await expect(page.getByText('74.5 kg').first()).toBeVisible();
-  });
-
   test('JSON backup export produces a file', async ({ page }) => {
     await fresh(page);
     await page.goto('/settings');
@@ -186,16 +104,5 @@ test.describe('Data', () => {
     const download = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Export sets CSV' }).click();
     expect((await download).suggestedFilename()).toMatch(/\.csv$/);
-  });
-
-  test('check-in copies plain text', async ({ page, context }) => {
-    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-    await fresh(page);
-    await page.goto('/checkin');
-    await expect(page.getByTestId('checkin-text')).toContainText('Romanian Deadlift (Barbell): 110 kg');
-    await page.getByTestId('copy-checkin').click();
-    const clip = await page.evaluate(() => navigator.clipboard.readText());
-    expect(clip).toContain('Lifts');
-    expect(clip).toContain('Barbell Back Squat: calibrating');
   });
 });

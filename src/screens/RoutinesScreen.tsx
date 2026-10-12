@@ -12,13 +12,11 @@ import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { ChevronIcon, MoreIcon, TopBar } from '@/ui/components/TopBar';
 import { useRoutines } from '@/ui/hooks';
-import { PasteRoutineSheet } from '@/ui/PasteRoutineSheet';
 
 export function RoutinesScreen() {
   const nav = useNavigate();
   const routines = useRoutines();
   const [newOpen, setNewOpen] = useState(false);
-  const [pasteOpen, setPasteOpen] = useState(false);
   const [menuFor, setMenuFor] = useState<Routine | null>(null);
   const [deleteFor, setDeleteFor] = useState<Routine | null>(null);
 
@@ -152,15 +150,7 @@ export function RoutinesScreen() {
         <div className="h-6" />
       </div>
 
-      <NewRoutineSheet
-        open={newOpen}
-        onClose={() => setNewOpen(false)}
-        onPaste={() => {
-          setNewOpen(false);
-          setPasteOpen(true);
-        }}
-      />
-      <PasteRoutineSheet open={pasteOpen} onClose={() => setPasteOpen(false)} />
+      <NewRoutineSheet open={newOpen} onClose={() => setNewOpen(false)} />
 
       <Sheet open={menuFor !== null} onClose={() => setMenuFor(null)} title={menuFor?.name}>
         <div className="grid gap-3">
@@ -209,7 +199,7 @@ export function RoutinesScreen() {
   );
 }
 
-function NewRoutineSheet({ open, onClose, onPaste }: { open: boolean; onClose: () => void; onPaste: () => void }) {
+function NewRoutineSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const nav = useNavigate();
   const [name, setName] = useState('');
   const [lower, setLower] = useState(false);
@@ -252,19 +242,6 @@ function NewRoutineSheet({ open, onClose, onPaste }: { open: boolean; onClose: (
         variant="outline"
         full
         className="mt-4"
-        onClick={() => {
-          reset();
-          onPaste();
-        }}
-        data-testid="paste-routine"
-      >
-        Paste a routine
-      </Button>
-      <Button
-        size="md"
-        variant="outline"
-        full
-        className="mt-2"
         onClick={() => {
           reset();
           onClose();

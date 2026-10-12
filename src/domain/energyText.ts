@@ -5,7 +5,7 @@
  * on; a gated estimate says which input fell short and by how much, and nothing about what to do.
  */
 
-import { fmtDateKey } from './checkin';
+import { fmtDateKey } from './dates';
 import { MIN_SPAN_DAYS, loggedDaysNeeded, type Maintenance } from './energy';
 import { fmtNum, fmtSignedKg } from './format';
 

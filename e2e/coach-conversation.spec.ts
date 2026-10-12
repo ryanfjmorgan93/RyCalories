@@ -8,86 +8,15 @@ import { DEFAULT_SETTINGS } from '../src/domain/types';
 import { createRawIronDb, fresh, IRON_SCHEMA_V3, readRawIron } from './fresh';
 
 /**
- * The coach as one box, on the built app, against `window.__ironNanoFake` (the documented stand-in
- * for the native plugin; see coach.spec.ts). The owner's conversation from their screenshots, and
- * the rules that make a routine smarter than a list of exercises: everything from that seam inward
- * is real, the owner's data read from IndexedDB, the generator, the review and the save.
- *
- * The model's calls are logged at the seam. A claim of "no model call" is asserted only once the
- * thing the call would have been for is on screen and the box is idle again, and again at the end of
- * the conversation, so a call made late is caught too.
+ * The coach as one box, on the built app. The owner's conversation from their screenshots, and the
+ * rules that make a routine smarter than a list of exercises: everything is real, the owner's data
+ * read from IndexedDB, the generator, the review and the save. A routine is built, and changed, by
+ * the app with no model; a question is for Claude, which is not set up yet, so it is answered with
+ * one plain line.
  */
 
-const REPLY = ['Each part of the shoulder ', 'has an exercise.'];
+const NO_CLAUDE = "Questions go to Claude, which isn't set up yet.";
 const SHOULDERS = 'Give me a routine solely designed to build 3D shoulders';
-
-interface ModelLog {
-  generate: string[];
-  counted: string[];
-  streamed: string[];
-}
-
-interface FakeOptions {
-  /** What an answer says, in pieces. */
-  reply?: string[];
-  /** What the default model answers when it is asked to read a typed line. */
-  intent?: string;
-  /** What the nth answer says, where it is not `reply`. */
-  replies?: string[][];
-  /** The first answer stops after its first piece and waits for `window.__release()`. */
-  hold?: boolean;
-  /** The first answer fails with "boom". */
-  fail?: boolean;
-  /** The model is not there: the status says so, and a question cannot be sent. */
-  unavailable?: boolean;
-}
-
-/**
- * The fake default and full models: every prompt of every kind is recorded in `window.__modelLog`.
- * `window.__streamsFinished` counts the answers that have run to their end: a held answer adds one
- * only after `__release()`, so a test can wait for something that cannot have happened before it.
- */
-async function fakeModel(page: Page, opts: FakeOptions = {}): Promise<void> {
-  await page.addInitScript(
-    (c: Required<Pick<FakeOptions, 'reply' | 'intent' | 'replies' | 'hold' | 'fail' | 'unavailable'>>) => {
-      const w = window as unknown as Record<string, unknown>;
-      const log = { generate: [] as string[], counted: [] as string[], streamed: [] as string[] };
-      w.__modelLog = log;
-      w.__streamsFinished = 0;
-      let calls = 0;
-      w.__ironNanoFake = {
-        status: { state: 'ready', detail: 'AVAILABLE · default' },
-        statusFull: c.unavailable ? { state: 'unavailable', detail: 'UNAVAILABLE · samsung SM-F971B' } : { state: 'ready', detail: 'AVAILABLE · nano-v4-full · 4000 tokens · samsung SM-F971B' },
-        generate: async ({ prompt }: { prompt: string }) => {
-          log.generate.push(prompt);
-          return { text: c.intent };
-        },
-        countTokens: async ({ prompt }: { prompt: string }) => {
-          log.counted.push(prompt);
-          return { tokens: Math.ceil(prompt.length / 4), limit: 4000 };
-        },
-        generateStream: async ({ prompt }: { prompt: string }, emit: (t: string) => void) => {
-          const n = calls++;
-          log.streamed.push(prompt);
-          if (c.fail && n === 0) throw new Error('boom');
-          const reply = c.replies[n] ?? c.reply;
-          emit(reply[0]!);
-          if (c.hold && n === 0) await new Promise<void>((resolve) => (w.__release = resolve));
-          for (const piece of reply.slice(1)) emit(piece);
-          w.__streamsFinished = (w.__streamsFinished as number) + 1;
-          return { text: reply.join('') };
-        },
-      };
-    },
-    { reply: opts.reply ?? REPLY, intent: opts.intent ?? '{}', replies: opts.replies ?? [], hold: opts.hold ?? false, fail: opts.fail ?? false, unavailable: opts.unavailable ?? false },
-  );
-}
-
-const release = (page: Page) => page.evaluate(() => (window as unknown as { __release: () => void }).__release());
-const streamsFinished = (page: Page) => page.evaluate(() => (window as unknown as { __streamsFinished: number }).__streamsFinished);
-
-const modelLog = (page: Page) => page.evaluate(() => (window as unknown as { __modelLog: ModelLog }).__modelLog);
-const NO_CALLS: ModelLog = { generate: [], counted: [], streamed: [] };
 
 // ---------------------------------------------------------------------------
 // The owner's data, raw, before the app boots
@@ -239,8 +168,7 @@ async function whyLines(where: Locator): Promise<string[]> {
 
 // ---------------------------------------------------------------------------
 
-test('the owner\'s conversation: a routine built with no model, why answered from it, a new routine, a shuffle, a review and a save', async ({ page }) => {
-  await fakeModel(page);
+test('the owner\'s conversation: a routine built with no model, a question answered with one line, a new routine, a shuffle and a review', async ({ page }) => {
   await seedOwner(page);
   await openCoach(page);
 
@@ -266,29 +194,20 @@ test('the owner\'s conversation: a routine built with no model, why answered fro
     await expect(bubble.getByTestId('coach-why-lines')).toHaveCount(0);
     firstReasons = await whyLines(bubble);
     expect(firstReasons).toContain('Focus: shoulders and rear delts, as asked');
-    expect(await modelLog(page)).toEqual(NO_CALLS);
   });
 
-  await test.step('Why have you chosen this? is one call, with the routine and its reasons, and answers without another routine', async () => {
+  await test.step('Why have you chosen this? is a question: answered with one line, and no second routine', async () => {
     await say(page, 'Why have you chosen this?');
-    await expect(entry(page, 1).getByTestId('coach-answer')).toHaveText(REPLY.join(''));
+    await expect(entry(page, 1).getByTestId('coach-answer')).toHaveText(NO_CLAUDE);
     await idle(page);
-    // Counted after the answer is on screen, so a second routine or a second call would be here.
+    // Counted after the answer is on screen, so a second routine would be here.
     await expect(page.getByTestId('coach-routine')).toHaveCount(1);
-    const log = await modelLog(page);
-    expect(log.streamed).toHaveLength(1);
-    expect(log.generate).toEqual([]);
-    const prompt = log.streamed[0]!;
-    for (const name of first) expect(prompt).toContain(name);
-    expect(firstReasons.some((line) => prompt.includes(line))).toBe(true);
-    expect(prompt).toContain(`User: ${SHOULDERS}`);
-    expect(prompt.endsWith('User: Why have you chosen this?')).toBe(true);
-    // The line under the answer says what the model was given.
-    await expect(entry(page, 1).getByTestId('coach-read')).toHaveText(/^Read: .*routine and reasons · last exchange$/);
+    // The answer carries no "Read:" line: there is nothing it was given to read.
+    await expect(entry(page, 1).getByTestId('coach-read')).toHaveCount(0);
   });
 
   let second: string[] = [];
-  await test.step("Doesn't matter, I want 3d shoulders builds again, with no call to the model", async () => {
+  await test.step("Doesn't matter, I want 3d shoulders builds again", async () => {
     await say(page, "Doesn't matter, I want 3d shoulders");
     await expect(page.getByTestId('coach-routine')).toHaveCount(2);
     await idle(page);
@@ -296,8 +215,6 @@ test('the owner\'s conversation: a routine built with no model, why answered fro
     expect(second).toHaveLength(6);
     expect(new Set(second).size).toBe(6);
     expect(await groupsOf(page, second)).toEqual(expect.arrayContaining(['shoulders', 'rear delts']));
-    expect((await modelLog(page)).streamed).toHaveLength(1);
-    expect((await modelLog(page)).generate).toEqual([]);
   });
 
   let shuffled: string[] = [];
@@ -320,12 +237,10 @@ test('the owner\'s conversation: a routine built with no model, why answered fro
     expect(shuffled).toHaveLength(6);
     expect(new Set(shuffled).size).toBe(6);
     expect(await groupsOf(page, shuffled)).toEqual(expect.arrayContaining(['shoulders', 'rear delts']));
-    // In place: still two routines, the first untouched, and the model was not asked.
+    // In place: still two routines, and the first untouched.
     await expect(page.getByTestId('coach-routine')).toHaveCount(2);
     expect(await rowNames(entry(page, 0))).toEqual(first);
     await expect(entry(page, 2).getByTestId('coach-read')).toHaveText('Read: shoulders, rear delts · 6 exercises');
-    expect((await modelLog(page)).streamed).toHaveLength(1);
-    expect((await modelLog(page)).generate).toEqual([]);
   });
 
   await test.step('Review routine opens what is on screen: a row for each, and the owner\'s own exercises under their own names', async () => {
@@ -347,8 +262,6 @@ test('the owner\'s conversation: a routine built with no model, why answered fro
     await expect(review.getByTestId('paste-add-new')).toHaveCount(0);
     await review.getByRole('button', { name: 'Cancel' }).click();
     await expect(review).toBeHidden();
-    expect((await modelLog(page)).streamed).toHaveLength(1);
-    expect((await modelLog(page)).generate).toEqual([]);
   });
 });
 
@@ -359,7 +272,6 @@ function bareOwner(): Owner {
 }
 
 test('Review routine opens the routine it sits under and saves it, the library exercises made once however often it is saved', async ({ page }) => {
-  await fakeModel(page);
   await seedOwner(page, bareOwner());
   await openCoach(page);
 
@@ -380,7 +292,6 @@ test('Review routine opens the routine it sits under and saves it, the library e
     await expect(entry(page, n).getByTestId('coach-minutes')).toHaveText(/^about \d+ min$/);
   }
   expect(shoulders).not.toEqual(chest);
-  expect(await modelLog(page)).toEqual(NO_CALLS);
 
   const saved = async () => {
     const { exercises, routines } = await savedState(page);
@@ -435,7 +346,6 @@ test('Review routine opens the routine it sits under and saves it, the library e
 const ADDUCTOR_DIAGRAMS = ['cable-standing-hip-adduction', 'hip-adduction-machine'].map((slug) => EXERCISE_DEMOS.find((d) => d.slug === slug)!);
 
 test('a routine built from the diagrams: Review has every row matched already, Save makes one exercise from each diagram and points the routine at it, and building and saving it again makes no second one', async ({ page }) => {
-  await fakeModel(page);
   await seedOwner(page, bareOwner());
   await openCoach(page);
   expect(ADDUCTOR_DIAGRAMS).toHaveLength(2);
@@ -447,7 +357,6 @@ test('a routine built from the diagrams: Review has every row matched already, S
   const built = await rowNames(entry(page, 0));
   expect([...built].sort()).toEqual(ADDUCTOR_DIAGRAMS.map((d) => d.name).sort());
   await expect(entry(page, 0).getByTestId('coach-new')).toHaveCount(2);
-  expect(await modelLog(page)).toEqual(NO_CALLS);
 
   const review = page.getByRole('dialog').filter({ hasText: 'Review routine' });
 
@@ -510,11 +419,9 @@ test('a routine built from the diagrams: Review has every row matched already, S
   expect(third.exercises.map((e) => e.id).sort()).toEqual(first.exercises.map((e) => e.id).sort());
   for (const d of ADDUCTOR_DIAGRAMS) expect(third.exercises.filter((e) => e.demo === d.slug), d.slug).toHaveLength(1);
   expect(third.routines).toHaveLength(3);
-  expect(await modelLog(page)).toEqual(NO_CALLS);
 });
 
 test('a fresh install, with nothing logged yet, is offered the library\'s cable exercises, because its routines use cables', async ({ page }) => {
-  await fakeModel(page);
   // The app's own seed: 27 exercises and five routines on barbells, dumbbells, machines and cables, and not one set logged.
   await fresh(page);
   expect((await readRawIron(page)).tables.setLogs).toEqual([]);
@@ -531,11 +438,9 @@ test('a fresh install, with nothing logged yet, is offered the library\'s cable 
   await expect(entry(page, 0).getByTestId('coach-new')).toHaveCount(3);
   for (const known of await lookup(page, names)) expect(known.equipment, known.name).toBe('cable');
   expect(await groupsOf(page, names)).toEqual(expect.arrayContaining(['shoulders', 'rear delts']));
-  expect(await modelLog(page)).toEqual(NO_CALLS);
 });
 
 test('Review saves the very exercise the builder took, and not another of the owner\'s with the same name', async ({ page }) => {
-  await fakeModel(page);
   // Two exercises of one name, as an import or two adds can leave: only the dumbbell one can be in a dumbbell routine.
   const twin = (id: string, equipment: string) => exercise(id, 'Twin Raise', { muscleGroup: 'calves', equipment });
   await seedOwner(page, { exercises: [twin('twin-a', 'barbell'), twin('twin-b', 'dumbbell')], routines: false });
@@ -566,7 +471,6 @@ test('Review saves the very exercise the builder took, and not another of the ow
 });
 
 test('Clear empties the conversation, a build and an answer alike', async ({ page }) => {
-  await fakeModel(page);
   await seedOwner(page);
   await openCoach(page);
   await say(page, 'Give me a chest routine');
@@ -578,17 +482,14 @@ test('Clear empties the conversation, a build and an answer alike', async ({ pag
   await expect(page.getByTestId('coach-entry')).toHaveCount(0);
   await expect(page.getByTestId('coach-clear')).toHaveCount(0);
 
-  // The routine that was built is not carried into a question asked after Clear.
+  // The conversation starts again: a question after Clear is the only entry on screen.
   await say(page, 'How was last week?');
-  await expect(page.getByTestId('coach-answer')).toHaveCount(1);
-  const { streamed } = await modelLog(page);
-  expect(streamed).toHaveLength(2);
-  expect(streamed[1]).not.toContain('Routine the app built');
-  expect(streamed[1]).not.toContain('Give me a chest routine');
+  await expect(page.getByTestId('coach-answer')).toHaveText(NO_CLAUDE);
+  await expect(page.getByTestId('coach-entry')).toHaveCount(1);
+  await expect(page.getByTestId('coach-routine')).toHaveCount(0);
 });
 
 test('Draft with coach: the first message is a build even when it reads like a question, and the next is routed as usual', async ({ page }) => {
-  await fakeModel(page);
   await seedOwner(page);
   await openCoach(page, '/coach?mode=routine');
 
@@ -596,17 +497,14 @@ test('Draft with coach: the first message is a build even when it reads like a q
   await expect(page.getByTestId('coach-routine')).toHaveCount(1);
   await idle(page);
   await expect(entry(page, 0).getByTestId('coach-read')).toHaveText(/^Read: chest · \d+ exercises$/);
-  expect(await modelLog(page)).toEqual(NO_CALLS);
 
   await say(page, 'Why have you chosen this?');
-  await expect(page.getByTestId('coach-answer')).toHaveText(REPLY.join(''));
+  await expect(page.getByTestId('coach-answer')).toHaveText(NO_CLAUDE);
   await idle(page);
   await expect(page.getByTestId('coach-routine')).toHaveCount(1);
-  expect((await modelLog(page)).streamed).toHaveLength(1);
 });
 
 test('the box has no example text and no toggle', async ({ page }) => {
-  await fakeModel(page);
   await seedOwner(page);
   await openCoach(page);
   await expect(page.getByTestId('coach-input')).toHaveAttribute('placeholder', 'Message');
@@ -624,8 +522,7 @@ async function minutesOf(where: Pick<Locator, 'getByTestId'>): Promise<number> {
   return Number(/^about (\d+) min$/.exec(text ?? '')![1]);
 }
 
-test('the owner\'s conversation carried on: "add biceps", "swap the front raise" and "make it shorter" change that routine with no model, and "why" is about the one on screen', async ({ page }) => {
-  await fakeModel(page);
+test('the owner\'s conversation carried on: "add biceps", "swap the front raise" and "make it shorter" change that routine with no model, and a question after them makes no new routine', async ({ page }) => {
   await seedOwner(page);
   await openCoach(page);
 
@@ -648,7 +545,6 @@ test('the owner\'s conversation carried on: "add biceps", "swap the front raise"
     expect(new Set(added).size).toBe(added.length);
     await expect(entry(page, 1).getByTestId('coach-read')).toHaveText('Read: shoulders, rear delts, biceps · 8 exercises');
     await expect(entry(page, 1).getByTestId('coach-edit')).toHaveText(/^Added .+/);
-    expect(await modelLog(page)).toEqual(NO_CALLS);
   });
 
   let swapped: string[] = [];
@@ -667,7 +563,6 @@ test('the owner\'s conversation carried on: "add biceps", "swap the front raise"
     const reasons = await whyLines(entry(page, 1));
     expect(reasons.find((line) => line.startsWith(`${replaced}: `)), reasons.join('\n')).toMatch(/front raise/);
     await expect(entry(page, 2).getByTestId('coach-edit')).toHaveText(`Swapped ${replaced} for ${swapped[changed[0]!]}`);
-    expect(await modelLog(page)).toEqual(NO_CALLS);
   });
 
   let shorter: string[] = [];
@@ -681,143 +576,59 @@ test('the owner\'s conversation carried on: "add biceps", "swap the front raise"
     expect(now).toBeLessThan(was);
     expect(shorter.length).toBeLessThan(swapped.length);
     for (const name of shorter) expect(swapped).toContain(name);
-    expect(await modelLog(page)).toEqual(NO_CALLS);
   });
 
-  await test.step('why have you chosen this? is one call, and its prompt holds the routine on screen now', async () => {
+  await test.step('why have you chosen this? is answered with one line, and is not another routine', async () => {
     await say(page, 'Why have you chosen this?');
-    await expect(entry(page, 4).getByTestId('coach-answer')).toHaveText(REPLY.join(''));
+    await expect(entry(page, 4).getByTestId('coach-answer')).toHaveText(NO_CLAUDE);
     await idle(page);
     await expect(page.getByTestId('coach-routine')).toHaveCount(4);
-    const log = await modelLog(page);
-    expect(log.streamed).toHaveLength(1);
-    expect(log.generate).toEqual([]);
-    const prompt = log.streamed[0]!;
-    const block = prompt.slice(prompt.indexOf('Routine the app built:'), prompt.indexOf('\n\nWhy:'));
-    for (const name of shorter) expect(block, name).toContain(name);
-    // Nothing of the earlier routines that the later ones dropped or replaced.
-    for (const gone of [replaced, ...swapped.filter((n) => !shorter.includes(n))]) expect(block, gone).not.toContain(gone);
-    // And the model is told what the coach did.
-    expect(prompt).toContain(`Coach: Routine changed (Shoulders, rear delts and biceps): ${await entry(page, 3).getByTestId('coach-edit').textContent()}`);
-    expect(prompt.endsWith('User: Why have you chosen this?')).toBe(true);
   });
 });
 
-test('Clear while an answer is held mid-stream empties the screen, and the answer does not come back when it finishes', async ({ page }) => {
-  await fakeModel(page, { hold: true, replies: [REPLY, ['A fresh answer.']] });
+test('an error keeps what was typed in the box, can be cleared, and goes with the next message', async ({ page }) => {
   await seedOwner(page);
   await openCoach(page);
   await say(page, SHOULDERS);
   await expect(page.getByTestId('coach-routine')).toHaveCount(1);
   await idle(page);
 
-  await say(page, 'Why have you chosen this?');
-  await expect(page.getByTestId('coach-partial')).toHaveText(REPLY[0]!);
-  await expect(page.getByTestId('coach-send')).toHaveText('Answering…');
-  await expect(page.getByTestId('coach-send')).toBeDisabled();
-
-  // Clear is there while it is busy, and it works.
-  await page.getByTestId('coach-clear').click();
-  await expect(page.getByTestId('coach-entry')).toHaveCount(0);
-  await expect(page.getByTestId('coach-pending')).toHaveCount(0);
-  await expect(page.getByTestId('coach-send')).toHaveText('Send');
-  await expect(page.getByTestId('coach-clear')).toHaveCount(0);
-
-  // The held answer runs to its end. Only once it has is anything asserted about it: a check made before would pass whatever the app did with it.
-  await release(page);
-  await expect.poll(() => streamsFinished(page)).toBe(1);
-
-  // The next question is answered alone: nothing of the cleared one, and not its second half.
-  await say(page, 'How was last week?');
-  await expect(page.getByTestId('coach-answer')).toHaveText('A fresh answer.');
-  await expect(page.getByTestId('coach-answer')).toHaveCount(1);
-  await expect(page.getByTestId('coach-entry')).toHaveCount(1);
-  await expect(page.locator('body')).not.toContainText(REPLY[1]!);
-  const { streamed } = await modelLog(page);
-  expect(streamed).toHaveLength(2);
-  expect(streamed[1]).not.toContain('Routine the app built');
-});
-
-test('while an answer is held, Shuffle and Read with assistant are off and Stop is there; Stop keeps what is on screen and puts the question back in the box', async ({ page }) => {
-  await fakeModel(page, { hold: true, intent: '{"focus":["biceps"]}' });
-  await seedOwner(page);
-  await openCoach(page);
-  // A routine the rules could not read, so that Read with assistant is offered under it.
-  await say(page, 'give me a routine that makes me look like thor');
-  await expect(page.getByTestId('coach-routine')).toHaveCount(1);
-  await idle(page);
-  const shuffle = entry(page, 0).getByTestId('coach-shuffle');
-  const assist = entry(page, 0).getByTestId('coach-read-assistant');
-  await expect(shuffle).toBeEnabled();
-  await expect(assist).toBeEnabled();
-  await expect(page.getByTestId('coach-stop')).toHaveCount(0);
-  const before = await rowNames(entry(page, 0));
-
-  const question = 'Why have you chosen this?';
-  await say(page, question);
-  await expect(page.getByTestId('coach-partial')).toHaveText(REPLY[0]!);
-  // Both would do nothing now, and say so by being off.
-  await expect(shuffle).toBeDisabled();
-  await expect(assist).toBeDisabled();
-  await expect(page.getByTestId('coach-stop')).toBeVisible();
-
-  await page.getByTestId('coach-stop').click();
-  await expect(page.getByTestId('coach-pending')).toHaveCount(0);
-  await expect(page.getByTestId('coach-send')).toHaveText('Send');
-  // What was on screen stays, and the question is in the box to be sent again, not retyped.
-  await expect(page.getByTestId('coach-entry')).toHaveCount(1);
-  expect(await rowNames(entry(page, 0))).toEqual(before);
-  await expect(page.getByTestId('coach-input')).toHaveValue(question);
-  await expect(shuffle).toBeEnabled();
-  await expect(assist).toBeEnabled();
-  await expect(page.getByTestId('coach-stop')).toHaveCount(0);
-
-  await release(page);
-  await expect.poll(() => streamsFinished(page)).toBe(1);
-  // Stopped for good: the second half of the answer is nowhere, and no entry was made of it.
-  await page.getByTestId('coach-send').click();
-  await expect(entry(page, 1).getByTestId('coach-answer')).toHaveText(REPLY.join(''));
-  await expect(page.getByTestId('coach-entry')).toHaveCount(2);
-});
-
-test('an error keeps what was typed in the box, can be cleared, and goes with the next message', async ({ page }) => {
-  await fakeModel(page, { fail: true, replies: [REPLY, ['Fine.']] });
-  await seedOwner(page);
-  await openCoach(page);
-  const question = 'How was last week, in some detail please?';
-  await say(page, question);
-  await expect(page.getByTestId('coach-error')).toHaveText('boom');
+  const change = 'swap the leg press';
+  await say(page, change);
+  await expect(page.getByTestId('coach-error')).toHaveText('No exercise called leg press in this routine');
   // Not lost: it is in the box, and nothing was made of it.
-  await expect(page.getByTestId('coach-input')).toHaveValue(question);
-  await expect(page.getByTestId('coach-entry')).toHaveCount(0);
+  await expect(page.getByTestId('coach-input')).toHaveValue(change);
+  await expect(page.getByTestId('coach-entry')).toHaveCount(1);
   await expect(page.getByTestId('coach-pending')).toHaveCount(0);
-  // With nothing else on screen, Clear is how the error goes.
+  // Clear is how the error goes with the rest of the screen; what was typed stays in the box.
   await page.getByTestId('coach-clear').click();
   await expect(page.getByTestId('coach-error')).toHaveCount(0);
-  await expect(page.getByTestId('coach-input')).toHaveValue(question);
+  await expect(page.getByTestId('coach-entry')).toHaveCount(0);
+  await expect(page.getByTestId('coach-input')).toHaveValue(change);
 
-  // The same words sent again are answered, and the box is empty after them.
+  // Sent again with no routine on screen, the same words are only a question, and the box is empty after them.
   await page.getByTestId('coach-send').click();
-  await expect(page.getByTestId('coach-answer')).toHaveText('Fine.');
+  await expect(page.getByTestId('coach-answer')).toHaveText(NO_CLAUDE);
   await expect(page.getByTestId('coach-error')).toHaveCount(0);
   await expect(page.getByTestId('coach-input')).toHaveValue('');
 });
 
 test('an error goes with the next message sent, whatever kind it is', async ({ page }) => {
-  await fakeModel(page, { fail: true, replies: [REPLY, ['Fine.']] });
   await seedOwner(page);
   await openCoach(page);
-  await say(page, 'How was last week?');
-  await expect(page.getByTestId('coach-error')).toHaveText('boom');
-  // A new message, of another kind: the build is made, and the error is gone with it.
-  await page.getByTestId('coach-input').fill('Give me a chest routine');
-  await page.getByTestId('coach-send').click();
+  await say(page, SHOULDERS);
   await expect(page.getByTestId('coach-routine')).toHaveCount(1);
+  await idle(page);
+  await say(page, 'swap the leg press');
+  await expect(page.getByTestId('coach-error')).toBeVisible();
+  // A new message, of another kind: the answer is given, and the error is gone with it.
+  await page.getByTestId('coach-input').fill('How was last week?');
+  await page.getByTestId('coach-send').click();
+  await expect(page.getByTestId('coach-answer')).toHaveText(NO_CLAUDE);
   await expect(page.getByTestId('coach-error')).toHaveCount(0);
 });
 
-test('a routine that comes to nothing is said to be nothing: the fact, no minutes, no Why, and the model is not told a routine was built', async ({ page }) => {
-  await fakeModel(page);
+test('a routine that comes to nothing is said to be nothing: the fact, no minutes, no Why', async ({ page }) => {
   await seedOwner(page, bareOwner());
   await openCoach(page);
 
@@ -832,18 +643,9 @@ test('a routine that comes to nothing is said to be nothing: the fact, no minute
   await expect(entry(page, 0)).not.toContainText(/\b0 min\b/);
   await expect(entry(page, 0).getByTestId('coach-shuffle')).toHaveCount(0);
   await expect(entry(page, 0).getByTestId('coach-review')).toHaveCount(0);
-
-  await say(page, 'Why have you chosen this?');
-  await expect(entry(page, 1).getByTestId('coach-answer')).toHaveText(REPLY.join(''));
-  const { streamed } = await modelLog(page);
-  expect(streamed).toHaveLength(1);
-  expect(streamed[0]).toContain('Coach: Built nothing: Nothing to choose from for neck');
-  expect(streamed[0]).not.toContain('Routine built');
-  expect(streamed[0]).not.toContain('Routine the app built');
 });
 
-test('with the model not there, a change to the routine is made, and a question is not sent', async ({ page }) => {
-  await fakeModel(page, { unavailable: true });
+test('with Claude not set up, a change to the routine is made, and a question is answered with one line', async ({ page }) => {
   await seedOwner(page);
   await openCoach(page);
   await say(page, SHOULDERS);
@@ -858,43 +660,30 @@ test('with the model not there, a change to the routine is made, and a question 
   await idle(page);
   for (const name of first) expect(await rowNames(entry(page, 1))).toContain(name);
 
+  // A question can be sent, and is answered with the one plain line.
   await page.getByTestId('coach-input').fill('Why have you chosen this?');
-  await expect(page.getByTestId('coach-send')).toBeDisabled();
-  expect(await modelLog(page)).toEqual(NO_CALLS);
+  await expect(page.getByTestId('coach-send')).toBeEnabled();
+  await page.getByTestId('coach-send').click();
+  await expect(entry(page, 2).getByTestId('coach-answer')).toHaveText(NO_CLAUDE);
+  await expect(page.getByTestId('coach-error')).toHaveCount(0);
 });
 
 // ---------------------------------------------------------------------------
 // Nothing the rules can read
 
-test('words the rules cannot read build a routine by need, offer the assistant, and call it only on a tap, which fills options and nothing else', async ({ page }) => {
-  await fakeModel(page, { intent: '{"focus":["biceps"],"count":3}' });
+test('words the rules cannot read build a routine by need, and say which words were not read', async ({ page }) => {
   await seedOwner(page);
   await openCoach(page);
 
-  const text = 'give me a routine that makes me look like thor';
-  await say(page, text);
+  await say(page, 'give me a routine that makes me look like thor');
   const bubble = entry(page, 0).getByTestId('coach-routine');
   await expect(bubble).toHaveCount(1);
   await expect(entry(page, 0).getByTestId('coach-read')).toHaveText('Read: nothing specific · full body by need');
   await expect(entry(page, 0).getByTestId('coach-not-read')).toHaveText('Not read: makes, look, thor');
-  await expect(entry(page, 0).getByTestId('coach-read-assistant')).toBeVisible();
   await idle(page);
-  const before = await rowNames(bubble);
-  expect(before.length).toBeGreaterThan(0);
-  expect(await modelLog(page)).toEqual(NO_CALLS);
-
-  await entry(page, 0).getByTestId('coach-read-assistant').click();
-  await expect(entry(page, 0).getByTestId('coach-read')).toHaveText('Read with assistant: biceps · 3 exercises');
-  await expect(entry(page, 0).getByTestId('coach-not-read')).toHaveCount(0);
-  const log = await modelLog(page);
-  expect(log.generate).toHaveLength(1);
-  expect(log.generate[0]).toContain(text);
-  expect(log.streamed).toEqual([]);
-  expect(log.counted).toEqual([]);
-  // Only options came back: the exercises are the builder's, for the muscle the options named.
-  const after = await rowNames(bubble);
-  expect(after).toHaveLength(3);
-  expect(await groupsOf(page, after)).toEqual(['biceps', 'biceps', 'biceps']);
+  expect((await rowNames(bubble)).length).toBeGreaterThan(0);
+  // There is no model to read the rest: nothing offers to.
+  await expect(page.getByRole('button', { name: /assistant/i })).toHaveCount(0);
 });
 
 // ---------------------------------------------------------------------------
@@ -914,8 +703,7 @@ const HURT: Row = { id: 'hurt', routineId: '', title: 'Upper (Push)', startedAt:
 
 test.describe('a shoulder niggle three days ago', () => {
   test('control: with no niggle, the owner\'s upright row and barbell overhead press are in a 3D shoulders routine', async ({ page }) => {
-    await fakeModel(page);
-    await seedOwner(page, { exercises: shoulderOwner() });
+      await seedOwner(page, { exercises: shoulderOwner() });
     await openCoach(page);
     await say(page, 'give me a routine for 3d shoulders');
     await expect(page.getByTestId('coach-routine')).toHaveCount(1);
@@ -928,8 +716,7 @@ test.describe('a shoulder niggle three days ago', () => {
   });
 
   test('steers a 3D shoulders routine off the upright row and the barbell overhead press, and Why says so', async ({ page }) => {
-    await fakeModel(page);
-    await seedOwner(page, { exercises: shoulderOwner(), sessions: [HURT] });
+      await seedOwner(page, { exercises: shoulderOwner(), sessions: [HURT] });
     await openCoach(page);
     await say(page, 'give me a routine for 3d shoulders');
     await expect(page.getByTestId('coach-routine')).toHaveCount(1);
@@ -974,8 +761,7 @@ const MOVING: [string, number, number][] = [['increase', 60, 62.5], ['increase',
 
 test.describe('a bench press stalled for three sessions', () => {
   test('control: the same three sessions with the weight moving are not a stall, and a chest routine has the bench', async ({ page }) => {
-    await fakeModel(page);
-    await seedOwner(page, benchSessions(MOVING));
+      await seedOwner(page, benchSessions(MOVING));
     await openCoach(page);
     await say(page, 'give me a chest routine');
     await expect(page.getByTestId('coach-routine')).toHaveCount(1);
@@ -984,8 +770,7 @@ test.describe('a bench press stalled for three sessions', () => {
   });
 
   test('is swapped for a variation in a chest routine, and Why names what took its place', async ({ page }) => {
-    await fakeModel(page);
-    await seedOwner(page, benchSessions(STALLED));
+      await seedOwner(page, benchSessions(STALLED));
     await openCoach(page);
     await say(page, 'give me a chest routine');
     await expect(page.getByTestId('coach-routine')).toHaveCount(1);
@@ -998,7 +783,5 @@ test.describe('a bench press stalled for three sessions', () => {
     const swap = lines.map((l) => /^Bench Press \(Barbell\) stalled for 3 sessions: (.+) in its place$/.exec(l)).find((m) => m);
     expect(swap, lines.join('\n')).toBeTruthy();
     expect(names).toContain(swap![1]);
-    // The model was never asked: the swap is the builder's.
-    expect(await modelLog(page)).toEqual(NO_CALLS);
   });
 });

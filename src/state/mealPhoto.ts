@@ -1,7 +1,7 @@
 /**
  * The meal-photo pipeline: downscale a picked photo, write it to the Filesystem cache for the
- * native `Nano.analyzeMeal` plugin to read by path (a Capacitor plugin call is JSON only — a photo
- * crosses the bridge as a path, never as base64 in the call itself), and clean up afterwards.
+ * model to read (it was written for the on-device `Nano.analyzeMeal` plugin, since removed, which
+ * read it by path: a Capacitor plugin call is JSON only), and clean up afterwards.
  *
  * The photo is NEVER stored on a meal or a recipe — it exists only for the seconds recognition
  * takes. `deleteMealPhoto` removes it once recognition finishes (success, failure or cancel — the
@@ -23,7 +23,7 @@ export interface PreparedPhoto {
   /** The `file://` (or web blob) URI Filesystem reports for the written file — not used for the
    * analyse call itself (that takes `path`), but handy for anything that wants to display it. */
   uri: string;
-  /** Path relative to `Directory.Cache`, e.g. "meal-photos/<uuid>.jpg" — what `Nano.analyzeMeal`
+  /** Path relative to `Directory.Cache`, e.g. "meal-photos/<uuid>.jpg" — what a reader
    * is given, and what `deleteMealPhoto` takes back. */
   path: string;
 }

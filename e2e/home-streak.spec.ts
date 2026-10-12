@@ -2,9 +2,9 @@ import { expect, test, type Page } from '@playwright/test';
 import { clickIfPresent, fresh } from './fresh';
 
 /**
- * Home's guidance card: the next session's prescribed weight, the plain-English reason for it,
- * last time's numbers, the deload start button and the streak line — all driven through the
- * real UI, reusing the acceptance-flow steps from acceptance.spec.ts.
+ * Home's streak line above the routines list: this week's count against the target, driven through
+ * the real UI, reusing the acceptance-flow steps from acceptance.spec.ts. Sessions are started from
+ * the routines list.
  */
 
 async function deleteRoutine(page: Page, name: string) {
@@ -32,21 +32,26 @@ async function finishToSummary(page: Page) {
   await expect(page).toHaveURL(/\/summary$/);
 }
 
-test.describe('Home guidance', () => {
-  test('prescribes the increased weight with a reason, shows last time, deload starts, streak is stable', async ({ page }) => {
+test.describe('Home streak', () => {
+  test('the streak line counts this week, sits above the routines list, and ignores an abandoned session', async ({ page }) => {
     await fresh(page);
 
-    // Down to a single routine (Lower (Hinge)) so it stays "Next up" after it is completed —
-    // suggestNextRoutine always moves to the next routine in weekly order otherwise.
+    // Down to a single routine (Lower (Hinge)), so the list is short and the order of sessions is plain.
     for (const name of ['Upper (Push)', 'Lower (Squat)', 'Upper (Pull)', 'Arms (Day 5)']) {
       await deleteRoutine(page, name);
     }
 
     await page.goto('/');
-    await expect(page.getByTestId('next-up')).toContainText('Lower (Hinge)');
+    await expect(page.getByTestId('routines-list')).toContainText('Lower (Hinge)');
     await expect(page.getByTestId('streak-line')).toHaveText('This week 0 of 3');
+    // The streak line is above the routines list, and Short session is below it.
+    const streak = await page.getByTestId('streak-line').boundingBox();
+    const list = await page.getByTestId('routines-list').boundingBox();
+    const short = await page.getByTestId('short-session').boundingBox();
+    expect(streak!.y).toBeLessThan(list!.y);
+    expect(short!.y).toBeGreaterThan(list!.y + list!.height - 1);
 
-    await page.getByTestId('start-session').click();
+    await page.getByTestId('start-Lower (Hinge)').click();
     await expect(page).toHaveURL(/\/session\//);
     await logSets(page, 'Romanian Deadlift (Barbell)', 110, [8, 8, 8, 8]);
     await finishToSummary(page);
@@ -56,23 +61,17 @@ test.describe('Home guidance', () => {
     // This week's count moved to 1; not yet enough to start a streak (target is 3).
     await expect(page.getByTestId('streak-line')).toHaveText('This week 1 of 3');
 
-    const item = page.getByTestId('plan-item-Romanian Deadlift (Barbell)');
-    await expect(item).toContainText('115 kg');
-    await expect(item).toContainText('up 5 kg last time');
-    await expect(item).toContainText('Last time 110 × 8, 8, 8, 8');
-
-    // Starting a deload does not touch the weight decision and says so on the session itself.
-    await page.getByTestId('start-deload').click();
+    // Starting another session and abandoning it: the streak line reads exactly as it did before.
+    // An active-but-abandoned session must not count towards the week. Home has no in-progress
+    // card — Discard lives on the session screen itself.
+    await page.getByTestId('start-Lower (Hinge)').click();
+    // Two lower-body days in a row asks first.
+    await clickIfPresent(page.getByRole('button', { name: 'Start anyway' }));
     await expect(page).toHaveURL(/\/session\//);
-    await expect(page.locator('body')).toContainText(/deload/i);
-
-    // Discard it (never finished) and the streak line reads exactly as it did before: an
-    // active-but-abandoned session must not count towards the week. Home no longer has its own
-    // in-progress card — Discard lives on the session screen itself.
     await page.getByRole('button', { name: 'Discard session', exact: true }).click();
     await page.getByRole('button', { name: 'Discard', exact: true }).click();
     await expect(page).toHaveURL('/');
-    await expect(page.getByTestId('next-up')).toBeVisible();
+    await expect(page.getByTestId('routines-list')).toBeVisible();
     await expect(page.getByTestId('streak-line')).toHaveText('This week 1 of 3');
   });
 });

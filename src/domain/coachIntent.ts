@@ -2,8 +2,8 @@
  * What a typed message asks of the coach — pure. No IO, no clock, no model call.
  *
  * "Give me a routine solely designed to build 3D shoulders" is a routine to be built, and the app's
- * own generator builds it. "Why have you chosen this?" is a question, and goes to the on-device
- * model with the routine and its reasons in front of it. "Add biceps" said with a routine on screen
+ * own generator builds it. "Why have you chosen this?" is a question, and goes to Claude
+ * with the routine and its reasons in front of it. "Add biceps" said with a routine on screen
  * is neither: it changes that routine, and the app's own generator does that too. One box does all
  * three, so something has to decide, and it has to decide the same way every time and without a
  * model: a small model asked to route its own input is the thing that made "I want 3d shoulders"

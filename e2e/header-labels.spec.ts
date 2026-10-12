@@ -156,7 +156,7 @@ test.describe('header labels', () => {
     await page.setViewportSize(NARROW);
     await assertHeaderLabelled(page);
 
-    // Ask, More and Finish are now all worded buttons crowding the same header as the day's
+    // More and Finish are worded buttons crowding the same header as the day's
     // longest routine title — confirm the title itself still gets real room rather than being
     // squeezed to nothing.
     await expect
@@ -166,38 +166,21 @@ test.describe('header labels', () => {
 });
 
 test.describe('meal body actions (not the header)', () => {
-  test('a new, empty meal offers "From a recipe" and "Estimate" in the body, and each opens its destination', async ({ page }) => {
-    // The estimate flow's text box only opens once the on-device model reports `ready` — fake it
-    // the same way e2e/recipe-builder.spec.ts does, registered before the app boots so the same
-    // window object carries it through the client-side navigation the Estimate button performs.
-    await page.addInitScript(() => {
-      (window as unknown as { __ironNanoFake?: unknown }).__ironNanoFake = {
-        status: { state: 'ready', detail: 'ready' },
-        generate: async () => ({ text: JSON.stringify({ parts: [{ name: 'egg' }] }) }),
-        analyzeMeal: async () => ({ text: '{"ingredients":[]}' }),
-      };
-    });
+  test('a new, empty meal offers "From a recipe" in the body, and it opens its destination', async ({ page }) => {
     await fresh(page);
     await page.goto('/food/new');
     await expect(page.getByTestId('meal-name')).toBeVisible();
 
     const fromRecipe = page.getByRole('button', { name: 'From a recipe', exact: true });
-    const estimate = page.getByRole('button', { name: 'Estimate', exact: true });
     await expect(fromRecipe).toBeVisible();
-    await expect(estimate).toBeVisible();
-    // Not the header: the redesign moved these into the body, not just renamed an icon in place.
+    // Not the header: the redesign moved this into the body, not just renamed an icon in place.
     await expect(page.locator('header').getByRole('button', { name: 'From a recipe', exact: true })).toHaveCount(0);
-    await expect(page.locator('header').getByRole('button', { name: 'Estimate', exact: true })).toHaveCount(0);
+    // The meal-out estimate went with the on-device model.
+    await expect(page.getByRole('button', { name: 'Estimate', exact: true })).toHaveCount(0);
 
     await fromRecipe.click();
     await expect(page.getByTestId('recipe-picker-search')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog')).toBeHidden();
-
-    await estimate.click();
-    await expect(page).toHaveURL(/\/food\/recipes\/new\?start=estimate&date=/);
-    // Same positive signal e2e/recipe-builder.spec.ts uses for this exact flow: the text box opens
-    // directly, with no need to tap "Estimate a meal out" first.
-    await expect(page.getByTestId('recipe-estimate-text')).toBeVisible();
   });
 });

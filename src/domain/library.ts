@@ -72,8 +72,7 @@ type Findable = Pick<Exercise, 'name' | 'demo'> & { aliases?: string[]; createdA
 /**
  * The exercise a library entry already is, or undefined. Adding it must not make a second row for
  * the same movement, so a row matches when it carries the entry's picture key, or has the same name
- * once case, apostrophes and spacing are ignored (an alias counts as a name: the Hevy import treats
- * it the same way). The picture key wins over a name; a name wins over an alias; then the oldest.
+ * once case, apostrophes and spacing are ignored (an alias counts as a name). The picture key wins over a name; a name wins over an alias; then the oldest.
  */
 export function findExistingExercise<E extends Findable>(exercises: readonly E[], demoKey: string, name: string): E | undefined {
   const key = normaliseName(name);

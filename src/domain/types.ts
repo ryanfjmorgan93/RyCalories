@@ -69,7 +69,7 @@ export interface Exercise {
   defaultIncrement: number;
   unilateral: boolean;
   notes?: string;
-  /** Alternative names (e.g. the title used in a Hevy export) so imports match. */
+  /** Alternative names (e.g. the title used in an old Hevy export) so a pasted or built routine matches. */
   aliases?: string[];
   /** ISO timestamp of creation; used only for ordering custom exercises. */
   createdAt: string;
@@ -169,12 +169,8 @@ export interface Session {
    */
   swaps?: Record<string, string>;
   /**
-   * Fingerprint of the import-controlled fields of this session's sets exactly as the last Hevy
-   * import wrote them (see `importFingerprint` in `db/hevy.ts`). Only present on `source: 'hevy'`
-   * sessions. Absent means either the session was never imported, or it was imported before this
-   * field existed — either way a re-import treats it as unknown and keeps the in-app version
-   * rather than guessing. Comparing the CURRENT stored sets against this value is how a re-import
-   * tells "untouched since import" (safe to replace) from "edited in Iron" (kept by default).
+   * Legacy: the fingerprint the Hevy importer (since removed) wrote on `source: 'hevy'` sessions,
+   * kept so that stored rows and old backups keep their shape. Nothing reads it now.
    */
   importHash?: string;
   /**
@@ -307,7 +303,8 @@ export interface CoachNote {
 export interface Settings {
   id: 'settings';
   units: 'kg';
-  theme: 'dark' | 'light';
+  /** Legacy: the app is dark only now. Kept optional so old backups, which carry it, still load. */
+  theme?: 'dark' | 'light';
   calorieStart: number;
   calorieStep: number;
   calorieStepDays: number;
@@ -332,11 +329,6 @@ export interface Settings {
    * which reads as on — so check `!== false`, never truthiness.
    */
   productLookup?: boolean;
-  /**
-   * Which effort scale the session UI shows and edits in. Always stored as RIR regardless.
-   * Absent = RIR.
-   */
-  effortScale?: 'rir' | 'rpe';
   /** Seed data version, so future seed changes can migrate. */
   seedVersion: number;
   /** ISO timestamp of first run. */
@@ -369,7 +361,6 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Omit<Settings, 'id' | 'createdAt'> = {
   units: 'kg',
-  theme: 'dark',
   calorieStart: 1900,
   calorieStep: 200,
   calorieStepDays: 14,
@@ -508,7 +499,7 @@ export interface RecipeIngredient {
    * the estimate used to resolve `grams`; `count * unitGrams` reproduces it. */
   unit?: { count: number; unitGrams: number; label: string; plural: string };
   /**
-   * True when `grams` came from "Estimate a meal out" (the on-device model's guess at this
+   * True when `grams` came from "Estimate a meal out" (a model's guess at this
    * component's weight), never entered or confirmed by the user. Cleared the moment the user
    * edits the amount — see `recipeSource`, which marks the whole recipe's logged source `'model'`
    * while any ingredient still carries this, so a guessed amount can never enter FoodMemory or a

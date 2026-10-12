@@ -233,7 +233,6 @@ export function LiveSessionScreen() {
 
   const requiredUndone = slots.filter((s) => !s.optional && s.rx && !skipped.has(s.rx.id) && (setsBySlot.get(s.key) ?? []).length === 0);
   const totalSets = (sets ?? []).length;
-  const currentExerciseId = slots.find((s) => s.key === currentKey)?.exercise.id;
 
   const finish = () => {
     if (requiredUndone.length > 0 || totalSets === 0) setFinishOpen(true);
@@ -246,7 +245,6 @@ export function LiveSessionScreen() {
         session={session}
         targetMinutes={routine?.targetMinutes}
         settings={settings}
-        currentExerciseId={currentExerciseId}
         onFinish={finish}
       />
       {isStaleSession(session.startedAt, now) && (

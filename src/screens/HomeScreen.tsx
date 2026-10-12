@@ -9,8 +9,7 @@ import { isBackup, type Backup } from '@/db/backup';
 import { useHistoryNoticeStore } from '@/state/historyNotice';
 import { ZERO } from '@/domain/food';
 import { fmtDateTime, fmtKg, fmtMinutes, fmtNum, plural } from '@/domain/format';
-import type { Prescription } from '@/domain/prescription';
-import { hasNoExercises, isConsecutiveLower, suggestNextRoutine } from '@/domain/schedule';
+import { hasNoExercises, isConsecutiveLower } from '@/domain/schedule';
 import { dateKeyToDate } from '@/domain/dates';
 import { weeklyDelta, bandStatus } from '@/domain/bodyweight';
 import type { Routine } from '@/domain/types';
@@ -28,20 +27,11 @@ import {
   useCalendar,
   useLastCompletedSession,
   useNextRoutineContext,
-  useNextSessionPlan,
   useRecentSessions,
   useRoutines,
   useSettings,
   useToday,
 } from '@/ui/hooks';
-
-/** Chip tone + label for a prescription flag, in the order they should read. */
-const FLAG_CHIPS: Record<Prescription['flags'][number], { tone: 'info' | 'warn'; label: string }> = {
-  calibrating: { tone: 'info', label: 'calibrating' },
-  stalled: { tone: 'warn', label: 'stalled' },
-  regression: { tone: 'warn', label: 'regression' },
-  deload: { tone: 'info', label: 'deload' },
-};
 
 export function HomeScreen() {
   const nav = useNavigate();
@@ -51,7 +41,6 @@ export function HomeScreen() {
   const rotation = useNextRoutineContext();
   const recent = useRecentSessions(3);
   const settings = useSettings();
-  const [pickOpen, setPickOpen] = useState(false);
   const [pending, setPending] = useState<Routine | null>(null);
   const [quickOpen, setQuickOpen] = useState(false);
 
@@ -62,17 +51,10 @@ export function HomeScreen() {
     return m;
   }, []);
 
-  // The rotation follows the last session that was not a quick one; the two-lower-days guard looks
-  // at the true last one. The Food screen's leg-day protein target reads the same context.
-  const suggested =
-    routines && rotation
-      ? suggestNextRoutine(routines, rotation.lastRoutineId, { avoidConsecutiveLower: true, lastWasLower: rotation.lastWasLower })
-      : null;
   // From the hook, never a bare toDateKey(): nothing on this screen is time-driven, so a plain
   // render-time read freezes on the day the screen mounted. Left open overnight it would show
   // yesterday's calories as today's progress, against yesterday's target.
   const todayKey = useToday();
-  const plan = useNextSessionPlan(suggested?.id, settings);
   const calendar = useCalendar(12, todayKey, settings);
 
   // A routine with no exercises has nothing to start; the buttons say so instead of opening an empty session.
@@ -90,20 +72,6 @@ export function HomeScreen() {
     try {
       const s = await startSession(r.id);
       setPending(null);
-      setPickOpen(false);
-      nav(`/session/${s.id}`);
-    } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not start', 'danger');
-    } finally {
-      starting.current = false;
-    }
-  };
-
-  const startDeload = async (r: Routine) => {
-    if (starting.current || empty(r)) return;
-    starting.current = true;
-    try {
-      const s = await startSession(r.id, { deload: true });
       nav(`/session/${s.id}`);
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Could not start', 'danger');
@@ -128,92 +96,50 @@ export function HomeScreen() {
       <div className="px-4">
         <HistoryNoticeCard />
 
+        {calendar && (
+          <div className="mt-2 px-1 text-xs font-semibold text-muted" data-testid="streak-line">
+            {calendar.streak > 0 ? `${calendar.streak} ${calendar.streak === 1 ? 'week' : 'weeks'} · ${calendar.line}` : `This week ${calendar.thisWeek} of ${calendar.weeklyTarget}`}
+          </div>
+        )}
+
+        <SectionTitle right={<Button size="sm" variant="ghost" className="-mb-2 text-accent" onClick={() => nav('/routines')}>Edit</Button>}>Routines</SectionTitle>
+        <Card data-testid="routines-list">
+          {(routines ?? []).map((r, i) => (
+            <div key={r.id}>
+              {i > 0 && <Divider />}
+              <Row
+                onClick={() => nav(`/routines/${r.id}`)}
+                title={r.name}
+                subtitle={`${exerciseCountText(r)}${r.targetMinutes ? ` · ${r.targetMinutes} min` : ''}${r.isLowerBody ? ' · lower' : ''}`}
+                right={
+                  active ? (
+                    <ChevronIcon />
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      data-testid={`start-${r.name}`}
+                      disabled={empty(r)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void start(r);
+                      }}
+                    >
+                      Start
+                    </Button>
+                  )
+                }
+              />
+            </div>
+          ))}
+          {routines && routines.length === 0 && <div className="p-4"><EmptyState>No routines. Add one from the Routines tab.</EmptyState></div>}
+        </Card>
+
+        {/* A short session needs no routine, so it is there with none. */}
         {!active && (
-          <Card className="mt-2 p-4" data-testid="next-up">
-            {calendar && (
-              <div className="mb-1 text-xs font-semibold text-muted" data-testid="streak-line">
-                {calendar.streak > 0 ? `${calendar.streak} ${calendar.streak === 1 ? 'week' : 'weeks'} · ${calendar.line}` : `This week ${calendar.thisWeek} of ${calendar.weeklyTarget}`}
-              </div>
-            )}
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Next up</div>
-                {suggested ? (
-                  <div className="mt-1 truncate text-3xl font-extrabold leading-tight">{suggested.name}</div>
-                ) : (
-                  <div className="mt-1 text-lg text-muted">No routines yet</div>
-                )}
-              </div>
-              {routines && routines.length > 1 && (
-                <Button size="sm" variant="ghost" onClick={() => setPickOpen(true)} data-testid="change-routine">
-                  Change
-                </Button>
-              )}
-            </div>
-
-            {plan && plan.items.length > 0 && (
-              <div className="mt-3 grid gap-2">
-                {plan.items.map((it) => (
-                  <div key={it.rx.id} className="rounded-xl border border-line bg-surface-2 px-3 py-2" data-testid={`plan-item-${it.exercise.name}`}>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="min-w-0 truncate font-semibold">{it.exercise.name}</span>
-                      {(it.prescription.weightDelta !== null || it.prescription.flags.length > 0) && (
-                        <div className="flex shrink-0 gap-1">
-                          {it.prescription.weightDelta !== null && (
-                            <span data-testid={`weight-delta-${it.exercise.name}`}>
-                              <Chip size="sm" tone={it.prescription.weightDelta > 0 ? 'ok' : 'warn'}>
-                                {it.prescription.weightDelta > 0 ? '+' : ''}
-                                {fmtNum(it.prescription.weightDelta)} kg
-                              </Chip>
-                            </span>
-                          )}
-                          {it.prescription.flags.map((f) => (
-                            <Chip key={f} size="sm" tone={FLAG_CHIPS[f].tone}>
-                              {FLAG_CHIPS[f].label}
-                            </Chip>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <div className="num text-sm">{it.prescription.line}</div>
-                    {it.prescription.reason && <div className="text-xs text-muted">{it.prescription.reason}</div>}
-                    {it.lastTime && (
-                      <div className="text-xs text-muted">
-                        Last time {it.lastTime.line}
-                        {it.lastTime.feel ? ` · ${it.lastTime.feel}` : ''}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {plan?.deloadSuggested && (
-              <div className="mt-3 text-xs font-semibold text-warn">Deload suggested · {plan.stalledCount} stalled</div>
-            )}
-
-            <div className="mt-4 grid gap-2">
-              {suggested && (
-                <>
-                  {empty(suggested) && (
-                    <div className="text-sm font-semibold text-warn" data-testid="next-up-empty">
-                      No exercises
-                    </div>
-                  )}
-                  <Button size="xl" variant="primary" full disabled={empty(suggested)} onClick={() => void start(suggested)} data-testid="start-session">
-                    Start
-                  </Button>
-                  <Button size="lg" variant="outline" full disabled={empty(suggested)} onClick={() => void startDeload(suggested)} data-testid="start-deload">
-                    Start as deload
-                  </Button>
-                </>
-              )}
-              {/* Outside the suggestion: a short session needs no routine, so it is there with none. */}
-              <Button size="lg" variant="outline" full onClick={() => setQuickOpen(true)} data-testid="short-session">
-                Short session
-              </Button>
-            </div>
-          </Card>
+          <Button size="lg" variant="outline" full className="mt-3" onClick={() => setQuickOpen(true)} data-testid="short-session">
+            Short session
+          </Button>
         )}
 
         {settings && (kcal || protein !== null) && (
@@ -241,39 +167,6 @@ export function HomeScreen() {
           </Card>
         )}
 
-        <SectionTitle right={<Button size="sm" variant="ghost" className="-mb-2 text-accent" onClick={() => nav('/routines')}>Edit</Button>}>Routines</SectionTitle>
-        <Card>
-          {(routines ?? []).map((r, i) => (
-            <div key={r.id}>
-              {i > 0 && <Divider />}
-              <Row
-                onClick={() => nav(`/routines/${r.id}`)}
-                title={r.name}
-                subtitle={`${exerciseCountText(r)}${r.targetMinutes ? ` · ${r.targetMinutes} min` : ''}${r.isLowerBody ? ' · lower' : ''}`}
-                right={
-                  active ? (
-                    <ChevronIcon />
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant={suggested?.id === r.id ? 'primary' : 'outline'}
-                      data-testid={`start-${r.name}`}
-                      disabled={empty(r)}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void start(r);
-                      }}
-                    >
-                      Start
-                    </Button>
-                  )
-                }
-              />
-            </div>
-          ))}
-          {routines && routines.length === 0 && <div className="p-4"><EmptyState>No routines. Add one from the Routines tab.</EmptyState></div>}
-        </Card>
-
         <SectionTitle right={<Button size="sm" variant="ghost" className="-mb-2 text-accent" onClick={() => nav('/history')}>All</Button>}>Recent sessions</SectionTitle>
         <Card>
           {(recent ?? []).map((s, i) => (
@@ -296,23 +189,6 @@ export function HomeScreen() {
       </div>
 
       <QuickSessionSheet open={quickOpen} onClose={() => setQuickOpen(false)} />
-
-      <Sheet open={pickOpen} onClose={() => setPickOpen(false)} title="Start which routine?">
-        <div className="overflow-hidden rounded-xl border border-line">
-          {(routines ?? []).map((r, i) => (
-            <div key={r.id}>
-              {i > 0 && <Divider />}
-              <Row
-                title={r.name}
-                subtitle={`${exerciseCountText(r)}${r.isLowerBody ? ' · lower' : ''}`}
-                onClick={empty(r) ? undefined : () => void start(r)}
-                right={empty(r) ? undefined : <ChevronIcon />}
-                dim={empty(r)}
-              />
-            </div>
-          ))}
-        </div>
-      </Sheet>
 
       <Sheet open={pending !== null} onClose={() => setPending(null)} title="Two lower-body days in a row">
         <div className="text-muted">

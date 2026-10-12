@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { fresh } from './fresh';
+import { fresh, openAdvanced } from './fresh';
 
 /**
  * The way back into a running workout (the session dock, `data-testid="live-banner"`, src/App.tsx).
@@ -38,7 +38,7 @@ async function box(page: Page, testId: string) {
 test.describe('the session dock', () => {
   test('sits above the tab bar during a workout, is a full-size target, and returns to it', async ({ page }) => {
     await fresh(page);
-    await page.getByTestId('start-session').click();
+    await page.getByTestId('start-Lower (Hinge)').click();
     await expect(page).toHaveURL(/\/session\//);
 
     await page.goto('/progress');
@@ -61,7 +61,7 @@ test.describe('the session dock', () => {
 
   test('with a real status bar and gesture bar, nothing tappable sits in either', async ({ page }) => {
     await fresh(page);
-    await page.getByTestId('start-session').click();
+    await page.getByTestId('start-Lower (Hinge)').click();
     await expect(page).toHaveURL(/\/session\//);
 
     // The session screen: its header controls must clear the status bar.
@@ -93,7 +93,7 @@ test.describe('the session dock', () => {
 
   test('a running rest timer stacks above the dock instead of covering it', async ({ page }) => {
     await fresh(page);
-    await page.getByTestId('start-session').click();
+    await page.getByTestId('start-Lower (Hinge)').click();
     await expect(page).toHaveURL(/\/session\//);
 
     await page.getByTestId('weight-input').first().fill('100');
@@ -112,7 +112,7 @@ test.describe('the session dock', () => {
 
   test('shows on Home too, above the tab bar, with no separate in-progress card', async ({ page }) => {
     await fresh(page);
-    await page.getByTestId('start-session').click();
+    await page.getByTestId('start-Lower (Hinge)').click();
     await expect(page).toHaveURL(/\/session\//);
 
     await page.goto('/progress');
@@ -138,7 +138,7 @@ test.describe('the session dock', () => {
 
   test('on Home, clears a real status bar and gesture bar too', async ({ page }) => {
     await fresh(page);
-    await page.getByTestId('start-session').click();
+    await page.getByTestId('start-Lower (Hinge)').click();
     await expect(page).toHaveURL(/\/session\//);
 
     await page.goto('/');
@@ -161,13 +161,15 @@ test.describe('the session dock', () => {
 
   test('while resting, the bottom of a screen can still be scrolled clear of the timer and dock', async ({ page }) => {
     await fresh(page);
-    await page.getByTestId('start-session').click();
+    await page.getByTestId('start-Lower (Hinge)').click();
     await page.getByTestId('weight-input').first().fill('100');
     await page.getByTestId('reps-input').first().fill('8');
     await page.getByTestId('set-done').first().click();
     await expect(page.getByTestId('rest-timer')).toBeVisible();
 
     await page.goto('/settings');
+    // The build line is the last on the page once Advanced (where the Developer card is) is open.
+    await openAdvanced(page);
     await expect(page.getByTestId('rest-timer')).toBeVisible();
     await expect(page.getByTestId('live-banner')).toBeVisible();
 
@@ -189,6 +191,7 @@ test.describe('the session dock', () => {
 test('Settings names the exact build, so it is clear whether a fix has reached the phone', async ({ page }) => {
   await fresh(page);
   await page.goto('/settings');
+  await openAdvanced(page);
   // Outside CI the run is "local"; in CI it is the run number and commit. Either way, never bare.
   await expect(page.getByTestId('build-id')).toHaveText(/^Iron \d+\.\d+\.\d+ · build (\d+ · [0-9a-f]{7}|local)$/);
 });

@@ -60,42 +60,8 @@ export function setBadges(sets: { type: SetType }[]): ('W' | 'D' | number)[] {
   return sets.map((s) => (s.type === 'warmup' ? 'W' : s.type === 'drop' ? 'D' : ++n));
 }
 
-export type EffortScale = 'rir' | 'rpe';
-
-/** RPE is 10 minus RIR, kept to halves. */
-export function rpeFromRir(rir: number): number {
-  return Math.round((10 - rir) * 2) / 2;
-}
-
-export function rirFromRpe(rpe: number): number {
-  return Math.round((10 - rpe) * 2) / 2;
-}
-
-export interface EffortOption {
-  /** Stored value: reps in reserve. */
-  rir: number;
-  /** What the chip shows. */
-  label: string;
-}
-
-/** Chip values for the effort row. RIR 0–5, or RPE 10 down to 6 in halves (RIR 0–4). */
-export function effortOptions(scale: EffortScale): EffortOption[] {
-  if (scale === 'rpe') {
-    const out: EffortOption[] = [];
-    for (let rpe = 10; rpe >= 6; rpe -= 0.5) out.push({ rir: rirFromRpe(rpe), label: String(rpe) });
-    return out;
-  }
-  return [0, 1, 2, 3, 4, 5].map((rir) => ({ rir, label: String(rir) }));
-}
-
-/** "RIR 2" or "RPE 8", as the settings say. */
-export function formatEffort(rir: number, scale: EffortScale): string {
-  return scale === 'rpe' ? `RPE ${rpeFromRir(rir)}` : `RIR ${rir}`;
-}
-
 // ---------------------------------------------------------------------------
-// Feel — the plain-language replacement for RIR/RPE jargon. Every screen uses it; the RIR/RPE
-// helpers above are left for reading stored `rir` values, and no control offers the choice now.
+// Feel — the plain-language word for a stored `rir`. Every screen uses it.
 
 export type Feel = 'Easy' | 'Good' | 'Hard' | 'Maxed';
 

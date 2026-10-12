@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { clickIfPresent, fresh } from './fresh';
 
 /**
- * WP4 — the live-session overlays (deload, supersets, warm-ups, plate maths, personal records,
+ * WP4 — the live-session overlays (deload, supersets, plate maths, personal records,
  * swap, how-to), driven through the real UI against seeded data.
  *
  * There is no UI yet to link a superset (that is the routine editor's job, owned by a different
@@ -10,8 +10,7 @@ import { clickIfPresent, fresh } from './fresh';
  * `toggleSupersetWithNext` would write — rather than driving a control that does not exist.
  *
  * Phase 3C: the current member of a superset now carries `data-current="true"` (in addition to
- * its visual highlight), which is what the tests below assert on instead of a CSS class. Warm-up
- * ghost rows log themselves directly — there is no more "pill preloads the live row" step.
+ * its visual highlight), which is what the tests below assert on instead of a CSS class.
  */
 
 /**
@@ -163,7 +162,7 @@ test.describe('WP4 overlays', () => {
     await expect(page.getByTestId('rest-timer')).toBeVisible();
   });
 
-  test('warm-up rows and plates on a known barbell weight', async ({ page }) => {
+  test('plates on a known barbell weight', async ({ page }) => {
     await fresh(page);
 
     // Lock Bench Press in at 60 kg via the ordinary override flow (acceptance.spec.ts style).
@@ -190,14 +189,6 @@ test.describe('WP4 overlays', () => {
     await expect(sheet.getByTestId('plate-diagram')).toBeVisible();
     await expect(sheet.getByTestId('plate-block')).toHaveCount(1);
     await page.keyboard.press('Escape');
-
-    // Warm-up ghost rows, shown only before a counted set exists, log themselves directly — one
-    // tap on the row's own tick, no separate confirm. Logging one doesn't touch the live row's
-    // own draft: the plate line still reflects the 60 kg working weight, unchanged.
-    await expect(card.getByTestId('warmup-row-0')).toContainText('20 × 10');
-    await card.getByTestId('warmup-done-0').click();
-    await expect(card.getByTestId('weight-input')).toHaveValue('60');
-    await expect(card.getByTestId('plate-line')).toHaveText('20 per side');
 
     // Typing the bar's own weight into the live row — the "bar only" state: a plate line with no
     // plates, and a diagram with no plate blocks (just the bar).
@@ -349,27 +340,6 @@ test.describe('WP4 overlays', () => {
     await expect(sheet.getByRole('textbox')).toHaveCount(0);
   });
 
-  test('edit set: the set-type chips meet the 44px tap floor', async ({ page }) => {
-    await fresh(page);
-    await page.getByTestId('start-Upper (Push)').click();
-    const card = page.getByTestId('exercise-card-Bench Press (Barbell)');
-    await expect(card).toBeVisible();
-
-    await card.getByTestId('weight-input').fill('60');
-    await card.getByTestId('reps-input').fill('8');
-    await card.getByTestId('set-done').click();
-    await clickIfPresent(page.getByTestId('rest-timer').getByRole('button', { name: 'Skip' }));
-
-    // Tap the logged set row to open the edit sheet.
-    await card.getByText('60 × 8', { exact: true }).click();
-    await expect(page.getByText('Edit set', { exact: true })).toBeVisible();
-
-    const failureChip = page.getByRole('dialog').getByRole('button', { name: 'Failure', exact: true });
-    await expect(failureChip).toBeVisible();
-    const box = await failureChip.boundingBox();
-    expect(box?.height).toBeGreaterThanOrEqual(44);
-  });
-
   test('how to: shows the demo image and a video link', async ({ page }) => {
     await fresh(page);
     await page.getByTestId('start-Upper (Push)').click();
@@ -382,30 +352,5 @@ test.describe('WP4 overlays', () => {
     const video = page.getByRole('link', { name: 'Video' });
     await expect(video).toBeVisible();
     await expect(video).toHaveAttribute('target', '_blank');
-  });
-
-  test('ask: opens the assistant sheet with a live question box', async ({ page }) => {
-    // The "Ask" button is gated on the assistant's status (§6) — 'unavailable' by default on the
-    // web build (see state/nano.ts), so the fake stands in for a ready on-device model. Must be
-    // set before the app's first script runs, so this goes in before `fresh()` navigates at all.
-    await page.addInitScript((cfg: { state: string; detail: string }) => {
-      (window as unknown as { __ironNanoFake?: unknown }).__ironNanoFake = {
-        status: { state: cfg.state, detail: cfg.detail },
-        generate: async () => ({ text: 'unused' }),
-      };
-    }, { state: 'ready', detail: 'fake, ready' });
-
-    await fresh(page);
-    await page.getByTestId('start-session').click();
-    await expect(page.getByTestId('ask-assistant')).toBeEnabled();
-    await page.getByTestId('ask-assistant').click();
-    await expect(page.getByText('Assistant', { exact: true })).toBeVisible();
-    await expect(page.getByTestId('assistant-input')).toBeVisible();
-  });
-
-  test('ask: is disabled while the on-device model is unavailable (the default on the web build)', async ({ page }) => {
-    await fresh(page);
-    await page.getByTestId('start-session').click();
-    await expect(page.getByTestId('ask-assistant')).toBeDisabled();
   });
 });

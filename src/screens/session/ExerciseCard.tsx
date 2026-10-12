@@ -25,7 +25,7 @@ import { prescribe } from '@/domain/prescription';
 import type { PersonalRecord } from '@/domain/records';
 import type { RestGroupMember } from '@/domain/rest';
 import { restSecondsFor, shouldStartRest } from '@/domain/rest';
-import { completionOf, justCompleted, planRows, type PendingRow, type SetTableRx, type WarmupGhostRow } from '@/domain/setTable';
+import { completionOf, justCompleted, planRows, type PendingRow, type SetTableRx } from '@/domain/setTable';
 import { countsForProgression, feelOf } from '@/domain/sets';
 import type { Exercise, Session, SetLog, Settings } from '@/domain/types';
 import { liveVerdict } from '@/domain/verdict';
@@ -158,15 +158,13 @@ export function ExerciseCard({
     () =>
       planRows({
         kind,
-        equipment: exercise.equipment,
         rx: setTableRx,
         loggedSets: sets,
         previousSets: prev?.sets ?? [],
         prescribedWeight: rx ? workingWeight : null,
-        warmup: { barKg, plates: plateSizes },
         extraRows,
       }),
-    [kind, exercise.equipment, setTableRx, sets, prev, rx, workingWeight, barKg, plateSizes, extraRows],
+    [kind, setTableRx, sets, prev, rx, workingWeight, extraRows],
   );
 
   const nextRow = useMemo(() => rows.find((r): r is PendingRow => (r.kind === 'target' || r.kind === 'extra') && r.status === 'next'), [rows]);
@@ -426,27 +424,6 @@ export function ExerciseCard({
     }
   };
 
-  const logWarmup = async (row: WarmupGhostRow) => {
-    if (busy.current) return;
-    focusWasInsideRef.current = !!ref.current && ref.current.contains(document.activeElement);
-    busy.current = true;
-    primeAudio();
-    void requestNotificationsOnce();
-    try {
-      const newSet = await logSet({
-        sessionId: session.id,
-        routineExerciseId: rx?.id ?? null,
-        exerciseId: exercise.id,
-        type: 'warmup',
-        weight: row.weight,
-        reps: kind === 'reps' || kind === 'bodyweight_plus' ? row.reps : undefined,
-      });
-      await afterLog(newSet, countedDone);
-    } finally {
-      busy.current = false;
-    }
-  };
-
   const inc = rx?.increment ?? exercise.defaultIncrement;
   const rawTLine = rx ? (session.deload && prescription ? prescription.line : targetLine(rx, kind)) : 'this session only';
   const tLine = cardMeta(rawTLine);
@@ -641,7 +618,6 @@ export function ExerciseCard({
             onLogLive={() => void logLive()}
             blockedShake={shakeKey}
             busy={busyUi}
-            onLogWarmup={(row) => void logWarmup(row)}
             onCopyPrevious={copyPrevious}
             onEditSet={setEditing}
             prIndices={prIndices}

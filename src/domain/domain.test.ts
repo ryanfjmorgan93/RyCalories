@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bandStatus, weeklyDelta } from './bodyweight';
-import { addDays, daysBetween, toDateKey } from './dates';
+import { addDays, daysBetween, fmtDateKey, inWindow, toDateKey, windowStart } from './dates';
 import { calorieTargetOn, proteinTarget } from './nutrition';
 import { isConsecutiveLower, suggestNextRoutine } from './schedule';
 import type { Bodyweight, Routine } from './types';
@@ -54,6 +54,18 @@ describe('dates', () => {
     expect(addDays('2026-09-08', 14)).toBe('2026-09-22');
     expect(daysBetween('2026-09-08', '2026-09-22')).toBe(14);
     expect(daysBetween('2026-09-22', '2026-09-08')).toBe(-14);
+  });
+  it('formats a date key without a locale', () => {
+    expect(fmtDateKey('2026-09-08')).toBe('8 Sep');
+    expect(fmtDateKey('2026-09-08', true)).toBe('8 Sep 2026');
+  });
+  it('windows end on the day asked for and count it', () => {
+    expect(windowStart('2026-09-08', 14)).toBe('2026-08-26');
+    expect(windowStart('2026-09-08', 1)).toBe('2026-09-08');
+    expect(inWindow('2026-08-26', '2026-09-08', 14)).toBe(true);
+    expect(inWindow('2026-08-25', '2026-09-08', 14)).toBe(false);
+    expect(inWindow('2026-09-09', '2026-09-08', 14)).toBe(false);
+    expect(inWindow('2026-09-08T23:30:00.000Z', '2026-09-08', 14)).toBe(true);
   });
 });
 

@@ -37,7 +37,7 @@ async function ageActiveSession(page: Page): Promise<void> {
 
 test('a fresh session shows Live, and a nine-hour-old one shows how long ago it started', async ({ page }) => {
   await fresh(page);
-  await page.getByTestId('start-session').click();
+  await page.getByTestId('start-Lower (Hinge)').click();
   await expect(page).toHaveURL(/\/session\//);
   const sessionUrl = page.url();
   // The session screen itself, while the session is fresh: no stale line.
@@ -65,7 +65,7 @@ test('a fresh session shows Live, and a nine-hour-old one shows how long ago it 
 
 test('Discard on the stale line discards the session', async ({ page }) => {
   await fresh(page);
-  await page.getByTestId('start-session').click();
+  await page.getByTestId('start-Lower (Hinge)').click();
   await expect(page).toHaveURL(/\/session\//);
   await ageActiveSession(page);
   await page.reload({ waitUntil: 'load' });
@@ -82,7 +82,7 @@ test('Discard on the stale line discards the session', async ({ page }) => {
 
 test('Finish on the stale line goes to the summary of what was logged', async ({ page }) => {
   await fresh(page);
-  await page.getByTestId('start-session').click();
+  await page.getByTestId('start-Lower (Hinge)').click();
   await expect(page).toHaveURL(/\/session\//);
   const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
   await logOneSet(page, card, 110, 8);

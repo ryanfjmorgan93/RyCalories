@@ -117,8 +117,6 @@ async function readAllDecisions(page: Page): Promise<{ rule: string; toWeight: n
 test.describe('set table', () => {
   test('ghost reps come from last time, not the target minimum', async ({ page }) => {
     await fresh(page);
-    // Named explicitly, both times: the suggested routine rotates on to the next one once this
-    // session is saved, so `start-session` would land on a different routine the second time.
     await page.getByTestId('start-Lower (Hinge)').click();
     await clickIfPresent(page.getByRole('button', { name: 'Start anyway' }));
     const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
@@ -130,11 +128,18 @@ test.describe('set table', () => {
     await clickIfPresent(page.getByRole('button', { name: 'Start anyway' }));
     const next = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
     await expect(next.getByTestId('reps-input')).toHaveValue('7');
+
+    // Tapping the previous cell copies last time's set straight into the live row.
+    await next.getByTestId('weight-input').fill('100');
+    await next.getByTestId('reps-input').fill('5');
+    await next.getByRole('button', { name: '110 × 7' }).first().click();
+    await expect(next.getByTestId('weight-input')).toHaveValue('110');
+    await expect(next.getByTestId('reps-input')).toHaveValue('7');
   });
 
   test('ticking the last target row plays the completion moment, then the next card is expanded', async ({ page }) => {
     await fresh(page);
-    await page.getByTestId('start-session').click();
+    await page.getByTestId('start-Lower (Hinge)').click();
     const rdl = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
     const hipThrust = page.getByTestId('exercise-card-Hip Thrust (Barbell)');
     await expect(rdl.getByTestId('weight-input')).toBeVisible();
@@ -151,7 +156,7 @@ test.describe('set table', () => {
 
   test('a skip during the completion hold does not strand currentKey on the finished card', async ({ page }) => {
     await fresh(page);
-    await page.getByTestId('start-session').click();
+    await page.getByTestId('start-Lower (Hinge)').click();
     const rdl = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
     const hipThrust = page.getByTestId('exercise-card-Hip Thrust (Barbell)');
     const legCurl = page.getByTestId('exercise-card-Lying Leg Curl (Machine)');
@@ -179,7 +184,7 @@ test.describe('set table', () => {
 
   test('an extra set is reachable only through the exercise menu', async ({ page }) => {
     await fresh(page);
-    await page.getByTestId('start-session').click();
+    await page.getByTestId('start-Lower (Hinge)').click();
     const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
     await logFour(page, card, 110, 8);
     await waitForCompletionCollapse(page);
@@ -193,85 +198,6 @@ test.describe('set table', () => {
     await card.getByRole('button', { name: 'More' }).click();
     await page.getByTestId('add-set').click();
     await expect(card.getByTestId('weight-input')).toBeVisible();
-  });
-
-  test('Easy writes RIR 3 to every counted non-failure set; a failure set keeps none', async ({ page }) => {
-    await fresh(page);
-    await page.getByTestId('start-session').click();
-    const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
-
-    for (const _ of [0, 1, 2]) {
-      await card.getByTestId('weight-input').fill('110');
-      await card.getByTestId('reps-input').fill('8');
-      await card.getByTestId('set-done').click();
-      await skipRest(page);
-    }
-    // Retype the 3rd logged set to Failure before finishing the exercise.
-    const rows = card.locator('button:has(span.num.w-7)');
-    await rows.nth(2).click();
-    await expect(page.getByText('Edit set', { exact: true })).toBeVisible();
-    await page.getByRole('dialog').getByRole('button', { name: 'Failure', exact: true }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
-    await expect(page.getByText('Edit set', { exact: true })).toHaveCount(0);
-
-    await card.getByTestId('weight-input').fill('110');
-    await card.getByTestId('reps-input').fill('8');
-    await card.getByTestId('set-done').click();
-    await waitForCompletionCollapse(page);
-
-    const easy = card.getByTestId('feel-Easy');
-    await expect(easy).toHaveAttribute('aria-pressed', 'false');
-    await easy.click();
-    await expect(easy).toHaveAttribute('aria-pressed', 'true');
-
-    const sets = await readAllSetLogs(page);
-    expect(sets.filter((s) => s.type === 'working').map((s) => s.rir)).toEqual([3, 3, 3]);
-    expect(sets.filter((s) => s.type === 'failure').map((s) => s.rir)).toEqual([undefined]);
-  });
-
-  test('retyping a logged set away from Working clears its inherited RIR, not just its type', async ({ page }) => {
-    await fresh(page);
-    await page.getByTestId('start-session').click();
-    const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
-    await logFour(page, card, 110, 8);
-    await waitForCompletionCollapse(page);
-
-    // Answer "Easy" — every counted working set now carries rir: 3 (the slot's feel).
-    const easy = card.getByTestId('feel-Easy');
-    await easy.click();
-    await expect(easy).toHaveAttribute('aria-pressed', 'true');
-    expect((await readAllSetLogs(page)).map((s) => s.rir)).toEqual([3, 3, 3, 3]);
-
-    // Reopen the card and retype the 3rd and 4th logged sets: one to Failure, one to Drop. Neither
-    // still counts as an "Easy" set once retyped, so neither may still carry the RIR 3 it inherited
-    // before the retype — a stale RIR 3 on the Failure set would feed a double-increment suggestion
-    // it never earned (§3), and a Drop set never has an effort answer of its own. The done card's
-    // whole tile is taller than its own toggle button (verdict/lock-in/feel sit below), so click
-    // the heading itself — nested inside that button — rather than the tile's own centre point.
-    await card.getByRole('heading', { name: 'Romanian Deadlift (Barbell)' }).click();
-    const rows = card.locator('button:has(span.num.w-7)');
-
-    await rows.nth(2).click();
-    await expect(page.getByText('Edit set', { exact: true })).toBeVisible();
-    await page.getByRole('dialog').getByRole('button', { name: 'Failure', exact: true }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
-    await expect(page.getByText('Edit set', { exact: true })).toHaveCount(0);
-
-    await rows.nth(3).click();
-    await expect(page.getByText('Edit set', { exact: true })).toBeVisible();
-    await page.getByRole('dialog').getByRole('button', { name: 'Drop', exact: true }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
-    await expect(page.getByText('Edit set', { exact: true })).toHaveCount(0);
-
-    const after = await readAllSetLogs(page);
-    const failureSet = after.find((s) => s.type === 'failure');
-    const dropSet = after.find((s) => s.type === 'drop');
-    expect(failureSet).toBeDefined();
-    expect(dropSet).toBeDefined();
-    expect(failureSet!.rir).toBeUndefined();
-    expect(dropSet!.rir).toBeUndefined();
-    // The two untouched working sets keep their real answer.
-    expect(after.filter((s) => s.type === 'working').map((s) => s.rir)).toEqual([3, 3]);
   });
 
   test('a lift whose sets all hit the top of the range surfaces the double-increment suggestion on Summary when answered Easy, and none when answered Good', async ({ page }) => {
@@ -316,7 +242,7 @@ test.describe('set table', () => {
 
   test('an extra set added after the feel answer inherits it', async ({ page }) => {
     await fresh(page);
-    await page.getByTestId('start-session').click();
+    await page.getByTestId('start-Lower (Hinge)').click();
     const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
     await logFour(page, card, 110, 8);
     await waitForCompletionCollapse(page);
@@ -443,7 +369,7 @@ test.describe('set table', () => {
   test('at 884×1104 the Fold shows two panes side by side', async ({ page }) => {
     await page.setViewportSize({ width: 884, height: 1104 });
     await fresh(page);
-    await page.getByTestId('start-session').click();
+    await page.getByTestId('start-Lower (Hinge)').click();
 
     const list = page.getByTestId('fold-list');
     const focus = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
@@ -532,7 +458,7 @@ test.describe('set table', () => {
   test('under reduced motion, the completion still reaches its real end state', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await fresh(page);
-    await page.getByTestId('start-session').click();
+    await page.getByTestId('start-Lower (Hinge)').click();
     const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
     await logFour(page, card, 110, 8);
 

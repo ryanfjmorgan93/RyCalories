@@ -20,8 +20,8 @@ const MIN_TEXT_CONTRAST = 4.5;
 
 // ---------------------------------------------------------------------------------------------
 // A small, deliberately literal CSS custom-property reader: this file owns the token contract, so
-// the test can rely on its own shape (one `:root { ... }` block, one `[data-theme='light'] { ... }`
-// block, no nested braces inside either) rather than a general CSS parser.
+// the test can rely on its own shape (one `:root { ... }` block, no nested braces inside it) rather
+// than a general CSS parser.
 // ---------------------------------------------------------------------------------------------
 
 function stripComments(text: string): string {
@@ -53,14 +53,7 @@ function parseDeclarations(block: string): Map<string, string> {
   return map;
 }
 
-const rootTokens = parseDeclarations(extractBlock(css, ':root'));
-const lightTokens = parseDeclarations(extractBlock(css, "[data-theme='light']"));
-
-/** Light overrides dark for anything it redefines; anything it does not redefine (radii, motion,
- *  --blur-glass, --content-max) cascades from :root exactly as it does for the real page. */
-function themeTokens(theme: 'dark' | 'light'): Map<string, string> {
-  return theme === 'dark' ? rootTokens : new Map([...rootTokens, ...lightTokens]);
-}
+const tokens = parseDeclarations(extractBlock(css, ':root'));
 
 interface Rgba {
   r: number;
@@ -118,7 +111,6 @@ function compositeOverBg(tokens: Map<string, string>, tintName: string, baseName
   return toHex({ r: mix(tint.r, base.r), g: mix(tint.g, base.g), b: mix(tint.b, base.b), a: 1 });
 }
 
-const THEMES = ['dark', 'light'] as const;
 const GLASS_TIERS = ['glass-1', 'glass-2', 'glass-3'] as const;
 const TEXT_ON_FILL = [
   { text: 'c-accent-fg', fill: 'c-accent', label: 'accent-fg on accent' },
@@ -128,9 +120,7 @@ const TEXT_ON_FILL = [
 const STATE_TEXT = ['c-accent', 'c-ok', 'c-warn', 'c-danger', 'c-info', 'c-record'] as const;
 const SURFACES = ['c-bg', 'c-surface'] as const;
 
-describe.each(THEMES)('%s theme tokens', (theme) => {
-  const tokens = themeTokens(theme);
-
+describe('dark theme tokens', () => {
   it.each(['c-fg', 'c-muted', 'c-dim'])('%s reaches 4.5:1 on bg and on surface', (textToken) => {
     for (const surfaceToken of SURFACES) {
       const ratio = contrastRatio(opaqueHex(tokens, textToken), opaqueHex(tokens, surfaceToken));
@@ -160,8 +150,7 @@ describe.each(THEMES)('%s theme tokens', (theme) => {
 });
 
 describe('token aliases', () => {
-  it.each(THEMES)('--c-done is --c-ok and --c-rest is --c-info in the %s theme', (theme) => {
-    const tokens = themeTokens(theme);
+  it('--c-done is --c-ok and --c-rest is --c-info', () => {
     expect(opaqueHex(tokens, 'c-done')).toBe(opaqueHex(tokens, 'c-ok'));
     expect(opaqueHex(tokens, 'c-rest')).toBe(opaqueHex(tokens, 'c-info'));
   });

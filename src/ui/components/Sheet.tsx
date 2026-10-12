@@ -49,8 +49,8 @@ interface Gesture {
  * Bottom sheet. Closes on a pull down (from the handle and title anywhere, from the body once
  * its list is at the top), a tap on the scrim or the handle, Escape, or the Android back
  * gesture — the last two through the shared stack in src/state/overlays.ts, so only the topmost
- * sheet closes. Every route out calls the caller's `onClose`, which may decline: HevyImportSheet
- * passes a no-op while importing, and the panel slides back.
+ * sheet closes. Every route out calls the caller's `onClose`, which may decline (a no-op while a
+ * save is running, say), and the panel slides back.
  */
 export function Sheet({
   open,
@@ -132,7 +132,7 @@ export function Sheet({
       const active = document.activeElement;
       if (active instanceof HTMLElement && panel.contains(active)) active.blur();
       // A tap on the scrim during the slide-out would close it a second time; for a caller whose
-      // "close" means "next step" (HevyImportSheet's result), that is a skipped step.
+      // "close" means "next step", that is a skipped step.
       scrim.style.pointerEvents = 'none';
       panel.style.transition = `transform ${LEAVE_MS}ms ease-in`;
       scrim.style.transition = `opacity ${LEAVE_MS}ms ease-in`;

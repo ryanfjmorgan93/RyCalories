@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { fmtNum, fmtSetsLine } from '@/domain/format';
 import type { Exercise, SetLog } from '@/domain/types';
-import type { LoggedRow, PendingRow, PlanRow, WarmupGhostRow } from '@/domain/setTable';
+import type { LoggedRow, PendingRow, PlanRow } from '@/domain/setTable';
 import { CheckIcon } from '@/ui/components/TopBar';
 import type { Draft } from './types';
 
@@ -34,7 +34,6 @@ export interface SetTableProps {
   onLogLive: () => void;
   blockedShake: number;
   busy: boolean;
-  onLogWarmup: (row: WarmupGhostRow, index: number) => void;
   onCopyPrevious: (row: PendingRow) => void;
   onEditSet: (set: SetLog) => void;
   /** Positions (within `rows`'s logged order) that are a real personal record. */
@@ -51,7 +50,6 @@ export function SetTable({
   onLogLive,
   blockedShake,
   busy,
-  onLogWarmup,
   onCopyPrevious,
   onEditSet,
   prIndices,
@@ -59,7 +57,6 @@ export function SetTable({
 }: SetTableProps) {
   const cols = columns(kind);
   let loggedI = 0;
-  let warmupI = 0;
 
   return (
     <div className="flex flex-col gap-1" role="group" aria-label={`${exerciseName} sets`}>
@@ -81,10 +78,6 @@ export function SetTable({
         if (row.kind === 'logged') {
           const i = loggedI++;
           return <LoggedRowView key={row.set.id} row={row} isRecord={prIndices.has(i)} kind={kind} cols={cols} onClick={() => onEditSet(row.set)} />;
-        }
-        if (row.kind === 'warmup-ghost') {
-          const i = warmupI++;
-          return <WarmupRowView key={`wg-${i}`} row={row} index={i} cols={cols} onLog={() => onLogWarmup(row, i)} />;
         }
         if (row.status === 'next') {
           return (
@@ -153,26 +146,6 @@ function LoggedRowView({
         </span>
       </span>
     </button>
-  );
-}
-
-function WarmupRowView({ row, index, cols, onLog }: { row: WarmupGhostRow; index: number; cols: string; onLog: () => void }) {
-  return (
-    <div className="grid min-h-[46px] items-center gap-1.5 px-1" style={{ gridTemplateColumns: cols }} data-testid={`warmup-row-${index}`}>
-      <RowBadge tone="dim">W</RowBadge>
-      <span className="num truncate text-base font-semibold text-muted" style={VALUE_SPAN}>
-        {fmtNum(row.weight)} × {row.reps}
-      </span>
-      <button
-        type="button"
-        data-testid={`warmup-done-${index}`}
-        aria-label={`Log warm-up ${index + 1}`}
-        onClick={onLog}
-        className="h-11 w-11 shrink-0 justify-self-end rounded-xl border border-line bg-surface-2 text-muted active:bg-line"
-      >
-        <CheckIcon size={20} />
-      </button>
-    </div>
   );
 }
 

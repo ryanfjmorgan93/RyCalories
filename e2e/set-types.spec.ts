@@ -2,18 +2,13 @@ import { expect, test } from '@playwright/test';
 import { clickIfPresent, fresh } from './fresh';
 
 /**
- * The four set types (warm-up, working, failure, drop) driven through the real UI.
- *
- * The live session has no way to choose a type before logging (except a warm-up ghost row, which
- * logs itself directly at its own weight/reps) — a set is retyped afterwards, by tapping the
- * logged row to open EditSetSheet, which still carries all four chips. Every set below is still
- * logged, every type still ends up on the right set, and the assertions about what counts for the
- * decision are unchanged from before Phase 3C.
+ * What a logged set counts for, driven through the real UI. A set is weight and reps: the live
+ * session offers no set type, before or after logging (the old warm-up row and the type chips in
+ * the edit sheet are gone). Rows already stored as warm-up, failure or drop keep their counting
+ * rules, which `src/domain/sets.test.ts` and the engine tests cover.
  *
  * Uses "Back Extension" (Lower (Hinge), targetSets 3, bodyweight_plus) so hitting only two counted
- * sets against a target of three exercises the hold_missing_sets path. Its target is met after the
- * 3rd plain log — the completion moment plays and the card collapses — so the 4th set (which ends
- * up retyped to a drop, and so never should have counted) is added afterwards via the ⋯ menu.
+ * sets against a target of three exercises the hold_missing_sets path.
  */
 
 async function finishToSummary(page: import('@playwright/test').Page) {
@@ -27,19 +22,10 @@ async function waitForCompletionCollapse(page: import('@playwright/test').Page) 
   await expect(page.getByTestId('exercise-complete')).toHaveCount(0);
 }
 
-/** Retype the nth logged row (0-based, in logging order) via EditSetSheet. */
-async function retype(page: import('@playwright/test').Page, rows: import('@playwright/test').Locator, nth: number, type: string) {
-  await rows.nth(nth).click();
-  await expect(page.getByText('Edit set', { exact: true })).toBeVisible();
-  await page.getByRole('dialog').getByRole('button', { name: type, exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(page.getByText('Edit set', { exact: true })).toHaveCount(0);
-}
-
 test.describe('set types', () => {
-  test('warm-up, working, failure and drop, set via the edit sheet; only working/failure count toward the decision', async ({ page }) => {
+  test('a set is weight and reps: the edit sheet has no type to pick, and a missing set holds the weight', async ({ page }) => {
     await fresh(page);
-    await page.getByTestId('start-session').click();
+    await page.getByTestId('start-Lower (Hinge)').click();
     const card = page.getByTestId('exercise-card-Back Extension');
     await expect(card).toBeVisible();
     // Back Extension isn't the current exercise (Romanian Deadlift, order 0, is) — it starts
@@ -47,45 +33,36 @@ test.describe('set types', () => {
     await card.click();
     await expect(card.getByTestId('weight-input')).toBeVisible();
 
-    // Log the 3 target sets as plain working sets — the session itself has no way to pick a type
-    // before logging. Target met on the 3rd — the completion moment plays and the card collapses.
-    for (const [w, r] of [[5, 12], [5, 12], [5, 12]] as const) {
+    // Two of the three target sets.
+    for (const [w, r] of [[5, 12], [5, 12]] as const) {
       await card.getByTestId('weight-input').fill(String(w));
       await card.getByTestId('reps-input').fill(String(r));
       await card.getByTestId('set-done').click();
       await clickIfPresent(page.getByTestId('rest-timer').getByRole('button', { name: 'Skip' }));
     }
-    await waitForCompletionCollapse(page);
 
-    // A 4th set, only reachable via the ⋯ menu now that the target is met.
-    await card.getByRole('button', { name: 'More' }).click();
-    await page.getByTestId('add-set').click();
-    await card.getByTestId('weight-input').fill('2');
-    await card.getByTestId('reps-input').fill('15');
-    await card.getByTestId('set-done').click();
-
-    // Retype set 1 → warm-up, set 3 → failure, set 4 → drop; set 2 stays the default, working.
-    // `.nth()` addresses sets by logged position, which edit-sheet type changes never reorder.
+    // Tapping a logged row opens the edit sheet: weight and reps, Delete and Save, and no set type.
     const rows = card.locator('button:has(span.num.w-7)');
-    await expect(rows).toHaveCount(4);
-    await retype(page, rows, 0, 'Warm-up');
-    await retype(page, rows, 2, 'Failure');
-    await retype(page, rows, 3, 'Drop');
-
-    const badges = await rows.locator('span.num.w-7').allTextContents();
-    expect(badges).toEqual(['W', '1', '2', 'D']);
+    await expect(rows).toHaveCount(2);
+    await rows.nth(0).click();
+    const sheet = page.getByRole('dialog');
+    await expect(sheet.getByText('Edit set', { exact: true })).toBeVisible();
+    await expect(sheet.getByRole('radiogroup', { name: 'Set type' })).toHaveCount(0);
+    for (const type of ['Warm-up', 'Working', 'Failure', 'Drop']) await expect(sheet.getByRole('button', { name: type, exact: true })).toHaveCount(0);
+    await sheet.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByText('Edit set', { exact: true })).toHaveCount(0);
+    expect(await rows.locator('span.num.w-7').allTextContents()).toEqual(['1', '2']);
 
     await finishToSummary(page);
     const decision = page.getByTestId('decision-Back Extension');
-    // Target is 3 sets; only the working + failure set count, so it holds for a missing set.
+    // Target is 3 sets and only two were done, so it holds for a missing set.
     // The exercise prescribes bodyweight (0); lifting at +5 kg is a deviation, so it is named.
-    // These numbers are identical to what this spec asserted before the set table was rebuilt.
     await expect(decision.getByTestId('decision-line')).toHaveText('2/3 sets (12/12) at +5 kg → hold +5 kg (was bodyweight)');
   });
 
   test('a feel answer writes its RIR to every counted set (§2 replaces the RIR/RPE picker)', async ({ page }) => {
     await fresh(page);
-    await page.getByTestId('start-session').click();
+    await page.getByTestId('start-Lower (Hinge)').click();
     const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
     await expect(card).toBeVisible();
 

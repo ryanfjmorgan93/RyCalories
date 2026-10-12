@@ -20,7 +20,6 @@ import { HistoryScreen } from './screens/HistoryScreen';
 import { SessionDetailScreen } from './screens/SessionDetailScreen';
 import { BodyweightScreen } from './screens/BodyweightScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
-import { CheckInScreen } from './screens/CheckInScreen';
 import { FoodScreen } from './screens/FoodScreen';
 import { MealEditScreen } from './screens/MealEditScreen';
 import { ProgressScreen } from './screens/ProgressScreen';
@@ -144,7 +143,6 @@ export function App() {
           <Route path="coach" element={<CoachScreen />} />
           <Route path="body" element={<BodyweightScreen />} />
           <Route path="settings" element={<SettingsScreen />} />
-          <Route path="checkin" element={<CheckInScreen />} />
         </Route>
         <Route element={<SessionShell />}>
           <Route path="session/:id" element={<LiveSessionScreen />} />

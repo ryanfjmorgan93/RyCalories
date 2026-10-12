@@ -6,9 +6,7 @@ import { createRawIronDb, IRON_SCHEMA_V3 } from './fresh';
 /**
  * What the owner sees when the routine builder does what a coach would do, on the built app. The
  * owner's data is read from IndexedDB, the sentence is parsed by the rules and the routine is built
- * by the generator, all real; only the on-device model is a stand-in (`window.__ironNanoFake`, see
- * coach.spec.ts), and it is asked nothing: every claim of "no model" is checked once the routine is
- * on screen.
+ * by the generator, all real: a routine is built by the app with no model.
  *
  * Every build uses a random seed, so each assertion is one that holds for every seed: the unit
  * tests (src/domain/routineBuilderCoach.test.ts) try the same properties over 500 of them. What is
@@ -18,41 +16,6 @@ import { createRawIronDb, IRON_SCHEMA_V3 } from './fresh';
  */
 
 const SHOULDERS = 'Give me a routine solely designed to build 3D shoulders';
-
-interface ModelLog {
-  generate: string[];
-  counted: string[];
-  streamed: string[];
-}
-
-/** The fake model: every prompt of every kind is recorded in `window.__modelLog`. */
-async function fakeModel(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    const w = window as unknown as Record<string, unknown>;
-    const log = { generate: [] as string[], counted: [] as string[], streamed: [] as string[] };
-    w.__modelLog = log;
-    w.__ironNanoFake = {
-      status: { state: 'ready', detail: 'AVAILABLE · default' },
-      statusFull: { state: 'ready', detail: 'AVAILABLE · full · 4000 tokens' },
-      generate: async ({ prompt }: { prompt: string }) => {
-        log.generate.push(prompt);
-        return { text: '{}' };
-      },
-      countTokens: async ({ prompt }: { prompt: string }) => {
-        log.counted.push(prompt);
-        return { tokens: Math.ceil(prompt.length / 4), limit: 4000 };
-      },
-      generateStream: async ({ prompt }: { prompt: string }, emit: (t: string) => void) => {
-        log.streamed.push(prompt);
-        emit('An answer.');
-        return { text: 'An answer.' };
-      },
-    };
-  });
-}
-
-const modelLog = (page: Page) => page.evaluate(() => (window as unknown as { __modelLog: ModelLog }).__modelLog);
-const NO_CALLS: ModelLog = { generate: [], counted: [], streamed: [] };
 
 type Row = Record<string, unknown>;
 
@@ -134,7 +97,6 @@ async function built(page: Page, sentence: string, n = 0): Promise<{ names: stri
 // ---------------------------------------------------------------------------
 
 test('3D shoulders is one press, two lateral raises, a rear fly and a face pull and a front raise or upright row, with the side delts on the most sets', async ({ page }) => {
-  await fakeModel(page);
   await seedOwner(page);
   await openCoach(page);
 
@@ -156,21 +118,17 @@ test('3D shoulders is one press, two lateral raises, a rear fly and a face pull 
   const sets = await rowSets(bubble);
   expect(sets.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(18);
   expect(sets.reduce((a, b) => a + b, 0)).toBeGreaterThanOrEqual(9);
-  expect(await modelLog(page)).toEqual(NO_CALLS);
 });
 
 test('a plain request for shoulders is never without rear-delt work, and takes the owner\'s own', async ({ page }) => {
-  await fakeModel(page);
   await seedOwner(page);
   await openCoach(page);
 
   const { names } = await built(page, 'give me a shoulder routine');
   expect(names).toEqual(expect.arrayContaining(['Rear Delt Fly (Machine)', 'Face Pull']));
-  expect(await modelLog(page)).toEqual(NO_CALLS);
 });
 
 test('a named day has the muscles it is named for: push has triceps and a lateral raise, pull biceps, legs quads, hamstrings and calves', async ({ page }) => {
-  await fakeModel(page);
   await seedOwner(page);
   await openCoach(page);
 
@@ -193,11 +151,9 @@ test('a named day has the muscles it is named for: push has triceps and a latera
     expect(legs).toContain('Romanian Deadlift (Barbell)');
     expect(legs!.some((name) => /Calf Raise/.test(name))).toBe(true);
   }
-  expect(await modelLog(page)).toEqual(NO_CALLS);
 });
 
 test('"my lower back is sore" is read as a niggle: no hinge and no barbell squat for a leg routine, and the Why says it was typed', async ({ page }) => {
-  await fakeModel(page);
   await seedOwner(page);
   await openCoach(page);
 
@@ -212,11 +168,9 @@ test('"my lower back is sore" is read as a niggle: no hinge and no barbell squat
   expect(sore.lines).toContain('Sore lower back, as you said: no hinges, good mornings, bent-over barbell rows or back squats; chest-supported rows, leg press and hack squat preferred');
   // The sore body part is not a muscle to train: nothing but legs is in it, and nothing is left unread.
   await expect(entry(page, 1).getByTestId('coach-not-read')).toHaveCount(0);
-  expect(await modelLog(page)).toEqual(NO_CALLS);
 });
 
 test('"no squats" leaves the squat out, and says so', async ({ page }) => {
-  await fakeModel(page);
   await seedOwner(page);
   await openCoach(page);
 
@@ -225,11 +179,9 @@ test('"no squats" leaves the squat out, and says so', async ({ page }) => {
   expect(r.names).toContain('Romanian Deadlift (Barbell)');
   expect(r.lines).toContain('No squat, as you asked');
   await expect(entry(page, 0).getByTestId('coach-not-read')).toHaveCount(0);
-  expect(await modelLog(page)).toEqual(NO_CALLS);
 });
 
 test('"upper chest" is two incline presses first, and the rest of the chest', async ({ page }) => {
-  await fakeModel(page);
   await seedOwner(page);
   await openCoach(page);
 
@@ -267,7 +219,6 @@ function stalledBench(): Owner {
 }
 
 test('a stalled bench is swapped for another loaded press, never a push-up, with no weight carried across', async ({ page }) => {
-  await fakeModel(page);
   await seedOwner(page, stalledBench());
   await openCoach(page);
 
@@ -286,11 +237,9 @@ test('a stalled bench is swapped for another loaded press, never a push-up, with
     const row = r.bubble.getByTestId('coach-row').filter({ hasText: swap![1]! });
     await expect(row).not.toContainText('65 kg');
   }
-  expect(await modelLog(page)).toEqual(NO_CALLS);
 });
 
 test('a length asked for: a longer ask adds a finisher, and the line says what the routine came to, never "nearer"', async ({ page }) => {
-  await fakeModel(page);
   await seedOwner(page);
   await openCoach(page);
 
@@ -305,7 +254,6 @@ test('a length asked for: a longer ask adds a finisher, and the line says what t
   expect(shorter.names.length).toBeLessThan(plain.names.length);
   expect(shorter.lines.some((l) => l.startsWith('Dropped '))).toBe(true);
   for (const lines of [plain.lines, longer.lines, shorter.lines]) expect(lines.some((l) => /nearer/.test(l))).toBe(false);
-  expect(await modelLog(page)).toEqual(NO_CALLS);
 });
 
 /**
@@ -327,7 +275,6 @@ function pushSessions(seconds: number): Owner {
 }
 
 test('with too little history to measure a pace, the time is "about N min" and not the owner\'s pace', async ({ page }) => {
-  await fakeModel(page);
   // One finished session is no evidence of a pace.
   await seedOwner(page);
   await openCoach(page);
@@ -337,7 +284,6 @@ test('with too little history to measure a pace, the time is "about N min" and n
 });
 
 test('a measured pace is called the owner\'s: three sessions that took what the model says they would', async ({ page }) => {
-  await fakeModel(page);
   await seedOwner(page, pushSessions(700));
   await openCoach(page);
   const r = await built(page, 'give me a chest routine');
@@ -345,7 +291,6 @@ test('a measured pace is called the owner\'s: three sessions that took what the 
 });
 
 test('a pace held to its limit is not called the owner\'s, and says which way it was held', async ({ page }) => {
-  await fakeModel(page);
   // Three sessions that took four times as long as the model says: the estimate is held at 1.6 times.
   await seedOwner(page, pushSessions(2700));
   await openCoach(page);

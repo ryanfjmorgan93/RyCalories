@@ -4,7 +4,7 @@
    file. The package's default entry is wght-only — importing both would duplicate every glyph. */
 @import '@fontsource-variable/archivo/wdth.css';
 
-/* Palette as runtime variables so the theme can switch without a rebuild. Dark is the default. */
+/* Palette as runtime variables. Dark only. */
 :root {
   --c-bg: #0b0b0d;
   --c-surface: #151518;
@@ -85,55 +85,6 @@
   --dock-h: 3.5rem;
   /* The rest timer card, margin included. */
   --timer-h: 4.875rem;
-}
-
-[data-theme='light'] {
-  --c-bg: #f5f5f7;
-  --c-surface: #ffffff;
-  --c-surface-2: #ececf0;
-  --c-line: #d8d8de;
-  --c-fg: #131316;
-  --c-muted: #5d5d68;
-  /* Never used for text below 4.5:1 against bg, surface OR a glass tile — see src/ui/tokens.test.ts. */
-  --c-dim: #6a6a73;
-  /* Darkened from #e8620c: that read 3.12:1 as text-accent on bg and 3.40:1 as accent-fg on
-     accent, both short of 4.5:1. This clears both. */
-  --c-accent: #b84508;
-  --c-accent-fg: #ffffff;
-  --c-ok: #15803d;
-  --c-ok-fg: #ffffff;
-  --c-warn: #b45309;
-  /* Darkened from #dc2626 (4.44:1 on bg, short of 4.5:1). */
-  --c-danger: #b81d1d;
-  --c-info: #0369a1;
-  color-scheme: light;
-
-  /* Light glass reads as a bright, faintly bordered card against the grey page bg rather than a
-     tinted pane — a translucent WHITE tile over a near-white page is the only tint direction that
-     stays visible, and it is also the direction that can only ever raise text contrast, never
-     lower it (see src/ui/tokens.test.ts). */
-  --glass-1: rgba(255, 255, 255, 0.75);
-  --glass-2: rgba(255, 255, 255, 0.62);
-  --glass-3: rgba(255, 255, 255, 0.5);
-  --glass-border: rgba(20, 20, 30, 0.1);
-  --glass-highlight: rgba(255, 255, 255, 0.9);
-  --glass-fixed-bg: rgba(255, 255, 255, 0.72);
-  --glass-fixed-border: rgba(20, 20, 30, 0.08);
-
-  --shadow-card: 0 20px 40px -28px rgba(15, 15, 20, 0.16);
-  --shadow-float: 0 16px 34px -20px rgba(15, 15, 20, 0.2);
-
-  --c-done: var(--c-ok);
-  --c-record: #8a6a00;
-  --c-record-fg: #ffffff;
-  --c-rest: var(--c-info);
-
-  --amb-ember: rgba(255, 122, 38, 0.1);
-  --amb-base: rgba(99, 102, 241, 0.06);
-  --amb-cool: rgba(125, 211, 252, 0.1);
-  --amb-done: rgba(74, 222, 128, 0.14);
-  --amb-record: rgba(245, 197, 66, 0.16);
-  --amb-grain-opacity: 0.035;
 }
 
 @theme inline {
@@ -382,11 +333,6 @@
   animation-name: confetti-fall;
   animation-timing-function: cubic-bezier(0.3, 0.6, 0.4, 1);
   animation-fill-mode: both;
-}
-
-/* Exercise diagrams are white line art on a transparent ground, drawn for the dark theme. */
-[data-theme='light'] .demo-frame {
-  filter: invert(1);
 }
 
 /* --- Phase 3C: the completion moment, the collapse, and the Fold layout ------------------- */

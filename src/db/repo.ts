@@ -205,7 +205,7 @@ export async function findExerciseByName(name: string): Promise<Exercise | undef
 }
 
 // `normaliseName` lives in `@/domain/exerciseMatch` (a pure domain module) and is re-exported here
-// so every existing caller of `./repo` — the Hevy importer included — keeps working unchanged.
+// so every existing caller of `./repo` keeps working unchanged.
 export { normaliseName };
 
 // ---------------------------------------------------------------------------

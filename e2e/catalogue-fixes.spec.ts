@@ -82,13 +82,12 @@ test.describe('catalogue photographs that are not 3:2', () => {
     const box = await thumb.boundingBox();
     expect(Math.abs(box!.width / box!.height - 1.5)).toBeLessThan(0.05);
 
-    // Controls: line art has always been shown whole, and inverted for the light theme; a bundled square photograph fills its square.
+    // Controls: line art has always been shown whole; a bundled square photograph fills its square.
     // The neck photograph is the seeded Neck exercise's own picture, so it is the owner's row that shows it.
     await page.getByTestId('exercise-search').fill('arnold press');
     const lineArt = page.getByTestId('exercise-row-arnold-press').locator('img');
     await expect(lineArt).toHaveAttribute('src', /^\/exercises\/arnold-press\/1\.png$/);
     await expect(lineArt).toHaveCSS('object-fit', 'contain');
-    await expect(lineArt).toHaveClass(/(^|\s)demo-frame(\s|$)/);
     await page.getByTestId('exercise-search').fill('neck');
     const neck = page.getByTestId(`exercise-row-${await ownedId(page, 'Neck')}`).locator('img');
     await expect(neck).toHaveAttribute('src', /^\/exercises\/neck\/1\.png$/);

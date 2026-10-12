@@ -89,7 +89,7 @@ async function seedPendingLockIn(page: Page, sessionId: string, exerciseName: st
 test.describe('the finish moment', () => {
   test('the three hero figures equal the logged session exactly, and confetti plays once on arrival', async ({ page }) => {
     await fresh(page);
-    await page.getByTestId('start-session').click();
+    await page.getByTestId('start-Lower (Hinge)').click();
     await clickIfPresent(page.getByRole('button', { name: 'Start anyway' }));
     // 4 sets × 110 kg × 8 reps, all counted (working): kg lifted 3,520, sets 4.
     await logSets(page, 'Romanian Deadlift (Barbell)', 110, [8, 8, 8, 8]);
@@ -111,7 +111,7 @@ test.describe('the finish moment', () => {
   test('confetti is absent under prefers-reduced-motion, and the figures show their final values immediately', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await fresh(page);
-    await page.getByTestId('start-session').click();
+    await page.getByTestId('start-Lower (Hinge)').click();
     await clickIfPresent(page.getByRole('button', { name: 'Start anyway' }));
     await logSets(page, 'Romanian Deadlift (Barbell)', 110, [8, 8, 8, 8]);
     await finishToSummary(page);
@@ -127,7 +127,7 @@ test.describe('the finish moment', () => {
     await fresh(page);
 
     // Session 1 — the first-ever session for this exercise: no record, whatever the numbers.
-    await page.getByTestId('start-session').click();
+    await page.getByTestId('start-Lower (Hinge)').click();
     await clickIfPresent(page.getByRole('button', { name: 'Start anyway' }));
     await logSets(page, 'Romanian Deadlift (Barbell)', 110, [8, 8, 8, 8]);
     await finishToSummary(page);

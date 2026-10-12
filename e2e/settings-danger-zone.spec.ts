@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { clickIfPresent, expectClass, fresh } from './fresh';
+import { clickIfPresent, expectClass, fresh, openAdvanced } from './fresh';
 
 /**
  * Settings → Developer → reset/wipe (Phase 1 — history that cannot be lost silently).
@@ -17,7 +17,7 @@ import { clickIfPresent, expectClass, fresh } from './fresh';
  */
 
 async function logOneRdlSession(page: Page, reps: number[]) {
-  await page.getByTestId('start-session').click();
+  await page.getByTestId('start-Lower (Hinge)').click();
   await expect(page).toHaveURL(/\/session\//);
   const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
   await expect(card).toBeVisible();
@@ -47,6 +47,8 @@ test.describe('Settings → Developer → reset/wipe', () => {
     // wait past the "Counting…" placeholder — otherwise this can capture that placeholder instead
     // of the resolved counts.
     await page.goto('/settings');
+    // The Developer card is under Advanced, closed until it is tapped (and kept open across the reload a reset ends in).
+    await openAdvanced(page);
     const countsLocator = page.getByTestId('data-counts');
     await expect(countsLocator).not.toHaveText('Counting…');
     const seedCounts = (await countsLocator.textContent())!;
@@ -55,6 +57,7 @@ test.describe('Settings → Developer → reset/wipe', () => {
     await logOneRdlSession(page, [8, 8, 8, 8]); // 1 session, 4 sets, 0 meals
 
     await page.goto('/settings');
+    await openAdvanced(page);
     await expect(page.getByTestId('data-counts')).toHaveText(/1 session · 4 sets/);
 
     // The reset/wipe buttons are collapsed by default.
@@ -109,6 +112,7 @@ test.describe('Settings → Developer → reset/wipe', () => {
     await logOneRdlSession(page, [8, 8, 8]); // 1 session, 3 sets
 
     await page.goto('/settings');
+    await openAdvanced(page);
     await expect(page.getByTestId('data-counts')).toHaveText(/1 session · 3 sets/);
     const before = (await page.getByTestId('data-counts').textContent())!;
     const exerciseCount = Number(before.match(/^(\d+) exercise/)![1]);

@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
 import { db } from '@/db/db';
-import { gatherContext } from '@/db/assistantQueries';
 import { routineUsageForExercise, type RoutineUsage } from '@/db/exerciseDetailQueries';
 import { bestsForExercise } from '@/db/recordsQueries';
 import { lastWorkingTopWeight, lockInRoutineExercise, unlockRoutineExercise, type HistoryEntry } from '@/db/repo';
@@ -12,8 +11,6 @@ import type { Bests } from '@/domain/records';
 import { strengthLevel, type StrengthStandard } from '@/domain/standards';
 import { countsForProgression, countsForRecords } from '@/domain/sets';
 import type { Exercise, ExerciseKind, ProgressionDecision, ProgressionRule, RoutineExercise, SetLog } from '@/domain/types';
-import { useAssistant } from '@/state/assistant';
-import { AssistantBox } from '@/ui/AssistantBox';
 import { Button } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row, SectionTitle } from '@/ui/components/Card';
 import { Chip, Segmented } from '@/ui/components/Chip';
@@ -23,7 +20,7 @@ import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { ChevronIcon, TopBar } from '@/ui/components/TopBar';
 import { ExerciseDemo } from '@/ui/ExerciseDemo';
-import { useExerciseSeries, useSettings, useToday } from '@/ui/hooks';
+import { useExerciseSeries } from '@/ui/hooks';
 
 const DECISIONS_CAP = 12;
 const HISTORY_CAP = 30;
@@ -39,8 +36,6 @@ const CHART_MODES: { value: ChartMode; label: string }[] = [
 export function ExerciseDetailScreen() {
   const { id } = useParams();
   const nav = useNavigate();
-  const today = useToday();
-  const settings = useSettings();
   // null = not found, undefined = loading.
   const exercise = useLiveQuery(async () => (id ? ((await db.exercises.get(id)) ?? null) : null), [id]);
   const usage = useLiveQuery(() => (id ? routineUsageForExercise(id) : []), [id]);
@@ -52,22 +47,11 @@ export function ExerciseDetailScreen() {
     if (rows.length === 0) return null;
     return [...rows].sort((a, b) => b.date.localeCompare(a.date))[0].kg;
   }, []);
-  const assistantContext = useLiveQuery(
-    async () => (settings && id ? gatherContext({ today, settings, exerciseId: id }) : undefined),
-    [today, settings, id],
-  );
 
   const [lockRx, setLockRx] = useState<RoutineExercise | null>(null);
   const [unlockRx, setUnlockRx] = useState<RoutineExercise | null>(null);
   const [historyLimit, setHistoryLimit] = useState(HISTORY_CAP);
   const [chartMode, setChartMode] = useState<ChartMode>('top');
-  const [askOpen, setAskOpen] = useState(false);
-
-  const assistantStatus = useAssistant((s) => s.status);
-  const refreshAssistantStatus = useAssistant((s) => s.refreshStatus);
-  useEffect(() => {
-    void refreshAssistantStatus();
-  }, [refreshAssistantStatus]);
 
   if (exercise === undefined || usage === undefined || history === undefined) {
     return (
@@ -101,20 +85,9 @@ export function ExerciseDetailScreen() {
         title={exercise.name}
         back="/exercises"
         right={
-          <div className="flex items-center gap-1">
-            <Button
-              size="md"
-              variant="ghost"
-              onClick={() => setAskOpen(true)}
-              disabled={assistantStatus?.state === 'unavailable'}
-              data-testid="ask-assistant"
-            >
-              Ask
-            </Button>
-            <Button size="md" variant="ghost" className="mr-1" onClick={() => nav(`/exercises/${exercise.id}/edit`)}>
-              Edit
-            </Button>
-          </div>
+          <Button size="md" variant="ghost" className="mr-1" onClick={() => nav(`/exercises/${exercise.id}/edit`)}>
+            Edit
+          </Button>
         }
       />
       <div className="px-4">
@@ -215,8 +188,6 @@ export function ExerciseDetailScreen() {
           toast('Calibrating');
         }}
       />
-
-      {assistantContext && <AssistantBox open={askOpen} onClose={() => setAskOpen(false)} context={assistantContext} title={exercise.name} />}
     </div>
   );
 }

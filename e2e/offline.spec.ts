@@ -6,7 +6,7 @@ import { expect, test } from '@playwright/test';
  */
 test('app boots and logs a set with the network off', async ({ page, context }) => {
   await page.goto('/');
-  await expect(page.getByTestId('next-up')).toBeVisible();
+  await expect(page.getByTestId('routines-list')).toBeVisible();
   // Wait for the service worker to be active and precaching complete.
   await page.evaluate(async () => {
     const reg = await navigator.serviceWorker.ready;
@@ -16,9 +16,9 @@ test('app boots and logs a set with the network off', async ({ page, context }) 
 
   await context.setOffline(true);
   await page.reload();
-  await expect(page.getByTestId('next-up')).toBeVisible();
+  await expect(page.getByTestId('routines-list')).toBeVisible();
 
-  await page.getByTestId('start-session').click();
+  await page.getByTestId('start-Lower (Hinge)').click();
   await expect(page).toHaveURL(/\/session\//);
   const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
   await card.getByTestId('weight-input').fill('110');

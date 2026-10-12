@@ -78,7 +78,7 @@ test.describe('session detail', () => {
 });
 
 test.describe('a routine with no exercises', () => {
-  test('cannot be started from its own page, the routine list on Home or the Next-up card', async ({ page }) => {
+  test('cannot be started from its own page or the routine list on Home', async ({ page }) => {
     await fresh(page);
 
     // Created through the New routine sheet, which lands on the routine's own page.
@@ -94,25 +94,7 @@ test.describe('a routine with no exercises', () => {
     await page.goto('/');
     await expect(page.getByTestId('start-Empty day')).toBeDisabled();
     await expect(page.getByTestId('start-Lower (Hinge)')).toBeEnabled();
-    // Its row says so in place of "0 exercises"; the Next-up card is not showing it yet.
+    // Its row says so in place of "0 exercises".
     await expect(page.getByText('No exercises', { exact: true })).toHaveCount(1);
-    await expect(page.getByTestId('next-up-empty')).toHaveCount(0);
-
-    // Move it to the top of the week so it is the Next-up routine, one real tap at a time.
-    await page.goto('/routines');
-    const orderOf = async () => (await readRawIron(page)).tables.routines.find((r) => r.name === 'Empty day')?.order;
-    await expect.poll(orderOf).toBe(5);
-    for (let from = 5; from > 0; from--) {
-      await page.getByRole('button', { name: 'Move up' }).nth(from).click();
-      await expect.poll(orderOf).toBe(from - 1);
-    }
-
-    await page.goto('/');
-    const nextUp = page.getByTestId('next-up');
-    await expect(nextUp).toContainText('Empty day');
-    await expect(page.getByTestId('next-up-empty')).toHaveText('No exercises');
-    await expect(page.getByTestId('start-session')).toBeDisabled();
-    await expect(page.getByTestId('start-deload')).toBeDisabled();
-    await expect(page.getByTestId('start-Empty day')).toBeDisabled();
   });
 });

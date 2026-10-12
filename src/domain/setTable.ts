@@ -1,13 +1,11 @@
 /**
  * The set table's pure model: given a slot's rx, its logged sets and its history, produce the
- * ordered rows a live session shows for that slot — logged sets, warm-up ghosts, and pending
+ * ordered rows a live session shows for that slot — logged sets, and pending
  * target/extra rows with their ghost weight/reps and "Previous" text. No IO, no clock, no database.
  */
 import { fmtSetsLine } from './format';
 import { countsForProgression, setBadges } from './sets';
-import type { Equipment, ExerciseKind, ProgressionMode, SetLog, SetType } from './types';
-import { genericWarmupRamp, warmupRamp, type WarmupSet } from './warmup';
-import type { PlateOptions } from './plates';
+import type { ExerciseKind, ProgressionMode, SetLog, SetType } from './types';
 
 /** The rx fields `planRows` needs; a subset of `RoutineExercise`. */
 export interface SetTableRx {
@@ -22,7 +20,6 @@ export interface SetTableRx {
 
 export interface PlanRowsInput {
   kind: ExerciseKind;
-  equipment?: Equipment;
   rx: SetTableRx;
   /** This slot's logged sets this session, sorted by index. */
   loggedSets: SetLog[];
@@ -31,8 +28,6 @@ export interface PlanRowsInput {
   previousSets: SetLog[];
   /** The working weight, already deload-adjusted by the caller. Null when calibrating. */
   prescribedWeight: number | null;
-  /** Warm-up settings: barbell plate maths, or the increment grid for everything else. */
-  warmup: PlateOptions;
   /** Extra rows the user added via the ⋯ menu, appended after the target rows. */
   extraRows: number;
 }
@@ -43,13 +38,6 @@ export interface LoggedRow {
   kind: 'logged';
   set: SetLog;
   badge: 'W' | 'D' | number;
-}
-
-/** A warm-up ramp step not yet logged as a warm-up — its own kind, with its own weight/reps. */
-export interface WarmupGhostRow {
-  kind: 'warmup-ghost';
-  weight: number;
-  reps: number;
 }
 
 export interface PendingRow {
@@ -71,7 +59,7 @@ export interface PendingRow {
   ghostSeconds: number | null;
 }
 
-export type PlanRow = LoggedRow | WarmupGhostRow | PendingRow;
+export type PlanRow = LoggedRow | PendingRow;
 
 /** { countedDone, target, complete } from a slot's logged sets and its target. */
 export function completionOf(sets: { type: SetType }[], targetSets: number): { countedDone: number; target: number; complete: boolean } {
@@ -89,7 +77,7 @@ function previousAt(prevCounted: SetLog[], position: number): SetLog | null {
 }
 
 export function planRows(input: PlanRowsInput): PlanRow[] {
-  const { kind, equipment, rx, loggedSets, previousSets, prescribedWeight, warmup, extraRows } = input;
+  const { kind, rx, loggedSets, previousSets, prescribedWeight, extraRows } = input;
 
   const rows: PlanRow[] = [];
 
@@ -99,15 +87,7 @@ export function planRows(input: PlanRowsInput): PlanRow[] {
 
   const countedDone = loggedSets.filter((s) => countsForProgression(s.type)).length;
 
-  // (b) warm-up ghosts, only before the first counted set of the slot, and only for a weighted
-  // reps/bodyweight_plus exercise with a known working weight (carry/timed never show a ramp).
-  // A logged warm-up consumes the next ramp step, whatever weight it was actually logged at.
   const isWeighted = kind === 'reps' || kind === 'bodyweight_plus';
-  if (countedDone === 0 && isWeighted && prescribedWeight !== null && prescribedWeight > 0) {
-    const ramp: WarmupSet[] = equipment === 'barbell' ? warmupRamp(prescribedWeight, warmup) : genericWarmupRamp(prescribedWeight, rx.increment);
-    const warmupsLogged = loggedSets.filter((s) => s.type === 'warmup').length;
-    for (const step of ramp.slice(warmupsLogged)) rows.push({ kind: 'warmup-ghost', weight: step.weight, reps: step.reps });
-  }
 
   const prevCounted = previousSets.filter((s) => countsForProgression(s.type));
   // The last counted set logged this session, if any: its weight and reps carry down to the rows

@@ -1,18 +1,15 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
-import { fileURLToPath } from 'node:url';
-import { clickIfPresent, fresh, logOneSet } from './fresh';
+import { clickIfPresent, fresh, logOneSet, openAdvanced } from './fresh';
 import { FIXTURE_CODE } from './fixtures/ean13';
 
 /**
- * A full set of screens for a design session, seeded with realistic data: the owner's real Hevy
- * export for training history, four days of food, and bodyweight readings.
+ * A full set of screens for a design session, seeded with realistic data: a few sessions logged
+ * through the app for training history, four days of food, and bodyweight readings.
  *
  * Not a test of anything — it asserts only enough to be sure each screen has rendered its content
  * before the shutter, because a screenshot of a loading state is worse than useless to a designer.
  */
 const OUT = process.env.SHOT_DIR ?? 'test-results/design';
-const HEVY_CSV = fileURLToPath(new URL('../hevy_export.csv', import.meta.url));
-const HEVY_MEASUREMENTS = fileURLToPath(new URL('../hevy_measurements.csv', import.meta.url));
 
 let n = 0;
 
@@ -105,6 +102,18 @@ async function finishToSummary(page: Page) {
   await expect(page).toHaveURL(/\/summary$/);
 }
 
+/** One finished session of a routine, logged through the app, so History and the charts have something in them. */
+async function trainRoutine(page: Page, routine: string, exercise: string, weight: number, reps: number[]) {
+  await page.goto('/');
+  await page.getByTestId(`start-${routine}`).click();
+  await clickIfPresent(page.getByRole('button', { name: 'Start anyway' }));
+  await expect(page).toHaveURL(/\/session\//);
+  await logSets(page, exercise, weight, reps);
+  await finishToSummary(page);
+  await page.getByTestId('save-session').click();
+  await expect(page).toHaveURL(/\/$/);
+}
+
 async function logMeal(page: Page, name: string, slot: string, foods: typeof BREAKFAST, daysBack: number) {
   await page.goto('/food');
   for (let i = 0; i < daysBack; i++) await page.getByTestId('prev-day').click();
@@ -130,19 +139,10 @@ test('capture every screen for a design session', async ({ page, browser, contex
   await page.getByRole('button', { name: 'Save' }).first().click();
   await expect(page.getByText('Saved')).toBeVisible();
 
-  // Real training history, so History and the exercise charts have something in them.
-  await page.locator('input[type="file"][accept*="csv"]').setInputFiles(HEVY_CSV);
-  await expect(page.getByRole('dialog')).toContainText('21 sessions');
-  await page.getByRole('button', { name: /Import 21 sessions/ }).click();
-  await page.getByTestId('hevy-result-continue').click(); // result step: "Continue" into the reconcile step
-  await page.getByRole('button', { name: 'Keep mine' }).click();
-  await expect(page.getByRole('dialog')).toBeHidden();
-
-  await page.goto('/settings');
-  await page.locator('input[type="file"][accept*="csv"]').setInputFiles(HEVY_MEASUREMENTS);
-  await page.getByRole('button', { name: 'Import', exact: true }).click();
-  await page.getByTestId('hevy-result-continue').click(); // result step: "Done"
-  await expect(page.getByRole('dialog')).toBeHidden();
+  // Training history, so History and the exercise charts have something in them. Bench Press at 75 kg
+  // is the all-time best the PR further down beats.
+  await trainRoutine(page, 'Upper (Push)', 'Bench Press (Barbell)', 75, [8, 8, 8]);
+  await trainRoutine(page, 'Lower (Squat)', 'Barbell Back Squat', 80, [6, 6, 6]);
 
   for (const [back, kg] of [[0, 80.4], [2, 80.1], [4, 79.8], [6, 79.9]] as const) {
     await page.goto('/body');
@@ -165,7 +165,7 @@ test('capture every screen for a design session', async ({ page, browser, contex
 
   // 01 Home
   await page.goto('/');
-  await expect(page.getByTestId('next-up')).toBeVisible();
+  await expect(page.getByTestId('routines-list')).toBeVisible();
   await expect(page.getByTestId('today-food')).toBeVisible();
   await shot(page, 'home', { full: true });
 
@@ -267,11 +267,11 @@ test('capture every screen for a design session', async ({ page, browser, contex
 
   // 16 History
   await page.goto('/history');
-  await expect(page.getByRole('button', { name: /Routine \d - / }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /^(Upper|Lower)/ }).first()).toBeVisible();
   await shot(page, 'history');
 
   // 17 Session detail
-  await page.getByRole('button', { name: /Routine \d - / }).first().click();
+  await page.getByRole('button', { name: /^(Upper|Lower)/ }).first().click();
   await expect(page).toHaveURL(/\/history\/[0-9a-f-]+$/);
   await shot(page, 'session-detail', { full: true });
 
@@ -280,17 +280,13 @@ test('capture every screen for a design session', async ({ page, browser, contex
   await expect(page.getByTestId('bw-kg')).toBeVisible();
   await shot(page, 'bodyweight', { full: true });
 
-  // 19 Check-in
-  await page.goto('/checkin');
-  await page.waitForTimeout(300);
-  await shot(page, 'checkin', { full: true });
-
   // 20 Settings
   await page.goto('/settings');
+  await openAdvanced(page);
   await expect(page.getByTestId('data-counts')).toBeVisible();
   await shot(page, 'settings', { full: true });
 
-  // ---- Superset, warm-up pills, plates, PRs (Upper (Push): Bench Press + Incline DB Press) -----
+  // ---- Superset, plates, PRs (Upper (Push): Bench Press + Incline DB Press) -----
 
   // There is no UI yet to link a superset (routine editor's own toggle is exercised in
   // overload.spec.ts) — linked directly in IndexedDB, the same shape `toggleSupersetWithNext`
@@ -321,14 +317,12 @@ test('capture every screen for a design session', async ({ page, browser, contex
   await expect(page.getByTestId('superset-Bench Press (Barbell)')).toContainText('Remove superset');
   await shot(page, 'routine-edit-superset', { full: true });
 
-  // 22 Live session: superset bracket, warm-up pills and the plate line on a barbell lift —
-  // captured before any set is logged, since the pills only show while nothing is counted yet.
+  // 22 Live session: superset bracket and the plate line on a barbell lift.
   await page.getByTestId('start-routine').click();
   await expect(page).toHaveURL(/\/session\//);
   await expect(page.getByText('Superset', { exact: true })).toBeVisible();
   const benchCard = page.getByTestId('exercise-card-Bench Press (Barbell)');
   await expect(benchCard).toBeVisible();
-  await expect(benchCard.getByTestId('warmup-row-0')).toBeVisible();
   await expect(benchCard.getByTestId('plate-line')).toBeVisible();
   await shot(page, 'session-live-superset', { full: true });
 
@@ -373,26 +367,11 @@ test('capture every screen for a design session', async ({ page, browser, contex
   await expect(page.getByTestId('save-as-routine')).toBeVisible();
   await shot(page, 'session-detail-pr', { full: true });
 
-  // A second, minimal Lower (Hinge) session — not captured — purely so "Next up" cycles back
-  // round to Upper (Push), which now carries a real in-app decision for Bench Press: the plan
-  // card's "reason" and "Last time" line only ever come from a decision made in-app, never from
-  // raw history, so this is the only way to see them on the currently-suggested routine.
+  // 27 Home after a week of training: the streak line above the routines list
   await page.goto('/');
-  await page.getByTestId('start-Lower (Hinge)').click();
-  await clickIfPresent(page.getByRole('button', { name: 'Start anyway' }));
-  await expect(page).toHaveURL(/\/session\//);
-  await logSets(page, 'Romanian Deadlift (Barbell)', 110, [8]);
-  await finishToSummary(page);
-  await page.getByTestId('save-session').click();
-  await expect(page).toHaveURL(/\/$/);
-
-  // 27 Home with the plan card populated: "Last time", a reason, and the streak line
-  await expect(page.getByTestId('next-up')).toContainText('Upper (Push)');
-  const planItem = page.getByTestId('plan-item-Bench Press (Barbell)');
-  await expect(planItem).toContainText(/up .* kg last time/i);
-  await expect(planItem).toContainText(/Last time/);
+  await expect(page.getByTestId('routines-list')).toBeVisible();
   await expect(page.getByTestId('streak-line')).toBeVisible();
-  await shot(page, 'home-plan', { full: true });
+  await shot(page, 'home-streak', { full: true });
 
   // 28 Exercise editor — the diagram picker open
   await page.goto('/exercises');
@@ -415,16 +394,17 @@ test('capture every screen for a design session', async ({ page, browser, contex
   await expect(page.getByTestId('picker-list').getByTestId('library-label').first()).toBeVisible();
   await shot(page, 'library-picker');
 
-  // 30 Settings scrolled to Plates / Progression / Assistant / About — the four sections together
+  // 30 Settings scrolled to Plates / Progression / Developer — the sections under Advanced together
   // run well over one phone screen, so the viewport is grown for this one capture (a design
   // reference, not a device-accurate shot) rather than showing only one or two of them.
   await page.goto('/settings');
+  await openAdvanced(page);
   await expect(page.getByTestId('plates-card')).toBeVisible();
   const originalViewport = page.viewportSize();
   await page.setViewportSize({ width: originalViewport!.width, height: 2000 });
   const platesTitle = page.getByRole('heading', { name: 'Plates', level: 2 });
   await platesTitle.evaluate((el) => window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 30 }));
-  await expect(page.getByText('About', { exact: true })).toBeInViewport();
+  await expect(page.getByText('Developer', { exact: true })).toBeInViewport();
   await shot(page, 'settings-scrolled');
   if (originalViewport) await page.setViewportSize(originalViewport);
 
@@ -438,28 +418,6 @@ test('capture every screen for a design session', async ({ page, browser, contex
   await expect(page.getByText('Camera not available.')).toBeVisible();
   await page.getByTestId('barcode-input').fill(FIXTURE_CODE);
   await shot(page, 'food-barcode-manual');
-  await page.keyboard.press('Escape');
-
-  // 32 Assistant box open with a fake reply
-  await page.addInitScript(
-    (cfg: { state: string; detail: string; reply: string }) => {
-      (window as unknown as { __ironNanoFake?: unknown }).__ironNanoFake = {
-        status: { state: cfg.state, detail: cfg.detail },
-        generate: async () => ({ text: cfg.reply }),
-      };
-    },
-    { state: 'ready', detail: 'fake', reply: 'Romanian Deadlift (Barbell): 110 kg × 8 last time.' },
-  );
-  await page.goto('/exercises');
-  await page.getByTestId('exercise-search').fill('Romanian Deadlift');
-  await page.getByRole('button', { name: /Romanian Deadlift/ }).first().click();
-  await expect(page.getByRole('heading', { name: 'Romanian Deadlift (Barbell)' })).toBeVisible();
-  await page.getByTestId('ask-assistant').click();
-  await expect(page.getByText('Romanian Deadlift (Barbell)', { exact: true }).last()).toBeVisible();
-  await page.getByTestId('assistant-input').fill('What did I lift last time?');
-  await page.getByTestId('assistant-send').click();
-  await expect(page.getByText('Romanian Deadlift (Barbell): 110 kg × 8 last time.')).toBeVisible();
-  await shot(page, 'assistant-reply');
   await page.keyboard.press('Escape');
 
   // 33/34 Progress — body map in "Sets this week" and "Last trained" modes

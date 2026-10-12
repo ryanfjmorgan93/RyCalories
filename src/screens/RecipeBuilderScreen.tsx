@@ -10,13 +10,9 @@ import { displayMacros, fromPer100, type Macros } from '@/domain/food';
 import { fmtGrams, fmtKcal, fmtNum } from '@/domain/format';
 import { uuid } from '@/domain/ids';
 import { matchIngredient, mergeByFood, searchFoods, type IngredientCandidate, type MatchSources, type TableFood } from '@/domain/ingredientMatch';
-import { MEAL_ESTIMATE_SYSTEM, MEAL_PHOTO_PROMPT, MEAL_PHOTO_SYSTEM, mealEstimatePrompt, parseMealAnalysis, parseMealEstimate, type MealEstimatePart } from '@/domain/mealAnalysis';
 import { parseMealText } from '@/domain/mealText';
-import { countToGrams, gapsCount, ingredientGap, recipeDisplayTotals, recipeIsComplete, shareFraction, toEstimatedIngredient, toIngredient } from '@/domain/recipe';
+import { countToGrams, gapsCount, ingredientGap, recipeDisplayTotals, recipeIsComplete, shareFraction, toIngredient } from '@/domain/recipe';
 import type { Recipe, RecipeIngredient } from '@/domain/types';
-import { describeAnalyzeMealError, Nano } from '@/state/nano';
-import { useAssistant } from '@/state/assistant';
-import { deleteMealPhoto, preparePhoto, sweepMealPhotos } from '@/state/mealPhoto';
 import { useRecipe, useSettings } from '@/ui/hooks';
 import { BarcodeScanner } from '@/ui/BarcodeScanner';
 import { Button } from '@/ui/components/Button';
@@ -28,7 +24,7 @@ import { toast } from '@/ui/components/Toast';
 import { TopBar } from '@/ui/components/TopBar';
 import { RecipeShareFields, shareInputFrom, useShareState } from '@/ui/RecipeShareFields';
 
-type Phase = 'start' | 'recognising' | 'estimating' | 'questions' | 'review';
+type Phase = 'start' | 'questions' | 'review';
 
 interface TypedAmount {
   count?: number;
@@ -63,21 +59,6 @@ function buildIngredients(names: string[], sources: MatchSources, amounts?: Map<
   const { merged, unmatched } = mergeByFood(matches);
   const fromGroup = merged.map((g) => applyTypedAmount(toIngredient(g.candidate, g.names[0]!, uuid()), amounts?.get(g.names[0]!)));
   const fromUnmatched = unmatched.map((n) => applyTypedAmount(toIngredient(null, n, uuid()), amounts?.get(n)));
-  return [...fromGroup, ...fromUnmatched];
-}
-
-/**
- * Turn "Estimate a meal out"'s parsed `{name, grams?}` parts into ingredients: match each,
- * merge duplicates that resolved to the same food (see `mergeByFood`, same as `buildIngredients`),
- * and build every one with `toEstimatedIngredient` so its guessed weight arrives already filled
- * in and marked — estimates go straight to Review, with no one-at-a-time walk.
- */
-function buildEstimatedIngredients(parts: MealEstimatePart[], sources: MatchSources): RecipeIngredient[] {
-  const gramsByName = new Map(parts.map((p) => [p.name, p.grams]));
-  const matches = parts.map((p) => ({ name: p.name, candidate: matchIngredient(p.name, sources).best }));
-  const { merged, unmatched } = mergeByFood(matches);
-  const fromGroup = merged.map((g) => toEstimatedIngredient(g.candidate, { name: g.names[0]!, grams: gramsByName.get(g.names[0]!) }, uuid()));
-  const fromUnmatched = unmatched.map((n) => toEstimatedIngredient(null, { name: n, grams: gramsByName.get(n) }, uuid()));
   return [...fromGroup, ...fromUnmatched];
 }
 
@@ -427,7 +408,6 @@ export function RecipeBuilderScreen() {
   const { id } = useParams();
   const [params] = useSearchParams();
   const nav = useNavigate();
-  const { status, refreshStatus } = useAssistant();
   const existing = useRecipe(id);
   const memories = useLiveQuery(() => db.foods.toArray(), []) ?? [];
   const [table, setTable] = useState<UkFoodTable | null>(null);
@@ -438,28 +418,16 @@ export function RecipeBuilderScreen() {
   const [questionIndex, setQuestionIndex] = useState(0);
   const [sheetIndex, setSheetIndex] = useState<number | null>(null);
   const [pickerFor, setPickerFor] = useState<'add' | number | null>(null);
-  const [recogniseNote, setRecogniseNote] = useState<{ kind: 'none' | 'error'; detail?: string } | null>(null);
   const [showTyping, setShowTyping] = useState(false);
   const [typedText, setTypedText] = useState('');
-  const [showEstimateInput, setShowEstimateInput] = useState(false);
-  const [estimateText, setEstimateText] = useState('');
   const [shareState, patchShare] = useShareState(1);
   const [saving, setSaving] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
   // What an edit started from, to tell an untouched recipe from a changed one.
   const [loaded, setLoaded] = useState<{ name: string; ingredients: RecipeIngredient[]; made: number } | null>(null);
 
-  const photoInputRef = useRef<HTMLInputElement>(null);
-  const ticketRef = useRef(0);
   const loadedExistingRef = useRef(false);
-  const startedEstimateRef = useRef(false);
 
-  useEffect(() => {
-    void sweepMealPhotos();
-  }, []);
-  useEffect(() => {
-    void refreshStatus();
-  }, [refreshStatus]);
   useEffect(() => {
     void loadUkFoodTable().then(setTable);
   }, []);
@@ -477,17 +445,6 @@ export function RecipeBuilderScreen() {
 
   const sources: MatchSources = useMemo(() => ({ foods: table?.foods ?? [], aliases: table?.aliases ?? [], memories }), [table, memories]);
 
-  // `?start=estimate` (MealEditScreen's Estimate button) opens the text box directly, the same
-  // way it would after tapping "Estimate a meal out" — but only once `status` has actually loaded
-  // and reads `ready`, the same gate the start button itself is under; on any other state the
-  // screen just lands on the ordinary start phase, showing why.
-  useEffect(() => {
-    if (startedEstimateRef.current || !status) return;
-    if (params.get('start') !== 'estimate') return;
-    startedEstimateRef.current = true;
-    if (status.state === 'ready') setShowEstimateInput(true);
-  }, [status, params]);
-
   const search = params.toString();
   const backHref = `/food/recipes${search ? `?${search}` : ''}`;
 
@@ -497,76 +454,6 @@ export function RecipeBuilderScreen() {
 
   const removeIngredient = (ingId: string) => {
     setIngredients((prev) => prev.filter((i) => i.id !== ingId));
-  };
-
-  // -- Photo recognition -----------------------------------------------------------------------
-
-  const onPhotoPicked = async (file: File) => {
-    setRecogniseNote(null);
-    setPhase('recognising');
-    const ticket = (ticketRef.current += 1);
-    let path: string | undefined;
-    try {
-      const prepared = await preparePhoto(file);
-      path = prepared.path;
-      if (ticket !== ticketRef.current) return;
-      // The native plugin needs the absolute file:// URI (`prepared.uri`), not the Directory.Cache-
-      // relative `path` — that one is only meaningful to further Capacitor Filesystem calls (see
-      // `deleteMealPhoto` below, which correctly keeps using it).
-      const { text } = await Nano.analyzeMeal({ path: prepared.uri, system: MEAL_PHOTO_SYSTEM, prompt: MEAL_PHOTO_PROMPT, temperature: 0.2, maxOutputTokens: 256 });
-      if (ticket !== ticketRef.current) return;
-      const analysis = parseMealAnalysis(text);
-      if (analysis.ingredients.length === 0) {
-        setRecogniseNote({ kind: 'none' });
-        setPhase('review');
-        return;
-      }
-      setIngredients(buildIngredients(analysis.ingredients, sources));
-      if (analysis.dish && !name.trim()) setName(analysis.dish);
-      setQuestionIndex(0);
-      setPhase('questions');
-    } catch (e) {
-      if (ticket !== ticketRef.current) return;
-      setRecogniseNote({ kind: 'error', detail: describeAnalyzeMealError(e) });
-      setPhase('review');
-    } finally {
-      if (path) void deleteMealPhoto(path);
-    }
-  };
-
-  const cancelRecognition = () => {
-    ticketRef.current += 1;
-    setPhase('start');
-  };
-
-  // -- Estimate a meal out ------------------------------------------------------------------------
-
-  const runEstimate = async () => {
-    const text = estimateText.trim();
-    if (!text) return;
-    setRecogniseNote(null);
-    setPhase('estimating');
-    const ticket = (ticketRef.current += 1);
-    try {
-      const { text: raw } = await Nano.generate({ system: MEAL_ESTIMATE_SYSTEM, prompt: mealEstimatePrompt(text), temperature: 0.2, maxOutputTokens: 300 });
-      if (ticket !== ticketRef.current) return;
-      const estimate = parseMealEstimate(raw);
-      if (estimate.parts.length === 0) {
-        setRecogniseNote({ kind: 'none' });
-        setPhase('review');
-        return;
-      }
-      // Straight to Review, never the one-at-a-time walk: the amounts are already there.
-      setIngredients(buildEstimatedIngredients(estimate.parts, sources));
-      if (estimate.dish && !name.trim()) setName(estimate.dish);
-      setShowEstimateInput(false);
-      setEstimateText('');
-      setPhase('review');
-    } catch (e) {
-      if (ticket !== ticketRef.current) return;
-      setRecogniseNote({ kind: 'error', detail: describeAnalyzeMealError(e) });
-      setPhase('review');
-    }
   };
 
   // -- Typed text --------------------------------------------------------------------------------
@@ -681,20 +568,6 @@ export function RecipeBuilderScreen() {
         }}
       />
 
-      <input
-        ref={photoInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        data-testid="recipe-photo-input"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          e.target.value = '';
-          if (file) void onPhotoPicked(file);
-        }}
-      />
-
       {loading && <div className="py-10 text-center text-sm text-muted">Loading…</div>}
       {notFound && (
         <div className="px-4">
@@ -706,16 +579,6 @@ export function RecipeBuilderScreen() {
         <>
           {phase === 'start' && (
             <div className="grid gap-3 px-4">
-              <Button size="xl" full disabled={status?.state !== 'ready'} onClick={() => photoInputRef.current?.click()} data-testid="recipe-take-photo">
-                Take a photo
-              </Button>
-              {status && status.state !== 'ready' && (
-                <div className="px-1 text-xs text-muted" data-testid="recipe-assistant-state">
-                  Assistant: {status.state}
-                  {status.detail ? ` · ${status.detail}` : ''}
-                </div>
-              )}
-
               <Button size="xl" full variant="secondary" onClick={() => setShowTyping((v) => !v)} data-testid="recipe-type-it">
                 Type it
               </Button>
@@ -731,48 +594,6 @@ export function RecipeBuilderScreen() {
               <Button size="xl" full variant="secondary" onClick={() => setPickerFor('add')} data-testid="recipe-add-ingredients">
                 Add ingredients
               </Button>
-
-              {/* Gated on the same Nano status as "Take a photo" — `recipe-assistant-state` above
-                  already states it factually, once, for both. */}
-              <Button size="xl" full variant="secondary" disabled={status?.state !== 'ready'} onClick={() => setShowEstimateInput((v) => !v)} data-testid="recipe-start-estimate">
-                Estimate a meal out
-              </Button>
-              {showEstimateInput && (
-                <div className="grid gap-2">
-                  <TextInput multiline value={estimateText} onChange={setEstimateText} placeholder="What did you eat?" testId="recipe-estimate-text" />
-                  <Button size="lg" full variant="primary" disabled={!estimateText.trim()} onClick={() => void runEstimate()} data-testid="recipe-estimate-submit">
-                    Estimate
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {phase === 'recognising' && (
-            <div className="px-4">
-              <Card className="p-6 text-center">
-                <div className="text-base font-semibold" data-testid="recipe-recognising">
-                  Recognising…
-                </div>
-                <div className="h-4" />
-                <Button size="lg" variant="secondary" onClick={cancelRecognition} data-testid="recipe-recognise-cancel">
-                  Cancel
-                </Button>
-              </Card>
-            </div>
-          )}
-
-          {phase === 'estimating' && (
-            <div className="px-4">
-              <Card className="p-6 text-center">
-                <div className="text-base font-semibold" data-testid="recipe-estimating">
-                  Estimating…
-                </div>
-                <div className="h-4" />
-                <Button size="lg" variant="secondary" onClick={cancelRecognition} data-testid="recipe-estimate-cancel">
-                  Cancel
-                </Button>
-              </Card>
             </div>
           )}
 
@@ -806,19 +627,6 @@ export function RecipeBuilderScreen() {
             <div className="px-4">
               <TextInput value={name} onChange={setName} placeholder="Recipe name" testId="recipe-name" />
               <div className="h-4" />
-
-              {/* Describes the recognition attempt, not the recipe — once the user has added an
-                  ingredient by hand, the recipe is no longer "nothing recognised". */}
-              {recogniseNote?.kind === 'none' && ingredients.length === 0 && (
-                <div className="pb-3 text-sm text-muted" data-testid="recognise-none">
-                  Nothing recognised.
-                </div>
-              )}
-              {recogniseNote?.kind === 'error' && ingredients.length === 0 && (
-                <div className="pb-3 text-sm text-muted" data-testid="recognise-error">
-                  {recogniseNote.detail}
-                </div>
-              )}
 
               {ingredients.length === 0 ? (
                 <EmptyState>No ingredients yet.</EmptyState>

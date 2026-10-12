@@ -5,7 +5,6 @@ import { exportBackup, exportCsv, importBackup, type Backup } from './backup';
 import { calendarData } from './calendarQueries';
 import { addCatalogueExercise, addDemoExercise } from './catalogueRepo';
 import { db } from './db';
-import { reconcileWeights } from './hevy';
 import { startQuickSession } from './quickRepo';
 import { bestsForExercise, e1rmSeries, recentRecords, recordsForNewSets, volumeSeries } from './recordsQueries';
 import {
@@ -491,24 +490,6 @@ describe('weights never leak out of a quick session', () => {
     const rx = await addRoutineExercise(elsewhere.id, RDL.id);
     expect(await previousSets(rx.id, RDL.id, '')).toBeNull();
     expect(await previousSets(null, RDL.id, '')).toBeNull();
-  });
-
-  it('reconcileWeights reconciles to the last real session, not a later quick one', async () => {
-    const rdlRx = (await db.routineExercises.where('routineId').equals(HINGE).toArray()).find((r) => r.exerciseId === RDL.id)!;
-    expect(rdlRx.currentWeight).toBe(110);
-    await realSession(HINGE, '2026-09-01T18:00:00.000Z', [
-      { exerciseId: RDL.id, weight: 100, reps: 8 },
-      { exerciseId: RDL.id, weight: 100, reps: 8 },
-    ]);
-    await quickSession([rowOf(RDL, { weightKg: 65 })], 'light', '2026-09-05T18:00:00.000Z', [
-      { row: 0, weight: 65, reps: 12 },
-      { row: 0, weight: 65, reps: 12 },
-    ]);
-
-    const rows = await reconcileWeights();
-    const row = rows.find((r) => r.exercise.id === RDL.id)!;
-    expect(row.latest).toBe(100);
-    expect(row.current).toBe(110);
   });
 
   it('a lock-in sheet is never offered a quick session’s weight', async () => {

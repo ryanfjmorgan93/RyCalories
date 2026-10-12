@@ -41,3 +41,23 @@ export function mondayOf(key: string): string {
   const dow = dateKeyToDate(key).getDay(); // 0 = Sunday .. 6 = Saturday
   return addDays(key, -(dow === 0 ? 6 : dow - 1));
 }
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "8 Sep" or "8 Sep 2026" from a YYYY-MM-DD key. Deterministic (no locale/timezone). */
+export function fmtDateKey(key: string, withYear = false): string {
+  const [y, m, d] = key.split('-').map(Number);
+  const month = MONTHS[(m ?? 1) - 1] ?? '';
+  return withYear ? `${d} ${month} ${y}` : `${d} ${month}`;
+}
+
+/** Inclusive window start for `days` days ending on `asOf`. */
+export function windowStart(asOf: string, days: number): string {
+  return addDays(asOf, -(Math.max(1, days) - 1));
+}
+
+/** Whether a date (or an ISO timestamp) falls in the `days`-day window ending on `asOf`, inclusive. */
+export function inWindow(date: string, asOf: string, days: number): boolean {
+  const key = date.slice(0, 10);
+  return key >= windowStart(asOf, days) && key <= asOf;
+}

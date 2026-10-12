@@ -79,7 +79,7 @@ describe('seeding', () => {
     expect(await db.bodyweight.count()).toBe(1);
     expect((await db.bodyweight.toArray())[0].kg).toBe(74);
     const s = await db.settings.get('settings');
-    expect(s).toMatchObject({ units: 'kg', theme: 'dark', calorieStart: 1900, proteinTargetLegDay: 200 });
+    expect(s).toMatchObject({ units: 'kg', calorieStart: 1900, proteinTargetLegDay: 200 });
     expect(s?.calorieStartDate).toBeUndefined();
   });
 
