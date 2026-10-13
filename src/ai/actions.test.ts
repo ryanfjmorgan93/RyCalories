@@ -118,7 +118,10 @@ describe('log_food', () => {
       lastUsedAt: '2026-10-01T12:00:00.000Z',
     });
     const actions = createCoachActions({ now: MORNING });
-    await actions.logFood({ items: [{ name: 'Chicken curry', amount: 1, unit: 'bowl', grams: 300, kcal: 900, protein: 40, carbs: 30, fat: 60 }], slot: 'dinner' });
+    // Claude's own reading agrees with the remembered food's density (≈160 vs 150 kcal per 100 g),
+    // so it is the same food and the owner's figures win; a wildly different density is the raw-vs-
+    // cooked guard's case, tested in src/domain/claudeFood.test.ts.
+    await actions.logFood({ items: [{ name: 'Chicken curry', amount: 1, unit: 'bowl', grams: 300, kcal: 480, protein: 30, carbs: 24, fat: 26 }], slot: 'dinner' });
     const item = (await mealsOnDay(TODAY))[0]!.items[0]!;
     expect(item.source).toBe('label');
     expect(macrosOf(item.nutrition).kcal).toBeCloseTo(450, 6);

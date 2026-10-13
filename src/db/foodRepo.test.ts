@@ -300,6 +300,17 @@ describe('remembering food', () => {
     expect(remembered[0]!.timesUsed).toBe(2);
   });
 
+  it('logs an item marked remember: false without teaching food memory anything, not even a use', async () => {
+    await addMeal({ name: 'A' }, [{ ...oats(100), source: 'user' }]);
+    const before = await suggestFoods('oat');
+    const id = await addMeal({ name: 'B' }, [{ ...oats(180), source: 'model', remember: false }]);
+    expect(await itemsForMeal(id)).toHaveLength(1);
+    expect(await suggestFoods('oat')).toEqual(before);
+    // A food seen only this way is not remembered at all.
+    await addMeal({ name: 'C' }, [{ ...oats(60), name: 'Congee', source: 'model', remember: false }]);
+    expect((await suggestFoods('congee')).length).toBe(0);
+  });
+
   it('survives a meal that cannot be remembered without failing the meal', async () => {
     const id = await addMeal({ name: 'Mixed' }, [shake(), oats(80)]);
     expect((await itemsForMeal(id))).toHaveLength(2);

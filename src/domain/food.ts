@@ -198,8 +198,16 @@ export function checkAtwater(m: Macros, overMargin = 0.1, underMargin = 0.25): A
 const ABSOLUTE_FLOOR_KCAL = 5;
 
 /**
- * Replace an implausible calorie figure with the one the macros imply. Each macro is anchored to
- * a visible quantity of food; the calorie figure is a single leap, so it is the one to distrust.
+ * Raise a calorie figure the macros contradict to the one they imply. Each macro is anchored to a
+ * visible quantity of food; the calorie figure is a single leap, so it is the one to distrust.
+ *
+ * Only the 'impossible' direction is corrected: macros that imply MORE energy than was stated
+ * cannot be right, because that energy is in the food by definition. Stated energy ABOVE what the
+ * macros imply ('unexplained') is left exactly as it came: alcohol carries 7 kcal/g and appears in
+ * no macro field, so a pint of lager at 215 kcal with P2 C16 F0 is correct and would otherwise be
+ * logged as 72. Lowering a figure is how a log ends up flattering the owner. This is for Claude's
+ * estimates only; a printed label is copied, never corrected (polyols and fibre make printed
+ * energy lower than 4/4/9 would give).
  */
 export function reconcileMacros(
   m: Macros,
@@ -207,7 +215,7 @@ export function reconcileMacros(
   underMargin = 0.25,
 ): { macros: Macros; corrected: boolean; reason?: AtwaterCheck['reason'] } {
   const check = checkAtwater(m, overMargin, underMargin);
-  if (check.ok || check.implied <= 0) return { macros: m, corrected: false };
+  if (check.ok || check.reason !== 'impossible' || check.implied <= 0) return { macros: m, corrected: false };
   return { macros: { ...m, kcal: Math.round(check.implied) }, corrected: true, reason: check.reason };
 }
 

@@ -14,7 +14,7 @@
  * for Claude lives in the cache for the seconds the reading takes and is deleted after.
  */
 import { Directory, Filesystem } from '@capacitor/filesystem';
-import { blockedReason, CLAUDE_ERROR_MESSAGES, ClaudeError, toClaudeError, type CallDeps, type ClaudeErrorKind } from '@/ai/client';
+import { blockedReason, CLAUDE_ERROR_MESSAGES, ClaudeError, noRetry, toClaudeError, type CallDeps, type ClaudeErrorKind } from '@/ai/client';
 import { readLabelPhoto, readMealPhoto, readMealText, type MealReadingItem } from '@/ai/vision';
 import { loadUkFoodTable } from '@/data/ukFoodTable';
 import { db } from '@/db/db';
@@ -216,7 +216,8 @@ export type Cancelled = () => boolean;
 export async function logMealPhoto(file: File, target: ReadTarget, cancelled: Cancelled = () => false): Promise<ReadLogged | null> {
   const image = await prepareImage(file);
   try {
-    const readings = await readMealPhoto(image.base64);
+    // No SDK retries for a photo read: a failed attempt is not in the spend ledger (src/ai/client.ts).
+    const readings = await readMealPhoto(image.base64, noRetry());
     if (cancelled()) return null;
     if (readings.length === 0) throw new ClaudeError('other', EMPTY.photo);
     const photoPath = await keepMealPhoto(image);
@@ -230,7 +231,7 @@ export async function logMealPhoto(file: File, target: ReadTarget, cancelled: Ca
 export async function logMealText(text: string, target: ReadTarget, cancelled: Cancelled = () => false, deps: CallDeps = {}): Promise<ReadLogged | null> {
   const said = text.trim();
   if (!said) throw new ClaudeError('other', 'Say or type what you ate first.');
-  const readings = await readMealText(said, deps);
+  const readings = await readMealText(said, noRetry(deps));
   if (cancelled()) return null;
   if (readings.length === 0) throw new ClaudeError('other', EMPTY.describe);
   return logReadings(target, readings, { enteredText: said.slice(0, 280) });
@@ -246,7 +247,7 @@ export async function logMealText(text: string, target: ReadTarget, cancelled: C
 export async function readLabel(file: File, barcode: string | undefined, cancelled: Cancelled = () => false): Promise<LabelNutrition | null> {
   const image = await prepareImage(file);
   try {
-    const reading = await readLabelPhoto(image.base64);
+    const reading = await readLabelPhoto(image.base64, noRetry());
     if (cancelled()) return null;
     const code = barcode ? (barcodeDigits(barcode) ?? '') : '';
     const label: LabelNutrition = {

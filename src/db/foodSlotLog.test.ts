@@ -114,6 +114,52 @@ describe('logging straight to a day’s slot', () => {
   });
 });
 
+describe('a photo logged into the slot’s meal', () => {
+  const PHOTO = 'meals/new-photo.jpg';
+
+  it('goes on a meal that exists and has none, so the kept file is referenced', async () => {
+    const existing = await addMeal({ name: 'Lunch', slot: 'lunch' }, [oats()]);
+    const logged = await logItemsToSlot(TODAY, 'lunch', [oats(20)], { photoPath: PHOTO, enteredText: 'oats' });
+    expect(logged).toMatchObject({ mealId: existing, createdMeal: false, attachedPhoto: PHOTO });
+    const [meal] = await mealsOnDay(TODAY);
+    expect(meal!.meal.photoPath).toBe(PHOTO);
+    // Only the photo is added: the words and the rest of an existing meal stay as they were.
+    expect(meal!.meal.enteredText).toBeUndefined();
+  });
+
+  it('does not replace the photo a meal already has, and says it kept none', async () => {
+    await addMeal({ name: 'Lunch', slot: 'lunch', photoPath: 'meals/first.jpg' }, [oats()]);
+    const logged = await logItemsToSlot(TODAY, 'lunch', [oats(20)], { photoPath: PHOTO });
+    expect(logged.attachedPhoto).toBeUndefined();
+    expect((await mealsOnDay(TODAY))[0]!.meal.photoPath).toBe('meals/first.jpg');
+  });
+
+  it('is on the meal it creates, as before, and that is not an attachment', async () => {
+    const logged = await logItemsToSlot(TODAY, 'lunch', [oats()], { photoPath: PHOTO });
+    expect(logged.createdMeal).toBe(true);
+    expect(logged.attachedPhoto).toBeUndefined();
+    expect((await mealsOnDay(TODAY))[0]!.meal.photoPath).toBe(PHOTO);
+  });
+
+  it('comes back off when the log is undone, because the photo is of what was taken back', async () => {
+    const existing = await addMeal({ name: 'Lunch', slot: 'lunch' }, [oats()]);
+    const logged = await logItemsToSlot(TODAY, 'lunch', [oats(20)], { photoPath: PHOTO });
+    await undoLoggedItems(logged);
+    const [meal] = await mealsOnDay(TODAY);
+    expect(meal!.meal.id).toBe(existing);
+    expect(meal!.items).toHaveLength(1);
+    expect(meal!.meal.photoPath).toBeUndefined();
+  });
+
+  it('stays when the owner has put another photo on the meal since', async () => {
+    await addMeal({ name: 'Lunch', slot: 'lunch' }, [oats()]);
+    const logged = await logItemsToSlot(TODAY, 'lunch', [oats(20)], { photoPath: PHOTO });
+    await db.meals.update(logged.mealId, { photoPath: 'meals/other.jpg' });
+    await undoLoggedItems(logged);
+    expect((await mealsOnDay(TODAY))[0]!.meal.photoPath).toBe('meals/other.jpg');
+  });
+});
+
 describe('remembering what was logged', () => {
   it('remembers the food as the other paths do, with the pack, serving and unit', async () => {
     await logItemToSlot(TODAY, 'dinner', wholePack());

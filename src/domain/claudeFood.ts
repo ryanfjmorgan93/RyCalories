@@ -171,27 +171,36 @@ function choiceFromCandidate(c: IngredientCandidate, memories: FoodMemory[]): Fo
 }
 
 /**
- * The food the app already knows for a name Claude gave, or null.
+ * The food the app already knows for a name Claude gave, and whether one of the owner's own was
+ * set aside.
  *
  * Not a match: a remembered estimate (no better than the fresh one), a word-overlap guess from the
- * table that does not cover every word Claude used, and a table row whose energy density is far
- * from what Claude saw (cooked against raw). The owner's own entries and their labels are kept
- * whatever Claude thinks: they are the better figures.
+ * table that does not cover every word Claude used, and ANY known food whose energy density is far
+ * from what Claude saw (cooked against raw). The density check is not for the table alone: the
+ * owner's own raw "Rice" at 360 kcal per 100 g is no more cooked rice than the table's row is, and
+ * taking it for 180 g of a cooked bowl logs three times the energy. Otherwise the owner's entries
+ * and their labels are kept whatever Claude thinks: they are the better figures.
+ *
+ * `setAside` is true when it was the owner's own entry or a label that the density check turned
+ * away, so the estimate that replaces it can be kept from teaching that food anything.
  */
-export function knownFood(r: ReadItem, sources: MatchSources): FoodChoice | null {
+function lookupKnown(r: ReadItem, sources: MatchSources): { known: FoodChoice | null; setAside: boolean } {
   const { best } = matchIngredient(r.name, sources);
-  if (!best || trustOf(best.source) <= trustOf('model')) return null;
+  if (!best || trustOf(best.source) <= trustOf('model')) return { known: null, setAside: false };
   const owners = trustOf(best.source) >= trustOf('label');
-  if (!owners) {
-    if (!isDirect(best, r.name, sources)) {
-      const named = tokens(r.name);
-      const row = tokens(best.name);
-      if (named.size === 0 || ![...named].every((t) => row.has(t))) return null;
-    }
-    const seen = per100Of(r);
-    if (seen && !densitiesAgree(seen.kcal, best.per100.kcal)) return null;
+  if (!owners && !isDirect(best, r.name, sources)) {
+    const named = tokens(r.name);
+    const row = tokens(best.name);
+    if (named.size === 0 || ![...named].every((t) => row.has(t))) return { known: null, setAside: false };
   }
-  return choiceFromCandidate(best, sources.memories);
+  const seen = per100Of(r);
+  if (seen && !densitiesAgree(seen.kcal, best.per100.kcal)) return { known: null, setAside: owners };
+  return { known: choiceFromCandidate(best, sources.memories), setAside: false };
+}
+
+/** The food the app already knows for a name Claude gave, or null — see `lookupKnown` for what does not count. */
+export function knownFood(r: ReadItem, sources: MatchSources): FoodChoice | null {
+  return lookupKnown(r, sources).known;
 }
 
 /**
@@ -227,14 +236,20 @@ function knownAmount(choice: FoodChoice, r: ReadItem): AmountItem | null {
   return estimated(taught);
 }
 
-/** One food Claude read as the item to log: the known food at Claude's amount, else Claude's own figures. */
+/**
+ * One food Claude read as the item to log: the known food at Claude's amount, else Claude's own
+ * figures. When the owner's own food (or a label) was set aside because it is a different state of
+ * the food from the one Claude saw, the estimate is logged but kept out of food memory
+ * (`remember: false`): it would otherwise file this plate's weight and unit under the owner's food.
+ */
 export function itemFromReading(r: ReadItem, sources: MatchSources): ReadMealItem {
-  const known = knownFood(r, sources);
+  const { known, setAside } = lookupKnown(r, sources);
   if (known) {
     const item = knownAmount(known, r);
     if (item) return item;
   }
-  return fromModel(r);
+  const estimate = fromModel(r);
+  return setAside ? { ...estimate, remember: false } : estimate;
 }
 
 export function itemsFromReadings(readings: readonly ReadItem[], sources: MatchSources): ReadMealItem[] {

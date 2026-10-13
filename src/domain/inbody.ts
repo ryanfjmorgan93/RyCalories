@@ -305,14 +305,52 @@ function isMissing(cell: string | undefined): boolean {
   return cell === undefined || MISSING.has(cell.trim().toLowerCase());
 }
 
-/** A number from a cell: "80.5", "80,5", "1,650", "22 %", "81.4 kg". Missing or unreadable is undefined. */
-function parseNumber(cell: string | undefined): number | undefined {
+/** What the rest of the file and the column say about a number whose comma could be either kind. */
+interface NumberContext {
+  /** The file writes decimals with a comma somewhere (a cell like "80,5" or "0,385"). */
+  decimalComma: boolean;
+  /** Whether a reading is believable for the column it sits in, in the unit the cell is written in. */
+  plausible?: (n: number) => boolean;
+}
+
+/** The number at the start of a cell, as written: "80.5", "80,5", "1,650", "22 %", "81.4 kg". */
+const NUMBER_TOKEN = /^[+-]?\d[\d,]*(?:[.,]\d+)?|^[+-]?\.\d+/;
+
+/**
+ * A cell that can only be a decimal comma: one or two digits after the comma ("80,5", "22,40"),
+ * four or more, or a leading zero ("0,385"). Three digits after a comma is the one case that could
+ * be either, so it is not evidence.
+ */
+const UNAMBIGUOUS_DECIMAL_COMMA = /^[+-]?(?:0,\d+|\d+,(?:\d{1,2}|\d{4,}))(?![\d,.])/;
+
+function writesDecimalComma(cell: string | undefined): boolean {
+  return !isMissing(cell) && UNAMBIGUOUS_DECIMAL_COMMA.test(cell!.trim());
+}
+
+/**
+ * A number from a cell. Missing or unreadable is undefined.
+ *
+ * "1,650" is the awkward one: a thousands separator in a file that writes decimals with a dot, a
+ * decimal comma in one that does not. A leading zero settles it ("0,385" is a ratio, never 385).
+ * Otherwise it is thousands when the number is believable for its column as thousands (1,840 kcal,
+ * not 1.84), or when nothing else in the file writes a decimal comma; in a decimal-comma file a
+ * reading that is not believable as thousands ("81,250" kg) is the decimal it looks like.
+ */
+function parseNumber(cell: string | undefined, ctx: NumberContext): number | undefined {
   if (isMissing(cell)) return undefined;
-  const m = /^[+-]?\d[\d,]*(?:[.,]\d+)?|^[+-]?\.\d+/.exec(cell!.trim());
+  const m = NUMBER_TOKEN.exec(cell!.trim());
   if (!m) return undefined;
   let s = m[0];
-  if (/^[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?$/.test(s)) s = s.replace(/,/g, '');
-  else s = s.replace(',', '.');
+  const grouped = /^[+-]?(\d{1,3})((?:,\d{3})+)(\.\d+)?$/.exec(s);
+  if (grouped) {
+    const head = grouped[1]!;
+    const groups = grouped[2]!;
+    const fraction = grouped[3];
+    const asThousands = Number(s.replace(/,/g, ''));
+    const couldBeDecimal = groups.length === 4 && fraction === undefined;
+    const decimal = couldBeDecimal && (Number(head) === 0 || (ctx.decimalComma && !(ctx.plausible?.(asThousands) ?? false)));
+    s = decimal ? s.replace(',', '.') : s.replace(/,/g, '');
+  } else s = s.replace(',', '.');
   const n = Number(s);
   return Number.isFinite(n) ? n : undefined;
 }
@@ -577,6 +615,10 @@ export function parseInbodyCsv(text: string): ParsedInbody {
   }
   const order: DateOrder = monthFirstProved && !dayFirstProved ? 'mdy' : 'dmy';
 
+  // Does this file write its decimals with a comma? Decides what a bare "1,250" means.
+  const measureCols = [...layout.columns.values()].filter((c) => c.target.type === 'scalar' || c.target.type === 'seg');
+  const decimalComma = data.some((r) => measureCols.some((c) => writesDecimalComma(r.cells[c.index])));
+
   const skipped: SkippedRow[] = [];
   const candidates: Candidate[] = [];
   const assumedKg = new Set<string>();
@@ -599,17 +641,23 @@ export function parseInbodyCsv(text: string): ParsedInbody {
     const rowUnitText = unitCol ? (cell(unitCol) ?? '').toLowerCase() : '';
     const rowUnit: Unit | null = /\b(lb|lbs|pound|pounds)\b/.test(rowUnitText) ? 'lb' : /\b(kg|kgs|kilo|kilogram|kilograms)\b/.test(rowUnitText) ? 'kg' : null;
 
-    /**
-     * kg from a mass cell, converting pounds. The unit comes from the header, then the row's units
-     * column; with neither, kilograms are assumed and the column is named in the note.
-     */
-    const massKg = (col: Column, n: number, assume = true): number => {
-      const unit = col.unit === 'kg' || col.unit === 'lb' ? col.unit : rowUnit;
-      if (unit === 'lb') {
-        seen.pounds = true;
-        return round2(n * LB_TO_KG);
-      }
-      if (unit === null && assume) assumedKg.add(col.label);
+    /** The unit a mass cell is written in: from the header, then the row's units column; null when neither says. */
+    const massUnit = (col: Column): Unit | null => (col.unit === 'kg' || col.unit === 'lb' ? col.unit : rowUnit);
+    /** kg from a mass cell, converting pounds. */
+    const asKg = (col: Column, n: number): number => (massUnit(col) === 'lb' ? round2(n * LB_TO_KG) : n);
+    /** Remember what the note should say about a mass cell: pounds were converted, or kilograms were assumed because no unit was given. */
+    const noteMass = (col: Column, assume = true): void => {
+      const unit = massUnit(col);
+      if (unit === 'lb') seen.pounds = true;
+      else if (unit === null && assume) assumedKg.add(col.label);
+    };
+    /** A scalar cell's number as stored: kilograms for a mass, litres for water, kcal for energy, a ratio for ECW. */
+    const stored = (col: Column, field: ScalarField, n: number): number => {
+      // Litres in a kg file, pounds in a pounds file; a litre of water weighs a kilogram.
+      if (field === 'totalBodyWaterL') return col.unit === 'l' ? n : asKg(col, n);
+      if (MASS_SCALARS.has(field)) return asKg(col, n);
+      if (field === 'bmrKcal' && col.unit === 'kj') return Math.round(n / 4.184);
+      if (field === 'ecwRatio' && n > 1 && n <= 100) return n / 100;
       return n;
     };
 
@@ -626,19 +674,18 @@ export function parseInbodyCsv(text: string): ParsedInbody {
     for (const col of layout!.columns.values()) {
       if (col.target.type === 'scalar') {
         const field = col.target.field;
-        let n = parseNumber(cell(col));
+        const n = parseNumber(cell(col), { decimalComma, plausible: (v) => within(stored(col, field, v), BOUNDS[field]) !== undefined });
         if (n === undefined) continue;
         if (field === 'totalBodyWaterL') {
-          // Litres in a kg file, pounds in a pounds file; a litre of water weighs a kilogram.
-          n = col.unit === 'l' ? n : massKg(col, n, false);
-        } else if (MASS_SCALARS.has(field)) n = massKg(col, n);
-        else if (field === 'bmrKcal' && col.unit === 'kj') n = Math.round(n / 4.184);
-        else if (field === 'ecwRatio' && n > 1 && n <= 100) n = n / 100;
-        put(field, Math.round(n * 1000) / 1000);
+          if (col.unit !== 'l') noteMass(col, false);
+        } else if (MASS_SCALARS.has(field)) noteMass(col);
+        put(field, Math.round(stored(col, field, n) * 1000) / 1000);
       } else if (col.target.type === 'seg') {
-        const n = parseNumber(cell(col));
+        const bounds = SEG_BOUNDS[col.target.kind];
+        const n = parseNumber(cell(col), { decimalComma, plausible: (v) => within(asKg(col, v), bounds) !== undefined });
         if (n === undefined) continue;
-        const kg = within(massKg(col, n), SEG_BOUNDS[col.target.kind]);
+        noteMass(col);
+        const kg = within(asKg(col, n), bounds);
         if (kg === undefined) continue;
         const key = col.target.kind === 'lean' ? 'segmentalLeanKg' : 'segmentalFatKg';
         scan[key] = { ...(scan[key] ?? {}), [col.target.limb]: kg };

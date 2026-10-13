@@ -49,6 +49,13 @@ export interface NewMealItem {
    * chips come back next time, offline included.
    */
   units?: ItemUnits;
+  /**
+   * `false` logs the item but teaches FoodMemory nothing from it. For an estimate that stands in
+   * for a remembered food it turned out not to be (Claude's cooked rice against the owner's raw
+   * "Rice"): the figures are already protected by the trust order, but the portion, units and use
+   * count would still be filed under the owner's food. Not persisted on the row.
+   */
+  remember?: false;
 }
 
 export interface NewMeal {
@@ -178,14 +185,20 @@ export async function addMeal(meal: NewMeal, items: NewMealItem[]): Promise<stri
  * Where an item (or several) went, so it can be taken back out. `createdMeal` says the meal did not
  * exist before the call: undoing then removes the meal too, provided nothing else has been put in
  * it since.
+ *
+ * `attachedPhoto` is the photo this call put on a meal that already existed and had none (see
+ * `logItemsToSlot`); undoing the log takes it off again, if the meal still carries it. Absent when
+ * the call created the meal (the photo is then the meal's own and goes with it) or the meal kept a
+ * photo it already had.
  */
 export interface LoggedItems {
   mealId: string;
   itemIds: string[];
   createdMeal: boolean;
+  attachedPhoto?: string;
 }
 
-/** The meal-level extras a reader of a photo or a description can attach when it creates the slot's meal. */
+/** The meal-level extras a reader of a photo or a description can attach to the slot's meal. */
 export type SlotMealExtras = Pick<NewMeal, 'photoPath' | 'enteredText' | 'confidence' | 'notes'>;
 
 /** A slot's name as a meal title: "Lunch". */
@@ -197,8 +210,11 @@ function slotName(slot: MealSlot): string {
  * Log food straight to a day: append `items` to that date's meal for `slot` — the most recently
  * logged one when there are several — creating it if there is none. No "Add meal" step, which is
  * the point: one tap from a chip is a logged food. `extras` (a photo path, the text a description
- * came from, how sure the reader was) are written only when this call creates the meal; a meal
- * that already exists keeps what it has.
+ * came from, how sure the reader was) are written when this call creates the meal; a meal that
+ * already exists keeps what it has, with one exception: a `photoPath` goes onto it when it has no
+ * photo yet. The caller has already kept that file, and a file no meal points at is swept away, so
+ * a photographed meal logged into an existing slot would otherwise be lost. A meal holds one
+ * photo, so a second is not kept in place of the first (the sweep takes it).
  *
  * Found-or-created and appended in ONE transaction, so two quick logs cannot both decide the slot
  * has no meal and write two. Remembering the foods happens after the commit, as in `addMeal`:
@@ -230,11 +246,16 @@ export async function logItemsToSlot(
       };
       await db.meals.put(meal);
     }
+    let attachedPhoto: string | undefined;
+    if (!createdMeal && extras?.photoPath && !meal.photoPath) {
+      await db.meals.update(meal.id, { photoPath: extras.photoPath });
+      attachedPhoto = extras.photoPath;
+    }
     const existing = await db.mealItems.where('mealId').equals(meal.id).toArray();
     const first = existing.reduce((max, i) => Math.max(max, i.index), -1) + 1;
     const rows = items.map((it, n) => toItemRow(uuid(), meal.id, first + n, it));
     if (rows.length) await db.mealItems.bulkPut(rows);
-    return { mealId: meal.id, itemIds: rows.map((r) => r.id), createdMeal };
+    return { mealId: meal.id, itemIds: rows.map((r) => r.id), createdMeal, ...(attachedPhoto ? { attachedPhoto } : {}) };
   });
   // From the ORIGINAL items, not the rows: `toItemRow` drops `unit`, `units` and `barcode`, which
   // are exactly what teach FoodMemory its unit weights, pack sizes and barcodes.
@@ -261,6 +282,12 @@ export async function undoLoggedItems(logged: LoggedItems): Promise<void> {
       await db.meals.delete(logged.mealId);
       return;
     }
+    // The photo this log put on an existing meal is of the food just taken back. The file is left
+    // for the sweep: once no meal points at it, it goes.
+    if (logged.attachedPhoto) {
+      const meal = await db.meals.get(logged.mealId);
+      if (meal?.photoPath === logged.attachedPhoto) await db.meals.update(logged.mealId, { photoPath: undefined });
+    }
     // Close the gap so indexes stay 0..n-1 and a later append cannot collide, as deleteItem does.
     await db.mealItems.bulkPut(rest.map((r, index) => ({ ...r, index })));
   });
@@ -279,6 +306,7 @@ export async function undoLoggedItems(logged: LoggedItems): Promise<void> {
  * a portion anyone ate (a recipe's batch quantity) — see `memoryFrom`'s doc comment.
  */
 export async function rememberFood(item: NewMealItem | MealItem, opts?: { portion?: boolean }): Promise<void> {
+  if ('remember' in item && item.remember === false) return;
   // NewMealItem's source is optional and defaults the same way toItemRow does, so a food added
   // without one is remembered as the user's own rather than falling through to the least trusted.
   // `unit` and `barcode` only ever exist on a NewMealItem (never persisted on the MealItem row —
