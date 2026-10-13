@@ -81,7 +81,7 @@ export function RoutineCard({
                 <span />
               )}
               <div className="min-w-0">
-                <div className="disp truncate text-[3.25rem] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]">{routine.name}</div>
+                <div className="disp line-clamp-2 text-[2.5rem] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]">{routine.name}</div>
                 {item.lastTop && (
                   <div className="mt-1 truncate text-sm text-fg/85" data-testid={`routine-top-${routine.name}`}>
                     Last: {item.lastTop}

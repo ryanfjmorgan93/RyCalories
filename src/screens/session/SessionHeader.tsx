@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { updateSession } from '@/db/repo';
 import { fmtDuration } from '@/domain/format';
 import { DEFAULT_SETTINGS, type Session, type Settings } from '@/domain/types';
-import { openCoach } from '@/state/coachSheet';
 import { Button } from '@/ui/components/Button';
 import { Toggle } from '@/ui/components/Chip';
 import { Sheet } from '@/ui/components/Sheet';
@@ -40,10 +39,6 @@ export function SessionHeader({
         right={
           <>
             <div className="flex items-center gap-0.5">
-              {/* The coach, mid-session: ask it, or tell it what to change about today. A word, like every header action (e2e/header-labels.spec.ts). */}
-              <Button size="sm" variant="ghost" onClick={() => openCoach()} data-testid="session-coach">
-                Coach
-              </Button>
               {/* The menu holds the deload switch only, and a quick session decides no weight. */}
               {!session.quick && (
                 <Button size="sm" variant="ghost" onClick={() => setSessionMenuOpen(true)} data-testid="session-options">

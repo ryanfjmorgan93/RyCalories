@@ -32,6 +32,7 @@ import { RecipeBuilderScreen } from './screens/RecipeBuilderScreen';
 import { useAndroidBackButton } from './ui/useAndroidBackButton';
 import { ShareTargetListener } from './platform/shareTarget';
 import { CoachSheetHost } from './ui/CoachSheetHost';
+import { CoachFab } from './ui/CoachFab';
 
 /**
  * Says once a month that the coach is paused: when the spend cap is reached (in the middle of a
@@ -50,6 +51,7 @@ function CapNotice() {
 
 function Shell() {
   const dock = useSessionDock();
+  const { pathname } = useLocation();
   // A running rest timer floats over the bottom of the page too; pad for it so the last row of a
   // screen is never stuck underneath it.
   const resting = useTimer((s) => s.endsAt !== null);
@@ -57,7 +59,10 @@ function Shell() {
   return (
     <div className={`content-max mx-auto min-h-dvh ${pad}`}>
       <Outlet />
+      {/* Room to scroll the last row clear of the floating coach button. */}
+      {pathname !== '/coach' && <div aria-hidden="true" className="h-18" />}
       {dock && <SessionDock session={dock} />}
+      {pathname !== '/coach' && <CoachFab dock={!!dock} />}
       <BottomNav />
     </div>
   );
@@ -115,6 +120,9 @@ function SessionShell() {
   return (
     <div className={`mx-auto min-h-dvh ${isLiveSession ? 'session-shell' : 'content-max'}`}>
       <Outlet />
+      {isLiveSession && <div aria-hidden="true" className="h-18" />}
+      {/* The coach, mid-session: ask it, or tell it what to change about today. */}
+      {isLiveSession && <CoachFab inSession testId="session-coach" />}
     </div>
   );
 }

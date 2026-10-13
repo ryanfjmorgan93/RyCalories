@@ -2,7 +2,7 @@
 
 Signed off by the owner in October 2026 from the mock-up "A + G2 + G3", then changed by them in two
 ways: the panels are **glass** instead of G3 shading (thin enough that a robot render shows through),
-and the accent is **theirs to pick** on a colour wheel. Dark only. Saira only.
+and the accent is **theirs to pick** on a colour wheel. Dark only. One typeface: IBM Plex Sans (the owner moved from Saira, which read as cheesy, to a calmer, classier face).
 
 Every value below lives in `src/index.css` as a custom property on `:root`, re-exported through
 `@theme inline` where a Tailwind utility is useful. Retune a value there and every screen follows.
@@ -12,9 +12,9 @@ The file is the source of truth; the tables are a map of what exists and why.
 
 A black stage. Panels are faint glass: a white tint of 3–6 %, a 1px hairline and a 1px inset top
 highlight, no shadows, no rings. One flat accent (ember `#FF5A1F` unless the owner picks another)
-for the primary pill, the rest timer, the active tab's bar and anything "live". Headlines and big
-numbers are Saira condensed, uppercase, weight 800; reading text is Saira at normal width; small
-labels are 11px uppercase with open tracking. Exercise pictures are robot renders on black with the
+for the primary pill, the rest timer, the active tab's bar and anything "live". Headlines are IBM Plex Sans
+light (300), sentence case, tight leading and tracking, after Runway's type rules; numbers are
+tabular; small labels are 11px uppercase with open tracking. Exercise pictures are robot renders on black with the
 accent glow rising from beneath (G2), or the glow alone where there is no render. Never a photo of
 a person outside the "How to" sheet.
 
@@ -53,9 +53,9 @@ card overlaps a render, a handful at most on screen.
 |---|---|---|
 | `--r-card` | 1.25rem | Cards, sheets |
 | Buttons | `rounded-full` | Every `Button` is a pill, at least 44px tall |
-| `--font-sans` | `'Saira Variable'` | Everything. `@fontsource-variable/saira/wdth.css`, bundled: wght 100–900 and wdth 50–125 in one file |
-| `.disp` | wdth 58 %, 800, uppercase, leading .92 | Headlines: TopBar titles, the exercise and routine heroes |
-| `.num` | wdth 62 %, tabular | Every number that is the point |
+| `--font-sans` | `'IBM Plex Sans Variable'` | Everything. `@fontsource-variable/ibm-plex-sans`, bundled: weights 100–700 in one file |
+| `.disp` | 300, sentence case, leading 1, tracking −.03em | Headlines: TopBar titles, the exercise and routine heroes |
+| `.num` | tabular, tracking −.02em | Every number that is the point |
 | `.label` | 11px, 500, uppercase, tracking .12em, `--c-dim` | Tile and section labels (`SectionTitle`, `Stat`) |
 
 `src/boot/recovery.ts` keeps the system font stack and its own hard-coded colours on purpose: it
@@ -95,7 +95,13 @@ must render when this stylesheet is what failed.
 - **`RestTimerBar`**: the running timer is one solid accent block with ink-coloured text, ring and
   pill buttons (`bg-black/12`, which keeps ink on them at 4.5:1 for every wheel colour). "Rest over"
   switches back to fixed glass with the done tint.
-- **`CoachComposer`**: one pill: the text field ("Talk to me…"), the mic in the accent, Send.
+- **`CoachFab`** (`src/ui/CoachFab.tsx`): the way to the coach from every screen, a floating
+  glass button bottom-right holding `CoachMark`: the satin robot's shoulders with the Iron icon as
+  its head, drawn in SVG so the dumbbell glows in the accent. It stacks above the tab bar, the
+  session dock and a running rest timer from the same height variables, and opens the coach sheet.
+  In the live session it replaces the header's Coach button (`data-testid="session-coach"`).
+- **`CoachComposer`**: inside the coach sheet, one pill: the text field ("Talk to me…"), the mic
+  in the accent, Send.
 - **The session** (`ExerciseCard`): the open card leads with an `ExerciseHero`, the exercise name
   in `.disp` over the render, collapse and menu buttons on the image. Collapsed cards are plain glass
   rows.

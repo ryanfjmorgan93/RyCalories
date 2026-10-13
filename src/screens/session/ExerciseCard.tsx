@@ -653,7 +653,7 @@ export function ExerciseCard({
           </div>
           <button type="button" className="min-w-0 flex-1 px-4 pb-3 pt-12 text-left" onClick={() => nav(`/exercises/${exercise.id}`)}>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <h2 className="disp text-[2.5rem] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]">{exercise.name}</h2>
+              <h2 className="disp text-[2rem] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]">{exercise.name}</h2>
               {chips}
             </div>
             <div className="mt-1 text-sm text-fg/85">{subtitle}</div>
