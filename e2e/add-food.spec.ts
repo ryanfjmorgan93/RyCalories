@@ -91,7 +91,7 @@ async function scanCode(page: Page, code: string): Promise<void> {
 /** Save Settings once, which is what gives the app a calorie target (as the food spec does). */
 async function saveSettings(page: Page): Promise<void> {
   await page.goto('/settings');
-  await page.getByRole('button', { name: 'Save' }).first().click();
+  await page.getByTestId('save-targets').click();
   await expect(page.getByText('Saved')).toBeVisible();
 }
 

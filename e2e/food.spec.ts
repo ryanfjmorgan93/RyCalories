@@ -37,7 +37,7 @@ async function addFood(
  */
 async function saveSettings(page: Page) {
   await page.goto('/settings');
-  await page.getByRole('button', { name: 'Save' }).first().click();
+  await page.getByTestId('save-targets').click();
   await expect(page.getByText('Saved')).toBeVisible();
 }
 

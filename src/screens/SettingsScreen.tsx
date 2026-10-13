@@ -371,7 +371,7 @@ function TargetsCard({ settings }: { settings: Settings }) {
       <div className="mt-2 text-sm text-muted">
         {settings.calorieStartDate ? `Reverse diet start: ${fmtKey(settings.calorieStartDate)}` : 'Reverse diet start: starts when you first save'}
       </div>
-      <Button variant="primary" full className="mt-4" onClick={() => void save()}>
+      <Button variant="primary" full className="mt-4" onClick={() => void save()} data-testid="save-targets">
         Save targets
       </Button>
     </Card>

@@ -310,7 +310,7 @@ test.describe('the weekly review', () => {
     await fresh(page);
     // A target has to exist before it can be changed: saving Settings starts the reverse diet.
     await page.goto('/settings');
-    await page.getByRole('button', { name: 'Save' }).first().click();
+    await page.getByTestId('save-targets').click();
     await expect(page.getByText('Saved')).toBeVisible();
     await page.clock.setFixedTime(MON);
     // Push on the Friday before: inside the week the review looks back over.

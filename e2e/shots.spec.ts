@@ -25,7 +25,7 @@ async function food(
 test('capture the nutrition screens', async ({ page }) => {
   await fresh(page);
   await page.goto('/settings');
-  await page.getByRole('button', { name: 'Save' }).first().click();
+  await page.getByTestId('save-targets').click();
   // Wait for the write, or the navigation below can abort it and there is no calorie target.
   await expect(page.getByText('Saved')).toBeVisible();
 
@@ -124,7 +124,7 @@ test('capture food memory', async ({ page }) => {
 test('capture progress', async ({ page }) => {
   await fresh(page);
   await page.goto('/settings');
-  await page.getByRole('button', { name: 'Save' }).first().click();
+  await page.getByTestId('save-targets').click();
   await expect(page.getByText('Saved')).toBeVisible();
 
   // A few days of eating and a couple of readings, so the charts have something in them.

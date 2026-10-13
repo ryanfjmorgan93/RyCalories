@@ -136,7 +136,7 @@ test('capture every screen for a design session', async ({ page, browser, contex
 
   // ---- Seed -------------------------------------------------------------------------------
   await page.goto('/settings');
-  await page.getByRole('button', { name: 'Save' }).first().click();
+  await page.getByTestId('save-targets').click();
   await expect(page.getByText('Saved')).toBeVisible();
 
   // Training history, so History and the exercise charts have something in them. Bench Press at 75 kg

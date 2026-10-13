@@ -52,7 +52,7 @@ test('a day of training and eating reads back as one record', async ({ page }) =
 
   // A target has to exist before anything can be measured against it.
   await page.goto('/settings');
-  await page.getByRole('button', { name: 'Save' }).first().click();
+  await page.getByTestId('save-targets').click();
   await expect(page.getByText('Saved')).toBeVisible();
 
   await trainLowerBody(page);

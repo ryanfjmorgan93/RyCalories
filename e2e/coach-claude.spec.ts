@@ -159,7 +159,9 @@ test.describe('the coach in a session', () => {
     await expect(sheet.getByTestId('coach-error')).toHaveCount(0);
 
     // Claude was asked as Sonnet, with the owner's words last, and the tool result went back to it.
-    const chat = seen.filter((s) => !isHaiku(s.body));
+    // (Home may also have asked for Monday's weekly review on the way in: a structured Sonnet call,
+    // not part of this conversation.)
+    const chat = seen.filter((s) => !isHaiku(s.body) && !(s.body.output_config as { format?: unknown } | undefined)?.format);
     expect(chat).toHaveLength(2);
     expect(chat[0]!.body.model).toBe('claude-sonnet-5-5');
     expect(lastUserText(chat[0]!.body)).toBe('only 2 sets of bench today');
