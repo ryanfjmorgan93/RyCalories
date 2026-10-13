@@ -40,6 +40,10 @@ async function linkSuperset(page: Page, ids: [string, string], supersetId: strin
     },
     { ids, supersetId },
   );
+  // The write went behind Dexie's back, and Dexie keeps a cache of the routine's exercises (Home
+  // reads them for its pictures); reload so the app reads the rows as they now are.
+  await page.reload();
+  await expect(page.getByTestId('routines-list')).toBeVisible();
 }
 
 async function skipRest(page: Page) {
