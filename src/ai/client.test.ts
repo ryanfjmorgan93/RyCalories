@@ -13,6 +13,8 @@ import {
   createMessage,
   getClient,
   HAIKU,
+  noRetry,
+  RETRIES,
   SONNET,
   testConnection,
   toClaudeError,
@@ -115,8 +117,33 @@ describe('error mapping', () => {
     const fake = offlineFetch();
     const error = await createMessage({ model: HAIKU, max_tokens: 10, messages: [{ role: 'user', content: 'x' }] }, { fetch: fake.fetch }).catch((e: unknown) => e);
     expect((error as ClaudeError).kind).toBe('offline');
-    // The SDK retried twice before giving up: the app's maxRetries is 2.
-    expect(fake.requests).toHaveLength(3);
+    // The SDK retried once before giving up. A failed attempt has no usage to count, so each retry is
+    // spend the cap cannot see: one is the most the app allows itself.
+    expect(RETRIES).toBe(1);
+    expect(fake.requests).toHaveLength(1 + RETRIES);
+  });
+
+  it('makes a call once when it is asked not to retry (the photo readers and the weekly review)', async () => {
+    const down = offlineFetch();
+    const error = await createMessage({ model: HAIKU, max_tokens: 10, messages: [{ role: 'user', content: 'x' }] }, noRetry({ fetch: down.fetch })).catch((e: unknown) => e);
+    expect((error as ClaudeError).kind).toBe('offline');
+    expect(down.requests).toHaveLength(1);
+
+    // The same holds for a server error the SDK would normally try again (no x-should-retry: false here).
+    let calls = 0;
+    const flaky = (async () => {
+      calls++;
+      return new Response(JSON.stringify({ type: 'error', error: { type: 'overloaded_error', message: 'busy' } }), { status: 529, headers: { 'content-type': 'application/json' } });
+    }) as typeof fetch;
+    const busy = await createMessage({ model: HAIKU, max_tokens: 10, messages: [{ role: 'user', content: 'x' }] }, noRetry({ fetch: flaky })).catch((e: unknown) => e);
+    expect((busy as ClaudeError).kind).toBe('busy');
+    expect(calls).toBe(1);
+  });
+
+  it('keeps the other deps when switching retries off', () => {
+    const fetchStub = (async () => new Response('')) as typeof fetch;
+    expect(noRetry({ fetch: fetchStub })).toEqual({ fetch: fetchStub, maxRetries: 0 });
+    expect(noRetry()).toEqual({ maxRetries: 0 });
   });
 
   it('classifies the SDK error classes directly', () => {

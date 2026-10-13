@@ -219,6 +219,23 @@ describe('with Claude in reach, everything goes to Claude', () => {
     await click(byTestId('coach-draft-save'));
     expect(review).toHaveBeenCalledTimes(1);
   });
+
+  it('hands the text back, and leaves no unanswered message in the thread, when the call fails before anything changed', async () => {
+    setApiKey(KEY);
+    const down = fakeClaude({ status: 529, error: { type: 'overloaded_error', message: 'Overloaded' } });
+    vi.stubGlobal('fetch', down.fetch);
+    await mount(sheet());
+    await say('how was my week?');
+    await waitFor(() => !!byTestId('coach-error') && input()?.value === 'how was my week?', 'the reason, and the text back in the box');
+    expect(await db.coachMessages.count()).toBe(0);
+    expect(all('coach-user-bubble')).toHaveLength(0);
+
+    // Sending it again is one message, answered.
+    vi.stubGlobal('fetch', fakeClaude({ content: [text('A solid one.')] }).fetch);
+    await click(byTestId('coach-send'));
+    await waitFor(() => !!byTestId('coach-bubble'), 'the answer');
+    expect((await db.coachMessages.toArray()).map((m) => `${m.role}: ${m.text}`).sort()).toEqual(['coach: A solid one.', 'user: how was my week?']);
+  });
 });
 
 describe('one thread', () => {

@@ -47,7 +47,7 @@ export class ClaudeError extends Error {
 
 /**
  * Any thrown value as a `ClaudeError`, by the SDK's typed classes and never by matching message
- * text. Connection failures are "offline" (the SDK has already retried them twice); a timeout is
+ * text. Connection failures are "offline" (the SDK has already retried them once); a timeout is
  * "busy" because the network is there and Claude is slow.
  */
 export function toClaudeError(e: unknown): ClaudeError {
@@ -99,11 +99,39 @@ export function assertCanCall(): void {
 // ---------------------------------------------------------------------------
 // Client
 
+/**
+ * How many times the SDK repeats a request that failed (a dropped connection, a timeout, a 429 or a
+ * 5xx). One, not the SDK's default of two: a failed attempt has no `usage` to put in the spend
+ * ledger (src/ai/spend.ts) although the API may still have billed it, so every retry is spend the
+ * cap cannot see. Chat and the short moment lines keep this one; the big structured reads (photos,
+ * the weekly review) use `noRetry`.
+ */
+export const RETRIES = 1;
+
 /** Seams a test (or a caller with a client of its own) can supply. */
 export interface CallDeps {
   /** Replaces the global `fetch` the SDK would use: tests pass one that returns canned Messages API JSON. */
   fetch?: typeof fetch;
   client?: Anthropic;
+  /**
+   * Retries for this request alone (`createMessage`; the tool runner takes no per-call setting and
+   * keeps `RETRIES`). The default is `RETRIES`; 0 for an expensive call the owner can simply repeat.
+   */
+  maxRetries?: number;
+}
+
+/**
+ * `deps` with retries switched off: the call is made once, and a failure is the owner's to repeat.
+ * For the structured readers (photo and text reads of food, labels and InBody sheets, src/ai/vision.ts)
+ * and the weekly review, whose failed attempts cost the most and show up in no ledger.
+ */
+export function noRetry<T extends CallDeps>(deps: T = {} as T): T & { maxRetries: 0 } {
+  return { ...deps, maxRetries: 0 };
+}
+
+/** The per-request options for a call's `maxRetries`, or none when the client's own setting stands. */
+function requestOptions(deps: CallDeps): { maxRetries: number } | undefined {
+  return deps.maxRetries === undefined ? undefined : { maxRetries: Math.max(0, Math.floor(deps.maxRetries)) };
 }
 
 /**
@@ -144,7 +172,7 @@ export function getClient(deps: Pick<CallDeps, 'fetch'> = {}): Anthropic {
   return new Anthropic({
     apiKey,
     dangerouslyAllowBrowser: true,
-    maxRetries: 2,
+    maxRetries: RETRIES,
     timeout: 60_000,
     fetch: deps.fetch ?? abortableFetch(),
   });
@@ -162,7 +190,7 @@ export async function createMessage(params: MessageParams, deps: CallDeps = {}):
   assertCanCall();
   try {
     const client = deps.client ?? getClient(deps);
-    const message = await client.messages.create(params);
+    const message = await client.messages.create(params, requestOptions(deps));
     recordUsage(params.model, message.usage);
     if (message.stop_reason === 'refusal') throw new ClaudeError('refused');
     return message;
@@ -178,6 +206,12 @@ export interface ToolLoopResult {
   iterations: number;
   /** The loop stopped because the cap was reached part-way, with a tool call left unrun. */
   stoppedForCap: boolean;
+  /**
+   * The loop stopped at `MAX_TOOL_ITERATIONS` with the model still asking for tools. They ran, but
+   * the model never saw their results, so `message` is a preamble ("Let me change that…") and not
+   * an answer: the caller says what was done instead.
+   */
+  hitIterationLimit: boolean;
 }
 
 /** Most requests one turn may make: a tool call, its result, and a few more steps. A runaway loop costs money. */
@@ -207,7 +241,7 @@ export async function runToolLoop(params: ToolRunnerParams, deps: CallDeps = {})
       }
     }
     if (!last) throw new ClaudeError('other');
-    return { message: last, iterations, stoppedForCap };
+    return { message: last, iterations, stoppedForCap, hitIterationLimit: !stoppedForCap && last.stop_reason === 'tool_use' };
   } catch (e) {
     throw toClaudeError(e);
   }

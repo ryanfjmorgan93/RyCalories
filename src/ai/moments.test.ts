@@ -234,6 +234,12 @@ describe('weeklyReview', () => {
     expect(parseReview('{"unexpected": true}')).toEqual({ text: '{"unexpected": true}' });
   });
 
+  it('is asked for once: a failed attempt is spend the ledger cannot see, so nothing retries it', async () => {
+    const down = offlineFetch();
+    await expect(weeklyReview({}, opts(down.fetch))).rejects.toMatchObject({ kind: 'offline' });
+    expect(down.requests).toHaveLength(1);
+  });
+
   it('throws the plain error when it cannot be asked', async () => {
     clearApiKey();
     await expect(weeklyReview({}, opts(fakeClaude({ content: [text('x')] }).fetch))).rejects.toBeInstanceOf(ClaudeError);

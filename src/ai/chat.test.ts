@@ -13,7 +13,7 @@ import type { CoachMessage } from '@/domain/types';
 import { fakeClaude, lastUserText, systemText, text, toolUse, type FakeRequest } from '@/test/fakeClaude';
 import { createCoachActions } from './actions';
 import { CHAT_MAX_TOKENS, historyTurns, sendCoachMessage } from './chat';
-import { CLAUDE_ERROR_MESSAGES } from './client';
+import { CLAUDE_ERROR_MESSAGES, MAX_TOOL_ITERATIONS } from './client';
 import { clearApiKey, setApiKey } from './key';
 import { setCap, spendThisMonth } from './spend';
 import { resetMemory } from './store';
@@ -220,12 +220,29 @@ describe('the tools do the work', () => {
     expect(await db.routines.count()).toBe(before);
   });
 
-  it('stops after the most requests a turn may make', async () => {
-    const fake = fakeClaude({ content: [toolUse('t', 'remember', { text: 'one more' })], stop_reason: 'tool_use' });
+  it('stops after the most requests a turn may make, and says what was done instead of the model\'s preamble', async () => {
+    const fake = fakeClaude(
+      (_req, i) => ({ content: [text('Let me sort that out for you.'), toolUse(`t${i}`, 'remember', { text: `note ${i}` })], stop_reason: 'tool_use' }),
+    );
     const reply = await sendCoachMessage('keep going', { fetch: fake.fetch, ...ctx });
-    expect(fake.requests.length).toBeLessThanOrEqual(6);
+    expect(fake.requests).toHaveLength(MAX_TOOL_ITERATIONS);
     expect(reply.ok).toBe(true);
-    expect(reply.text.length).toBeGreaterThan(0);
+    // The model's last words introduce tools whose results it never saw; they are not an answer.
+    expect(reply.text).not.toContain('Let me sort that out');
+    expect(reply.text).toBe(`Done: ${reply.actions.join('; ')}.`);
+    expect(reply.actions).toHaveLength(MAX_TOOL_ITERATIONS);
+    expect((await thread()).at(-1)).toMatchObject({ role: 'coach', text: reply.text, actions: reply.actions });
+  });
+
+  it('says plainly that nothing changed when it stopped at the limit with nothing done', async () => {
+    const fake = fakeClaude(
+      (_req, i) => ({ content: [text('Checking.'), toolUse(`t${i}`, 'edit_routine', { routine: 'Leg day of doom', exercise: 'Squat', change: 'sets', sets: 3 })], stop_reason: 'tool_use' }),
+    );
+    const reply = await sendCoachMessage('squats to 3 sets', { fetch: fake.fetch, ...ctx });
+    expect(reply.ok).toBe(true);
+    expect(reply.actions).toEqual([]);
+    expect(reply.text).not.toContain('Checking');
+    expect(reply.text).toContain('Nothing was changed');
   });
 });
 
@@ -247,14 +264,34 @@ describe('when Claude cannot be reached or answers with an error', () => {
     expect(await db.coachMessages.count()).toBe(0);
   });
 
-  it('keeps the owner\'s turn but stores nothing from the model on an API error, and says so plainly', async () => {
+  it('takes the owner\'s turn back out when the call fails before anything changed, so the sheet keeps the text and a retry is not a double', async () => {
     const fake = fakeClaude({ status: 401, error: { type: 'authentication_error', message: `invalid x-api-key ${KEY}` } });
     const reply = await sendCoachMessage('how was my week?', { fetch: fake.fetch, ...ctx });
-    expect(reply).toMatchObject({ ok: false, error: 'bad_key', text: CLAUDE_ERROR_MESSAGES.bad_key, actions: [] });
-    const rows = await thread();
-    expect(rows.map((r) => r.role)).toEqual(['user']);
-    expect(JSON.stringify(rows)).not.toContain(KEY);
+    expect(reply).toMatchObject({ ok: false, error: 'bad_key', text: CLAUDE_ERROR_MESSAGES.bad_key, actions: [], stored: false });
+    expect(await thread()).toEqual([]);
     expect(JSON.stringify(reply)).not.toContain(KEY);
+
+    // Sending the same words again leaves one copy in the thread, not two.
+    const retry = fakeClaude({ content: [text('A good one.')] });
+    expect((await sendCoachMessage('how was my week?', { fetch: retry.fetch, ...ctx })).stored).toBe(true);
+    expect((await thread()).map((r) => `${r.role}: ${r.text}`)).toEqual(['user: how was my week?', 'coach: A good one.']);
+  });
+
+  it('takes the owner\'s turn back out when a tool call it asked for hit the spend cap unrun', async () => {
+    setCap(0.01);
+    const fake = fakeClaude({ content: [toolUse('t1', 'remember', { text: 'Never written' })], stop_reason: 'tool_use', usage: { input_tokens: 100_000, output_tokens: 500 } });
+    const reply = await sendCoachMessage('remember something', { fetch: fake.fetch, ...ctx });
+    expect(reply).toMatchObject({ ok: false, error: 'over_cap', stored: false });
+    expect(await thread()).toEqual([]);
+  });
+
+  it('a failure that is not the owner\'s mistake still counts as stored when the turn is half done', async () => {
+    const fake = fakeClaude(
+      { content: [toolUse('t1', 'remember', { text: 'Prefers cables' })], stop_reason: 'tool_use' },
+      { status: 529, error: { type: 'overloaded_error', message: 'Overloaded' } },
+    );
+    const reply = await sendCoachMessage('I prefer cables, remember that', { fetch: fake.fetch, ...ctx });
+    expect(reply).toMatchObject({ ok: false, stored: true });
   });
 
   it('says what was already changed if the connection fails after a tool ran', async () => {
@@ -292,6 +329,35 @@ describe('when Claude cannot be reached or answers with an error', () => {
     const reply = await sendCoachMessage('hm', { fetch: fake.fetch, ...ctx });
     expect(reply.ok).toBe(true);
     expect(reply.text).toMatch(/another way/);
+  });
+});
+
+describe('a Claude key pasted into the box by mistake', () => {
+  const PASTED = 'sk-ant-api03-PASTEDBYMISTAKEPASTEDBYMISTAKEPASTED0123';
+
+  it('is neither stored nor sent, in the message or in the reply', async () => {
+    const fake = fakeClaude({ content: [text(`Do not share ${PASTED} with anyone.`)] });
+    const reply = await sendCoachMessage(`my key is ${PASTED} can you check it`, { fetch: fake.fetch, ...ctx });
+
+    expect(JSON.stringify(fake.requests)).not.toContain(PASTED);
+    expect(lastUserText(fake.requests[0]!.body)).toBe('my key is sk-ant-… can you check it');
+
+    const rows = await thread();
+    expect(JSON.stringify(rows)).not.toContain(PASTED);
+    expect(rows[0]!.text).toBe('my key is sk-ant-… can you check it');
+    expect(reply.text).not.toContain(PASTED);
+    expect(rows[1]!.text).not.toContain(PASTED);
+  });
+
+  it('is not sent from an older turn that already holds one', async () => {
+    await db.coachMessages.bulkPut([
+      { id: 'old1', at: new Date(2026, 9, 11, 8, 0).toISOString(), role: 'user', text: `here ${PASTED}` },
+      { id: 'old2', at: new Date(2026, 9, 11, 8, 1).toISOString(), role: 'coach', text: 'That looks like a key.' },
+    ]);
+    const fake = fakeClaude({ content: [text('Ok.')] });
+    await sendCoachMessage('hello', { fetch: fake.fetch, ...ctx });
+    expect(JSON.stringify(fake.requests)).not.toContain(PASTED);
+    expect(JSON.stringify(fake.requests)).toContain('here sk-ant-…');
   });
 });
 

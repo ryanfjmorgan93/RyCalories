@@ -53,7 +53,8 @@ const LogFoodInput = z.object({
       }),
     )
     .describe('Everything eaten in this sitting'),
-  slot: z.enum(MEAL_SLOTS).optional().describe('breakfast, lunch, dinner or snack; leave out to use the time of day'),
+  slot: z.enum(MEAL_SLOTS).optional().describe('breakfast, lunch, dinner or snack; leave out to use the time of day (required with a date)'),
+  date: z.string().optional().describe('YYYY-MM-DD, for a meal on an earlier day (up to 7 days back, never the future); leave out for today'),
 });
 
 const LogWeightInput = z.object({
@@ -105,9 +106,9 @@ export function createCoachTools(actions: CoachActions, turn: TurnRecord): Coach
     strictTool({
       name: 'log_food',
       description:
-        'Log what the owner ate as one meal. Use when they say what they had, or send a description. Estimate honestly: kcal and macros are for the whole amount eaten. Marked as an estimate in the app.',
+        'Log what the owner ate. The items join that day\'s meal for the slot (made if there is none). Use when they say what they had, or send a description. Estimate honestly: kcal and macros are for the whole amount eaten. Foods the app already knows keep their own figures; yours are marked as estimates.',
       inputSchema: LogFoodInput,
-      run: async (input) => finish(await actions.logFood({ items: input.items, slot: input.slot }), turn),
+      run: async (input) => finish(await actions.logFood({ items: input.items, slot: input.slot, date: input.date }), turn),
     }),
     strictTool({
       name: 'log_weight',

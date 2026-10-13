@@ -4,6 +4,7 @@
  * scan for the owner to check against the paper, or null when nothing could be read, and it saves
  * nothing.
  */
+import { noRetry } from '@/ai/client';
 import { readInbodySheet } from '@/ai/vision';
 import { toDateKey } from '@/domain/dates';
 import type { ParsedInbody } from '@/domain/inbody';
@@ -20,7 +21,8 @@ export async function scansFromPhoto(file: File): Promise<ParsedInbody | null> {
   try {
     const image = await prepareImage(file);
     try {
-      const reading = await readInbodySheet(image.base64);
+      // Once: a failed attempt is spend the ledger cannot see, and the owner can take the photo again.
+      const reading = await readInbodySheet(image.base64, noRetry());
       return parsedFromReading(reading, toDateKey());
     } finally {
       await discardImage(image);

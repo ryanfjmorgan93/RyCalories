@@ -15,36 +15,47 @@
  * added by the training-engine work and is taken as a parameter (`deps.setPlanOverride`) so this
  * file has no import of it. Until it is supplied, changing today's sets, reps or weight answers
  * that it cannot.
+ *
+ * Food goes in by the same road as the Add food screen's Describe: what the model gives is a
+ * reading (state/claudeFood.ts `logReadings`), matched against the owner's remembered foods and the
+ * UK table before its own figures are used (docs/adr/0004), and appended to that day's meal for the
+ * slot (foodRepo `logItemsToSlot`) rather than made a meal of its own.
  */
 import { db } from '@/db/db';
-import { addMeal, dayTotals, type NewMealItem } from '@/db/foodRepo';
+import { dayTotals } from '@/db/foodRepo';
 import {
   addExtraExercise,
   addRoutineExercise,
   getActiveSession,
   getSettings,
+  linkedSiblings,
   listRoutines,
   lockInRoutineExercise,
   logBodyweight,
   removeRoutineExercise,
   routineItems,
   setSkipped,
+  setsForSlot,
   swapExercise,
+  undoSwap,
   updateRoutineExercise,
 } from '@/db/repo';
 import { loadRoutineInput } from '@/db/routineBuildQueries';
 import { buildCoach, describeRead, emptyReasonLines, nothingFact, requestUsable, type CoachRequest } from '@/domain/coachBuild';
-import { nowIso, toDateKey } from '@/domain/dates';
+import { dateKeyToDate, daysBetween, fmtDateKey, nowIso, toDateKey } from '@/domain/dates';
 import { lockInBlocked, roundKg } from '@/domain/engine';
 import { matchExercise, normaliseName, type MatchCandidate } from '@/domain/exerciseMatch';
-import { fromPortion, weigh, type Macros } from '@/domain/food';
+import { displayMacros } from '@/domain/food';
 import { fmtKg, fmtNum, fmtRange, plural } from '@/domain/format';
 import { uuid } from '@/domain/ids';
+import { effectiveRx } from '@/domain/planOverride';
 import { parseQuickRequest, type RoutineSplit } from '@/domain/quickRequest';
 import { routineRequestFrom, routineToText, type BuiltRoutine } from '@/domain/routineBuilder';
-import { MEAL_SLOTS, type Exercise, type MealSlot, type MuscleGroup, type Routine, type RoutineExercise } from '@/domain/types';
+import { MEAL_SLOTS, type Exercise, type MealSlot, type MuscleGroup, type Routine, type RoutineExercise, type Session } from '@/domain/types';
+import { logReadings } from '@/state/claudeFood';
 import { noteShortId } from './context';
 import type { PlanOverridePatch, SetPlanOverride } from './types';
+import type { MealReadingItem } from './vision';
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -74,9 +85,14 @@ export interface LogFoodItem {
 
 export interface LogFoodInput {
   items: LogFoodItem[];
-  /** Defaults to the slot the time of day suggests. */
+  /** Defaults to the slot the time of day suggests (today only: an earlier day needs one). */
   slot?: MealSlot;
+  /** YYYY-MM-DD, today or up to a week back. Defaults to today. */
+  date?: string;
 }
+
+/** How far back the coach may log a meal. Older days are the owner's to fill in on the Food screen. */
+export const FOOD_DAYS_BACK = 7;
 
 export interface LogWeightInput {
   kg: number;
@@ -160,8 +176,6 @@ export function slotForHour(hour: number): MealSlot {
   return 'snack';
 }
 
-const cap = (s: string) => `${s[0]!.toUpperCase()}${s.slice(1)}`;
-
 function candidatesOf(exercises: readonly Pick<Exercise, 'id' | 'name' | 'aliases'>[]): MatchCandidate[] {
   return exercises.map((e) => ({ id: e.id, name: e.name, ...(e.aliases ? { aliases: e.aliases } : {}) }));
 }
@@ -210,6 +224,122 @@ function names(list: readonly string[], max = 12): string {
 
 function repsText(min: number, max: number): string {
   return `${fmtRange(min, max)} reps`;
+}
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** "Mon 12 Oct" from a YYYY-MM-DD key (no locale, so it reads the same everywhere). */
+function dayLabel(key: string): string {
+  return `${WEEKDAYS[dateKeyToDate(key).getDay()]} ${fmtDateKey(key)}`;
+}
+
+/** Why `day` is not one a meal can be logged for, or null: a real date, not in the future, at most a week back. */
+function checkFoodDay(day: string, today: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || toDateKey(dateKeyToDate(day)) !== day) return 'The date must be a real day, YYYY-MM-DD.';
+  if (day > today) return 'That date is in the future.';
+  if (daysBetween(day, today) > FOOD_DAYS_BACK) return `Meals can be logged for today and the last ${FOOD_DAYS_BACK} days. Older days are for the owner to fill in on the Food screen.`;
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Today's session, as the live screen has it
+
+/**
+ * What a place in today's session is:
+ *   planned      a routine exercise that is on (it has a plan: sets, reps, weight);
+ *   skipped      a routine exercise skipped for today;
+ *   swapped-out  a routine exercise swapped for another, so skipped, with `partner` doing its job;
+ *   substitute   the exercise swapped in: an extra, with no plan, standing where `rx` was;
+ *   extra        an exercise added for today, with no plan.
+ */
+type SlotKind = 'planned' | 'skipped' | 'swapped-out' | 'substitute' | 'extra';
+
+interface SessionSlot {
+  /** What the matcher answers with: `rx:<id>` for a routine exercise, `x:<exercise id>` for an extra. */
+  key: string;
+  kind: SlotKind;
+  exercise: Exercise;
+  /** The routine exercise: itself, or the one a substitute stands in for. */
+  rx?: RoutineExercise;
+  /** The other half of a swap: the substitute for a swapped-out slot, the original for a substitute. */
+  partner?: Exercise;
+}
+
+/** Every place in the session: the routine's exercises (skipped and swapped ones too) and the extras, in screen order. */
+async function sessionSlots(session: Session): Promise<SessionSlot[]> {
+  const items = await routineItems(session.routineId);
+  const skipped = new Set(session.skippedRoutineExerciseIds ?? []);
+  const swaps = session.swaps ?? {};
+  const extras = (await db.exercises.bulkGet(session.extraExerciseIds ?? [])).filter((e): e is Exercise => !!e);
+  const extraById = new Map(extras.map((e) => [e.id, e]));
+  const slots: SessionSlot[] = [];
+  for (const { rx, exercise } of items) {
+    const swappedFor = swaps[rx.id] ? extraById.get(swaps[rx.id]!) : undefined;
+    if (!skipped.has(rx.id)) slots.push({ key: `rx:${rx.id}`, kind: 'planned', exercise, rx });
+    else if (swappedFor) slots.push({ key: `rx:${rx.id}`, kind: 'swapped-out', exercise, rx, partner: swappedFor });
+    else slots.push({ key: `rx:${rx.id}`, kind: 'skipped', exercise, rx });
+  }
+  for (const exercise of extras) {
+    const rxId = Object.keys(swaps).find((id) => swaps[id] === exercise.id && skipped.has(id));
+    const original = rxId ? items.find((i) => i.rx.id === rxId) : undefined;
+    if (original) slots.push({ key: `x:${exercise.id}`, kind: 'substitute', exercise, rx: original.rx, partner: original.exercise });
+    else slots.push({ key: `x:${exercise.id}`, kind: 'extra', exercise });
+  }
+  return slots;
+}
+
+/** A slot as the model is told of it when listing what the session has. */
+function slotLabel(slot: SessionSlot): string {
+  switch (slot.kind) {
+    case 'planned':
+      return slot.exercise.name;
+    case 'skipped':
+      return `${slot.exercise.name} (skipped)`;
+    case 'swapped-out':
+      return `${slot.exercise.name} (swapped out for ${slot.partner!.name})`;
+    case 'substitute':
+      return `${slot.exercise.name} (swapped in for ${slot.partner!.name})`;
+    case 'extra':
+      return `${slot.exercise.name} (added today)`;
+  }
+}
+
+/** Why a slot has no sets, reps or weight to change. Only a planned exercise has a plan. */
+function noPlanReason(slot: SessionSlot): string {
+  const name = slot.exercise.name;
+  switch (slot.kind) {
+    case 'skipped':
+      return `${name} is skipped today, so there is no plan to change. Put it back first.`;
+    case 'swapped-out':
+      return `${name} is swapped for ${slot.partner!.name} today, so there is no plan to change. ${slot.partner!.name} is an extra in today's session and has no sets, reps or weight to set.`;
+    case 'substitute':
+      return `${name} is standing in for ${slot.partner!.name} today as an extra, with no sets, reps or weight to set. Only a planned exercise has them.`;
+    case 'extra':
+      return `${name} was added to today's session as an extra, with no sets, reps or weight to set.`;
+    case 'planned':
+      return '';
+  }
+}
+
+/** The id of the session whose Summary screen is open right now, or null. That screen has already judged the session. */
+function summaryOpenFor(): string | null {
+  try {
+    const m = /^\/session\/([^/]+)\/summary\/?$/.exec(window.location.pathname);
+    return m ? decodeURIComponent(m[1]!) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The first of `rxs` that already has a set logged in the live session, or null. */
+async function loggedInLiveSession(rxs: readonly RoutineExercise[]): Promise<RoutineExercise | null> {
+  const live = await getActiveSession();
+  if (!live) return null;
+  for (const rx of rxs) {
+    if (rx.routineId !== live.routineId) continue;
+    if ((await db.setLogs.where('[sessionId+routineExerciseId]').equals([live.id, rx.id]).count()) > 0) return rx;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -262,37 +392,40 @@ export function createCoachActions(deps: ActionDeps = {}): CoachActions {
 
   return {
     // ---- food
-    async logFood({ items, slot }) {
+    async logFood({ items, slot, date }) {
       if (!Array.isArray(items) || items.length === 0) return fail('Nothing to log: no foods were given.');
-      const rows: NewMealItem[] = [];
-      const total: Macros = { kcal: 0, protein: 0, carbs: 0, fat: 0 };
+      const day = date ?? today();
+      const wrongDay = checkFoodDay(day, today());
+      if (wrongDay) return fail(wrongDay);
+      if (day !== today() && !(slot && MEAL_SLOTS.includes(slot))) return fail('Which meal was that: breakfast, lunch, dinner or snack?');
+
+      const readings: MealReadingItem[] = [];
       for (const it of items) {
         const name = typeof it.name === 'string' ? it.name.trim() : '';
         if (!name) return fail('A food had no name.');
-        const macros: Macros = { kcal: it.kcal, protein: it.protein, carbs: it.carbs, fat: it.fat };
+        const macros = { kcal: it.kcal, protein: it.protein, carbs: it.carbs, fat: it.fat };
         if (![it.amount, it.kcal, it.protein, it.carbs, it.fat].every(finite) || Object.values(macros).some((v) => v < 0) || !(it.amount > 0)) {
           return fail(`The numbers for ${name} do not look right.`);
         }
         if (it.kcal > 5000) return fail(`${name} at ${fmtNum(it.kcal)} kcal is too much for one item. Check the amount.`);
         const unit = (it.unit ?? '').trim();
         const isGrams = /^(g|gram|grams)$/i.test(unit);
-        const grams = it.grams !== undefined && finite(it.grams) && it.grams > 0 ? it.grams : isGrams ? it.amount : undefined;
-        const portion = isGrams ? `${fmtNum(it.amount)} g` : `${fmtNum(it.amount)} ${unit}${grams ? ` (${fmtNum(Math.round(grams))} g)` : ''}`.trim();
-        const base = fromPortion(macros);
-        rows.push({ name, portion, nutrition: grams ? weigh(base, grams) : base, source: 'model' });
-        total.kcal += macros.kcal;
-        total.protein += macros.protein;
-        total.carbs += macros.carbs;
-        total.fat += macros.fat;
+        const grams = it.grams !== undefined && finite(it.grams) && it.grams > 0 ? it.grams : isGrams ? it.amount : 0;
+        readings.push({ name, amount: it.amount, unit: unit || 'portion', grams: Math.round(grams), ...macros, confidence: 'medium' });
       }
+
       const useSlot = slot && MEAL_SLOTS.includes(slot) ? slot : slotForHour(now().getHours());
-      await addMeal({ name: cap(useSlot), slot: useSlot, date: today() }, rows);
-      const day = await dayTotals(today());
-      const list = names(rows.map((r) => r.name), 6);
+      // The Describe road: known foods keep their own figures, the rest are the model's (estimates),
+      // and the items join the day's meal for the slot.
+      const logged = await logReadings({ date: day, slot: useSlot }, readings, { enteredText: readings.map((r) => r.name).join(', ').slice(0, 280) });
+      const protein = logged.items.reduce((sum, i) => sum + displayMacros(i.nutrition).protein, 0);
+      const totals = await dayTotals(day);
+      const list = names(logged.items.map((i) => i.name), 6);
+      const on = day === today() ? '' : ` on ${dayLabel(day)}`;
       return {
         ok: true,
-        result: `Logged ${plural(rows.length, 'item')} for ${useSlot}: ${list}, about ${fmtNum(Math.round(total.kcal))} kcal and ${fmtNum(Math.round(total.protein))} g protein (estimates). Today so far: ${fmtNum(Math.round(day.kcal))} kcal, ${fmtNum(Math.round(day.protein))} g protein.`,
-        description: `Logged ${list} for ${useSlot} (≈${fmtNum(Math.round(total.kcal))} kcal)`,
+        result: `Logged ${plural(logged.count, 'item')} for ${useSlot}${on}: ${list}, about ${fmtNum(Math.round(logged.kcal))} kcal and ${fmtNum(Math.round(protein))} g protein (estimates). ${day === today() ? 'Today' : dayLabel(day)} so far: ${fmtNum(Math.round(totals.kcal))} kcal, ${fmtNum(Math.round(totals.protein))} g protein.`,
+        description: `Logged ${list} for ${useSlot}${on} (≈${fmtNum(Math.round(logged.kcal))} kcal)`,
       };
     },
 
@@ -352,6 +485,15 @@ export function createCoachActions(deps: ActionDeps = {}): CoachActions {
       const item = m ? items.find((it) => it.rx.id === m.id) : undefined;
       if (!item) return fail(`No exercise matching "${input.exercise}" in ${routine.name}. It has: ${names(items.map((it) => it.exercise.name))}.`);
 
+      // A session is live on this routine and this exercise already has sets in it: removing it would
+      // strand those sets, and a new set count, rep range or weight would move the goalposts the session
+      // is judged against at its Summary. A weight is also copied to the linked copies of the exercise
+      // in other routines, so one of those being done today counts too.
+      const touched = input.change === 'weight' ? [item.rx, ...(await linkedSiblings(item.rx))] : [item.rx];
+      if (await loggedInLiveSession(touched)) {
+        return fail(`${item.exercise.name} has sets logged in today's session; change it after the owner finishes, or change today only (edit_session).`);
+      }
+
       if (input.change === 'remove') {
         await removeRoutineExercise(item.rx.id);
         return { ok: true, result: `Removed ${item.exercise.name} from ${routine.name}.`, description: `Removed ${item.exercise.name} from ${routine.name}` };
@@ -403,36 +545,100 @@ export function createCoachActions(deps: ActionDeps = {}): CoachActions {
     async editSession(input) {
       const session = await getActiveSession();
       if (!session) return fail('No session is live, so there is nothing to change for today. Use the routine instead if they want it permanent.');
-      const items = await routineItems(session.routineId);
+      // The Summary screen has already judged the session; a change now would only make what it shows untrue.
+      if (summaryOpenFor() === session.id) {
+        return fail("Today's session is finished and waiting on the Summary screen, so it cannot be changed now. Use the routine instead if they want it permanent.");
+      }
+      const slots = await sessionSlots(session);
 
       if (input.change === 'add') {
         const exercise = await findOwnExercise(input.exercise);
         if (!exercise) return fail(`"${input.exercise}" is not one of the owner's exercises.`);
-        if (items.some((it) => it.exercise.id === exercise.id && !(session.skippedRoutineExerciseIds ?? []).includes(it.rx.id))) return fail(`${exercise.name} is already in today's session.`);
+        // The same exclusion as the Add exercise picker: anything already in the session, skipped or swapped out included.
+        const there = slots.find((s) => s.exercise.id === exercise.id);
+        if (there?.kind === 'skipped') return fail(`${exercise.name} is in today's session but skipped. Put it back (unskip) instead of adding it again.`);
+        if (there?.kind === 'swapped-out') return fail(`${exercise.name} is in today's session but swapped for ${there.partner!.name}. Undo the swap (unskip) to put it back.`);
+        if (there) return fail(`${exercise.name} is already in today's session.`);
         await addExtraExercise(session.id, exercise.id);
         return { ok: true, result: `Added ${exercise.name} to today's session.`, description: `${exercise.name} added today` };
       }
 
-      const m = matchExercise(input.exercise, candidatesOf(items.map((it) => ({ id: it.rx.id, name: it.exercise.name, aliases: it.exercise.aliases }))));
-      const item = m ? items.find((it) => it.rx.id === m.id) : undefined;
-      if (!item) return fail(`No exercise matching "${input.exercise}" in today's session. It has: ${names(items.map((it) => it.exercise.name))}.`);
+      const m = matchExercise(input.exercise, candidatesOf(slots.map((s) => ({ id: s.key, name: s.exercise.name, aliases: s.exercise.aliases }))));
+      const slot = m ? slots.find((s) => s.key === m.id) : undefined;
+      if (!slot) return fail(`No exercise matching "${input.exercise}" in today's session. It has: ${names(slots.map(slotLabel))}.`);
+      const name = slot.exercise.name;
 
       switch (input.change) {
         case 'skip':
-          await setSkipped(session.id, item.rx.id, true);
-          return { ok: true, result: `${item.exercise.name} is skipped for today.`, description: `${item.exercise.name} skipped today` };
+          switch (slot.kind) {
+            case 'planned':
+              await setSkipped(session.id, slot.rx!.id, true);
+              return { ok: true, result: `${name} is skipped for today.`, description: `${name} skipped today` };
+            case 'skipped':
+              return { ok: true, result: `${name} is already skipped today.` };
+            case 'swapped-out':
+              return { ok: true, result: `${name} is already swapped for ${slot.partner!.name} today.` };
+            case 'substitute':
+              return fail(`${name} is standing in for ${slot.partner!.name} today. To drop it, undo the swap by unskipping ${slot.partner!.name}.`);
+            case 'extra':
+              return fail(`${name} was added to today's session, so there is nothing to skip. It stays until the owner removes it.`);
+          }
+
         case 'unskip':
-          await setSkipped(session.id, item.rx.id, false);
-          return { ok: true, result: `${item.exercise.name} is back in today's session.`, description: `${item.exercise.name} back in today` };
+          switch (slot.kind) {
+            case 'planned':
+              return { ok: true, result: `${name} is already in today's session.` };
+            case 'skipped':
+              await setSkipped(session.id, slot.rx!.id, false);
+              return { ok: true, result: `${name} is back in today's session.`, description: `${name} back in today` };
+            case 'swapped-out': {
+              // Undoing a swap deletes the substitute's sets with it, so not once any are logged.
+              const done = (await setsForSlot(session.id, null, slot.partner!.id)).length;
+              if (done > 0) return fail(`${slot.partner!.name} has ${plural(done, 'set')} logged today, and undoing the swap would delete them. Leave the swap as it is.`);
+              await undoSwap(session.id, slot.rx!.id);
+              return { ok: true, result: `${name} is back in today's session; the swap for ${slot.partner!.name} is undone.`, description: `${name} back in today` };
+            }
+            case 'substitute':
+              return fail(`${name} is today's swap for ${slot.partner!.name}. Unskip ${slot.partner!.name} to undo the swap.`);
+            case 'extra':
+              return fail(`${name} is not skipped: it was added to today's session.`);
+          }
+
         case 'swap': {
           if (!input.swapTo) return fail('Swap for which exercise?');
+          if (slot.kind === 'extra') return fail(`${name} was added to today's session rather than planned, so there is nothing to swap it for.`);
           const sub = await findOwnExercise(input.swapTo);
           if (!sub) return fail(`"${input.swapTo}" is not one of the owner's exercises.`);
-          if (sub.id === item.exercise.id) return fail('That is the same exercise.');
-          await swapExercise(session.id, item.rx.id, sub.id);
-          return { ok: true, result: `${item.exercise.name} is swapped for ${sub.name} today.`, description: `${item.exercise.name} swapped for ${sub.name} today` };
+          // The slot is the routine exercise; asking about its substitute means the same slot.
+          const original = slot.kind === 'substitute' ? slot.partner! : slot.exercise;
+          const current = slot.kind === 'swapped-out' ? slot.partner! : slot.exercise;
+          if (sub.id === current.id) return fail('That is the same exercise.');
+          if (sub.id === original.id) return fail(`${original.name} is the exercise being swapped out. Unskip it to put it back.`);
+          // The same exclusion as the swap sheet: nothing already in the session, or it would get a second card.
+          if (slots.some((s) => s.exercise.id === sub.id)) return fail(`${sub.name} is already in today's session.`);
+          const rx = slot.rx!;
+          const earlier = slot.kind === 'swapped-out' ? slot.partner : slot.kind === 'substitute' ? slot.exercise : undefined;
+          if (earlier) {
+            // A second swap on the slot replaces the first: undo it, or its substitute would be left behind as an extra.
+            const done = (await setsForSlot(session.id, null, earlier.id)).length;
+            if (done > 0) return fail(`${earlier.name} has ${plural(done, 'set')} logged today, so it cannot be swapped out. Leave it, or add ${sub.name} as an extra.`);
+            await undoSwap(session.id, rx.id);
+          }
+          await swapExercise(session.id, rx.id, sub.id);
+          return { ok: true, result: `${original.name} is swapped for ${sub.name} today.`, description: `${original.name} swapped for ${sub.name} today` };
         }
-        default: {
+
+        case 'sets':
+        case 'reps':
+        case 'weight': {
+          // Sets, reps and weight are a routine exercise's plan; a skipped, swapped or added exercise has none today.
+          if (slot.kind !== 'planned') return fail(noPlanReason(slot));
+          const rx = slot.rx!;
+          // A calibrating exercise has no weight to change: the override would be dropped without a word.
+          if (input.change === 'weight' && rx.mode === 'calibrating') {
+            return fail(`${name} is still calibrating, so it has no working weight to change for today. Setting one in the routine (edit_routine) would lock it in for good.`);
+          }
+          // A bound left out comes from today's plan, which may already be changed, not from the saved routine.
           const numbers = numbersOf(
             {
               sets: input.change === 'sets' ? input.sets : undefined,
@@ -440,16 +646,17 @@ export function createCoachActions(deps: ActionDeps = {}): CoachActions {
               repMax: input.change === 'reps' ? input.repMax : undefined,
               weightKg: input.change === 'weight' ? input.weightKg : undefined,
             },
-            item.rx,
-            item.exercise,
+            effectiveRx(rx, session),
+            slot.exercise,
           );
           if ('error' in numbers) return fail(numbers.error);
           if (!deps.setPlanOverride) return fail("I can't change today's sets, reps or weight yet. Say the change and the owner can make it on the exercise.");
-          await deps.setPlanOverride(session.id, item.rx.id, numbers.patch);
-          const what = patchText(numbers.patch, item.exercise);
-          return { ok: true, result: `${item.exercise.name} is ${what} today only. The routine is unchanged.`, description: `${item.exercise.name}: ${what} today` };
+          await deps.setPlanOverride(session.id, rx.id, numbers.patch);
+          const what = patchText(numbers.patch, slot.exercise);
+          return { ok: true, result: `${name} is ${what} today only. The routine is unchanged.`, description: `${name}: ${what} today` };
         }
       }
+      return fail(`"${String(input.change)}" is not something that can be changed in today's session.`);
     },
   };
 }

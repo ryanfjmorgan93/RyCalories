@@ -31,6 +31,7 @@ import {
   type Niggle,
   type PlanOverride,
   type ProgressionDecision,
+  type ProgressionRule,
   type Routine,
   type RoutineExercise,
   type Session,
@@ -942,6 +943,14 @@ export interface FinishChoice {
   overrideTo?: number;
   /** For calibrating exercises: lock in at this weight. */
   lockInAt?: number;
+  /**
+   * The decision the Summary showed for this exercise. `finishSession` rebuilds the summary when it
+   * saves, and the plan can have moved since the Summary was drawn (the coach changing today's sets
+   * while it was open, say), which would move the proposal under the owner's thumb. With this, the
+   * proposal that was on the screen is the one saved and recorded. Left out, the decision is worked
+   * out afresh. Ignored for a calibrating exercise, which has no weight decision to carry.
+   */
+  shown?: { rule: ProgressionRule; fromWeight: number; toWeight: number };
 }
 
 export interface FinishInput {
@@ -966,9 +975,12 @@ export async function finishSession(sessionId: string, input: FinishInput): Prom
     for (const item of summary.items) {
       if (!item.rx || !item.decision) continue;
       const rx = item.rx;
-      const d = item.decision;
       const choice = byRx.get(rx.id);
-      if (d.rule === 'not_applicable') continue;
+      if (item.decision.rule === 'not_applicable') continue;
+      // What the owner saw is what is saved: the decision as the Summary showed it, if it said.
+      const shown = choice?.shown;
+      const showable = shown && Number.isFinite(shown.fromWeight) && Number.isFinite(shown.toWeight) && shown.rule !== 'calibrating' && shown.rule !== 'not_applicable';
+      const d: Decision = item.decision.rule !== 'calibrating' && showable ? { ...item.decision, rule: shown.rule, fromWeight: roundKg(shown.fromWeight), toWeight: roundKg(shown.toWeight) } : item.decision;
       if (d.rule === 'calibrating') {
         // The commit boundary re-applies the one lock-in floor rather than trusting every caller
         // to have filtered already; a blocked weight keeps the lift calibrating. A quick session

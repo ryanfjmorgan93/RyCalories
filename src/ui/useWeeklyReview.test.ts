@@ -90,8 +90,16 @@ describe('generateReview', () => {
     expect(await generateReview(week, today, settings, { fetch: down.fetch })).toBe(false);
     expect(await db.coachMessages.count()).toBe(0);
     const attempts = down.requests.length;
-    expect(attempts).toBeGreaterThan(0);
+    // Once: the review is not retried inside the call either.
+    expect(attempts).toBe(1);
 
+    expect(await generateReview(week, today, settings, { fetch: down.fetch })).toBe(false);
+    expect(down.requests).toHaveLength(attempts);
+
+    // The review is the biggest request there is and a failed one is invisible to the spend ledger, so it
+    // is not asked for again within the hour, however often Home is opened.
+    expect(RETRY_AFTER_MS).toBeGreaterThanOrEqual(60 * 60 * 1000);
+    vi.setSystemTime(new Date(Date.now() + 59 * 60 * 1000));
     expect(await generateReview(week, today, settings, { fetch: down.fetch })).toBe(false);
     expect(down.requests).toHaveLength(attempts);
 

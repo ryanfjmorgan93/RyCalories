@@ -220,11 +220,17 @@ export function SummaryScreen() {
     setSaving(true);
     try {
       await finishSession(summary.session.id, {
-        choices: Object.entries(choices).map(([rxId, c]) => ({
-          routineExerciseId: rxId,
-          overrideTo: c.mode === 'override' && c.overrideTo !== null ? c.overrideTo : undefined,
-          lockInAt: c.lockIn && c.lockInAt !== null ? c.lockInAt : undefined,
-        })),
+        choices: Object.entries(choices).map(([rxId, c]) => {
+          // What the card showed for "next time": saved as shown, even if the plan has changed since
+          // (the coach can edit today while this screen is open) and the proposal would now differ.
+          const d = summary.items.find((i) => i.rx?.id === rxId)?.decision;
+          return {
+            routineExerciseId: rxId,
+            overrideTo: c.mode === 'override' && c.overrideTo !== null ? c.overrideTo : undefined,
+            lockInAt: c.lockIn && c.lockInAt !== null ? c.lockInAt : undefined,
+            shown: d ? { rule: d.rule, fromWeight: d.fromWeight, toWeight: d.toWeight } : undefined,
+          };
+        }),
         niggles,
         notes,
         checklist: summary.routine?.isLowerBody ? checklist : undefined,
