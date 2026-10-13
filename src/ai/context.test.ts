@@ -9,7 +9,7 @@ import { SEED_EXERCISE_IDS, SEED_ROUTINE_IDS } from '@/db/seed';
 import { toDateKey } from '@/domain/dates';
 import { fromPortion } from '@/domain/food';
 import type { BodyScan, RoutineExercise, Session } from '@/domain/types';
-import { bodyScansBlock, buildCoachContext, buildStableContext, buildVolatileContext, effectiveRx, estimateTokens, MAX_CONTEXT_TOKENS, noteShortId, notesBlock, otherExercisesBlock } from './context';
+import { bodyScansBlock, buildCoachContext, buildStableContext, buildVolatileContext, effectiveRx, estimateTokens, MAX_CONTEXT_TOKENS, noteShortId, notesBlock, otherExercisesBlock, stepsLine } from './context';
 
 const PUSH = SEED_ROUTINE_IDS['Upper (Push)'];
 const NOW = new Date(2026, 9, 12, 14, 35, 0);
@@ -214,5 +214,26 @@ describe('buildCoachContext', () => {
     expect(tight.text).toContain("TODAY'S FOOD");
     expect(tight.text).toMatch(/Averages over the/);
     expect(tight.text.match(/Upper \(Push\) ·/g)?.length ?? 0).toBeLessThan(roomy.text.match(/Upper \(Push\) ·/g)?.length ?? 0);
+  });
+});
+
+describe('steps', () => {
+  const week = (steps: (number | null)[]) => steps.map((s, i) => ({ date: `2026-10-${String(7 + i).padStart(2, '0')}`, steps: s }));
+
+  it('tells the coach today so far and the week over recorded days only', () => {
+    const line = stepsLine(week([9000, null, 7000, 8000, null, 10000, 4200]), 8000);
+    expect(line).toBe('STEPS (from Health Connect) · today 4,200 so far · goal 8,000 · last 7 days: average 7,640 over 5 recorded days, goal reached on 3');
+  });
+
+  it('says nothing when there are no steps to tell', () => {
+    expect(stepsLine(null, 8000)).toBeNull();
+    expect(stepsLine(week([null, null]), 8000)).toBeNull();
+  });
+
+  it('puts the steps in the volatile part, and leaves them out when there are none', async () => {
+    const withSteps = await buildVolatileContext({ now: new Date(2026, 9, 13, 15), steps: week([null, null, null, null, null, null, 3100]) });
+    expect(withSteps).toContain('STEPS (from Health Connect) · today 3,100 so far');
+    const without = await buildVolatileContext({ now: new Date(2026, 9, 13, 15), steps: null });
+    expect(without).not.toContain('STEPS');
   });
 });

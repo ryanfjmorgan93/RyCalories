@@ -394,6 +394,8 @@ export interface Settings {
    * ember. The colour itself is derived (src/domain/accent.ts) so it always reads on the dark surfaces.
    */
   accentHue?: number;
+  /** Daily step goal for the Steps strip on Home. Absent means DEFAULT_STEP_GOAL (src/domain/steps.ts). */
+  stepGoal?: number;
   /**
    * Plate sizes available, in kg, one of each pair, any order. Absent on rows written before
    * this setting existed — read as `?? DEFAULT_SETTINGS.plates`.

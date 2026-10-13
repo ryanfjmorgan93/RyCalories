@@ -28,7 +28,9 @@ import { fmtKg, fmtNum, fmtSetsLine, fmtTime, plural, targetLine } from '@/domai
 import { DEFAULT_SETTINGS, type BodyScan, type CoachMessage, type CoachNote, type Exercise, type MealItem, type RoutineExercise, type Session, type Settings } from '@/domain/types';
 import { loadClaudeSummaryInput } from '@/db/claudeSummaryQueries';
 import { db } from '@/db/db';
+import { cleanStepGoal, stepWeek, type StepDay } from '@/domain/steps';
 import { SUPPLEMENT_TIME_LABEL, supplementDay, supplementLabel } from '@/domain/supplements';
+import { stepsSnapshot } from '@/state/steps';
 import { mealsOnDay } from '@/db/foodRepo';
 import { completedSessions } from '@/db/historyQueries';
 import { getActiveSession, getSettings, routineItems, setsForSlot } from '@/db/repo';
@@ -63,6 +65,8 @@ export interface ContextOptions {
   settings?: Settings;
   /** Overrides MAX_CONTEXT_TOKENS. */
   maxTokens?: number;
+  /** The week of steps; defaults to what Health Connect last gave (src/state/steps.ts). */
+  steps?: StepDay[] | null;
 }
 
 type SessionWithOverrides = Session & { planOverrides?: Record<string, PlanOverridePatch> };
@@ -144,6 +148,16 @@ export function otherExercisesBlock(exercises: readonly Pick<Exercise, 'id' | 'n
   if (names.length === 0) return null;
   const shown = names.slice(0, limit);
   return `OTHER EXERCISES THE OWNER HAS (in no routine; the tools can add or swap these)\n${shown.join('; ')}${names.length > limit ? `; and ${names.length - limit} more` : ''}`;
+}
+
+/** Steps from Health Connect, today so far and the week; null when there are none to tell. */
+export function stepsLine(days: readonly StepDay[] | null, goal: number): string | null {
+  if (!days || days.every((d) => d.steps === null)) return null;
+  const w = stepWeek(days, goal);
+  return [
+    `STEPS (from Health Connect) · today ${w.today === null ? 'none recorded yet' : `${fmtNum(w.today)} so far`} · goal ${fmtNum(goal)}`,
+    `last ${days.length} days: average ${fmtNum(w.average ?? 0)} over ${plural(w.recordedDays, 'recorded day')}, goal reached on ${w.goalHit}`,
+  ].join(' · ');
 }
 
 export function goalsLine(settings: Settings): string {
@@ -340,6 +354,7 @@ export async function buildVolatileContext(opts: ContextOptions = {}): Promise<s
     ].join(' '),
     foodLines.join('\n'),
     supplementLine,
+    stepsLine(opts.steps !== undefined ? opts.steps : stepsSnapshot(), cleanStepGoal(settings.stepGoal)),
     live ?? 'No session is live right now.',
     said,
   ].filter((p): p is string => !!p);

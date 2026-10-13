@@ -112,7 +112,13 @@ must render when this stylesheet is what failed.
   rows.
 - **Home** (`RoutineCard`): the first, most rested routine is the cover, an `ExerciseHero` of its
   first exercise that has a render, with the rest label as a tag and Start as the accent pill. The
-  others are rows with a `RobotThumb`.
+  others are rows with a `RobotThumb`. Over the bottom of the cover sit frosted tiles
+  (`.glass-over`): Calories and Protein side by side, and under them the Steps strip, today's count
+  against the goal with an accent bar that stops at full while the number does not. The strip opens
+  a sheet with the week as bars against a dashed goal line (accent at or over the goal), the average
+  over recorded days, the total and the days the goal was hit, and the goal itself.
+- **Supplements** (`SupplementsCard`): pills grouped by time of day (Morning, Midday, Evening, Any
+  time). A ticked pill fills with the accent and its ink; the dose sits after the name.
 - **The Fold**: two panes from 840px (`.fold-shell`, `.fold-list`), unchanged by this pass.
 
 ## 5. The colour wheel (Settings → Look)

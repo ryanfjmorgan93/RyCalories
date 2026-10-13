@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- allowBackup is off: the app keeps its own backups (Documents/Iron, Settings → Export), and
          Android's cloud backup would copy the whole database off the phone. Guarded by
@@ -40,7 +41,26 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
 
+            <!-- Health Connect shows an app's permission screen only when the app can explain why it
+                 asks: this is where its "why" link lands (Android 13 and below; Android 14+ uses
+                 the alias below). Iron opens on it. src/platform/health.ts reads the steps. -->
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
+
         </activity>
+
+        <!-- The same "why" link on Android 14+. -->
+        <activity-alias
+            android:name="ViewPermissionUsageActivity"
+            android:exported="true"
+            android:targetActivity=".MainActivity"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -68,6 +88,21 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
+    <!-- Steps, read from Health Connect (Samsung Health writes them there). Iron reads steps and
+         nothing else, and writes nothing: @capgo/capacitor-health's own manifest declares read and
+         write for five kinds of health data, so every one but READ_STEPS is removed from the
+         merged manifest here. Guarded by src/db/manifest.test.ts. -->
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.WRITE_STEPS" tools:node="remove" />
+    <uses-permission android:name="android.permission.health.READ_DISTANCE" tools:node="remove" />
+    <uses-permission android:name="android.permission.health.WRITE_DISTANCE" tools:node="remove" />
+    <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" tools:node="remove" />
+    <uses-permission android:name="android.permission.health.WRITE_ACTIVE_CALORIES_BURNED" tools:node="remove" />
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" tools:node="remove" />
+    <uses-permission android:name="android.permission.health.WRITE_HEART_RATE" tools:node="remove" />
+    <uses-permission android:name="android.permission.health.READ_WEIGHT" tools:node="remove" />
+    <uses-permission android:name="android.permission.health.WRITE_WEIGHT" tools:node="remove" />
+
     <!-- On Android 11+, package visibility means resolveActivity() can return null for the camera
          intent below without this declaration; Capacitor's BridgeWebChromeClient then silently
          opens a file picker instead of the camera for <input type=file capture>. -->
@@ -75,5 +110,8 @@
         <intent>
             <action android:name="android.media.action.IMAGE_CAPTURE" />
         </intent>
+        <!-- Health Connect is an app of its own on Android 13 and below; without this Iron cannot
+             see that it is installed. -->
+        <package android:name="com.google.android.apps.healthdata" />
     </queries>
 </manifest>

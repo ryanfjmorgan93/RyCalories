@@ -28,6 +28,7 @@ import { CoachLine } from '@/ui/CoachLine';
 import { QuickSessionSheet } from '@/ui/QuickSessionSheet';
 import { RestoreSheet } from '@/ui/RestoreSheet';
 import { RoutineCard } from '@/ui/RoutineCard';
+import { StepsStrip } from '@/ui/StepsStrip';
 import { SupplementsCard } from '@/ui/SupplementsCard';
 import { quoteOfTheDay, welcomeLine } from '@/domain/dailyQuote';
 import { WeeklyReviewCard } from '@/ui/WeeklyReviewCard';
@@ -151,6 +152,13 @@ export function HomeScreen() {
         )}
       </button>
     ) : null;
+  // Steps sit under the two tiles, on the same glass.
+  const todayOverlay = settings ? (
+    <div className="space-y-2">
+      {todayTiles}
+      <StepsStrip settings={settings} />
+    </div>
+  ) : null;
 
   return (
     <div>
@@ -179,7 +187,7 @@ export function HomeScreen() {
         <SectionTitle right={<Button size="sm" variant="ghost" className="-mb-2 text-accent" onClick={() => nav('/routines')}>Edit</Button>}>Routines</SectionTitle>
         <div className="space-y-3" data-testid="routines-list">
           {(routines ?? []).map((item, i) => (
-            <RoutineCard key={item.routine.id} hero={i === 0} overlay={i === 0 ? todayTiles : undefined} item={item} settings={settings} active={!!active} onStart={() => void start(item.routine)} />
+            <RoutineCard key={item.routine.id} hero={i === 0} overlay={i === 0 ? todayOverlay : undefined} item={item} settings={settings} active={!!active} onStart={() => void start(item.routine)} />
           ))}
           {routines && routines.length === 0 && <EmptyState>No routines. Add one from the Routines tab.</EmptyState>}
         </div>
@@ -192,7 +200,7 @@ export function HomeScreen() {
         )}
 
         {/* With no routine to lay them over, the day's numbers stand on their own. */}
-        {todayTiles && (!routines || routines.length === 0) && <div className="mt-3">{todayTiles}</div>}
+        {todayOverlay && (!routines || routines.length === 0) && <div className="mt-3">{todayOverlay}</div>}
 
         <SectionTitle right={<Button size="sm" variant="ghost" className="-mb-2 text-accent" onClick={() => nav('/history')}>All</Button>}>Recent sessions</SectionTitle>
         <Card>

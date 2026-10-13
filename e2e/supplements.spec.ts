@@ -32,8 +32,9 @@ test('add supplements, tick one, and it is still ticked after a reload', async (
   await expect(sheet).toContainText('Vitamin D');
   await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click();
 
-  // Morning before any time.
+  // Morning before any time, each under its own heading.
   await expect(card.getByRole('checkbox')).toHaveText([/Vitamin D/, /Creatine.*5 g/]);
+  await expect(card).toContainText(/Morning\s*Vitamin D.*Any time\s*Creatine/);
   await expect(page.getByTestId('supplements-count')).toHaveText(' · 0 of 2');
 
   const creatine = page.getByTestId('supplement-Creatine');

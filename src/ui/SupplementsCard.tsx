@@ -11,8 +11,9 @@ import { Sheet } from './components/Sheet';
 import { toast } from './components/Toast';
 
 /**
- * Home's supplement checklist for today: one big row per supplement, tapped to tick or untick.
- * With nothing on the list it is one row offering to add some. Edit opens the list itself.
+ * Home's supplement checklist for today: a pill per supplement, grouped by time of day, tapped to
+ * tick or untick (the dose is on the pill when there is one). With nothing on the list it is one
+ * line offering to add some. Edit opens the list itself.
  */
 export function SupplementsCard({ today }: { today: string }) {
   const supplements = useLiveQuery(() => db.supplements.toArray(), []);
@@ -20,6 +21,7 @@ export function SupplementsCard({ today }: { today: string }) {
   const [editing, setEditing] = useState(false);
   if (!supplements || !logs) return null;
   const day = supplementDay(supplements, logs, today);
+  const groups = SUPPLEMENT_TIMES.map((time) => ({ time, items: day.items.filter((i) => i.supplement.time === time) })).filter((g) => g.items.length > 0);
 
   return (
     <>
@@ -35,37 +37,42 @@ export function SupplementsCard({ today }: { today: string }) {
         {day.total === 0 ? (
           <div className="px-4 pb-4 text-sm text-muted">Nothing on the list.</div>
         ) : (
-          <ul className="pb-1">
-            {day.items.map(({ supplement, taken }) => (
-              <li key={supplement.id}>
-                <button
-                  type="button"
-                  role="checkbox"
-                  aria-checked={taken}
-                  onClick={() => void toggleSupplementTaken(supplement.id, today)}
-                  data-testid={`supplement-${supplement.name}`}
-                  className="flex min-h-14 w-full items-center gap-3 px-4 py-2 text-left active:bg-surface-2"
-                >
-                  <span
-                    aria-hidden="true"
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 ${taken ? 'border-accent bg-accent text-accent-fg' : 'border-line'}`}
-                  >
-                    {taken && (
-                      <svg width="16" height="16" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2">
-                        <path d="M2.5 6.5 5 9l4.5-6" />
-                      </svg>
-                    )}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className={`block truncate font-medium ${taken ? 'text-muted line-through' : ''}`}>{supplement.name}</span>
-                    <span className="block truncate text-sm text-muted">
-                      {[supplement.dose, SUPPLEMENT_TIME_LABEL[supplement.time]].filter(Boolean).join(' · ')}
-                    </span>
-                  </span>
-                </button>
-              </li>
+          <div className="space-y-3 px-4 pt-1 pb-4">
+            {groups.map(({ time, items }) => (
+              <div key={time}>
+                <div className="mb-1.5 text-xs font-semibold text-dim">{SUPPLEMENT_TIME_LABEL[time]}</div>
+                <ul className="flex flex-wrap gap-2">
+                  {items.map(({ supplement, taken }) => (
+                    <li key={supplement.id} className="min-w-0 max-w-full">
+                      <button
+                        type="button"
+                        role="checkbox"
+                        aria-checked={taken}
+                        onClick={() => void toggleSupplementTaken(supplement.id, today)}
+                        data-testid={`supplement-${supplement.name}`}
+                        className={`flex min-h-12 max-w-full items-center gap-2 rounded-full border py-2 pr-4 pl-2 text-left transition-colors ${
+                          taken ? 'border-accent bg-accent text-accent-fg' : 'border-glass-border bg-white/[.04] active:bg-white/[.08]'
+                        }`}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 ${taken ? 'border-accent-fg/40 bg-black/12' : 'border-line'}`}
+                        >
+                          {taken && (
+                            <svg width="14" height="14" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2">
+                              <path d="M2.5 6.5 5 9l4.5-6" />
+                            </svg>
+                          )}
+                        </span>
+                        <span className="min-w-0 truncate font-medium">{supplement.name}</span>
+                        {supplement.dose && <span className={`shrink-0 text-sm ${taken ? 'text-accent-fg/70' : 'text-muted'}`}>{supplement.dose}</span>}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
       </Card>
       <SupplementsSheet open={editing} onClose={() => setEditing(false)} />

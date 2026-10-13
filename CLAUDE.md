@@ -53,9 +53,11 @@ The owner does not check on device. Correctness has to come from the code and th
   Monday weigh-in and the daily supplement checklist (`src/domain/reminders.ts`).
 - Tracking must work fully offline. Three things leave the device, all listed in Settings → About:
   Claude API calls (only with the owner's key: what they send the coach, a summary of their
-  training and food, and photos they choose), the Open Food Facts label lookup (switchable off; the
-  barcode scan is the same lookup), and the Video link on an exercise (a user tap that opens the
-  browser). Nothing else.
+  training, food, supplements and steps, and photos they choose), the Open Food Facts label lookup
+  (switchable off; the barcode scan is the same lookup), and the Video link on an exercise (a user
+  tap that opens the browser). Nothing else. Steps are read on the phone from Health Connect (read
+  steps only, write nothing; every other health permission the plugin declares is removed in the
+  manifest) and are never stored in the database.
 - The Claude key lives only in `localStorage` (`src/ai/key.ts`), never in the Settings row, a
   backup, a CSV or a log (docs/adr/0003). Spending is capped in the app (`src/ai/spend.ts`).
 - Claude's figures are estimates (docs/adr/0004): stored with the `model` source, shown with ≈,
@@ -81,6 +83,9 @@ The owner does not check on device. Correctness has to come from the code and th
   logging produces.
   `inbody.ts` reads body-scan exports; `reminders.ts` plans the local notifications.
   `supplements.ts` is the daily supplement checklist; `dailyQuote.ts` is Home's welcome and quote.
+  `steps.ts` turns Health Connect's raw step records into daily totals: per day the largest single
+  source, never the sum across apps (a phone and a watch count the same walk), and the week
+  averaged over recorded days only.
   `energy.ts` is the maintenance estimate (with `energyText.ts` for its wording): intake over
   logged days only, weight change between week-means, three gates, shown with its counts or not at
   all.
@@ -103,8 +108,11 @@ The owner does not check on device. Correctness has to come from the code and th
   tools, chat, moments, photo and label readers). Sonnet for conversation, tools and photos; Haiku
   for coach lines; never Opus. Tests never call the real API: unit tests use
   `src/test/fakeClaude.ts`, e2e intercepts `api.anthropic.com` with `page.route`.
-- `src/platform/` — share-sheet import (InBody files) and local reminders. There is no custom
-  native code; plugins come from npm and `npx cap sync` wires them.
+- `src/platform/` — share-sheet import (InBody files), local reminders and steps from Health
+  Connect (`health.ts`, through `@capgo/capacitor-health`). There is no custom native code; plugins
+  come from npm and `npx cap sync` wires them. A browser has no Health Connect, so no test reaches
+  the live read: the wrapper and the store are tested with the plugin faked, e2e covers the
+  "not here" state and the goal.
 - `src/db/` — Dexie schema and every write. `todayQueries.ts` and `trendQueries.ts` are the
   cross-domain joins between training and nutrition.
 - `src/screens/`, `src/ui/` — React. `e2e/` — Playwright against the built app.
