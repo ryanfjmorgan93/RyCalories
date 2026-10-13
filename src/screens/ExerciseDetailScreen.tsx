@@ -93,7 +93,17 @@ export function ExerciseDetailScreen() {
         }
       />
       <div className="px-4">
-        <div className="px-1 text-sm text-muted">{metaLine(exercise)}</div>
+        <div className="px-1 text-sm text-muted" data-testid="exercise-meta">
+          {/* Each part stays on one line ("+5 kg Steps"); the line breaks between parts. */}
+          {metaLine(exercise)
+            .split(' · ')
+            .map((part, i) => (
+              <span key={i}>
+                {i > 0 && ' · '}
+                <span className="whitespace-nowrap">{part}</span>
+              </span>
+            ))}
+        </div>
 
         {exercise.demo && <ExercisePicture demo={exercise.demo} name={exercise.name} videoUrl={exercise.videoUrl} />}
 
