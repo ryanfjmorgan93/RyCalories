@@ -2,8 +2,8 @@ import { expect, test, type Page } from '@playwright/test';
 import { clickIfPresent, expectClass, fresh, readRawIron } from './fresh';
 
 /**
- * Small faults: a deload on the session detail page, the leg-day protein figure on the checklist,
- * and a routine with no exercises that must not start. Each drives the real screens against the
+ * Small faults: a deload on the session detail page, the Summary without its retired niggles and
+ * leg-day checklist, and a routine with no exercises that must not start. Each drives the real screens against the
  * built app.
  */
 
@@ -59,21 +59,24 @@ test.describe('session detail', () => {
     await expect(page.getByText('no weight decision')).toHaveCount(0);
   });
 
-  test('the leg-day protein line carries the saved target on the summary and on the detail page', async ({ page }) => {
+  test('a lower-body Summary asks for no niggles and no leg-day checklist, and the saved session carries neither', async ({ page }) => {
+    // Both were removed at the owner's request (October 2026).
     await fresh(page);
-    await page.goto('/settings');
-    await page.getByTestId('target-proteinTargetLegDay').fill('185');
-    await page.getByRole('button', { name: 'Save targets' }).click();
-    // The row itself, not the toast (which reads "Saved" for every save on this screen).
-    await expect.poll(async () => (await readRawIron(page)).tables.settings[0]?.proteinTargetLegDay, { timeout: 10_000 }).toBe(185);
-
     await trainToSummary(page);
-    await expect(page.getByRole('checkbox', { name: 'Protein 185 g today' })).toBeVisible();
-    await expect(page.getByText('Protein 200 g')).toHaveCount(0);
+    // The Summary has rendered its decisions before anything is said to be missing from it.
+    await expect(page.getByTestId('decision-Romanian Deadlift (Barbell)').getByTestId('decision-line')).toBeVisible();
+    await expect(page.getByTestId('save-session')).toBeVisible();
+    await expect(page.getByText('Niggles', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Leg day', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('checkbox', { name: /Electrolytes|Protein/ })).toHaveCount(0);
 
     await saveAndOpenDetail(page);
-    await expect(page.getByText('Protein 185 g', { exact: true })).toBeVisible();
-    await expect(page.getByText('Protein 200 g')).toHaveCount(0);
+    const saved = ((await readRawIron(page)).tables.sessions as { title: string; endedAt?: string; checklist?: unknown; niggles?: unknown }[]).filter((s) => s.endedAt);
+    expect(saved).toHaveLength(1);
+    expect(saved[0]!.checklist).toBeUndefined();
+    expect(saved[0]!.niggles).toBeUndefined();
+    await expect(page.getByTestId('decision-line').first()).toBeVisible();
+    await expect(page.getByText('Leg-day checklist')).toHaveCount(0);
   });
 });
 
