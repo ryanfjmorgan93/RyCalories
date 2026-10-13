@@ -134,6 +134,10 @@ test.describe('catalogue photographs that are not 3:2', () => {
     await page.getByTestId('exercise-search').fill('bench press');
     await page.getByTestId(`exercise-row-${await ownedId(page, 'Bench Press (Barbell)')}`).click();
     await expect(page).toHaveURL(/\/exercises\/[0-9a-f-]{36}$/);
+    // Bench has a robot render: it leads the page, and the line drawing waits behind How to.
+    await expect(page.getByTestId('exercise-hero')).toHaveAttribute('data-render', 'robot');
+    await expect(page.getByTestId('demo-frame')).toHaveCount(0);
+    await page.getByTestId('detail-how-to').click();
     await expect(page.getByTestId('demo-frame')).toHaveAttribute('src', /^\/exercises\/bench-press\/\d\.png$/);
     await expect(page.getByTestId('demo-frame')).toHaveCSS('object-fit', 'contain');
 

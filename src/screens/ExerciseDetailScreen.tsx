@@ -19,7 +19,9 @@ import { NumberField } from '@/ui/components/NumberField';
 import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { ChevronIcon, TopBar } from '@/ui/components/TopBar';
+import { robotSrc } from '@/ui/demoPicture';
 import { ExerciseDemo } from '@/ui/ExerciseDemo';
+import { ExerciseHero } from '@/ui/ExerciseHero';
 import { useExerciseSeries } from '@/ui/hooks';
 
 const DECISIONS_CAP = 12;
@@ -93,11 +95,7 @@ export function ExerciseDetailScreen() {
       <div className="px-4">
         <div className="px-1 text-sm text-muted">{metaLine(exercise)}</div>
 
-        {exercise.demo && (
-          <div className="mt-3 flex justify-center">
-            <ExerciseDemo slug={exercise.demo} name={exercise.name} videoUrl={exercise.videoUrl} size="sm" />
-          </div>
-        )}
+        {exercise.demo && <ExercisePicture demo={exercise.demo} name={exercise.name} videoUrl={exercise.videoUrl} />}
 
         <SectionTitle>In routines</SectionTitle>
         {usage.length === 0 && <EmptyState>Not in any routine</EmptyState>}
@@ -189,6 +187,36 @@ export function ExerciseDetailScreen() {
         }}
       />
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Picture
+
+/**
+ * The head of the exercise page. With a robot render, the render leads, full width, and the
+ * technique frames, steps and Video link wait behind "How to" (the robot is the picture; the line
+ * drawings are instructions). Without one, the frames and steps show as they always have.
+ */
+function ExercisePicture({ demo, name, videoUrl }: { demo: string; name: string; videoUrl?: string }) {
+  const [howTo, setHowTo] = useState(false);
+  const demoBlock = (
+    <div className="mt-3 flex justify-center">
+      <ExerciseDemo slug={demo} name={name} videoUrl={videoUrl} size="sm" />
+    </div>
+  );
+  if (robotSrc(demo) === undefined) return demoBlock;
+  return (
+    <>
+      <ExerciseHero demo={demo} className="mt-3 aspect-[3/2] w-full rounded-card border border-glass-border" />
+      {howTo ? (
+        demoBlock
+      ) : (
+        <Button full variant="outline" className="mt-3" aria-expanded={false} onClick={() => setHowTo(true)} data-testid="detail-how-to">
+          How to
+        </Button>
+      )}
+    </>
   );
 }
 

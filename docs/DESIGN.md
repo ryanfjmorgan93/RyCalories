@@ -107,6 +107,9 @@ must render when this stylesheet is what failed.
   In the live session it replaces the header's Coach button (`data-testid="session-coach"`).
 - **`CoachComposer`**: inside the coach sheet, one pill: the text field ("Talk to me…"), the mic
   in the accent, Send.
+- **The exercise page** (`ExerciseDetailScreen`): with a robot render, the render leads, full
+  width (3:2), and the line-drawing frames, steps and Video link wait behind "How to". Without one,
+  the frames and steps show as before.
 - **The session** (`ExerciseCard`): the open card leads with an `ExerciseHero`, the exercise name
   in `.disp` over the render, collapse and menu buttons on the image. Collapsed cards are plain glass
   rows.
