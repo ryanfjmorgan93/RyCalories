@@ -24,6 +24,8 @@ export function Ambient() {
   return (
     <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-bg">
       <Field corner="left-top" color="var(--amb-base)" visible size={120} />
+      <Field corner="right-top" color="var(--amb-glow)" visible size={110} offset={6} />
+      <Field corner="left-bottom" color="var(--amb-glow)" visible size={120} offset={4} />
       <Field corner="left-top" color="var(--amb-ember)" visible={working} size={130} offset={-8} />
       <Field corner="left-top" color="var(--amb-cool)" visible={resting} size={140} offset={20} durationMs={1400} />
       <Field corner="left-top" color="var(--amb-done)" visible={flash === 'done'} size={120} offset={30} durationMs={700} />
@@ -48,7 +50,7 @@ function Field({
   offset = 0,
   durationMs = 1400,
 }: {
-  corner: 'left-top' | 'right-top';
+  corner: 'left-top' | 'right-top' | 'left-bottom';
   color: string;
   visible: boolean;
   /** Diameter as a percentage of the larger viewport dimension (vmax). */
@@ -57,10 +59,8 @@ function Field({
   offset?: number;
   durationMs?: number;
 }) {
-  const pos =
-    corner === 'left-top'
-      ? { left: `${-size / 2 + offset}vmax`, top: `${-size / 2 + offset}vmax` }
-      : { right: `${-size / 2 + offset}vmax`, top: `${-size / 2 + offset}vmax` };
+  const edge = `${-size / 2 + offset}vmax`;
+  const pos = corner === 'left-top' ? { left: edge, top: edge } : corner === 'right-top' ? { right: edge, top: edge } : { left: edge, bottom: edge };
   return (
     <div
       className="absolute rounded-full"

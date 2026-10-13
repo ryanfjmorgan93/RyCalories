@@ -123,6 +123,35 @@ export function HomeScreen() {
     weighInDue: weighIn === true,
   });
 
+  // Eaten against target, and a tap through to the day. The targets alone were only ever half the
+  // number worth knowing. The figures are as they are: over target reads as over. Drawn as frosted
+  // glass over the cover routine's render when there is one.
+  const todayTiles =
+    settings && (kcal || protein !== null) ? (
+      <button type="button" onClick={() => nav('/food')} className="grid w-full grid-cols-2 gap-2 text-left" data-testid="today-food">
+        <span className="glass-over glass-card block rounded-[1rem] border border-glass-border px-3 py-3">
+          {kcal ? (
+            <Stat
+              label="Calories"
+              value={`${fmtNum(Math.round(eaten.kcal))} / ${fmtNum(kcal.kcal)}`}
+              sub={kcal.nextStepOn ? `+${settings.calorieStep} in ${kcal.daysUntilNextStep} d` : 'at ceiling'}
+            />
+          ) : (
+            <Stat label="Calories" value={fmtNum(Math.round(eaten.kcal))} sub="no target set" />
+          )}
+        </span>
+        {protein !== null && (
+          <span className="glass-over glass-card block rounded-[1rem] border border-glass-border px-3 py-3">
+            <Stat
+              label="Protein"
+              value={`${fmtNum(Math.round(eaten.protein))} / ${protein} g`}
+              sub={view?.legDay ? (view.legDayBasis === 'planned' ? 'lower-body planned' : 'lower-body day') : 'default'}
+            />
+          </span>
+        )}
+      </button>
+    ) : null;
+
   return (
     <div>
       <TopBar
@@ -150,7 +179,7 @@ export function HomeScreen() {
         <SectionTitle right={<Button size="sm" variant="ghost" className="-mb-2 text-accent" onClick={() => nav('/routines')}>Edit</Button>}>Routines</SectionTitle>
         <div className="space-y-3" data-testid="routines-list">
           {(routines ?? []).map((item, i) => (
-            <RoutineCard key={item.routine.id} hero={i === 0} item={item} settings={settings} active={!!active} onStart={() => void start(item.routine)} />
+            <RoutineCard key={item.routine.id} hero={i === 0} overlay={i === 0 ? todayTiles : undefined} item={item} settings={settings} active={!!active} onStart={() => void start(item.routine)} />
           ))}
           {routines && routines.length === 0 && <EmptyState>No routines. Add one from the Routines tab.</EmptyState>}
         </div>
@@ -162,30 +191,8 @@ export function HomeScreen() {
           </Button>
         )}
 
-        {settings && (kcal || protein !== null) && (
-          // Eaten against target, and a tap through to the day. The targets alone were only ever
-          // half the number worth knowing. The figures are as they are: over target reads as over.
-          <Card className="mt-3">
-            <button type="button" onClick={() => nav('/food')} className="flex w-full items-center gap-6 px-4 py-3 text-left active:bg-surface-2" data-testid="today-food">
-              {kcal ? (
-                <Stat
-                  label="Calories"
-                  value={`${fmtNum(Math.round(eaten.kcal))} / ${fmtNum(kcal.kcal)}`}
-                  sub={kcal.nextStepOn ? `+${settings.calorieStep} in ${kcal.daysUntilNextStep} d` : 'at ceiling'}
-                />
-              ) : (
-                <Stat label="Calories" value={fmtNum(Math.round(eaten.kcal))} sub="no target set" />
-              )}
-              {protein !== null && (
-                <Stat
-                  label="Protein"
-                  value={`${fmtNum(Math.round(eaten.protein))} / ${protein} g`}
-                  sub={view?.legDay ? (view.legDayBasis === 'planned' ? 'lower-body planned' : 'lower-body day') : 'default'}
-                />
-              )}
-            </button>
-          </Card>
-        )}
+        {/* With no routine to lay them over, the day's numbers stand on their own. */}
+        {todayTiles && (!routines || routines.length === 0) && <div className="mt-3">{todayTiles}</div>}
 
         <SectionTitle right={<Button size="sm" variant="ghost" className="-mb-2 text-accent" onClick={() => nav('/history')}>All</Button>}>Recent sessions</SectionTitle>
         <Card>

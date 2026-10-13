@@ -40,7 +40,8 @@
   --glass-2: rgba(255, 255, 255, 0.045); /* the default card */
   --glass-3: rgba(255, 255, 255, 0.03); /* nested / low-emphasis rows */
   --glass-border: rgba(255, 255, 255, 0.1);
-  --glass-highlight: rgba(255, 255, 255, 0.1); /* inset top edge, 1px */
+  --glass-highlight: rgba(255, 255, 255, 0.16); /* inset top edge, 1px */
+  --glass-sheen: rgba(255, 255, 255, 0.05); /* the light across the top of a card */
   --glass-fixed-bg: rgba(10, 10, 10, 0.62);
   --glass-fixed-border: rgba(255, 255, 255, 0.09);
   --blur-glass: 14px;
@@ -76,6 +77,9 @@
      for contrast, since text never sits directly on them. */
   --amb-ember: color-mix(in srgb, var(--c-accent) 22%, transparent);
   --amb-base: rgba(255, 255, 255, 0.025);
+  /* The steady accent glow the glass sits over: faint, from two corners, so a translucent card
+     always has colour behind it to show. Mixed from the accent, so it follows the colour wheel. */
+  --amb-glow: color-mix(in srgb, var(--c-accent) 13%, transparent);
   --amb-cool: rgba(255, 255, 255, 0.03);
   --amb-done: rgba(74, 222, 128, 0.26);
   --amb-record: rgba(245, 197, 66, 0.26);
@@ -266,10 +270,15 @@
 
   /* Fake glass — Card and anything else that tints a scrolling surface. No backdrop-filter: this
      paints under normal content, so it costs nothing extra per frame while the page scrolls. */
+  /* Glass: the tier's tint with a sheen that catches the light at the top and fades by mid-card,
+     a lit top edge, and a faint inner rim. Translucent, so the accent glow in <Ambient/> and any
+     render behind shows through; no blur here, because a scrolling blur repaints every frame. */
   .glass-card {
+    background-image: linear-gradient(180deg, var(--glass-sheen) 0%, transparent 55%);
     box-shadow:
       var(--shadow-card),
-      inset 0 1px 0 var(--glass-highlight);
+      inset 0 1px 0 var(--glass-highlight),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.02);
   }
 
   /* Real glass — only for layers fixed to the viewport (TopBar, BottomNav, the session dock, Sheet,

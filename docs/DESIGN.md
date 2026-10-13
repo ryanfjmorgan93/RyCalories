@@ -43,6 +43,11 @@ a person outside the "How to" sheet.
 | `--glass-over` + `--blur-over` | white at 3.5 %, 10px | `.glass-over`: a card that sits over a render, frosted so the robot shows through |
 | `--glass-fixed-bg` + `--blur-glass` | `rgba(10,10,10,.62)`, 14px | `.glass-fixed`: layers pinned to the viewport (TopBar, BottomNav, the session dock, Sheet, Toast) |
 
+Glass needs something behind it to read as glass. <Ambient/> keeps a faint accent glow from two
+corners (`--amb-glow`, mixed from the accent), every `.glass-card` adds a sheen across its top
+(`--glass-sheen`) and a lit top edge, and Home's Calories and Protein tiles sit as frosted
+`.glass-over` panels over the bottom of the cover routine's robot render.
+
 A `backdrop-filter` that scrolls repaints every frame on an Android WebView, so scrolling cards are
 tint only. The two exceptions are fixed layers (composited once) and `.glass-over`, used only where a
 card overlaps a render, a handful at most on screen.

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { HomeRoutine } from '@/db/homeQueries';
 import { planRow } from '@/domain/homeToday';
 import { plural } from '@/domain/format';
@@ -27,6 +27,7 @@ export function RoutineCard({
   active,
   onStart,
   hero = false,
+  overlay,
 }: {
   item: HomeRoutine;
   settings: Settings | undefined;
@@ -34,6 +35,8 @@ export function RoutineCard({
   onStart: () => void;
   /** The first, most rested routine: drawn as a cover with its lead lift's render. */
   hero?: boolean;
+  /** Drawn over the bottom of the cover, as frosted glass (Home's food tiles). Cover only. */
+  overlay?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const { routine } = item;
@@ -64,34 +67,38 @@ export function RoutineCard({
       {hero ? (
         // The most rested routine leads Home as a cover: its lead lift's robot render (or the glow),
         // the name in condensed capitals over it, and Start as the one accent pill.
-        <ExerciseHero demo={demo} className="flex min-h-52 items-end">
-          <button
-            type="button"
-            aria-expanded={open}
-            onClick={() => setOpen((o) => !o)}
-            data-testid={`routine-toggle-${routine.name}`}
-            className="min-w-0 flex-1 self-stretch px-4 pb-4 pt-4 text-left"
-          >
-            <div className="flex h-full flex-col justify-between gap-10">
-              {item.label ? (
-                <span className="self-start rounded-full bg-black/55 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.12em] text-fg" data-testid={`routine-rest-${routine.name}`}>
-                  {item.label}
-                </span>
-              ) : (
-                <span />
-              )}
-              <div className="min-w-0">
-                <div className="disp line-clamp-2 text-[2.5rem] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]">{routine.name}</div>
-                {item.lastTop && (
-                  <div className="mt-1 truncate text-sm text-fg/85" data-testid={`routine-top-${routine.name}`}>
-                    Last: {item.lastTop}
-                  </div>
+        <ExerciseHero demo={demo} className={`flex flex-col ${overlay ? 'min-h-80' : 'min-h-52'}`}>
+          <div className="flex flex-1 items-end">
+            <button
+              type="button"
+              aria-expanded={open}
+              onClick={() => setOpen((o) => !o)}
+              data-testid={`routine-toggle-${routine.name}`}
+              className="min-w-0 flex-1 self-stretch px-4 pb-4 pt-4 text-left"
+            >
+              <div className="flex h-full flex-col justify-between gap-10">
+                {item.label ? (
+                  <span className="self-start rounded-full bg-black/55 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.12em] text-fg" data-testid={`routine-rest-${routine.name}`}>
+                    {item.label}
+                  </span>
+                ) : (
+                  <span />
                 )}
-                <div className="mt-0.5 truncate text-xs text-fg/75">{detail}</div>
+                <div className="min-w-0">
+                  <div className="disp line-clamp-2 text-[2.5rem] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]">{routine.name}</div>
+                  {item.lastTop && (
+                    <div className="mt-1 truncate text-sm text-fg/85" data-testid={`routine-top-${routine.name}`}>
+                      Last: {item.lastTop}
+                    </div>
+                  )}
+                  <div className="mt-0.5 truncate text-xs text-fg/75">{detail}</div>
+                </div>
               </div>
-            </div>
-          </button>
-          {!active && <div className="flex items-end pb-4 pl-1 pr-4">{startButton('primary')}</div>}
+            </button>
+            {!active && <div className="flex items-end pb-4 pl-1 pr-4">{startButton('primary')}</div>}
+          </div>
+          {/* Glass over the render: the day's numbers, frosted, with the robot showing through. */}
+          {overlay && <div className="px-3 pb-3">{overlay}</div>}
         </ExerciseHero>
       ) : (
         <div className="flex items-stretch">
