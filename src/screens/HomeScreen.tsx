@@ -28,6 +28,7 @@ import { CoachLine } from '@/ui/CoachLine';
 import { QuickSessionSheet } from '@/ui/QuickSessionSheet';
 import { RestoreSheet } from '@/ui/RestoreSheet';
 import { RoutineCard } from '@/ui/RoutineCard';
+import { quoteOfTheDay, welcomeLine } from '@/domain/dailyQuote';
 import { WeeklyReviewCard } from '@/ui/WeeklyReviewCard';
 import { WeighInCard } from '@/ui/WeighInCard';
 import {
@@ -124,10 +125,11 @@ export function HomeScreen() {
   return (
     <div>
       <TopBar
-        title="Iron"
+        title={welcomeLine(new Date().getHours())}
         subtitle={new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }).format(dateKeyToDate(todayKey))}
       />
       <div className="px-4">
+        <QuoteOfTheDay today={todayKey} />
         <HistoryNoticeCard />
 
         <CoachLine moment="open" facts={facts} ask={factsReady} className="mt-3" />
@@ -380,5 +382,16 @@ function BodyweightQuickAdd() {
       </div>
       {latest && latest.date === todayKey && <div className="mt-2 text-xs text-muted"><Chip size="sm" tone="ok">Logged today</Chip></div>}
     </Card>
+  );
+}
+
+/** One line a day, chosen by date from a fixed list (src/domain/dailyQuote.ts). */
+function QuoteOfTheDay({ today }: { today: string }) {
+  const q = quoteOfTheDay(today);
+  return (
+    <figure className="px-1 pt-4" data-testid="quote-of-the-day">
+      <blockquote className="text-[17px] font-light leading-snug tracking-[-0.01em] text-fg">“{q.text}”</blockquote>
+      <figcaption className="label mt-2">{q.author}</figcaption>
+    </figure>
   );
 }

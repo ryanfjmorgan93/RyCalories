@@ -44,7 +44,9 @@ The owner does not check on device. Correctness has to come from the code and th
   to the point, encouraging, the odd motivational line, now and then asking how the owner is
   doing. It says nothing when it has nothing useful, and nothing at all offline, without a key or
   over the spend cap. The rest of the app's copy still states facts and offers actions, with no
-  tips or hand-holding; the streak line's fixed sentences in `src/domain/calendar.ts` remain. The
+  tips or hand-holding; the streak line's fixed sentences in `src/domain/calendar.ts` remain, and so
+  does Home's welcome and quote of the day (`src/domain/dailyQuote.ts`, a fixed bundled list, added
+  at the owner's request in October 2026). The
   technique text in `src/data/exerciseInstructions.json` and `exerciseCatalogueSteps.json` is
   third-party dataset content shown only behind a "How to" tap; leave it alone. Phone
   notifications are deterministic and limited to the food reminder, the training nudge and the

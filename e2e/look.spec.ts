@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { accentFromHue, EMBER } from '../src/domain/accent';
+import { quoteOfTheDay, welcomeLine } from '../src/domain/dailyQuote';
 import { fresh } from './fresh';
 
 /**
@@ -67,4 +68,29 @@ test('the colour wheel recolours the app, survives a reload, and resets to ember
   await expect(page.getByTestId('accent-value')).toHaveText('Ember');
   await expect(activeBar(page)).toHaveCSS('background-color', rgb(EMBER.accent));
   await expect.poll(() => storedHue(page)).toBeNull();
+});
+
+test('Home opens with a welcome for the time of day and the day\'s quote', async ({ page }) => {
+  await fresh(page);
+  const hour = await page.evaluate(() => new Date().getHours());
+  const today = await page.evaluate(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(welcomeLine(hour));
+  const q = quoteOfTheDay(today);
+  await expect(page.getByTestId('quote-of-the-day')).toContainText(q.text);
+  await expect(page.getByTestId('quote-of-the-day')).toContainText(q.author);
+});
+
+test('the muscle map draws the satin robot, front and back, from the build', async ({ page }) => {
+  await fresh(page);
+  await page.goto('/progress');
+  const images = page.locator('svg[aria-label="Muscle map, front and back"] image');
+  await expect(images).toHaveCount(2);
+  for (const href of ['/body/front.webp', '/body/back.webp']) {
+    const res = await page.request.get(href);
+    expect(res.status(), href).toBe(200);
+    expect(res.headers()['content-type']).toContain('image/webp');
+  }
 });

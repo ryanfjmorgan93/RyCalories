@@ -111,7 +111,7 @@ const FX = 100;
 const BX = 300;
 
 const FRONT_REGIONS: Region[] = [
-  { group: 'neck', d: ellipse(FX, 66, 8, 10) },
+  { group: 'neck', d: ellipse(FX, 74, 9, 7) },
   { group: 'shoulders', d: `${ellipse(FX - 58, 88, 16, 18)} ${ellipse(FX + 58, 88, 16, 18)}` },
   { group: 'chest', d: `${ellipse(FX - 25, 104, 21, 16)} ${ellipse(FX + 25, 104, 21, 16)}` },
   { group: 'biceps', d: `${capsule(FX - 58, 86, FX - 74, 168, 12)} ${capsule(FX + 58, 86, FX + 74, 168, 12)}` },
@@ -123,7 +123,7 @@ const FRONT_REGIONS: Region[] = [
 ];
 
 const BACK_REGIONS: Region[] = [
-  { group: 'neck', d: ellipse(BX, 66, 8, 10) },
+  { group: 'neck', d: ellipse(BX, 72, 10, 8) },
   { group: 'traps', d: `M${BX},70 L${BX - 40},98 L${BX - 15},132 L${BX},144 L${BX + 15},132 L${BX + 40},98 Z` },
   { group: 'rear delts', d: `${ellipse(BX - 58, 88, 16, 18)} ${ellipse(BX + 58, 88, 16, 18)}` },
   { group: 'upper back', d: roundRect(BX - 15, 130, 30, 42, 8) },
@@ -175,9 +175,11 @@ export function BodyMap({
       data-muscle={r.group}
       d={r.d}
       fill="var(--c-accent)"
-      fillOpacity={intensityOf(r.group)}
-      stroke="var(--c-line)"
-      strokeWidth={1.1}
+      fillOpacity={intensityOf(r.group) * 0.85}
+      stroke="rgba(255,255,255,0.14)"
+      strokeWidth={0.8}
+      style={{ mixBlendMode: 'color' }}
+      filter="url(#bodymap-soft)"
       className="cursor-pointer"
       role="button"
       aria-label={r.group}
@@ -199,10 +201,20 @@ export function BodyMap({
           { value: 'recency', label: 'Last trained' },
         ]}
       />
-      <svg viewBox="0 0 400 420" className="mt-3 block w-full" role="img" aria-label="Muscle map, front and back">
-        {/* Base silhouettes, non-interactive. */}
-        <path d={BASE_FRONT_D} fill="var(--c-surface-2)" stroke="var(--c-line)" strokeWidth={1.5} />
-        <path d={BASE_BACK_D} fill="var(--c-surface-2)" stroke="var(--c-line)" strokeWidth={1.5} />
+      <svg viewBox="0 0 400 420" className="mt-3 block w-full rounded-card bg-black [isolation:isolate]" role="img" aria-label="Muscle map, front and back">
+        {/* The satin robot, front and back, drawn in the same pose as the regions below
+            (public/body/, bundled; docs/DESIGN.md §3). Each region tints the metal under it in
+            the accent (mix-blend-mode: color keeps the robot's shading). If an image is missing,
+            the plain silhouette underneath still shows where every region is. */}
+        <defs>
+          <filter id="bodymap-soft" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="1.4" />
+          </filter>
+        </defs>
+        <path d={BASE_FRONT_D} fill="var(--c-surface-2)" />
+        <path d={BASE_BACK_D} fill="var(--c-surface-2)" />
+        <image href="/body/front.webp" x={0} y={0} width={200} height={420} preserveAspectRatio="xMidYMid meet" aria-hidden="true" />
+        <image href="/body/back.webp" x={200} y={0} width={200} height={420} preserveAspectRatio="xMidYMid meet" aria-hidden="true" />
 
         {FRONT_REGIONS.map(region('front'))}
         {BACK_REGIONS.map(region('back'))}
