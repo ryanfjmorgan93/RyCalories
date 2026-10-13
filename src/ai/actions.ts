@@ -54,6 +54,7 @@ import { routineRequestFrom, routineToText, type BuiltRoutine } from '@/domain/r
 import { MEAL_SLOTS, type Exercise, type MealSlot, type MuscleGroup, type Routine, type RoutineExercise, type Session } from '@/domain/types';
 import { logReadings } from '@/state/claudeFood';
 import { noteShortId } from './context';
+import { createOfferActions, type OfferActions } from './offerActions';
 import type { PlanOverridePatch, SetPlanOverride } from './types';
 import type { MealReadingItem } from './vision';
 
@@ -148,6 +149,9 @@ export interface CoachActions {
   editRoutine(input: EditRoutineInput): Promise<ActionResult>;
   buildRoutine(input: BuildRoutineInput): Promise<BuildRoutineResult>;
   editSession(input: EditSessionInput): Promise<ActionResult>;
+  proposeTargets: OfferActions['proposeTargets'];
+  suggestSupplement: OfferActions['suggestSupplement'];
+  tickSupplements: OfferActions['tickSupplements'];
 }
 
 export interface ActionDeps {
@@ -391,6 +395,7 @@ export function createCoachActions(deps: ActionDeps = {}): CoachActions {
   }
 
   return {
+    ...createOfferActions(now),
     // ---- food
     async logFood({ items, slot, date }) {
       if (!Array.isArray(items) || items.length === 0) return fail('Nothing to log: no foods were given.');

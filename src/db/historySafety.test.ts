@@ -61,7 +61,7 @@ describe('migrationIsComing', () => {
     // Dexie stores its version ×10 in raw IndexedDB. 20 is Dexie schema v2 (this branch's
     // pre-recipes shape) — exactly what an install upgrading through v3 has on disk.
     expect(migrationIsComing(20)).toBe(true);
-    expect(DB_VERSION).toBe(4); // pins the assumption the case above and db.test.ts both rely on
+    expect(DB_VERSION).toBe(5); // pins the assumption the case above and db.test.ts both rely on
   });
 
   it('is false once the raw version matches the current schema', () => {
@@ -69,7 +69,7 @@ describe('migrationIsComing', () => {
   });
 
   it('is false for a raw version already ahead (never held back for a newer build)', () => {
-    expect(migrationIsComing(40)).toBe(false);
+    expect(migrationIsComing(DB_VERSION * 10 + 10)).toBe(false);
   });
 
   it('reproduces the exact historical bug: a probe of 20 against an un-bumped DB_VERSION of 2 reads as no migration coming', () => {

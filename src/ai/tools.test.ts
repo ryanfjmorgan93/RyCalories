@@ -17,14 +17,28 @@ function fakeActions(): { [K in keyof CoachActions]: ReturnType<typeof vi.fn> } 
     editRoutine: ok('edited', 'Bench: 5 sets'),
     buildRoutine: vi.fn(async () => ({ ok: true, result: 'draft', description: 'Drafted Push', draft: { routines: [], text: 'Push\nBench 3x8' } })),
     editSession: ok('session edited', 'Bench: 3 sets today'),
+    proposeTargets: vi.fn(async () => ({ ok: true, result: 'offered', targets: { calories: 2500, protein: 160 } })),
+    suggestSupplement: vi.fn(async ({ name }: { name: string }) => ({ ok: true, result: 'offered', suggestion: { name, dose: '5 g', time: 'any', why: 'Strength' } })),
+    tickSupplements: ok('ticked', 'Supplements ticked: Creatine'),
   } as never;
 }
 
 describe('the tool definitions', () => {
   const tools = createCoachTools(fakeActions(), newTurnRecord());
 
-  it('are the same seven, in the same order, every time (the order is part of the cache key)', () => {
-    expect(tools.map((t) => t.name)).toEqual(['log_food', 'log_weight', 'remember', 'forget', 'edit_routine', 'edit_session', 'build_routine']);
+  it('are the same ten, in the same order, every time (the order is part of the cache key)', () => {
+    expect(tools.map((t) => t.name)).toEqual([
+      'log_food',
+      'log_weight',
+      'remember',
+      'forget',
+      'edit_routine',
+      'edit_session',
+      'build_routine',
+      'propose_targets',
+      'suggest_supplement',
+      'tick_supplements',
+    ]);
     expect(createCoachTools(fakeActions(), newTurnRecord()).map((t) => JSON.stringify([t.name, t.description, t.input_schema]))).toEqual(tools.map((t) => JSON.stringify([t.name, t.description, t.input_schema])));
   });
 
@@ -152,5 +166,22 @@ describe('toStrictJsonSchema', () => {
       expect(stats.optional, name).toBeLessThanOrEqual(24);
       expect(stats.unions, name).toBeLessThanOrEqual(16);
     }
+  });
+});
+
+describe('the offer tools', () => {
+  it('leave targets and supplements on the turn as an offer, and change nothing themselves', async () => {
+    const actions = fakeActions();
+    const turn = newTurnRecord();
+    const tools = createCoachTools(actions, turn);
+    const run = (name: string, input: unknown) => (tools.find((t) => t.name === name)! as unknown as { run: (i: unknown) => Promise<string> }).run(input);
+    await run('propose_targets', { calories: 2500, protein: 160 });
+    await run('suggest_supplement', { name: 'Creatine', why: 'Strength' });
+    await run('suggest_supplement', { name: 'creatine', why: 'Again' });
+    expect(turn.offer).toEqual({ targets: { calories: 2500, protein: 160 }, supplements: [{ name: 'creatine', dose: '5 g', time: 'any', why: 'Strength' }] });
+    expect(turn.actions).toEqual([]);
+    await run('tick_supplements', { all: true });
+    expect(actions.tickSupplements).toHaveBeenCalledWith({ names: undefined, all: true, date: undefined });
+    expect(turn.actions).toEqual(['Supplements ticked: Creatine']);
   });
 });

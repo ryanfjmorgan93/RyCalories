@@ -14,7 +14,8 @@
 import type { BetaRunnableTool } from '@anthropic-ai/sdk/lib/tools/BetaRunnableTool';
 import * as z from 'zod/v4';
 import { FOCUSABLE_MUSCLES } from '@/domain/quickRequest';
-import { MEAL_SLOTS, type MuscleGroup } from '@/domain/types';
+import { SUPPLEMENT_TIMES } from '@/domain/supplements';
+import { MEAL_SLOTS, type MuscleGroup, type SupplementTime } from '@/domain/types';
 import type { ActionResult, CoachActions } from './actions';
 import { strictTool } from './schema';
 import type { TurnRecord } from './types';
@@ -90,6 +91,24 @@ const EditSessionInput = z.object({
   swap_to: z.string().optional().describe('The exercise to do instead (change = swap)'),
 });
 
+const ProposeTargetsInput = z.object({
+  calories: z.number().optional().describe('New daily calorie target in kcal, if proposing one'),
+  protein: z.number().optional().describe('New daily protein target in grams, if proposing one'),
+});
+
+const SuggestSupplementInput = z.object({
+  name: z.string().describe('The supplement, plainly: "Creatine monohydrate", "Vitamin D3"'),
+  dose: z.string().optional().describe('The usual dose as it reads on a tub: "5 g", "10 µg", "1 capsule"'),
+  time: z.enum(SUPPLEMENT_TIMES as unknown as [SupplementTime, ...SupplementTime[]]).optional().describe('When in the day it is usually taken: morning, midday, evening or any'),
+  why: z.string().describe('One short reason it suits the owner, in a sentence'),
+});
+
+const TickSupplementsInput = z.object({
+  names: z.array(z.string()).optional().describe('The supplements taken, as the owner named them'),
+  all: z.boolean().optional().describe('True when they say they took all of them'),
+  date: z.string().optional().describe('YYYY-MM-DD for an earlier day; leave out for today'),
+});
+
 const BuildRoutineInput = z.object({
   request: z.string().describe('What the owner asked for, in their words: "a 45 minute shoulder routine", "push pull legs"'),
   focus: z.array(z.enum(MUSCLES)).optional().describe('Muscles to train, if you can read them from the request'),
@@ -154,6 +173,37 @@ export function createCoachTools(actions: CoachActions, turn: TurnRecord): Coach
         if (outcome.ok && outcome.draft) turn.draft = outcome.draft;
         return finish(outcome, turn);
       },
+    }),
+    strictTool({
+      name: 'propose_targets',
+      description:
+        "Offer the owner a new daily calorie and/or protein target. Nothing changes: the offer appears as buttons under your reply, and the owner taps to use it. Use when they ask to change their targets, or when their numbers clearly call for it. Say what you offered and why.",
+      inputSchema: ProposeTargetsInput,
+      run: async (input) => {
+        const outcome = await actions.proposeTargets({ calories: input.calories, protein: input.protein });
+        if (outcome.ok && outcome.targets) turn.offer = { ...turn.offer, targets: { ...turn.offer?.targets, ...outcome.targets } };
+        return finish(outcome, turn);
+      },
+    }),
+    strictTool({
+      name: 'suggest_supplement',
+      description:
+        "Offer to add a supplement to the owner's daily checklist. Nothing is added: it appears as a button under your reply. Only well-evidenced basics, one at a time, and only when asked or clearly useful.",
+      inputSchema: SuggestSupplementInput,
+      run: async (input) => {
+        const outcome = await actions.suggestSupplement({ name: input.name, dose: input.dose, time: input.time, why: input.why });
+        if (outcome.ok && outcome.suggestion) {
+          const held = turn.offer?.supplements ?? [];
+          turn.offer = { ...turn.offer, supplements: [...held.filter((s) => s.name.toLowerCase() !== outcome.suggestion!.name.toLowerCase()), outcome.suggestion].slice(-3) };
+        }
+        return finish(outcome, turn);
+      },
+    }),
+    strictTool({
+      name: 'tick_supplements',
+      description: "Tick supplements on the owner's checklist as taken, when they say they took them ('had my creatine', 'took all my supps').",
+      inputSchema: TickSupplementsInput,
+      run: async (input) => finish(await actions.tickSupplements({ names: input.names, all: input.all, date: input.date }), turn),
     }),
   ];
   return tools as unknown as CoachTool[];

@@ -15,6 +15,7 @@ import { sumItems } from '@/db/foodRepo';
 import { muscleSetRowsFrom } from '@/db/volumeQueries';
 import { isoToDateKey, mondayOf, toDateKey } from '@/domain/dates';
 import { isReminderId, planReminders, resolveReminders, type ReminderInput } from '@/domain/reminders';
+import { supplementDay, supplementLabel } from '@/domain/supplements';
 import { isNative } from '@/state/native';
 
 /** Its own channel, so Iron's reminders can be silenced in system settings apart from the rest timer. */
@@ -29,12 +30,16 @@ export async function loadReminderInput(now: Date): Promise<ReminderInput> {
   const itemsByMeal = new Map<string, typeof items>();
   for (const item of items) itemsByMeal.set(item.mealId, [...(itemsByMeal.get(item.mealId) ?? []), item]);
 
-  const [sets, sessions, exercises, weights] = await Promise.all([
+  const [sets, sessions, exercises, weights, supplements, supplementLogs] = await Promise.all([
     db.setLogs.toArray(),
     db.sessions.toArray(),
     db.exercises.toArray(),
     db.bodyweight.where('date').aboveOrEqual(mondayOf(today)).toArray(),
+    db.supplements.toArray(),
+    db.supplementLogs.where('date').aboveOrEqual(today).toArray(),
   ]);
+  const takenOn: Record<string, string[]> = {};
+  for (const l of supplementLogs) (takenOn[l.date] ??= []).push(l.supplementId);
 
   let lastSessionDate: string | null = null;
   for (const s of sessions) {
@@ -48,6 +53,7 @@ export async function loadReminderInput(now: Date): Promise<ReminderInput> {
     lastSessionDate,
     muscleRows: muscleSetRowsFrom(sets, sessions, exercises),
     bodyweightDates: weights.map((w) => w.date),
+    supplements: { labels: supplementDay(supplements, [], today).items.map(({ supplement }) => ({ id: supplement.id, label: supplementLabel(supplement) })), takenOn },
   };
 }
 

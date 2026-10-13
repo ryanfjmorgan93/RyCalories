@@ -20,10 +20,13 @@ const at = (day: number, h: number, m = 0) => new Date(2026, 9, day, h, m).toISO
 
 const EMPTY: ReminderInput = { meals: [], lastSessionDate: null, muscleRows: [], bodyweightDates: [] };
 const input = (o: Partial<ReminderInput> = {}): ReminderInput => ({ ...EMPTY, ...o });
-const prefs = (o: { food?: Partial<ReminderPrefs['food']>; training?: Partial<ReminderPrefs['training']>; weighIn?: Partial<ReminderPrefs['weighIn']> } = {}): ReminderPrefs => ({
+const prefs = (
+  o: { food?: Partial<ReminderPrefs['food']>; training?: Partial<ReminderPrefs['training']>; weighIn?: Partial<ReminderPrefs['weighIn']>; supplements?: Partial<ReminderPrefs['supplements']> } = {},
+): ReminderPrefs => ({
   food: { ...DEFAULT_REMINDERS.food, ...o.food },
   training: { ...DEFAULT_REMINDERS.training, ...o.training },
   weighIn: { ...DEFAULT_REMINDERS.weighIn, ...o.weighIn },
+  supplements: { ...DEFAULT_REMINDERS.supplements, ...o.supplements },
 });
 const only = (kind: 'Food' | 'Training' | 'Weigh-in') => (r: { title: string }) => r.title === kind;
 const dayOf = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -292,6 +295,49 @@ describe('resolveReminders', () => {
       food: { on: true, time: '20:30' },
       training: { on: true, time: '17:30', afterDays: 2 },
       weighIn: { on: true, weekday: 1, time: '12:00' },
+      supplements: { on: true, time: '08:30' },
     });
+  });
+});
+
+describe('supplements reminder', () => {
+  const only = prefs({ food: { on: false }, training: { on: false }, weighIn: { on: false } });
+  const labels = [
+    { id: 'c', label: 'Creatine 5 g' },
+    { id: 'd', label: 'Vitamin D' },
+    { id: 'm', label: 'Magnesium' },
+    { id: 'f', label: 'Fish oil' },
+  ];
+
+  it('says nothing with an empty list', () => {
+    expect(planReminders(input({ supplements: { labels: [], takenOn: {} } }), MON_MORNING, only)).toEqual([]);
+    expect(planReminders(input(), MON_MORNING, only)).toEqual([]);
+  });
+
+  it('names what is left each day at the set time, from tomorrow when today\'s time has passed', () => {
+    const plan = planReminders(input({ supplements: { labels: labels.slice(0, 2), takenOn: {} } }), MON_MORNING, only);
+    expect(plan).toHaveLength(6);
+    expect(plan[0]).toMatchObject({ title: 'Supplements', body: 'Creatine 5 g, Vitamin D' });
+    expect([plan[0].at.getDate(), plan[0].at.getHours(), plan[0].at.getMinutes()]).toEqual([13, 8, 30]);
+  });
+
+  it('counts what is left of a partly ticked day, and skips a fully ticked one', () => {
+    const early = new Date(2026, 9, 12, 7, 0);
+    const partly = planReminders(input({ supplements: { labels, takenOn: { '2026-10-12': ['c'] } } }), early, only);
+    expect(partly[0].body).toBe('3 of 4 left: Vitamin D, Magnesium, Fish oil');
+    expect(partly[1].body).toBe('Creatine 5 g, Vitamin D, Magnesium and 1 more');
+    const all = planReminders(input({ supplements: { labels, takenOn: { '2026-10-12': ['c', 'd', 'm', 'f'] } } }), early, only);
+    expect(all[0].at.getDate()).toBe(13);
+  });
+
+  it('stays in Iron\'s id range and off when switched off', () => {
+    const plan = planReminders(input({ supplements: { labels, takenOn: {} } }), MON_MORNING, only);
+    for (const r of plan) expect(r.id >= 8130 && r.id <= REMINDER_ID_LAST).toBe(true);
+    expect(planReminders(input({ supplements: { labels, takenOn: {} } }), MON_MORNING, prefs({ food: { on: false }, training: { on: false }, weighIn: { on: false }, supplements: { on: false } }))).toEqual([]);
+  });
+
+  it('fills in a missing or malformed stored setting', () => {
+    expect(resolveReminders({ supplements: { time: '25:00' } }).supplements).toEqual(DEFAULT_REMINDERS.supplements);
+    expect(resolveReminders({ supplements: { on: false, time: '07:05' } }).supplements).toEqual({ on: false, time: '07:05' });
   });
 });

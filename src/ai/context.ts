@@ -28,6 +28,7 @@ import { fmtKg, fmtNum, fmtSetsLine, fmtTime, plural, targetLine } from '@/domai
 import { DEFAULT_SETTINGS, type BodyScan, type CoachMessage, type CoachNote, type Exercise, type MealItem, type RoutineExercise, type Session, type Settings } from '@/domain/types';
 import { loadClaudeSummaryInput } from '@/db/claudeSummaryQueries';
 import { db } from '@/db/db';
+import { SUPPLEMENT_TIME_LABEL, supplementDay, supplementLabel } from '@/domain/supplements';
 import { mealsOnDay } from '@/db/foodRepo';
 import { completedSessions } from '@/db/historyQueries';
 import { getActiveSession, getSettings, routineItems, setsForSlot } from '@/db/repo';
@@ -299,7 +300,7 @@ export async function buildVolatileContext(opts: ContextOptions = {}): Promise<s
   const now = opts.now ?? new Date();
   const today = toDateKey(now);
   const settings = opts.settings ?? (await getSettings());
-  const [view, todayMeals, live, said, lastFinished, lastMeal, weighIn] = await Promise.all([
+  const [view, todayMeals, live, said, lastFinished, lastMeal, weighIn, supplements, supplementLogs] = await Promise.all([
     dayView(today, settings, today),
     mealsOnDay(today),
     liveSessionBlock(now),
@@ -307,7 +308,14 @@ export async function buildVolatileContext(opts: ContextOptions = {}): Promise<s
     completedSessions().then((all) => all[0]),
     db.meals.orderBy('date').last(),
     db.bodyweight.where('date').equals(today).first(),
+    db.supplements.toArray(),
+    db.supplementLogs.where('date').equals(today).toArray(),
   ]);
+  const sups = supplementDay(supplements, supplementLogs, today);
+  const supplementLine =
+    sups.total === 0
+      ? 'SUPPLEMENTS: none on the checklist.'
+      : `SUPPLEMENTS · ${sups.taken} of ${sups.total} ticked today: ${sups.items.map(({ supplement, taken }) => `${supplementLabel(supplement)} (${SUPPLEMENT_TIME_LABEL[supplement.time].toLowerCase()}, ${taken ? 'taken' : 'not yet'})`).join('; ')}`;
 
   const sinceSession = lastFinished ? daysBetween(isoToDateKey(lastFinished.startedAt), today) : null;
   const lastFoodDay = todayMeals.length > 0 ? today : lastMeal?.date;
@@ -331,6 +339,7 @@ export async function buildVolatileContext(opts: ContextOptions = {}): Promise<s
       weighIn ? `Weighed in today: ${fmtKg(weighIn.kg)}.` : 'No weigh-in logged today.',
     ].join(' '),
     foodLines.join('\n'),
+    supplementLine,
     live ?? 'No session is live right now.',
     said,
   ].filter((p): p is string => !!p);

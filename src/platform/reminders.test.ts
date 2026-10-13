@@ -86,7 +86,7 @@ describe('loadReminderInput', () => {
   });
 
   it('ignores a session that never finished, and is empty on a blank database', async () => {
-    expect(await loadReminderInput(NOW)).toEqual({ meals: [], lastSessionDate: null, muscleRows: [], bodyweightDates: [] });
+    expect(await loadReminderInput(NOW)).toEqual({ meals: [], lastSessionDate: null, muscleRows: [], bodyweightDates: [], supplements: { labels: [], takenOn: {} } });
     await db.sessions.put({ id: 's', routineId: '', title: 'Open', startedAt: iso(11, 17) });
     expect((await loadReminderInput(NOW)).lastSessionDate).toBeNull();
   });
@@ -118,7 +118,7 @@ describe('rescheduleReminders', () => {
   });
 
   it('plans from the saved preferences', async () => {
-    await saveSettings({ reminders: { food: { on: false, time: '20:30' }, training: { on: false, time: '17:30', afterDays: 2 }, weighIn: { on: true, weekday: 3, time: '07:15' } } });
+    await saveSettings({ reminders: { food: { on: false, time: '20:30' }, training: { on: false, time: '17:30', afterDays: 2 }, weighIn: { on: true, weekday: 3, time: '07:15' }, supplements: { on: false, time: '08:30' } } });
     await rescheduleReminders(NOW);
     const { notifications } = plugin.schedule.mock.calls[0][0] as { notifications: { title: string; schedule: { at: Date } }[] };
     expect(notifications.map((n) => n.title)).toEqual(['Weigh-in']);
@@ -135,7 +135,7 @@ describe('rescheduleReminders', () => {
 
   it('cancels what it had scheduled when every reminder is switched off, without asking for permission', async () => {
     plugin.getPending.mockResolvedValue({ notifications: [{ id: 8100 }] });
-    await saveSettings({ reminders: { food: { on: false, time: '20:30' }, training: { on: false, time: '17:30', afterDays: 2 }, weighIn: { on: false, weekday: 1, time: '12:00' } } });
+    await saveSettings({ reminders: { food: { on: false, time: '20:30' }, training: { on: false, time: '17:30', afterDays: 2 }, weighIn: { on: false, weekday: 1, time: '12:00' }, supplements: { on: false, time: '08:30' } } });
     expect(await rescheduleReminders(NOW)).toBe('off');
     expect(plugin.cancel).toHaveBeenCalledWith({ notifications: [{ id: 8100 }] });
     expect(plugin.schedule).not.toHaveBeenCalled();
@@ -203,5 +203,19 @@ describe('startReminders', () => {
 
     onState({ isActive: false });
     await vi.waitFor(() => expect(plugin.schedule).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe('loadReminderInput: supplements', () => {
+  it('reads the checklist in list order and today\'s ticks onward', async () => {
+    const { addSupplement, toggleSupplementTaken } = await import('@/db/supplementRepo');
+    const c = await addSupplement({ name: 'Creatine', dose: '5 g', time: 'any' });
+    const d = await addSupplement({ name: 'Vitamin D', time: 'morning' });
+    if (!c.ok || !d.ok) throw new Error('not added');
+    await toggleSupplementTaken(d.supplement.id, '2026-10-12');
+    await toggleSupplementTaken(c.supplement.id, '2026-10-11');
+    const { supplements } = await loadReminderInput(NOW);
+    expect(supplements?.labels.map((l) => l.label)).toEqual(['Vitamin D', 'Creatine 5 g']);
+    expect(supplements?.takenOn).toEqual({ '2026-10-12': [d.supplement.id] });
   });
 });

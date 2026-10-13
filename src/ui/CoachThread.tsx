@@ -9,6 +9,7 @@ import type { AskEntry, BuildEntry, CoachEntry } from '@/state/coach';
 import { Button } from './components/Button';
 import { Card } from './components/Card';
 import { Chip } from './components/Chip';
+import { CoachOfferCard } from './CoachOfferCard';
 import { CheckIcon } from './components/TopBar';
 import type { CoachConversation } from './useCoachConversation';
 
@@ -143,6 +144,7 @@ export function CoachThread({ c, onReview }: { c: CoachConversation; onReview?: 
           </div>
         </Card>
       )}
+      <CoachOfferCard />
       <div ref={endRef} className="scroll-mb-32" />
     </div>
   );

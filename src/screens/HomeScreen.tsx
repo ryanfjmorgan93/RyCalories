@@ -28,6 +28,7 @@ import { CoachLine } from '@/ui/CoachLine';
 import { QuickSessionSheet } from '@/ui/QuickSessionSheet';
 import { RestoreSheet } from '@/ui/RestoreSheet';
 import { RoutineCard } from '@/ui/RoutineCard';
+import { SupplementsCard } from '@/ui/SupplementsCard';
 import { quoteOfTheDay, welcomeLine } from '@/domain/dailyQuote';
 import { WeeklyReviewCard } from '@/ui/WeeklyReviewCard';
 import { WeighInCard } from '@/ui/WeighInCard';
@@ -135,6 +136,8 @@ export function HomeScreen() {
         <CoachLine moment="open" facts={facts} ask={factsReady} className="mt-3" />
 
         {review && <WeeklyReviewCard review={review} />}
+
+        <SupplementsCard today={todayKey} />
 
         {weighIn === true && <WeighInCard today={todayKey} last={readings ? lastWeekReading(readings, todayKey) : null} />}
 

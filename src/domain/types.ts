@@ -314,6 +314,34 @@ export type CoachMoment =
   | 'day'
   | 'week';
 
+/** When in the day a supplement is taken; 'any' sorts last and is never late. */
+export type SupplementTime = 'morning' | 'midday' | 'evening' | 'any';
+
+/** One supplement on the owner's daily checklist. */
+export interface Supplement {
+  id: string;
+  name: string;
+  /** Free text as the owner writes it on the tub: "5 g", "1 capsule", "25 µg". */
+  dose?: string;
+  time: SupplementTime;
+  /** Position within its time of day. */
+  order: number;
+  createdAt: string;
+  /** Taken off the list. Kept so a past tick still has a name. */
+  archived?: boolean;
+  /** Typed by the owner, or suggested by the coach and accepted by the owner. */
+  source: 'owner' | 'coach';
+}
+
+/** A supplement ticked as taken on a day. At most one per supplement per day. */
+export interface SupplementLog {
+  id: string;
+  /** Local day, YYYY-MM-DD. */
+  date: string;
+  supplementId: string;
+  takenAt: string;
+}
+
 /** Something the coach was asked, or decided, to remember about the owner (a niggle, a preference). */
 export interface CoachNote {
   id: string;

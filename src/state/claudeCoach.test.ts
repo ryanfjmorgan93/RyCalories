@@ -7,7 +7,7 @@ import { resetToSeed, startSession } from '../db/repo';
 import { SEED_ROUTINE_IDS } from '../db/seed';
 import { configureClaudeCoach, createClaudeCoachStore, getClaudeCoachActions } from './claudeCoach';
 
-const reply = (over: Partial<ChatReply> = {}): ChatReply => ({ ok: true, text: 'Fine.', actions: [], draft: null, stored: true, ...over });
+const reply = (over: Partial<ChatReply> = {}): ChatReply => ({ ok: true, text: 'Fine.', actions: [], draft: null, offer: null, stored: true, ...over });
 
 function deferred<T>() {
   let resolve!: (v: T) => void;

@@ -108,6 +108,18 @@ export function RemindersCard({ settings }: RemindersCardProps) {
       )}
       <Divider />
 
+      <Toggle
+        label="Supplements"
+        sub="Daily, naming what is still unticked on your list"
+        checked={prefs.supplements.on}
+        onChange={(on) => void update({ ...prefs, supplements: { ...prefs.supplements, on } })}
+        testId="reminder-supplements"
+      />
+      {prefs.supplements.on && (
+        <TimeRow group="Supplements" value={prefs.supplements.time} onChange={(time) => void update({ ...prefs, supplements: { ...prefs.supplements, time } })} testId="reminder-supplements-time" />
+      )}
+      <Divider />
+
       <div className="py-3" data-testid="reminders-permission">
         <div className="font-semibold">Notification permission</div>
         <div className="text-sm text-muted" data-testid="reminders-permission-state">

@@ -12,6 +12,9 @@
  *   trained for a week ("Legs last trained 9 days ago").
  * - Weigh-in, on the chosen weekday: skipped once a bodyweight has been logged since the Monday
  *   that week began.
+ * - Supplements, every day at the chosen time: names what is still unticked on the checklist, and
+ *   stays quiet when the list is empty or everything is ticked (added at the owner's request,
+ *   October 2026).
  *
  * Nothing is reminded about in the past, and a plan is only good until the owner next opens the
  * app, which is why the platform layer replans whenever the app goes to the background.
@@ -26,6 +29,7 @@ export interface ReminderPrefs {
   training: { on: boolean; time: string; afterDays: number };
   /** `weekday` is JavaScript's: 0 Sunday to 6 Saturday. */
   weighIn: { on: boolean; weekday: number; time: string };
+  supplements: { on: boolean; time: string };
 }
 
 /**
@@ -39,6 +43,7 @@ export const DEFAULT_REMINDERS: ReminderPrefs = {
   food: { on: true, time: '20:30' },
   training: { on: true, time: '17:30', afterDays: 2 },
   weighIn: { on: true, weekday: 1, time: '12:00' },
+  supplements: { on: true, time: '08:30' },
 };
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -68,6 +73,7 @@ export function resolveReminders(stored?: Partials<ReminderPrefs> | null): Remin
       weekday: int(stored?.weighIn?.weekday, 0, 6, d.weighIn.weekday),
       time: time(stored?.weighIn?.time, d.weighIn.time),
     },
+    supplements: { on: on(stored?.supplements?.on, d.supplements.on), time: time(stored?.supplements?.time, d.supplements.time) },
   };
 }
 
@@ -75,14 +81,14 @@ export function resolveReminders(stored?: Partials<ReminderPrefs> | null): Remin
 // Ids
 
 /**
- * Notification ids Iron's reminders use: 8100 to 8129. The rest-over notification is 7001
+ * Notification ids Iron's reminders use: 8100 to 8139. The rest-over notification is 7001
  * (src/state/native.ts), so the two can never replace each other. Within the range an id is the
  * reminder's kind plus the weekday it falls on; a seven-day plan holds each weekday once, so the
  * same plan always gets the same ids and scheduling over a pending one replaces it.
  */
 export const REMINDER_ID_FIRST = 8100;
-export const REMINDER_ID_LAST = 8129;
-const KIND_BASE = { food: 8100, training: 8110, weighIn: 8120 } as const;
+export const REMINDER_ID_LAST = 8139;
+const KIND_BASE = { food: 8100, training: 8110, weighIn: 8120, supplements: 8130 } as const;
 
 export function isReminderId(id: number): boolean {
   return Number.isInteger(id) && id >= REMINDER_ID_FIRST && id <= REMINDER_ID_LAST;
@@ -143,6 +149,8 @@ export interface ReminderInput {
   muscleRows: MuscleSetRow[];
   /** Days (YYYY-MM-DD) that have a bodyweight reading. */
   bodyweightDates: string[];
+  /** The checklist as it stands (labels, in list order), and what is ticked on which day. Optional so older callers plan nothing for it. */
+  supplements?: { labels: { id: string; label: string }[]; takenOn: Record<string, string[]> };
 }
 
 export interface PlannedReminder {
@@ -151,6 +159,9 @@ export interface PlannedReminder {
   title: string;
   body: string;
 }
+
+/** At most this many supplements are named in one reminder. */
+const MAX_SUPPLEMENTS_NAMED = 3;
 
 /** Days ahead planned, today included: seven days holds every weekday once. */
 export const HORIZON_DAYS = 7;
@@ -221,6 +232,22 @@ export function planReminders(input: ReminderInput, now: Date, prefs: ReminderPr
       const weighedThisWeek = input.bodyweightDates.some((d) => d >= weekStart && d <= day);
       if (when.getTime() > now.getTime() && !weighedThisWeek) {
         out.push({ id: KIND_BASE.weighIn + weekday, at: when, title: 'Weigh-in', body: "Log this week's weight" });
+      }
+    }
+
+    const sups = input.supplements;
+    if (prefs.supplements.on && sups && sups.labels.length > 0) {
+      const when = at(day, prefs.supplements.time);
+      const taken = new Set(sups.takenOn[day] ?? []);
+      const left = sups.labels.filter((s) => !taken.has(s.id)).map((s) => s.label);
+      if (when.getTime() > now.getTime() && left.length > 0) {
+        const named = left.length > MAX_SUPPLEMENTS_NAMED ? `${left.slice(0, MAX_SUPPLEMENTS_NAMED).join(', ')} and ${left.length - MAX_SUPPLEMENTS_NAMED} more` : left.join(', ');
+        out.push({
+          id: KIND_BASE.supplements + weekday,
+          at: when,
+          title: 'Supplements',
+          body: left.length === sups.labels.length ? named : `${left.length} of ${sups.labels.length} left: ${named}`,
+        });
       }
     }
   }

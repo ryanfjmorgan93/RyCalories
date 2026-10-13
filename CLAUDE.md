@@ -49,8 +49,8 @@ The owner does not check on device. Correctness has to come from the code and th
   at the owner's request in October 2026). The
   technique text in `src/data/exerciseInstructions.json` and `exerciseCatalogueSteps.json` is
   third-party dataset content shown only behind a "How to" tap; leave it alone. Phone
-  notifications are deterministic and limited to the food reminder, the training nudge and the
-  Monday weigh-in (`src/domain/reminders.ts`).
+  notifications are deterministic and limited to the food reminder, the training nudge, the
+  Monday weigh-in and the daily supplement checklist (`src/domain/reminders.ts`).
 - Tracking must work fully offline. Three things leave the device, all listed in Settings → About:
   Claude API calls (only with the owner's key: what they send the coach, a summary of their
   training and food, and photos they choose), the Open Food Facts label lookup (switchable off; the
@@ -80,6 +80,7 @@ The owner does not check on device. Correctness has to come from the code and th
   natural units, matching to remembered foods and the UK table, and the one item shape every way of
   logging produces.
   `inbody.ts` reads body-scan exports; `reminders.ts` plans the local notifications.
+  `supplements.ts` is the daily supplement checklist; `dailyQuote.ts` is Home's welcome and quote.
   `energy.ts` is the maintenance estimate (with `energyText.ts` for its wording): intake over
   logged days only, weight change between week-means, three gates, shown with its counts or not at
   all.

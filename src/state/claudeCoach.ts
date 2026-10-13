@@ -48,10 +48,15 @@ export interface ClaudeCoachState {
   lastError: string | null;
   /** The routine the coach most recently drafted, until it is saved or dismissed. */
   draft: TurnRecord['draft'];
+  /** The targets or supplements the coach most recently offered, until taken or dismissed. */
+  offer: TurnRecord['offer'];
   /** Send a message. Resolves with the reply, or null when it was ignored (empty, or one already in flight). */
   send: (text: string) => Promise<ChatReply | null>;
   clearError: () => void;
   dismissDraft: () => void;
+  dismissOffer: () => void;
+  /** Drop one part of the offer once it has been used: a target, or a supplement by name. */
+  takeFromOffer: (what: 'calories' | 'protein' | { supplement: string }) => void;
 }
 
 export interface ClaudeCoachDeps {
@@ -64,6 +69,7 @@ export function createClaudeCoachStore(deps: ClaudeCoachDeps) {
     busy: false,
     lastError: null,
     draft: null,
+    offer: null,
 
     send: async (text) => {
       const message = text.trim();
@@ -71,7 +77,7 @@ export function createClaudeCoachStore(deps: ClaudeCoachDeps) {
       set({ busy: true, lastError: null });
       try {
         const reply = await deps.send(message);
-        set((s) => ({ busy: false, lastError: reply.ok ? null : reply.text, draft: reply.draft ?? s.draft }));
+        set((s) => ({ busy: false, lastError: reply.ok ? null : reply.text, draft: reply.draft ?? s.draft, offer: reply.offer ?? s.offer }));
         return reply;
       } catch {
         // sendCoachMessage reports every expected failure as a reply; this is a bug or a broken database.
@@ -82,6 +88,18 @@ export function createClaudeCoachStore(deps: ClaudeCoachDeps) {
 
     clearError: () => set({ lastError: null }),
     dismissDraft: () => set({ draft: null }),
+    dismissOffer: () => set({ offer: null }),
+    takeFromOffer: (what) =>
+      set((s) => {
+        if (!s.offer) return {};
+        const next = { ...s.offer };
+        if (what === 'calories' || what === 'protein') {
+          const targets = { ...next.targets };
+          delete targets[what];
+          next.targets = targets.calories === undefined && targets.protein === undefined ? undefined : targets;
+        } else next.supplements = next.supplements?.filter((x) => x.name !== what.supplement);
+        return { offer: next.targets || next.supplements?.length ? next : null };
+      }),
   }));
 }
 

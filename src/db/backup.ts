@@ -18,6 +18,8 @@ import type {
   ProductCacheEntry,
   ProgressionDecision,
   Recipe,
+  Supplement,
+  SupplementLog,
   Routine,
   RoutineExercise,
   Session,
@@ -26,12 +28,13 @@ import type {
 } from '@/domain/types';
 
 /** Bumped whenever the set of tables changes, so a restore can reason about what it is holding.
- * 1 = workouts only (pre-merge). 2 = +nutrition. 3 = +recipes. 4 = +body scans and the coach. */
-export const BACKUP_VERSION = 4;
+ * 1 = workouts only (pre-merge). 2 = +nutrition. 3 = +recipes. 4 = +body scans and the coach.
+ * 5 = +supplements. */
+export const BACKUP_VERSION = 5;
 
 export interface Backup {
   app: 'iron';
-  /** 1 = workouts only (pre-merge). 2 = workouts and nutrition. 3 = +recipes. 4 = +body scans and the coach. */
+  /** 1 = workouts only (pre-merge). 2 = workouts and nutrition. 3 = +recipes. 4 = +body scans and the coach. 5 = +supplements. */
   version: number;
   exportedAt: string;
   tables: {
@@ -55,12 +58,15 @@ export interface Backup {
     bodyScans?: BodyScan[];
     coachMessages?: CoachMessage[];
     coachNotes?: CoachNote[];
+    // Supplements. Optional so a version 1–4 backup still satisfies the type.
+    supplements?: Supplement[];
+    supplementLogs?: SupplementLog[];
   };
 }
 
 /** Full JSON backup of every table. */
 export async function exportBackup(): Promise<Backup> {
-  const [exercises, routines, routineExercises, sessions, setLogs, decisions, bodyweight, settings, meals, mealItems, foods, productCache, phases, recipes, bodyScans, coachMessages, coachNotes] =
+  const [exercises, routines, routineExercises, sessions, setLogs, decisions, bodyweight, settings, meals, mealItems, foods, productCache, phases, recipes, bodyScans, coachMessages, coachNotes, supplements, supplementLogs] =
     await Promise.all([
       db.exercises.toArray(),
       db.routines.toArray(),
@@ -79,6 +85,8 @@ export async function exportBackup(): Promise<Backup> {
       db.bodyScans.toArray(),
       db.coachMessages.toArray(),
       db.coachNotes.toArray(),
+      db.supplements.toArray(),
+      db.supplementLogs.toArray(),
     ]);
   return {
     app: 'iron',
@@ -102,6 +110,8 @@ export async function exportBackup(): Promise<Backup> {
       bodyScans,
       coachMessages,
       coachNotes,
+      supplements,
+      supplementLogs,
     },
   };
 }

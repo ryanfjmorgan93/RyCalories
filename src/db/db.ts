@@ -13,6 +13,8 @@ import type {
   ProductCacheEntry,
   ProgressionDecision,
   Recipe,
+  Supplement,
+  SupplementLog,
   Routine,
   RoutineExercise,
   Session,
@@ -33,7 +35,7 @@ import type {
  * pre-migration backup silently never fires for that upgrade. `src/db/db.test.ts` asserts this
  * against the live `db.verno` so the two cannot drift apart unnoticed.
  */
-export const DB_VERSION = 4;
+export const DB_VERSION = 5;
 
 /** The IndexedDB database name, exported so callers that must talk to it raw (recovery, the
  * pre-migration backup) do not each hardcode it. src/boot/recovery.ts keeps its own copy
@@ -58,6 +60,8 @@ export class IronDB extends Dexie {
   bodyScans!: EntityTable<BodyScan, 'id'>;
   coachMessages!: EntityTable<CoachMessage, 'id'>;
   coachNotes!: EntityTable<CoachNote, 'id'>;
+  supplements!: EntityTable<Supplement, 'id'>;
+  supplementLogs!: EntityTable<SupplementLog, 'id'>;
 
   constructor(name = DB_NAME) {
     super(name);
@@ -106,6 +110,13 @@ export class IronDB extends Dexie {
       coachMessages: 'id, at',
       coachNotes: 'id, createdAt',
     });
+
+    // Version 5 adds the supplement checklist. Additive DELTA with no upgrade callback, for the
+    // same reasons as versions 2 to 4 above.
+    this.version(5).stores({
+      supplements: 'id, order',
+      supplementLogs: 'id, date, supplementId',
+    });
   }
 }
 
@@ -137,5 +148,7 @@ export const TABLE_NAMES = [
   'bodyScans',
   'coachMessages',
   'coachNotes',
+  'supplements',
+  'supplementLogs',
 ] as const;
 export type TableName = (typeof TABLE_NAMES)[number];
