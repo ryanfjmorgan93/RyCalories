@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/db';
 import { useNavigate, useParams } from 'react-router-dom';
 import { createExercise, deleteExercise, exerciseUsage, updateExercise, type ExerciseInput } from '@/db/repo';
+import { muscleLabel } from '@/domain/format';
 import { EQUIPMENT_KINDS, MUSCLE_GROUPS, type Equipment, type Exercise, type ExerciseKind, type MuscleGroup } from '@/domain/types';
 import { STRENGTH_STANDARDS, type StrengthStandard } from '@/domain/standards';
 import { Button } from '@/ui/components/Button';
@@ -214,7 +215,7 @@ export function ExerciseEditScreen() {
                 <div className="flex flex-wrap gap-2">
                   {MUSCLE_GROUPS.map((g) => (
                     <Chip key={g} className="min-h-11" active={form.muscleGroup === g} onClick={() => patch({ muscleGroup: g })}>
-                      {g}
+                      {muscleLabel(g)}
                     </Chip>
                   ))}
                 </div>

@@ -9,8 +9,8 @@ import { NumberInput } from '@/ui/components/NumberField';
 import { toast } from '@/ui/components/Toast';
 
 /**
- * The weekly weigh-in: from the start of the week until a weight is logged in it, one field and
- * one button, with last week's reading beside it. Home shows it only while `weighInDue`, so a
+ * The weekly weigh-in: from the start of the week until a weight is logged in it, one compact row
+ * with last week's reading, a field and a button. Home shows it only while `weighInDue`, so a
  * logged reading removes it (the live query that decides that is Home's own).
  *
  * The field starts empty and shows last week's figure as its placeholder: a stale number one tap
@@ -35,19 +35,19 @@ export function WeighInCard({ today, last }: { today: string; last: Reading | nu
     }
   };
 
+  // One compact row: Home lists it below the routines, and it is a reminder, not the headline.
   return (
-    <Card className="mt-3 p-4" data-testid="weigh-in-card">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Weigh-in</h2>
-        {last && (
-          <div className="num text-sm text-muted" data-testid="weigh-in-last">
-            Last: {fmtKg(last.kg)} · {fmtDateKey(last.date)}
+    <Card className="mt-3 px-4 py-3" data-testid="weigh-in-card">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <h2 className="label">Weigh-in</h2>
+          <div className="num mt-0.5 truncate text-sm text-muted" data-testid="weigh-in-last">
+            {last ? `Last: ${fmtKg(last.kg)} · ${fmtDateKey(last.date)}` : 'Start the trend'}
           </div>
-        )}
-      </div>
-      <div className="mt-2 text-[15px]">{last ? "This week's weight isn't logged yet." : 'Log your weight to start the trend.'}</div>
-      <div className="mt-3 flex gap-2">
-        <NumberInput value={kg} onChange={setKg} placeholder={last ? fmtNum(last.kg) : 'kg'} testId="weigh-in-input" />
+        </div>
+        <div className="w-24 shrink-0">
+          <NumberInput value={kg} onChange={setKg} placeholder={last ? fmtNum(last.kg) : 'kg'} testId="weigh-in-input" />
+        </div>
         <Button variant="primary" disabled={!valid || saving} onClick={() => void log()} data-testid="weigh-in-log">
           Log
         </Button>

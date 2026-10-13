@@ -7,7 +7,7 @@ import { applyRestDefaults, dataCounts } from '@/db/settingsQueries';
 import { clearProductCache } from '@/db/productRepo';
 import { DB_VERSION } from '@/db/db';
 import { dateKeyToDate, toDateKey } from '@/domain/dates';
-import { fmtNum } from '@/domain/format';
+import { fmtNum, muscleLabel } from '@/domain/format';
 import { calorieTargetOn } from '@/domain/nutrition';
 import { MUSCLE_GROUPS, type MuscleGroup, type Settings } from '@/domain/types';
 import { cancelRestNotification } from '@/state/native';
@@ -634,7 +634,7 @@ function ProgressionCard({ settings }: { settings: Settings }) {
       <div className="mt-3 mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Weekly set targets</div>
       <div className="grid grid-cols-2 gap-x-3 gap-y-3">
         {MUSCLE_GROUPS.filter((g) => g !== 'full body' && g !== 'other').map((g) => (
-          <Field key={g} label={g}>
+          <Field key={g} label={muscleLabel(g)}>
             <NumberInput
               value={setTargets[g]}
               onChange={(v) => setSetTargets((t) => ({ ...t, [g]: v }))}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { muscleLabel } from '@/domain/format';
 import { emptyListText, filterExerciseList, groupsInList, libraryCountsLine, listHeading, LIST_PAGE_SIZE, type ExerciseListRow } from '@/domain/library';
 import type { MuscleGroup } from '@/domain/types';
 import { Button } from '@/ui/components/Button';
@@ -102,7 +103,7 @@ export function ExercisesScreen() {
           </Chip>
           {groups.map((g) => (
             <Chip key={g} className="min-h-11" active={filter === g} onClick={() => setFilter(filter === g ? 'all' : g)}>
-              {g}
+              {muscleLabel(g)}
             </Chip>
           ))}
         </div>

@@ -145,7 +145,7 @@ test.describe('the Exercises screen', () => {
 
     const target = libraryEntries(owned, 'rear delts')[0]!;
     expect(target, 'the catalogue has a rear delts entry the seed does not').toBeDefined();
-    const chip = page.getByRole('button', { name: 'rear delts', exact: true });
+    const chip = page.getByRole('button', { name: 'Rear delts', exact: true });
     await chip.click();
     await expectClass(chip, 'bg-fg');
 
@@ -355,7 +355,7 @@ test.describe('the Exercises screen keeps its place', () => {
     const entry = libraryEntries(owned, 'rear delts')[0]!;
     await openExercises(page, owned);
 
-    const chip = page.getByRole('button', { name: 'rear delts', exact: true });
+    const chip = page.getByRole('button', { name: 'Rear delts', exact: true });
     await chip.click();
     await expectClass(chip, 'bg-fg');
     await page.getByTestId('exercise-search').fill(entry.name);
@@ -368,7 +368,7 @@ test.describe('the Exercises screen keeps its place', () => {
 
     // The filters are what was left, and what they show is the exercise just added, now the owner's.
     await expect(page.getByTestId('exercise-search')).toHaveValue(entry.name);
-    await expectClass(page.getByRole('button', { name: 'rear delts', exact: true }), 'bg-fg');
+    await expectClass(page.getByRole('button', { name: 'Rear delts', exact: true }), 'bg-fg');
     await expectClass(page.getByRole('button', { name: 'All', exact: true }), 'bg-fg', false);
     await expect(page.getByTestId('exercise-scope-all')).toHaveAttribute('aria-checked', 'true');
     await expect(page.getByTestId(`exercise-row-${id}`)).toBeVisible();
@@ -382,7 +382,7 @@ test.describe('the Exercises screen keeps its place', () => {
 
     await page.getByTestId('exercise-scope-yours').click();
     await expect(page.getByTestId('exercise-scope-yours')).toHaveAttribute('aria-checked', 'true');
-    const chip = page.getByRole('button', { name: 'biceps', exact: true });
+    const chip = page.getByRole('button', { name: 'Biceps', exact: true });
     await chip.click();
     await expectClass(chip, 'bg-fg');
     await page.getByTestId('exercise-search').fill('curl');
@@ -397,7 +397,7 @@ test.describe('the Exercises screen keeps its place', () => {
     await expect(page).toHaveURL(/\/exercises$/);
 
     await expect(page.getByTestId('exercise-scope-yours')).toHaveAttribute('aria-checked', 'true');
-    await expectClass(page.getByRole('button', { name: 'biceps', exact: true }), 'bg-fg');
+    await expectClass(page.getByRole('button', { name: 'Biceps', exact: true }), 'bg-fg');
     await expect(page.getByTestId('exercise-search')).toHaveValue('curl');
     await expect(rows).toHaveCount(listed);
   });
@@ -407,7 +407,7 @@ test.describe('the Exercises screen keeps its place', () => {
     await page.goto('/routines');
     await page.getByText('Exercise library').click();
     await expect(page).toHaveURL(/\/exercises$/);
-    const chip = page.getByRole('button', { name: 'rear delts', exact: true });
+    const chip = page.getByRole('button', { name: 'Rear delts', exact: true });
     await chip.click();
     await expectClass(chip, 'bg-fg');
     await page.getByTestId('exercise-search').fill('fly');
@@ -421,7 +421,7 @@ test.describe('the Exercises screen keeps its place', () => {
     await expect(page).toHaveURL(/\/exercises$/);
 
     await expectClass(page.getByRole('button', { name: 'All', exact: true }), 'bg-fg');
-    await expectClass(page.getByRole('button', { name: 'rear delts', exact: true }), 'bg-fg', false);
+    await expectClass(page.getByRole('button', { name: 'Rear delts', exact: true }), 'bg-fg', false);
     await expect(page.getByTestId('exercise-search')).toHaveValue('');
     await expect(page.getByTestId('exercise-scope-all')).toHaveAttribute('aria-checked', 'true');
   });

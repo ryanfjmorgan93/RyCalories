@@ -18,6 +18,13 @@ test('add supplements, tick one, and it is still ticked after a reload', async (
   await fresh(page);
   const card = page.getByTestId('supplements-card');
   await expect(card).toContainText('Nothing on the list.');
+  // Below the training, not the first thing on Home: under the routines and Short session.
+  await expect
+    .poll(async () => {
+      const [c, short] = await Promise.all([card.boundingBox(), page.getByTestId('short-session').boundingBox()]);
+      return !!c && !!short && c.y > short.y + short.height;
+    })
+    .toBe(true);
 
   await page.getByTestId('supplements-edit').click();
   const sheet = page.getByTestId('supplements-sheet');
@@ -32,9 +39,10 @@ test('add supplements, tick one, and it is still ticked after a reload', async (
   await expect(sheet).toContainText('Vitamin D');
   await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click();
 
-  // Morning before any time, each under its own heading.
+  // Morning before any time; the time of day is in each pill's accessible name.
   await expect(card.getByRole('checkbox')).toHaveText([/Vitamin D/, /Creatine.*5 g/]);
-  await expect(card).toContainText(/Morning\s*Vitamin D.*Any time\s*Creatine/);
+  await expect(card.getByRole('checkbox', { name: 'Vitamin D, morning' })).toBeVisible();
+  await expect(card.getByRole('checkbox', { name: 'Creatine 5 g, any time' })).toBeVisible();
   await expect(page.getByTestId('supplements-count')).toHaveText(' · 0 of 2');
 
   const creatine = page.getByTestId('supplement-Creatine');

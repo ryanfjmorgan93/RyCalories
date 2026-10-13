@@ -28,6 +28,11 @@ export function fmtRange(min: number, max: number, unit = ''): string {
   return min === max ? `${fmtNum(min)}${u}` : `${fmtNum(min)}–${fmtNum(max)}${u}`;
 }
 
+/** A muscle group as a label or a filter chip shows it: first letter capitalised ("Rear delts"). Stored values stay lower case. */
+export function muscleLabel(group: string): string {
+  return group.charAt(0).toUpperCase() + group.slice(1);
+}
+
 export function fmtReps(reps: number[]): string {
   return reps.join('/');
 }

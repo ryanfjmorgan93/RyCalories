@@ -11,9 +11,9 @@ import { Sheet } from './components/Sheet';
 import { toast } from './components/Toast';
 
 /**
- * Home's supplement checklist for today: a pill per supplement, grouped by time of day, tapped to
- * tick or untick (the dose is on the pill when there is one). With nothing on the list it is one
- * line offering to add some. Edit opens the list itself.
+ * Home's supplement checklist for today, kept small: a pill per supplement in one row that scrolls
+ * sideways, in time-of-day order, tapped to tick or untick (the dose is on the pill when there is one). With
+ * nothing on the list it is one line offering to add some. Edit opens the list.
  */
 export function SupplementsCard({ today }: { today: string }) {
   const supplements = useLiveQuery(() => db.supplements.toArray(), []);
@@ -21,12 +21,11 @@ export function SupplementsCard({ today }: { today: string }) {
   const [editing, setEditing] = useState(false);
   if (!supplements || !logs) return null;
   const day = supplementDay(supplements, logs, today);
-  const groups = SUPPLEMENT_TIMES.map((time) => ({ time, items: day.items.filter((i) => i.supplement.time === time) })).filter((g) => g.items.length > 0);
 
   return (
     <>
       <Card className="mt-3 overflow-hidden" data-testid="supplements-card">
-        <div className="flex items-center justify-between px-4 pt-3">
+        <div className="flex items-center justify-between px-4 pt-2">
           <span className="label">
             Supplements{day.total > 0 && <span data-testid="supplements-count"> · {day.taken} of {day.total}</span>}
           </span>
@@ -35,44 +34,41 @@ export function SupplementsCard({ today }: { today: string }) {
           </Button>
         </div>
         {day.total === 0 ? (
-          <div className="px-4 pb-4 text-sm text-muted">Nothing on the list.</div>
+          <div className="px-4 pb-3 text-sm text-muted">Nothing on the list.</div>
         ) : (
-          <div className="space-y-3 px-4 pt-1 pb-4">
-            {groups.map(({ time, items }) => (
-              <div key={time}>
-                <div className="mb-1.5 text-xs font-semibold text-dim">{SUPPLEMENT_TIME_LABEL[time]}</div>
-                <ul className="flex flex-wrap gap-2">
-                  {items.map(({ supplement, taken }) => (
-                    <li key={supplement.id} className="min-w-0 max-w-full">
-                      <button
-                        type="button"
-                        role="checkbox"
-                        aria-checked={taken}
-                        onClick={() => void toggleSupplementTaken(supplement.id, today)}
-                        data-testid={`supplement-${supplement.name}`}
-                        className={`flex min-h-12 max-w-full items-center gap-2 rounded-full border py-2 pr-4 pl-2 text-left transition-colors ${
-                          taken ? 'border-accent bg-accent text-accent-fg' : 'border-glass-border bg-white/[.04] active:bg-white/[.08]'
-                        }`}
-                      >
-                        <span
-                          aria-hidden="true"
-                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 ${taken ? 'border-accent-fg/40 bg-black/12' : 'border-line'}`}
-                        >
-                          {taken && (
-                            <svg width="14" height="14" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2">
-                              <path d="M2.5 6.5 5 9l4.5-6" />
-                            </svg>
-                          )}
-                        </span>
-                        <span className="min-w-0 truncate font-medium">{supplement.name}</span>
-                        {supplement.dose && <span className={`shrink-0 text-sm ${taken ? 'text-accent-fg/70' : 'text-muted'}`}>{supplement.dose}</span>}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+          // One row of pills that scrolls sideways, in time-of-day order (morning first), so the card
+          // is one line high however long the list. The count in the header says how many there are;
+          // the time of day is on the list itself (Edit) and in each pill's name for a reader.
+          <ul className="no-scrollbar flex gap-2 overflow-x-auto px-4 pt-1 pb-3" data-testid="supplements-row">
+            {day.items.map(({ supplement, taken }) => (
+              <li key={supplement.id} className="shrink-0">
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={taken}
+                  aria-label={`${supplement.name}${supplement.dose ? ` ${supplement.dose}` : ''}, ${SUPPLEMENT_TIME_LABEL[supplement.time].toLowerCase()}`}
+                  onClick={() => void toggleSupplementTaken(supplement.id, today)}
+                  data-testid={`supplement-${supplement.name}`}
+                  className={`flex min-h-11 items-center gap-2 whitespace-nowrap rounded-full border py-1.5 pr-3.5 pl-1.5 text-left text-sm transition-colors ${
+                    taken ? 'border-accent bg-accent text-accent-fg' : 'border-glass-border bg-white/[.04] active:bg-white/[.08]'
+                  }`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${taken ? 'border-accent-fg/40 bg-black/12' : 'border-line'}`}
+                  >
+                    {taken && (
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2">
+                        <path d="M2.5 6.5 5 9l4.5-6" />
+                      </svg>
+                    )}
+                  </span>
+                  <span className="font-medium">{supplement.name}</span>
+                  {supplement.dose && <span className={`shrink-0 ${taken ? 'text-accent-fg/70' : 'text-muted'}`}>{supplement.dose}</span>}
+                </button>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </Card>
       <SupplementsSheet open={editing} onClose={() => setEditing(false)} />

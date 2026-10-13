@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { muscleLabel } from '@/domain/format';
 import type { ExerciseListRow } from '@/domain/library';
 import type { Exercise } from '@/domain/types';
 import { Divider, Row } from './components/Card';
@@ -6,9 +7,9 @@ import { ChevronIcon } from './components/TopBar';
 import { DemoThumb } from './DemoThumb';
 import { LibraryLabel } from './LibraryLabel';
 
-/** Row subtitle: "muscle group · compound|isolation · kind label · per side". */
+/** Row subtitle: "Muscle group · compound|isolation · kind label · per side". */
 export function exerciseSubtitle(e: Exercise): string {
-  const parts: string[] = [e.muscleGroup, e.isCompound ? 'compound' : 'isolation'];
+  const parts: string[] = [muscleLabel(e.muscleGroup), e.isCompound ? 'compound' : 'isolation'];
   if (e.kind === 'bodyweight_plus') parts.push('bodyweight +kg');
   else if (e.kind === 'carry') parts.push('carry');
   else if (e.kind === 'timed') parts.push('timed');
@@ -58,7 +59,7 @@ export const LibraryRow = memo(function LibraryRow({
               <LibraryLabel />
             </span>
           }
-          subtitle={`${row.muscleLabel} · ${row.equipment}`}
+          subtitle={`${muscleLabel(row.muscleLabel)} · ${row.equipment}`}
           right={<ChevronIcon />}
         />
       )}

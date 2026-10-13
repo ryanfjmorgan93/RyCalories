@@ -174,10 +174,6 @@ export function HomeScreen() {
 
         {review && <WeeklyReviewCard review={review} />}
 
-        <SupplementsCard today={todayKey} />
-
-        {weighIn === true && <WeighInCard today={todayKey} last={readings ? lastWeekReading(readings, todayKey) : null} />}
-
         {calendar && (
           <div className="mt-2 px-1 text-xs font-semibold text-muted" data-testid="streak-line">
             {calendar.streak > 0 ? `${calendar.streak} ${calendar.streak === 1 ? 'week' : 'weeks'} · ${calendar.line}` : `This week ${calendar.thisWeek} of ${calendar.weeklyTarget}`}
@@ -201,6 +197,10 @@ export function HomeScreen() {
 
         {/* With no routine to lay them over, the day's numbers stand on their own. */}
         {todayOverlay && (!routines || routines.length === 0) && <div className="mt-3">{todayOverlay}</div>}
+
+        {/* The daily reminders sit under the training, small: not the first thing on opening the app. */}
+        <SupplementsCard today={todayKey} />
+        {weighIn === true && <WeighInCard today={todayKey} last={readings ? lastWeekReading(readings, todayKey) : null} />}
 
         <SectionTitle right={<Button size="sm" variant="ghost" className="-mb-2 text-accent" onClick={() => nav('/history')}>All</Button>}>Recent sessions</SectionTitle>
         <Card>
