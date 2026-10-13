@@ -107,7 +107,10 @@ The owner does not check on device. Correctness has to come from the code and th
 - `src/ai/` — the coach: Claude through `@anthropic-ai/sdk` (key, spend cap, context, persona,
   tools, chat, moments, photo and label readers). Sonnet for conversation, tools and photos; Haiku
   for coach lines; never Opus. Tests never call the real API: unit tests use
-  `src/test/fakeClaude.ts`, e2e intercepts `api.anthropic.com` with `page.route`.
+  `src/test/fakeClaude.ts`, e2e intercepts `api.anthropic.com` with `page.route`. The routine and
+  session tools reach the whole exercise library by name (`findExerciseAnywhere` in
+  `src/db/catalogueRepo.ts`, the paste matcher's rules); with no review step, a library entry is
+  taken only when the name says exactly it, and a looser guess is named back, never added.
 - `src/platform/` — share-sheet import (InBody files), local reminders and steps from Health
   Connect (`health.ts`, through `@capgo/capacitor-health`). There is no custom native code; plugins
   come from npm and `npx cap sync` wires them. A browser has no Health Connect, so no test reaches

@@ -21,6 +21,7 @@
  * UK table before its own figures are used (docs/adr/0004), and appended to that day's meal for the
  * slot (foodRepo `logItemsToSlot`) rather than made a meal of its own.
  */
+import { findExerciseAnywhere, type ExercisePick } from '@/db/catalogueRepo';
 import { db } from '@/db/db';
 import { dayTotals } from '@/db/foodRepo';
 import {
@@ -353,11 +354,13 @@ export function createCoachActions(deps: ActionDeps = {}): CoachActions {
   const now = () => (deps.now ? deps.now() : new Date());
   const today = () => toDateKey(now());
 
-  /** The owner's exercise a name means, or null. */
-  async function findOwnExercise(name: string): Promise<Exercise | null> {
-    const all = await db.exercises.toArray();
-    const m = matchExercise(name, candidatesOf(all));
-    return m ? (all.find((e) => e.id === m.id) ?? null) : null;
+  /** Why a name found nothing to add: nothing near it, or only a library entry it does not exactly name. */
+  function notFound(name: string, pick: Extract<ExercisePick, { kind: 'closest' }> | null) {
+    return fail(
+      pick
+        ? `No exercise called "${name}". The closest in the app's library is "${pick.name}"; to use it, ask for it by that name.`
+        : `No exercise called "${name}" among the owner's exercises or in the app's library.`,
+    );
   }
 
   /** The numbers of a sets / reps / weight change, checked, as the patch they make. */
@@ -475,15 +478,18 @@ export function createCoachActions(deps: ActionDeps = {}): CoachActions {
       const items = await routineItems(routine.id);
 
       if (input.change === 'add') {
-        const exercise = await findOwnExercise(input.exercise);
-        if (!exercise) return fail(`"${input.exercise}" is not one of the owner's exercises.`);
+        const pick = await findExerciseAnywhere(input.exercise);
+        if (!pick || pick.kind === 'closest') return notFound(input.exercise, pick);
+        const fromLibrary = pick.kind === 'library';
+        const exercise = pick.kind === 'owned' ? pick.exercise : await pick.add();
         if (items.some((it) => it.exercise.id === exercise.id)) return fail(`${exercise.name} is already in ${routine.name}.`);
         const rx = await addRoutineExercise(routine.id, exercise.id);
         const numbers = input.sets !== undefined || input.repMin !== undefined || input.repMax !== undefined || input.weightKg !== undefined ? numbersOf(input, rx, exercise) : null;
-        if (numbers && 'error' in numbers) return { ok: true, result: `Added ${exercise.name} to ${routine.name} with the default sets and reps. ${numbers.error}`, description: `Added ${exercise.name} to ${routine.name}` };
+        const added = fromLibrary ? ` ${exercise.name} was not one of their exercises: it came from the library and is theirs now, with no weight history.` : '';
+        if (numbers && 'error' in numbers) return { ok: true, result: `Added ${exercise.name} to ${routine.name} with the default sets and reps. ${numbers.error}${added}`, description: `Added ${exercise.name} to ${routine.name}` };
         if (numbers) await applyToRoutine(rx, numbers.patch);
         const extra = numbers ? `: ${patchText(numbers.patch, exercise)}` : '';
-        return { ok: true, result: `Added ${exercise.name} to ${routine.name}${extra}.`, description: `Added ${exercise.name} to ${routine.name}${extra}` };
+        return { ok: true, result: `Added ${exercise.name} to ${routine.name}${extra}.${added}`, description: `Added ${exercise.name} to ${routine.name}${extra}` };
       }
 
       const m = matchExercise(input.exercise, candidatesOf(items.map((it) => ({ id: it.rx.id, name: it.exercise.name, aliases: it.exercise.aliases }))));
@@ -557,15 +563,18 @@ export function createCoachActions(deps: ActionDeps = {}): CoachActions {
       const slots = await sessionSlots(session);
 
       if (input.change === 'add') {
-        const exercise = await findOwnExercise(input.exercise);
-        if (!exercise) return fail(`"${input.exercise}" is not one of the owner's exercises.`);
+        const pick = await findExerciseAnywhere(input.exercise);
+        if (!pick || pick.kind === 'closest') return notFound(input.exercise, pick);
         // The same exclusion as the Add exercise picker: anything already in the session, skipped or swapped out included.
+        // A library entry is not one of theirs yet, so it cannot already be there.
+        const exercise = pick.kind === 'owned' ? pick.exercise : await pick.add();
         const there = slots.find((s) => s.exercise.id === exercise.id);
         if (there?.kind === 'skipped') return fail(`${exercise.name} is in today's session but skipped. Put it back (unskip) instead of adding it again.`);
         if (there?.kind === 'swapped-out') return fail(`${exercise.name} is in today's session but swapped for ${there.partner!.name}. Undo the swap (unskip) to put it back.`);
         if (there) return fail(`${exercise.name} is already in today's session.`);
         await addExtraExercise(session.id, exercise.id);
-        return { ok: true, result: `Added ${exercise.name} to today's session.`, description: `${exercise.name} added today` };
+        const added = pick.kind === 'library' ? ` ${exercise.name} came from the library and is one of their exercises now, with no weight history.` : '';
+        return { ok: true, result: `Added ${exercise.name} to today's session.${added}`, description: `${exercise.name} added today` };
       }
 
       const m = matchExercise(input.exercise, candidatesOf(slots.map((s) => ({ id: s.key, name: s.exercise.name, aliases: s.exercise.aliases }))));
@@ -612,25 +621,31 @@ export function createCoachActions(deps: ActionDeps = {}): CoachActions {
         case 'swap': {
           if (!input.swapTo) return fail('Swap for which exercise?');
           if (slot.kind === 'extra') return fail(`${name} was added to today's session rather than planned, so there is nothing to swap it for.`);
-          const sub = await findOwnExercise(input.swapTo);
-          if (!sub) return fail(`"${input.swapTo}" is not one of the owner's exercises.`);
+          const pick = await findExerciseAnywhere(input.swapTo);
+          if (!pick || pick.kind === 'closest') return notFound(input.swapTo, pick);
+          // A library entry is not one of theirs yet: none of the checks against the session can match it,
+          // and it is only added once the swap is going ahead, so a refused swap leaves no new exercise behind.
+          const owned = pick.kind === 'owned' ? pick.exercise : null;
+          const subName = pick.kind === 'owned' ? pick.exercise.name : pick.name;
           // The slot is the routine exercise; asking about its substitute means the same slot.
           const original = slot.kind === 'substitute' ? slot.partner! : slot.exercise;
           const current = slot.kind === 'swapped-out' ? slot.partner! : slot.exercise;
-          if (sub.id === current.id) return fail('That is the same exercise.');
-          if (sub.id === original.id) return fail(`${original.name} is the exercise being swapped out. Unskip it to put it back.`);
+          if (owned?.id === current.id) return fail('That is the same exercise.');
+          if (owned?.id === original.id) return fail(`${original.name} is the exercise being swapped out. Unskip it to put it back.`);
           // The same exclusion as the swap sheet: nothing already in the session, or it would get a second card.
-          if (slots.some((s) => s.exercise.id === sub.id)) return fail(`${sub.name} is already in today's session.`);
+          if (owned && slots.some((s) => s.exercise.id === owned.id)) return fail(`${owned.name} is already in today's session.`);
           const rx = slot.rx!;
           const earlier = slot.kind === 'swapped-out' ? slot.partner : slot.kind === 'substitute' ? slot.exercise : undefined;
           if (earlier) {
             // A second swap on the slot replaces the first: undo it, or its substitute would be left behind as an extra.
             const done = (await setsForSlot(session.id, null, earlier.id)).length;
-            if (done > 0) return fail(`${earlier.name} has ${plural(done, 'set')} logged today, so it cannot be swapped out. Leave it, or add ${sub.name} as an extra.`);
+            if (done > 0) return fail(`${earlier.name} has ${plural(done, 'set')} logged today, so it cannot be swapped out. Leave it, or add ${subName} as an extra.`);
             await undoSwap(session.id, rx.id);
           }
+          const sub = pick.kind === 'owned' ? pick.exercise : await pick.add();
           await swapExercise(session.id, rx.id, sub.id);
-          return { ok: true, result: `${original.name} is swapped for ${sub.name} today.`, description: `${original.name} swapped for ${sub.name} today` };
+          const added = owned ? '' : ` ${sub.name} came from the library and is one of their exercises now, with no weight history.`;
+          return { ok: true, result: `${original.name} is swapped for ${sub.name} today.${added}`, description: `${original.name} swapped for ${sub.name} today` };
         }
 
         case 'sets':

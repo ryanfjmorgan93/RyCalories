@@ -778,3 +778,77 @@ describe('the meal written is the meal read back', () => {
     expect(meal?.macros).toEqual({ kcal: 310, protein: 10, carbs: 52, fat: 6 });
   });
 });
+
+describe('exercises from the app library', () => {
+  it('adds a library exercise to a routine by its name, making it one of the owner\'s with its picture', async () => {
+    const actions = createCoachActions();
+    const before = await db.exercises.count();
+    const out = await actions.editRoutine({ routine: 'Upper (Push)', exercise: 'Chest-Supported Row', change: 'add' });
+    expect(out).toMatchObject({ ok: true, description: 'Added Chest Supported Row to Upper (Push)' });
+    expect(out.result).toContain('came from the library');
+    expect(await db.exercises.count()).toBe(before + 1);
+    const row = await rxOf('Upper (Push)', 'Chest Supported Row');
+    expect(row.exercise.demo).toBe('chest-supported-row');
+
+    // Asked for again, it is the owner's own now: no second row, and it is already there.
+    const again = await actions.editRoutine({ routine: 'Upper (Push)', exercise: 'chest supported rows', change: 'add' });
+    expect(again).toMatchObject({ ok: false, result: 'Chest Supported Row is already in Upper (Push).' });
+    expect(await db.exercises.count()).toBe(before + 1);
+  });
+
+  it('takes a cable lateral raise as the cable one, not the dumbbell Lateral Raise the owner has', async () => {
+    const actions = createCoachActions();
+    expect((await actions.editRoutine({ routine: 'Upper (Push)', exercise: 'Lateral Raise', change: 'add' })).ok).toBe(true);
+    const out = await actions.editRoutine({ routine: 'Upper (Push)', exercise: 'Cable Lateral Raise', change: 'add' });
+    expect(out).toMatchObject({ ok: true, description: 'Added Cable Lateral Raise to Upper (Push)' });
+    const names = (await routineItems(PUSH)).map((it) => it.exercise.name);
+    expect(names).toEqual(expect.arrayContaining(['Lateral Raise', 'Cable Lateral Raise']));
+  });
+
+  it('finds a catalogue exercise from shorthand that says the same words', async () => {
+    const actions = createCoachActions();
+    const out = await actions.editRoutine({ routine: 'Upper (Push)', exercise: 'Incline DB Rows', change: 'add' });
+    expect(out).toMatchObject({ ok: true, description: 'Added Dumbbell Incline Row to Upper (Push)' });
+    expect((await rxOf('Upper (Push)', 'Dumbbell Incline Row')).exercise.demo).toBe('cat:dumbbell-incline-row');
+  });
+
+  it('names the closest library exercise instead of adding a guess, and writes nothing', async () => {
+    const actions = createCoachActions();
+    const before = await db.exercises.count();
+    const out = await actions.editRoutine({ routine: 'Upper (Push)', exercise: 'Zercher Squat Of Doom', change: 'add' });
+    expect(out.ok).toBe(false);
+    expect(out.result).toBe('No exercise called "Zercher Squat Of Doom". The closest in the app\'s library is "Zercher Squats"; to use it, ask for it by that name.');
+    expect(await db.exercises.count()).toBe(before);
+    expect((await routineItems(PUSH)).map((it) => it.exercise.name)).not.toContain('Zercher Squats');
+  });
+
+  it('adds and swaps in library exercises in today\'s session, and a refused swap leaves no new exercise behind', async () => {
+    const actions = createCoachActions({ setPlanOverride: vi.fn() });
+    const session = await startSession(PUSH);
+
+    const add = await actions.editSession({ exercise: 'Machine Lateral Raise', change: 'add' });
+    expect(add).toMatchObject({ ok: true, description: 'Machine Lateral Raise added today' });
+    const machine = (await db.exercises.toArray()).find((e) => e.name === 'Machine Lateral Raise')!;
+    expect((await getActiveSession())!.extraExerciseIds).toContain(machine.id);
+
+    // Bench swapped for one of theirs, with a set logged on the substitute: a second swap would delete
+    // that set, so it is refused, and the library exercise it named is not added.
+    expect((await actions.editSession({ exercise: 'bench', change: 'swap', swapTo: 'Incline DB Curl' })).ok).toBe(true);
+    await logSet({ sessionId: session.id, routineExerciseId: null, exerciseId: SEED_EXERCISE_IDS['Incline DB Curl'], type: 'working', weight: 10, reps: 10 });
+    const before = await db.exercises.count();
+    const refused = await actions.editSession({ exercise: 'bench', change: 'swap', swapTo: 'Meadows Row' });
+    expect(refused).toMatchObject({ ok: false, result: 'Incline DB Curl has 1 set logged today, so it cannot be swapped out. Leave it, or add Meadows Row as an extra.' });
+    expect(await db.exercises.count()).toBe(before);
+    expect((await db.exercises.toArray()).some((e) => e.name === 'Meadows Row')).toBe(false);
+  });
+
+  it('swaps in a library exercise when the swap goes ahead', async () => {
+    const actions = createCoachActions({ setPlanOverride: vi.fn() });
+    await startSession(PUSH);
+    const bench = await rxOf('Upper (Push)', 'Bench Press (Barbell)');
+    const out = await actions.editSession({ exercise: 'bench', change: 'swap', swapTo: 'Meadows Row' });
+    expect(out).toMatchObject({ ok: true, description: 'Bench Press (Barbell) swapped for Meadows Row today' });
+    const meadows = (await db.exercises.toArray()).find((e) => e.name === 'Meadows Row')!;
+    expect((await getActiveSession())!.swaps).toEqual({ [bench.rx.id]: meadows.id });
+  });
+});

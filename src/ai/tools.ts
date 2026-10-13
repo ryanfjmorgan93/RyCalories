@@ -150,7 +150,7 @@ export function createCoachTools(actions: CoachActions, turn: TurnRecord): Coach
     strictTool({
       name: 'edit_routine',
       description:
-        "Change a saved routine permanently: sets, rep range or weight of one exercise, or add or remove an exercise. Use for 'in my push day make bench 4 sets' or 'put it in the routine'. To change only today, use edit_session instead.",
+        "Change a saved routine permanently: sets, rep range or weight of one exercise, or add or remove an exercise. An exercise to add can be one of the owner's or any in the app's built-in library of about 800 (use its usual name, e.g. 'Chest Supported Row'); a library one becomes theirs. Use for 'in my push day make bench 4 sets' or 'put it in the routine'. To change only today, use edit_session instead.",
       inputSchema: EditRoutineInput,
       run: async (input) =>
         finish(await actions.editRoutine({ routine: input.routine, exercise: input.exercise, change: input.change, sets: input.sets, repMin: input.rep_min, repMax: input.rep_max, weightKg: input.weight_kg }), turn),
@@ -158,7 +158,7 @@ export function createCoachTools(actions: CoachActions, turn: TurnRecord): Coach
     strictTool({
       name: 'edit_session',
       description:
-        "Change today's live session only (the routine stays as it is): sets, reps or weight of an exercise, swap it for another, skip it or put it back, or add an exercise. Only works while a session is live.",
+        "Change today's live session only (the routine stays as it is): sets, reps or weight of an exercise, swap it for another, skip it or put it back, or add an exercise. An exercise to add or swap in can be the owner's or any in the app's built-in library. Only works while a session is live.",
       inputSchema: EditSessionInput,
       run: async (input) =>
         finish(await actions.editSession({ exercise: input.exercise, change: input.change, sets: input.sets, repMin: input.rep_min, repMax: input.rep_max, weightKg: input.weight_kg, swapTo: input.swap_to }), turn),

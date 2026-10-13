@@ -136,9 +136,9 @@ export function bodyScansBlock(scans: readonly BodyScan[], limit = 3): string {
 }
 
 /**
- * The owner's own exercises that no routine uses, by name: what the coach can add to a routine or
- * swap in without asking, since a tool only finds exercises the owner already has. Null when there
- * are none.
+ * The owner's own exercises that no routine uses, by name: ones with history the coach can add to a
+ * routine or swap in. The tools also reach the app's built-in library by name, which is too long to
+ * list here. Null when there are none.
  */
 export function otherExercisesBlock(exercises: readonly Pick<Exercise, 'id' | 'name'>[], usedIds: ReadonlySet<string>, limit = 40): string | null {
   const names = exercises
