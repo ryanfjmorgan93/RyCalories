@@ -17,15 +17,6 @@ export function fmtKg(n: number): string {
   return `${fmtNum(n)} kg`;
 }
 
-/**
- * The leg-day protein line of the session checklist, from the owner's own target
- * (`settings.proteinTargetLegDay`). While settings have not loaded the figure is left out rather
- * than showing a default that may not be the target.
- */
-export function legDayProteinLabel(grams: number | undefined): string {
-  return grams === undefined ? 'Protein' : `Protein ${fmtNum(grams)} g`;
-}
-
 /** Weight label aware of exercise kind: bodyweight_plus shows "+5 kg" / "bodyweight". */
 export function fmtWeight(kind: ExerciseKind, n: number): string {
   if (kind === 'bodyweight_plus') return n === 0 ? 'bodyweight' : `+${fmtNum(n)} kg`;
@@ -91,22 +82,42 @@ export function targetLine(rx: RoutineExercise, kind: ExerciseKind): string {
   return `${sets} × ${reps} @ ${fmtWeight(kind, rx.currentWeight)}`;
 }
 
+/**
+ * The working sets as lifted: "8/8/8 at 110 kg" when every set was at one weight, and each run of
+ * sets at one weight in order when they were not: "8 at 85 kg, 8/8 at 101 kg".
+ */
+function setsAt(d: Decision, w: (n: number) => string): string {
+  if (d.workingReps.length === 0) return `no working sets at ${w(d.baseWeight)}`;
+  if (d.sessionWeight !== null) return `${fmtReps(d.workingReps)} at ${w(d.sessionWeight)}`;
+  const runs: { weight: number; reps: number[] }[] = [];
+  d.workingReps.forEach((r, i) => {
+    const weight = d.workingWeights[i]!;
+    const last = runs.at(-1);
+    if (last && last.weight === weight) last.reps.push(r);
+    else runs.push({ weight, reps: [r] });
+  });
+  return runs.map((run) => `${fmtReps(run.reps)} at ${w(run.weight)}`).join(', ');
+}
+
 /** One-line plain-terms decision, e.g. "8/8/8/8 at 110 kg → 115 kg next time". */
 export function decisionLine(d: Decision, kind: ExerciseKind): string {
-  const at = d.sessionWeight ?? d.fromWeight;
+  const at = d.sessionWeight ?? d.baseWeight;
   const reps = d.workingReps.length ? fmtReps(d.workingReps) : 'no working sets';
   const w = (n: number) => fmtWeight(kind, n);
-  // When the session was lifted at a different weight than prescribed, say so every time.
-  const was = d.sessionWeight !== null && d.sessionWeight !== d.fromWeight ? ` (was ${w(d.fromWeight)})` : '';
+  const lifted = setsAt(d, w);
+  // When the weight progressed from is not what was prescribed, say so every time.
+  const was = d.baseWeight !== d.fromWeight ? ` (was ${w(d.fromWeight)})` : '';
   switch (d.rule) {
     case 'increase':
-      return `${reps} at ${w(at)} → ${w(d.toWeight)} next time${was}`;
+      return `${lifted} → ${w(d.toWeight)} next time${was}`;
     case 'hold':
-      return `${reps} at ${w(at)} → hold ${w(d.toWeight)}${was}`;
+      return `${lifted} → hold ${w(d.toWeight)}${was}`;
     case 'hold_missing_sets':
-      return `${d.workingSets}/${d.targetSets} sets (${reps}) at ${w(at)} → hold ${w(d.toWeight)}${was}`;
+      return d.sessionWeight !== null || d.workingReps.length === 0
+        ? `${d.workingSets}/${d.targetSets} sets (${reps}) at ${w(at)} → hold ${w(d.toWeight)}${was}`
+        : `${d.workingSets}/${d.targetSets} sets (${lifted}) → hold ${w(d.toWeight)}${was}`;
     case 'hold_hard':
-      return `${reps} at ${w(at)} → hold ${w(d.toWeight)}${was}`;
+      return `${lifted} → hold ${w(d.toWeight)}${was}`;
     case 'calibrating':
       return 'calibrating — no decision';
     case 'not_applicable':
@@ -123,14 +134,19 @@ export function decisionLine(d: Decision, kind: ExerciseKind): string {
 
 /**
  * Why the weight moved the way it did, when the slot's effort chip had a say: "Felt easy: up 5 kg"
- * (Easy, every set at the top), "Felt good: up 2.5 kg", "Marked Hard, so 60 kg again". Null when
- * the chip changed nothing (below the top of the range, a missed set, no chip, calibrating, a
- * deload). The Summary and the live verdict both quote it.
+ * (Easy, every set at the top), "Felt good: up 2.5 kg", "Marked Hard, so 60 kg again"; or when the
+ * sets were at different weights and the decision is held at the heaviest one done for the range:
+ * "Heaviest set in the rep range: 101 kg, so 101 kg next time". Null when neither changed anything
+ * (below the top of the range at one weight, a missed set, no chip, calibrating, a deload). The
+ * Summary and the live verdict both quote it.
  */
 export function effortReason(d: Decision, kind: ExerciseKind): string | null {
   if (d.rule === 'hold_hard') return `Marked Hard, so ${fmtWeight(kind, d.toWeight)} again`;
+  if ((d.rule === 'hold' || d.rule === 'hold_missing_sets') && d.sessionWeight === null && d.workingReps.length > 0 && d.baseWeight !== d.fromWeight) {
+    return `Heaviest set in the rep range: ${fmtWeight(kind, d.baseWeight)}, so ${fmtWeight(kind, d.toWeight)} next time`;
+  }
   if (d.rule !== 'increase' || !d.effort) return null;
-  const up = Math.round((d.toWeight - (d.sessionWeight ?? d.fromWeight)) * 100) / 100;
+  const up = Math.round((d.toWeight - d.baseWeight) * 100) / 100;
   if (up <= 0) return null;
   return `${d.effort === 'easy' ? 'Felt easy' : 'Felt good'}: up ${fmtKg(up)}`;
 }

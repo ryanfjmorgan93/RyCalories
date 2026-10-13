@@ -127,13 +127,14 @@ describe('liveVerdict — flattering-number traps', () => {
     expect(v.line).toBe('→ 105 kg next time'); // 100 + increment(5), never 115
   });
 
-  it('sets logged at inconsistent weights progress from rx.currentWeight (decide()\'s real base), never from the last weight lifted', () => {
-    // Two different weights among the counted sets → sessionWeight is null inside decide(), so
-    // baseWeight falls back to rx.currentWeight (110), not the last set's weight (105).
+  it('sets logged at inconsistent weights never earn a step up from a prescription nobody lifted', () => {
+    // Two different weights among the counted sets → sessionWeight is null inside decide(), and the
+    // weight progressed from is the heaviest done for the range (105), not the 110 prescribed and
+    // never lifted. Two sets at 105 are not a full target of four, so it holds.
     const v = liveVerdict(rx, [s(100, 8), s(100, 8), s(105, 8), s(105, 8)]);
     expect(v.decision.sessionWeight).toBeNull();
-    expect(v.decision.rule).toBe('increase');
-    expect(v.line).toBe('→ 115 kg next time'); // 110 + increment(5) — from currentWeight, not 110 (105+5)
+    expect(v.decision).toMatchObject({ baseWeight: 105, rule: 'hold', toWeight: 105 });
+    expect(v.line).toBe('Holding 105 kg');
     // Cross-check directly against decide() itself, so this can never silently drift from the engine.
     const direct = decide(rx, [s(100, 8), s(100, 8), s(105, 8), s(105, 8)]);
     expect(v.decision).toEqual(direct);

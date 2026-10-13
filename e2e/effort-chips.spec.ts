@@ -165,4 +165,27 @@ test.describe('effort chips decide the next prescription', () => {
     await expect(again.getByTestId('feel-Easy')).toHaveAttribute('aria-pressed', 'false');
     await expect(again.getByTestId('verdict-line')).toHaveText('Marked Hard, so 65 kg again');
   });
+
+  test('moving up mid-session: next time starts from the heaviest weight done for the range, not the old prescription', async ({ page }) => {
+    // The owner's adductor case on bench: prescribed 65, lifted 65 then 80 three times, marked Hard.
+    await fresh(page);
+    await page.getByTestId('start-Upper (Push)').click();
+    const bench = page.getByTestId(`exercise-card-${BENCH}`);
+    await logOneSet(page, bench, 65, 8);
+    for (let i = 0; i < 3; i++) await logOneSet(page, bench, 80, 8);
+    await waitForCompletionCollapse(page);
+    const hard = bench.getByTestId('feel-Hard');
+    await hard.click();
+    await expect(hard).toHaveAttribute('aria-pressed', 'true');
+    await page.getByTestId('finish-session').click();
+    await clickIfPresent(page.getByRole('dialog').getByRole('button', { name: 'Finish', exact: true }));
+    await expect(page).toHaveURL(/\/summary$/);
+    const decision = page.getByTestId(`decision-${BENCH}`);
+    await expect(decision.getByTestId('decision-line')).toHaveText('8 at 65 kg, 8/8/8 at 80 kg → hold 80 kg (was 65 kg)');
+    await expect(decision.getByTestId('decision-reason')).toHaveText('Heaviest set in the rep range: 80 kg, so 80 kg next time');
+    // The Summary asks for no niggles and no checklist any more.
+    await expect(page.getByText('Niggles', { exact: true })).toHaveCount(0);
+    const next = await saveAndStartAgain(page);
+    await expect(next).toContainText('4 sets of 6–8 · 80 kg');
+  });
 });

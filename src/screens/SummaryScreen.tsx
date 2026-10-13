@@ -3,10 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import type { MomentFacts } from '@/ai/moments';
 import { backupAfterSessionFinish } from '@/db/historySafety';
 import { buildSummary, discardSession, finishSession, type SessionSummary, type SummaryItem } from '@/db/repo';
-import { decisionLine, effortReason, fmtDate, fmtDuration, fmtKg, fmtNum, fmtWeight, legDayProteinLabel, plural } from '@/domain/format';
+import { decisionLine, effortReason, fmtDate, fmtDuration, fmtKg, fmtNum, fmtWeight, plural } from '@/domain/format';
 import { lockInBlocked, type Suggestion } from '@/domain/engine';
 import type { PersonalRecord } from '@/domain/records';
-import { NIGGLE_TAGS, type Niggle, type NiggleTag } from '@/domain/types';
 import { sessionVolume } from '@/domain/volume';
 import { useSessionDraft } from '@/state/sessionDraft';
 import { useTimer } from '@/state/timer';
@@ -18,7 +17,6 @@ import { Confirm } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { TopBar } from '@/ui/components/TopBar';
 import { CoachLine } from '@/ui/CoachLine';
-import { useSettings } from '@/ui/hooks';
 
 interface Choice {
   mode: 'accept' | 'override';
@@ -98,12 +96,9 @@ export function SummaryScreen() {
   const nav = useNavigate();
   const [summary, setSummary] = useState<SessionSummary | null>(null);
   const [choices, setChoices] = useState<Record<string, Choice>>({});
-  const [niggles, setNiggles] = useState<Niggle[]>([]);
   const [notes, setNotes] = useState('');
-  const [checklist, setChecklist] = useState<{ electrolytes: boolean; protein: boolean }>({ electrolytes: false, protein: false });
   const [saving, setSaving] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
-  const settings = useSettings();
 
   useEffect(() => {
     useTimer.getState().skip();
@@ -139,7 +134,6 @@ export function SummaryScreen() {
               { mode: 'accept', overrideTo: item.decision.toWeight, lockIn: item.lockIn !== null, lockInAt: item.lockIn?.suggested ?? null };
       }
       setChoices(init);
-      setNiggles(s.session.niggles ?? []);
       setNotes(s.session.notes ?? '');
     });
     return () => {
@@ -231,9 +225,7 @@ export function SummaryScreen() {
             shown: d ? { rule: d.rule, fromWeight: d.fromWeight, toWeight: d.toWeight } : undefined,
           };
         }),
-        niggles,
         notes,
-        checklist: summary.routine?.isLowerBody ? checklist : undefined,
       });
       useSessionDraft.getState().clearSession(summary.session.id);
       // Fire-and-forget: must not slow down or block the finish flow.
@@ -358,39 +350,6 @@ export function SummaryScreen() {
                   </div>
                 </div>
               ))}
-            </Card>
-          </>
-        )}
-
-        <SectionTitle>Niggles</SectionTitle>
-        <Card className="p-4">
-          <div className="flex flex-wrap gap-2">
-            {NIGGLE_TAGS.map((tag) => {
-              const on = niggles.some((n) => n.tag === tag);
-              return (
-                <Chip
-                  key={tag}
-                  tone={on ? 'danger' : 'neutral'}
-                  active={on}
-                  onClick={() => setNiggles((prev) => (on ? prev.filter((n) => n.tag !== tag) : [...prev, { tag, severity: 1 }]))}
-                >
-                  {tag}
-                </Chip>
-              );
-            })}
-          </div>
-          {niggles.map((n) => (
-            <NiggleRow key={n.tag} niggle={n} onChange={(next) => setNiggles((prev) => prev.map((x) => (x.tag === n.tag ? next : x)))} />
-          ))}
-        </Card>
-
-        {summary.routine?.isLowerBody && (
-          <>
-            <SectionTitle>Leg day</SectionTitle>
-            <Card className="px-4 py-1">
-              <CheckRow label="Electrolytes (intra-workout)" checked={checklist.electrolytes} onChange={(v) => setChecklist((c) => ({ ...c, electrolytes: v }))} />
-              <div className="h-px bg-line" />
-              <CheckRow label={`${legDayProteinLabel(settings?.proteinTargetLegDay)} today`} checked={checklist.protein} onChange={(v) => setChecklist((c) => ({ ...c, protein: v }))} />
             </Card>
           </>
         )}
@@ -635,36 +594,5 @@ function SuggestionRow({ s, kind, onUse }: { s: Suggestion; kind: SummaryItem['e
   );
 }
 
-function NiggleRow({ niggle, onChange }: { niggle: Niggle; onChange: (n: Niggle) => void }) {
-  return (
-    <div className="mt-3 border-t border-line pt-3">
-      <div className="flex items-center gap-2">
-        <span className="min-w-0 flex-1 truncate font-semibold">{niggle.tag}</span>
-        {[1, 2, 3].map((sev) => (
-          <Chip key={sev} size="lg" className="min-w-11 justify-center px-0" tone="danger" active={niggle.severity === sev} onClick={() => onChange({ ...niggle, severity: sev as 1 | 2 | 3 })}>
-            {sev}
-          </Chip>
-        ))}
-      </div>
-      <div className="mt-2">
-        <TextInput value={niggle.note ?? ''} onChange={(v) => onChange({ ...niggle, note: v })} placeholder={niggle.tag === ('other' as NiggleTag) ? 'What and where' : 'Note (optional)'} />
-      </div>
-    </div>
-  );
-}
 
-function CheckRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button type="button" role="checkbox" aria-checked={checked} onClick={() => onChange(!checked)} className="flex min-h-14 w-full items-center gap-3 py-2 text-left">
-      <span className={`flex h-7 w-7 items-center justify-center rounded-lg border-2 ${checked ? 'border-ok bg-ok text-ok-fg' : 'border-line'}`}>
-        {checked && (
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M5 13l4 4L19 7" />
-          </svg>
-        )}
-      </span>
-      <span className="font-semibold">{label}</span>
-    </button>
-  );
-}
 

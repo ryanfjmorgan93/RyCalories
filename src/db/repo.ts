@@ -22,7 +22,7 @@ import {
 import { normaliseName } from '@/domain/exerciseMatch';
 import { uuid } from '@/domain/ids';
 import { applyOverride, isEmptyOverride, judgedRx, mergeOverride, pruneOverride } from '@/domain/planOverride';
-import type { PersonalRecord } from '@/domain/records';
+import { sessionRecords, type PersonalRecord } from '@/domain/records';
 import { countsForProgression, countsForRecords, countsForVolume } from '@/domain/sets';
 import {
   DEFAULT_SETTINGS,
@@ -894,7 +894,7 @@ export async function buildSummary(sessionId: string, now = nowIso()): Promise<S
       const engineRx = toEngine(judgedRx(rx, session), exercise);
       if (session.quick) {
         const decision = rx.mode === 'calibrating' ? decide(engineRx, sets) : null;
-        const records = await recordsForNewSets(exercise.id, sessionId, sets, { calibrating: rx.mode === 'calibrating' });
+        const records = sessionRecords(await recordsForNewSets(exercise.id, sessionId, sets, { calibrating: rx.mode === 'calibrating' }));
         items.push({ rx, exercise, sets, status: 'done', decision, suggestions: [], lockIn: null, records });
         continue;
       }
@@ -912,7 +912,7 @@ export async function buildSummary(sessionId: string, now = nowIso()): Promise<S
         decision.rule === 'calibrating' && suggestedLockInWeight(sets) !== null
           ? { suggested: suggestedLockInWeight(sets) as number }
           : null;
-      const records = await recordsForNewSets(exercise.id, sessionId, sets, { calibrating: rx.mode === 'calibrating' });
+      const records = sessionRecords(await recordsForNewSets(exercise.id, sessionId, sets, { calibrating: rx.mode === 'calibrating' }));
       items.push({ rx, exercise, sets, status: 'done', decision, suggestions, lockIn, records });
     }
   }
@@ -922,7 +922,7 @@ export async function buildSummary(sessionId: string, now = nowIso()): Promise<S
     const exercise = await db.exercises.get(exerciseId);
     if (!exercise) continue;
     const sets = allSets.filter((s) => s.routineExerciseId === null && s.exerciseId === exerciseId);
-    const records = sets.length > 0 ? await recordsForNewSets(exerciseId, sessionId, sets) : [];
+    const records = sets.length > 0 ? sessionRecords(await recordsForNewSets(exerciseId, sessionId, sets)) : [];
     items.push({ rx: null, exercise, sets, status: 'extra', decision: null, suggestions: [], lockIn: null, records });
   }
 

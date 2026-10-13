@@ -37,6 +37,7 @@ import {
   updateSession,
   wipeAll,
 } from './repo';
+import { recordsForNewSets } from './recordsQueries';
 import { SEED_EXERCISE_IDS, SEED_EXERCISES, SEED_ROUTINE_IDS } from './seed';
 import { toDateKey } from '@/domain/dates';
 import { calorieTargetOn } from '@/domain/nutrition';
@@ -986,19 +987,26 @@ describe('personal records attached to summary items (WP3)', () => {
     await resetToSeed();
   });
 
-  it('a second heavier set in the same session is a record against the first, not only history', async () => {
+  it('a second heavier set in the same session is a record against the first; the Summary lists the session\'s best once, against the old best', async () => {
     await rdlSession([8, 8, 8, 8], 100, { startedAt: '2026-09-01T18:00:00.000Z' });
     const session = await startSession(HINGE);
     const rx = await rxFor(HINGE, RDL);
     await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 105, reps: 8 });
     await logSet({ sessionId: session.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight: 110, reps: 8 });
 
+    // Set by set (the PR marks on the sets themselves), each is a record against what came before it.
+    const sets = (await db.setLogs.where('sessionId').equals(session.id).toArray()).sort((a, b) => a.index - b.index);
+    const perSet = (await recordsForNewSets(RDL, session.id, sets)).filter((r) => r.kind === 'weight');
+    expect(perSet).toHaveLength(2);
+    expect(perSet[0]).toMatchObject({ value: 105, previous: 100, previousSource: 'app', setIndex: 0 });
+    expect(perSet[1]).toMatchObject({ value: 110, previous: 105, previousSource: 'app', setIndex: 1 });
+
+    // The Summary: one weight record, the session's best, against the best from before it.
     const summary = await buildSummary(session.id);
     const item = summary.items.find((i) => i.exercise.id === RDL)!;
     const weightRecords = item.records.filter((r) => r.kind === 'weight');
-    expect(weightRecords).toHaveLength(2);
-    expect(weightRecords[0]).toMatchObject({ value: 105, previous: 100, previousSource: 'app', setIndex: 0 });
-    expect(weightRecords[1]).toMatchObject({ value: 110, previous: 105, previousSource: 'app', setIndex: 1 });
+    expect(weightRecords).toHaveLength(1);
+    expect(weightRecords[0]).toMatchObject({ value: 110, previous: 100, previousSource: 'app', setIndex: 1 });
   });
 
   it('records are computed for extra exercises too — given real prior history (a first-ever session shows none)', async () => {

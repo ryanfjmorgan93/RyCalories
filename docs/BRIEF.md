@@ -66,7 +66,7 @@ See `src/domain/types.ts` (Exercise, Routine, RoutineExercise, Session, SetLog, 
 2. Routines — list, reorder, create / edit / duplicate / delete, unlimited. Editing = add / remove / reorder exercises; set sets, rep range, increment, cue, optional flag, mode, rest override.
 3. Exercise library — seeded. Add custom. Tag muscle group, compound, lower-body, kind, unilateral.
 4. Live session — all exercises on one scrollable screen, current highlighted; per exercise: name · cue · target line · previous session's sets in grey · input rows · ✓ Set done. Rest timer pinned bottom. Optional exercises at the end, de-emphasised, Skip.
-5. Session summary — duration, sets, every decision with Accept / Override, stall/regression/double-increment suggestions, niggle chips (lower back · hamstring DOMS · knee · shoulder · other + free text, severity 1–3), Save.
+5. Session summary — duration, sets, every decision with Accept / Override, stall/regression/double-increment suggestions, niggle chips (lower back · hamstring DOMS · knee · shoulder · other + free text, severity 1–3; removed at the owner's request, October 2026), Save.
 6. Exercise detail — history table (date · sets · weight × reps) · line chart of top-set weight over time · stall badge · current mode / weight / increment · Lock-in if calibrating · edit.
 7. Bodyweight — log · weekly view · 4-week trend line · weekly delta vs target band.
 8. Settings / Data — export JSON · export CSV · import Hevy CSV · reset to seed (dev) · targets · theme.
@@ -78,7 +78,7 @@ Default order Hinge → Push → Squat → Pull → Day 5. Never two lower-body 
 - Fortnightly check-in view: current weight for RDL · Hip Thrust · Bench · Back Squat, bodyweight trend last 14 days, niggles in window. One-tap "Copy check-in" → plain text to clipboard.
 - Reverse-diet stepper: +200 kcal every 14 days from 1,900 (start date = day Settings first saved) to a 3,000 ceiling. Today's target on Home.
 - Protein 170 g default, 200 g on lower-body days.
-- Leg-day checklist on lower-body sessions: Electrolytes (intra-workout) · Protein 200 g today.
+- Leg-day checklist on lower-body sessions: Electrolytes (intra-workout) · Protein 200 g today. (Removed at the owner's request, October 2026.)
 - Out of scope: food logging, barcode scanning, calorie databases, macro tracking.
 
 ## 10. Seed data

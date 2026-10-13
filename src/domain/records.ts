@@ -262,3 +262,20 @@ export function newRecords(
 
   return records;
 }
+
+/**
+ * A session's records as its Summary lists them: one per kind (per weight, for reps at a weight).
+ * Records are found set by set, each against the sets before it, so a ramp of 85 then 101 sets a
+ * weight record twice; only the last stands, since each later one beat the one before. What it is
+ * said to beat is the best from before the session (the first record's `previous`), not the
+ * session's own earlier set. Order is the order each kind first appeared.
+ */
+export function sessionRecords(records: readonly PersonalRecord[]): PersonalRecord[] {
+  const byKey = new Map<string, PersonalRecord>();
+  for (const r of records) {
+    const key = r.kind === 'reps_at_weight' ? `${r.kind}:${r.weight}` : r.kind;
+    const first = byKey.get(key);
+    byKey.set(key, first ? { ...r, previous: first.previous, previousSource: first.previousSource } : r);
+  }
+  return [...byKey.values()];
+}

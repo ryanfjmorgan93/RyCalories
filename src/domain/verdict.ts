@@ -28,9 +28,9 @@ export interface Verdict {
 
 /**
  * Pads the sets logged so far with the sets still needed to reach `rx.targetSets`, each at
- * `rx.repMax` reps and at the same weight `decide()` is already progressing from (`sessionWeight`
- * when the real sets agree on one, else `fromWeight`) — so padding can never manufacture a
- * `sessionWeight` the real sets did not already agree on — then asks `decide()` what that would
+ * `rx.repMax` reps and at the same weight `decide()` is already progressing from (`baseWeight`:
+ * the weight the real sets agree on, else the heaviest done for the range) — so padding can never
+ * manufacture a weight the real sets did not already reach — then asks `decide()` what that would
  * produce. This is the only way this module ever answers "would an increase still happen"; it is
  * never computed by hand.
  */
@@ -42,7 +42,7 @@ function projectFullTarget(
 ): Decision {
   const remaining = rx.targetSets - decision.workingSets;
   if (remaining <= 0) return decision;
-  const padWeight = decision.sessionWeight ?? decision.fromWeight;
+  const padWeight = decision.baseWeight;
   // The padding carries the effort the real sets already share, so a slot answered Easy or Hard
   // before its target was raised is projected the way it will actually be decided.
   const rir = feelOf(sets) ?? undefined;

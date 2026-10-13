@@ -399,7 +399,7 @@ describe('deviating from the prescribed weight', () => {
     expect(d.changesWeight).toBe(true);
   });
 
-  it('mixed weights fall back to the prescription', () => {
+  it('dropping weight mid-session holds the heaviest weight done for the range: two sets at 110 are not four', () => {
     const sets: EngineSet[] = [
       { type: 'working', weight: 110, reps: 8 },
       { type: 'working', weight: 110, reps: 8 },
@@ -408,8 +408,47 @@ describe('deviating from the prescribed weight', () => {
     ];
     const d = decide(rdl, sets);
     expect(d.sessionWeight).toBeNull();
-    expect(d.rule).toBe('increase');
-    expect(d.toWeight).toBe(115);
+    expect(d.baseWeight).toBe(110);
+    expect(d).toMatchObject({ rule: 'hold', toWeight: 110, changesWeight: false });
+  });
+
+  it('ramping up mid-session progresses from the heaviest weight done for the range, never the old prescription', () => {
+    // The owner's adductor session: prescribed 69 kg, lifted 85 then 101 twice, all for 8, marked Hard.
+    const adductor: EngineRoutineExercise = { id: 'add', kind: 'reps', mode: 'normal', targetSets: 3, repMin: 8, repMax: 12, currentWeight: 69, increment: 5 };
+    const hard = (weight: number): EngineSet => ({ type: 'working', weight, reps: 8, rir: 1 });
+    const d = decide(adductor, [hard(85), hard(101), hard(101)]);
+    expect(d).toMatchObject({ sessionWeight: null, baseWeight: 101, rule: 'hold', toWeight: 101, changesWeight: true, workingWeights: [85, 101, 101] });
+    expect(decisionLine(d, 'reps')).toBe('8 at 85 kg, 8/8 at 101 kg → hold 101 kg (was 69 kg)');
+    expect(effortReason(d, 'reps')).toBe('Heaviest set in the rep range: 101 kg, so 101 kg next time');
+  });
+
+  it('a heavier set short of the range does not count as owned', () => {
+    // 3 × 8 at 100, then a try at 110 for 4: the weight progressed from is 100, and the try does not block the step.
+    const d = decide({ ...rdl, targetSets: 3, repMin: 6, repMax: 8, currentWeight: 100 }, [
+      { type: 'working', weight: 100, reps: 8 },
+      { type: 'working', weight: 100, reps: 8 },
+      { type: 'working', weight: 100, reps: 8 },
+      { type: 'working', weight: 110, reps: 4 },
+    ]);
+    expect(d).toMatchObject({ baseWeight: 100, rule: 'increase', toWeight: 105 });
+  });
+
+  it('a full target at the new weight after a ramp earns the step up from it', () => {
+    const d = decide({ ...rdl, targetSets: 3, repMin: 6, repMax: 8, currentWeight: 80 }, [
+      { type: 'working', weight: 90, reps: 8 },
+      { type: 'working', weight: 100, reps: 8 },
+      { type: 'working', weight: 100, reps: 8 },
+      { type: 'working', weight: 100, reps: 8 },
+    ]);
+    expect(d).toMatchObject({ baseWeight: 100, rule: 'increase', toWeight: 105, changesWeight: true });
+  });
+
+  it('when no set reached the range, mixed weights hold the prescription', () => {
+    const d = decide({ ...rdl, targetSets: 2, repMin: 6, repMax: 8, currentWeight: 100 }, [
+      { type: 'working', weight: 100, reps: 4 },
+      { type: 'working', weight: 95, reps: 5 },
+    ]);
+    expect(d).toMatchObject({ baseWeight: 100, rule: 'hold', toWeight: 100, changesWeight: false });
   });
 });
 

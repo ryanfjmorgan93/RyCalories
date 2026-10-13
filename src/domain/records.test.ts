@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bestsFor, newRecords, type RecordSession, type RecordSet } from './records';
+import { bestsFor, newRecords, sessionRecords, type PersonalRecord, type RecordSession, type RecordSet } from './records';
 import { e1rm } from './strength';
 
 function session(sessionId: string, sets: RecordSet[], over: Partial<RecordSession> = {}): RecordSession {
@@ -211,5 +211,31 @@ describe('newRecords: reps_at_weight', () => {
     const prior = [session('s1', [{ type: 'working', weight: 100, reps: 5 }])];
     const recs = newRecords('reps', [{ type: 'working', weight: 100, reps: 5 }], prior, HIST);
     expect(recs.find((r) => r.kind === 'reps_at_weight')).toBeUndefined();
+  });
+});
+
+describe('sessionRecords', () => {
+  const rec = (kind: PersonalRecord['kind'], value: number, weight: number, setIndex: number, previous: number | null, previousSource: PersonalRecord['previousSource'] = 'app'): PersonalRecord => ({
+    kind,
+    value,
+    weight,
+    reps: 8,
+    setIndex,
+    previous,
+    previousSource,
+  });
+
+  it('keeps one record per kind, the last, against the best from before the session', () => {
+    // The adductor ramp: 85 beat the old 80 (from Hevy), then 101 beat 85.
+    const out = sessionRecords([rec('weight', 85, 85, 0, 80, 'hevy'), rec('e1rm', 107.67, 85, 0, 101, 'hevy'), rec('weight', 101, 101, 1, 85), rec('e1rm', 127.93, 101, 1, 107.67)]);
+    expect(out).toEqual([rec('weight', 101, 101, 1, 80, 'hevy'), rec('e1rm', 127.93, 101, 1, 101, 'hevy')]);
+  });
+
+  it('keeps reps-at-weight records apart by weight', () => {
+    const out = sessionRecords([rec('reps_at_weight', 10, 60, 0, 8), rec('reps_at_weight', 9, 70, 1, 7), rec('reps_at_weight', 11, 60, 2, 10)]);
+    expect(out.map((r) => [r.weight, r.value, r.previous])).toEqual([
+      [60, 11, 8],
+      [70, 9, 7],
+    ]);
   });
 });

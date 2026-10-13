@@ -13,6 +13,9 @@
  *   - every counted set ≥ repMax, marked Hard          → hold the weight one more session (`hold_hard`)
  *   - otherwise                                        → hold (the chip changes nothing below the top)
  *   - fewer counted sets than targetSets → hold (missing sets count as misses)
+ *   - working sets at different weights (moved up or down mid-session): progress from the heaviest
+ *     weight lifted for at least repMin reps (`progressFrom`), never from a prescription the owner
+ *     has already outlifted; a step up needs targetSets sets at that weight, every one at the top
  *   - calibrating exercises produce no decision
  *   - carry / timed exercises never produce a weight decision
  */
@@ -51,8 +54,12 @@ export interface Decision {
   toWeight: number;
   /** The weight actually used on the working sets, if they all agree; otherwise null. */
   sessionWeight: number | null;
+  /** The weight the decision progresses from: see `progressFrom`. */
+  baseWeight: number;
   /** Working-set reps in logged order. */
   workingReps: number[];
+  /** Working-set weights in logged order, alongside `workingReps`. */
+  workingWeights: number[];
   workingSets: number;
   targetSets: number;
   /** True when the decision changes the prescription (increase, or a hold at a deviated weight). */
@@ -93,6 +100,20 @@ export function slotEffort(sets: EngineSet[]): Effort | null {
   return effort;
 }
 
+/**
+ * The weight to progress from. Every working set at one weight: that weight. Sets at different
+ * weights (a ramp to a heavier weight, or a drop after one): the heaviest weight lifted for at least
+ * `repMin` reps, the heaviest the owner showed they own today. When no set got there, or nothing was
+ * logged, the prescription.
+ */
+export function progressFrom(rx: Pick<EngineRoutineExercise, 'repMin' | 'currentWeight'>, sets: EngineSet[]): number {
+  const working = workingSets(sets);
+  if (working.length === 0) return rx.currentWeight;
+  if (working.every((s) => s.weight === working[0]!.weight)) return working[0]!.weight;
+  const owned = working.filter((s) => Math.floor(s.reps ?? 0) >= rx.repMin).map((s) => s.weight);
+  return owned.length > 0 ? Math.max(...owned) : rx.currentWeight;
+}
+
 /** Kinds the engine will never write a weight decision for. */
 export function producesWeightDecision(kind: ExerciseKind): boolean {
   return kind === 'reps' || kind === 'bodyweight_plus';
@@ -112,11 +133,17 @@ export function decide(rx: EngineRoutineExercise, sets: EngineSet[], opts?: { de
     weights.length > 0 && weights.every((w) => w === weights[0]) ? weights[0] : null;
 
   const effort = slotEffort(sets);
+  // The weight to progress from: what was actually lifted (see `progressFrom`), not a prescription
+  // the owner has already moved off. A deviated hold re-prescribes the deviated weight (visibly —
+  // the summary shows from → to) rather than snapping back silently.
+  const baseWeight = progressFrom(rx, sets);
   const base: Omit<Decision, 'rule' | 'toWeight' | 'changesWeight'> = {
     routineExerciseId: rx.id,
     fromWeight: rx.currentWeight,
     sessionWeight,
+    baseWeight,
     workingReps: reps,
+    workingWeights: weights,
     workingSets: working.length,
     targetSets: rx.targetSets,
     ...(effort ? { effort } : {}),
@@ -132,17 +159,16 @@ export function decide(rx: EngineRoutineExercise, sets: EngineSet[], opts?: { de
     return { ...base, rule: 'deload', toWeight: rx.currentWeight, changesWeight: false };
   }
 
-  // The weight to progress from: what was actually lifted if every working set agrees,
-  // otherwise the prescription. A deviated hold re-prescribes the deviated weight
-  // (visibly — the summary shows from → to) rather than snapping back silently.
-  const baseWeight = sessionWeight ?? rx.currentWeight;
-
   if (working.length < rx.targetSets || working.length === 0) {
     const to = roundKg(baseWeight);
     return { ...base, rule: 'hold_missing_sets', toWeight: to, changesWeight: to !== rx.currentWeight };
   }
 
-  const allAtTop = reps.every((r) => r >= rx.repMax);
+  // Judged at the weight progressed from. With every set at one weight that is every set; after a
+  // ramp it is the sets at the top weight, and a step up needs a full target of them at the top of
+  // the range (two sets at a new weight are not yet three).
+  const atBase = reps.filter((_, i) => weights[i] === baseWeight);
+  const allAtTop = atBase.length >= rx.targetSets && atBase.every((r) => r >= rx.repMax);
   if (allAtTop) {
     // The chip decides the step: Hard holds, Easy takes two increments, Good or none takes one.
     if (effort === 'hard') {

@@ -71,7 +71,9 @@ The owner does not check on device. Correctness has to come from the code and th
 - `src/domain/` — pure functions, no IO, no clock, no database. Tested directly. `sets.ts` is the
   one place that says what each set type counts for (only working sets are logged now; warm-up,
   failure and drop rows survive in old data); `engine.ts` decides, using the effort chip at the top
-  of the rep range; `prescription.ts`, `records.ts`, `strength.ts`, `volume.ts`, `calendar.ts` and
+  of the rep range, and progresses from what was lifted: when a session's sets were at different
+  weights, from the heaviest done for at least the bottom of the range, never from a prescription
+  already outlifted; `prescription.ts`, `records.ts`, `strength.ts`, `volume.ts`, `calendar.ts` and
   `plates.ts` are the progressive-overload maths.
   `planOverride.ts` is today's plan for one exercise (a plan override); `routineOrder.ts` orders
   routines by how long their regions have rested.
