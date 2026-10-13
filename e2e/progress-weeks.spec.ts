@@ -33,7 +33,7 @@ test('the weekly sets card steps back a week and forward again', async ({ page }
 
   // This week: today's two sets are counted, and there is nothing later to step to.
   await expect(label).toHaveText('This week');
-  await expect(row).toHaveText(/hamstrings\s*2( of \d+)?$/);
+  await expect(row).toHaveText(/Hamstrings\s*2( of \d+)?$/);
   await expect(next).toBeDisabled();
 
   await prev.click();
@@ -46,7 +46,7 @@ test('the weekly sets card steps back a week and forward again', async ({ page }
 
   await next.click();
   await expect(label).toHaveText('This week');
-  await expect(row).toHaveText(/hamstrings\s*2( of \d+)?$/);
+  await expect(row).toHaveText(/Hamstrings\s*2( of \d+)?$/);
   await expect(next).toBeDisabled();
 });
 
@@ -94,7 +94,7 @@ test('sets logged last week show under the previous week and not under this one'
 
   await page.getByTestId('week-prev').click();
   await expect(label).toHaveText(/^Week of \d{1,2} \w+/);
-  await expect(row).toHaveText(/hamstrings\s*2( of \d+)?$/);
+  await expect(row).toHaveText(/Hamstrings\s*2( of \d+)?$/);
 
   // A second step back is a week with nothing in it.
   await page.getByTestId('week-prev').click();
@@ -102,7 +102,7 @@ test('sets logged last week show under the previous week and not under this one'
   await expect(row).toHaveCount(0);
 
   await page.getByTestId('week-next').click();
-  await expect(row).toHaveText(/hamstrings\s*2( of \d+)?$/);
+  await expect(row).toHaveText(/Hamstrings\s*2( of \d+)?$/);
   await page.getByTestId('week-next').click();
   await expect(label).toHaveText('This week');
   await expect(page.getByText('No sets logged this week.')).toBeVisible();

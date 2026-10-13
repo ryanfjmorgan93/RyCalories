@@ -63,10 +63,10 @@ test.describe('Progress', () => {
     const box = await region.boundingBox();
     if (!box) throw new Error('hamstrings region not found');
     await region.click({ position: { x: box.width * 0.2, y: box.height * 0.5 } });
-    await expect(page.getByTestId('body-map-readout')).toContainText('hamstrings');
+    await expect(page.getByTestId('body-map-readout')).toContainText('Hamstrings');
     await expect(page.getByTestId('body-map-readout')).toContainText('sets this week');
 
-    await expect(page.getByTestId('weekly-sets')).toContainText('hamstrings');
+    await expect(page.getByTestId('weekly-sets')).toContainText('Hamstrings');
 
     await expect(page.getByTestId('recent-prs')).toContainText('Romanian Deadlift (Barbell)');
     await expect(page.getByTestId('recent-prs')).toContainText('PR');
