@@ -11,8 +11,12 @@
  *   4. persists the coach's reply with the lines for what its tools changed, and returns it.
  *
  * If the call fails, nothing from the model is stored and the reply is the error's one plain line.
- * One exception, because it would otherwise lie by omission: if a tool had already changed
- * something before the failure, the app stores a note of its own saying so, with those lines.
+ * Two things follow from what the turn had already done:
+ *   - if no tool had changed anything, the owner's message is taken out of the thread again and the
+ *     reply says it was not stored, so the sheet hands the text back and a retry is not a double;
+ *   - if a tool had changed something, the owner's message stays and the app stores a note of its
+ *     own saying so, with those lines (it would otherwise lie by omission).
+ * A message that has a Claude key in it is stored and sent with the key blanked (key.ts `redactKeys`).
  *
  * The prompt is laid out for the cache: tools, then one system block (persona, rules and the stable
  * context) carrying the cache breakpoint, then a second system block of volatile context.
@@ -25,6 +29,7 @@ import type { CoachMessage } from '@/domain/types';
 import { createCoachActions, type CoachActions } from './actions';
 import { assertCanCall, blockedReason, ClaudeError, runToolLoop, SONNET, textOf, toClaudeError, type CallDeps, type ClaudeErrorKind } from './client';
 import { buildCoachContext, type ContextOptions } from './context';
+import { redactKeys } from './key';
 import { CHAT_RULES, personaWith } from './persona';
 import { createCoachTools } from './tools';
 import { newTurnRecord, type TurnRecord } from './types';
@@ -50,7 +55,10 @@ export interface ChatReply {
   actions: string[];
   /** A routine drafted this turn, not saved. */
   draft: TurnRecord['draft'];
-  /** The owner's message was stored in the thread. False when nothing was sent, so the sheet can hand the text back to be sent later. */
+  /**
+   * The owner's message is in the thread. False when nothing was sent, and when the turn failed
+   * before anything changed (the message is taken back out), so the sheet hands the text back to be sent later.
+   */
   stored: boolean;
   /** Present when `ok` is false. */
   error?: ClaudeErrorKind;
@@ -69,7 +77,8 @@ export function historyTurns(rows: readonly CoachMessage[], limit = HISTORY_TURN
   for (const row of recent) {
     const role = row.role === 'user' ? 'user' : 'assistant';
     const changed = row.actions && row.actions.length > 0 ? ` [Changes made: ${row.actions.join('; ')}]` : '';
-    const content = `${row.text.trim()}${changed}`.trim();
+    // A key pasted into the box before keys were blanked on the way in is not sent now either.
+    const content = redactKeys(`${row.text.trim()}${changed}`).trim();
     if (!content) continue;
     const last = turns[turns.length - 1];
     if (last && last.role === role) last.content = `${last.content}\n${content}`;
@@ -86,9 +95,12 @@ function laterThan(previous: string): string {
 }
 
 const EMPTY_REPLY = "I didn't have an answer for that. Try asking another way.";
+const STOPPED_REPLY = 'That took more steps than I am allowed in one go, so I stopped. Nothing was changed.';
 
 export async function sendCoachMessage(rawText: string, opts: ChatOptions = {}): Promise<ChatReply> {
-  const text = rawText.trim();
+  // A Claude key pasted into the box by mistake goes no further than this line: not stored, not
+  // backed up with the thread, not sent.
+  const text = redactKeys(rawText.trim());
   const turn = newTurnRecord();
   let stored = false;
   const fail = (error: ClaudeError): ChatReply => ({ ok: false, text: error.message, actions: turn.actions, draft: turn.draft, stored, error: error.kind });
@@ -101,14 +113,15 @@ export async function sendCoachMessage(rawText: string, opts: ChatOptions = {}):
   // Only the recent end of the thread is read: it grows for ever, and only the last turns are sent.
   const history = historyTurns(await db.coachMessages.orderBy('at').reverse().limit(HISTORY_TURNS * 3).toArray());
   const userAt = nowIso();
-  await db.coachMessages.put({ id: uuid(), at: userAt, role: 'user', text });
+  const userId = uuid();
+  await db.coachMessages.put({ id: userId, at: userAt, role: 'user', text });
   stored = true;
 
   try {
     assertCanCall();
     const context = await buildCoachContext(opts.context);
     const tools = createCoachTools(opts.actions ?? createCoachActions(), turn);
-    const { message, stoppedForCap } = await runToolLoop(
+    const { message, stoppedForCap, hitIterationLimit } = await runToolLoop(
       {
         model: SONNET,
         max_tokens: CHAT_MAX_TOKENS,
@@ -127,9 +140,12 @@ export async function sendCoachMessage(rawText: string, opts: ChatOptions = {}):
     // is about something that did not happen, so it is not shown.
     if (stoppedForCap) throw new ClaudeError('over_cap');
 
-    let reply = textOf(message.content);
+    // At the step limit the model's last words are a preamble to tools it never saw the results of,
+    // so what was done is said in its place.
+    let reply = hitIterationLimit ? '' : textOf(message.content);
     if (!reply && turn.actions.length > 0) reply = `Done: ${turn.actions.join('; ')}.`;
-    if (!reply) reply = EMPTY_REPLY;
+    if (!reply) reply = hitIterationLimit ? STOPPED_REPLY : EMPTY_REPLY;
+    reply = redactKeys(reply);
 
     const row: CoachMessage = { id: uuid(), at: laterThan(userAt), role: 'coach', text: reply, ...(turn.actions.length > 0 ? { actions: [...turn.actions] } : {}) };
     await db.coachMessages.put(row);
@@ -138,6 +154,10 @@ export async function sendCoachMessage(rawText: string, opts: ChatOptions = {}):
     const error = toClaudeError(e);
     if (turn.actions.length > 0) {
       await db.coachMessages.put({ id: uuid(), at: laterThan(userAt), role: 'coach', text: `${error.message} These changes were made first.`, actions: [...turn.actions] });
+    } else {
+      // Nothing changed and nothing came back: the owner's message would sit in the thread with no
+      // answer, and sending it again would put it there twice. Take it out and let the sheet keep the text.
+      stored = !(await db.coachMessages.delete(userId).then(() => true, () => false));
     }
     return fail(error);
   }

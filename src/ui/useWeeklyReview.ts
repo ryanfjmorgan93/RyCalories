@@ -11,8 +11,13 @@ import { buildReviewFacts, isMonday } from '@/domain/weekReview';
 import { patchWeekReview, readWeekReview } from '@/state/weekReview';
 import { toast } from '@/ui/components/Toast';
 
-/** After a failed attempt the review is not asked for again for this long (a retry costs money when the failure came after the call). */
-export const RETRY_AFTER_MS = 10 * 60 * 1000;
+/**
+ * After a failed attempt the review is not asked for again for this long. A failure can come after
+ * Claude has done the work (a timeout, a dropped answer), which costs money that the spend ledger
+ * never sees, and the review is the biggest request there is. Home asks again whenever it opens, so
+ * the wait has to be long enough that opening the app a few times cannot add up to a bill.
+ */
+export const RETRY_AFTER_MS = 60 * 60 * 1000;
 
 const inflight = new Map<string, Promise<boolean>>();
 const failedAt = new Map<string, number>();

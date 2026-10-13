@@ -242,7 +242,9 @@ export async function weeklyReview(facts: MomentFacts = {}, opts: ReviewOptions 
       ],
       messages: [{ role: 'user', content: `It is time for the weekly review.\n\nFacts:\n${factsText(facts)}` }],
     },
-    opts,
+    // Once, unless the caller says otherwise: it is the biggest request the app makes, and a failed
+    // attempt is spend the ledger cannot see. The card simply tries again later (useWeeklyReview).
+    { ...opts, maxRetries: opts.maxRetries ?? 0 },
   );
   const review = parseReview(textOf(message.content));
   if (review.text && opts.persist !== false) {

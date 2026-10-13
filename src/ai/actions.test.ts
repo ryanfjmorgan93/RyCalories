@@ -3,10 +3,10 @@
  *
  * Each coach action against the real data code (Dexie on fake-indexeddb, the seeded routines).
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '@/db/db';
 import { getMeal, mealsOnDay } from '@/db/foodRepo';
-import { getActiveSession, listRoutines, logSet, resetToSeed, routineItems, startSession } from '@/db/repo';
+import { getActiveSession, listRoutines, logSet, resetToSeed, routineItems, setPlanOverride, startSession } from '@/db/repo';
 import { SEED_EXERCISE_IDS, SEED_ROUTINE_IDS } from '@/db/seed';
 import { toDateKey } from '@/domain/dates';
 import { macrosOf } from '@/domain/food';
@@ -51,10 +51,11 @@ describe('log_food', () => {
     expect(meal).toMatchObject({ name: 'Breakfast', slot: 'breakfast', date: TODAY });
     expect(items.map((i) => i.name)).toEqual(['Wholemeal toast', 'Scrambled eggs']);
     expect(items.every((i) => i.source === 'model')).toBe(true);
-    expect(items[0]!.portion).toBe('2 slices (72 g)');
+    // An amount Claude supplied is an estimate and says so (docs/adr/0004).
+    expect(items[0]!.portion).toBe('≈ 2 slices (72 g)');
     expect(items[0]!.nutrition.basis).toBe('weighed');
     expect(macrosOf(items[0]!.nutrition).kcal).toBeCloseTo(170, 6);
-    expect(items[1]!.portion).toBe('3 eggs');
+    expect(items[1]!.portion).toBe('≈ 3 eggs');
     expect(items[1]!.nutrition.basis).toBe('portion');
   });
 
@@ -71,8 +72,96 @@ describe('log_food', () => {
     const actions = createCoachActions({ now: MORNING });
     await actions.logFood({ items: [{ name: 'Chicken breast', amount: 150, unit: 'g', kcal: 248, protein: 46, carbs: 0, fat: 5.4 }] });
     const item = (await mealsOnDay(TODAY))[0]!.items[0]!;
-    expect(item.portion).toBe('150 g');
+    expect(item.portion).toBe('≈ 150 g');
     expect(item.nutrition).toMatchObject({ basis: 'weighed', grams: 150 });
+  });
+
+  it('adds to the meal the slot already has instead of making a new meal for every call', async () => {
+    const actions = createCoachActions({ now: MORNING });
+    await actions.logFood({ items: [{ name: 'Porridge', amount: 1, unit: 'bowl', grams: 300, kcal: 310, protein: 10, carbs: 52, fat: 6 }] });
+    await actions.logFood({ items: [{ name: 'Black coffee', amount: 1, unit: 'cup', kcal: 5, protein: 0, carbs: 1, fat: 0 }] });
+    const meals = await mealsOnDay(TODAY);
+    expect(meals).toHaveLength(1);
+    expect(meals[0]!.meal).toMatchObject({ name: 'Breakfast', slot: 'breakfast' });
+    expect(meals[0]!.items.map((i) => i.name)).toEqual(['Porridge', 'Black coffee']);
+    expect(meals[0]!.items.map((i) => i.index)).toEqual([0, 1]);
+  });
+
+  it('keeps the figures of a food the app already knows, as the Describe flow does, and the coach\'s own for the rest', async () => {
+    const actions = createCoachActions({ now: MORNING });
+    // The UK table's whole raw egg is 131 kcal per 100 g; the coach said 150 for these two.
+    const out = await actions.logFood({
+      items: [
+        { name: 'Egg', amount: 2, unit: 'eggs', grams: 100, kcal: 150, protein: 12, carbs: 1, fat: 10 },
+        { name: 'Sourdough toast', amount: 2, unit: 'slices', grams: 80, kcal: 210, protein: 8, carbs: 40, fat: 1 },
+      ],
+    });
+    const { items } = (await mealsOnDay(TODAY))[0]!;
+    expect(items.map((i) => i.source)).toEqual(['table', 'model']);
+    expect(items[0]!.name).toBe('Eggs, chicken, whole, raw');
+    expect(macrosOf(items[0]!.nutrition).kcal).toBeCloseTo(131, 6);
+    expect(macrosOf(items[1]!.nutrition).kcal).toBeCloseTo(210, 6);
+    // What the coach is told and what the owner sees is what was stored, not what the model guessed.
+    expect(out.description).toBe('Logged Eggs, chicken, whole, raw, Sourdough toast for breakfast (≈341 kcal)');
+    expect(out.result).toContain('about 341 kcal');
+    expect(out.result).toContain('Today so far: 341 kcal');
+  });
+
+  it('keeps a food the owner has already remembered at their own figures', async () => {
+    await db.foods.put({
+      id: 'f1',
+      key: 'n:chicken curry',
+      name: 'Chicken curry',
+      per100: { kcal: 150, protein: 10, carbs: 8, fat: 8 },
+      source: 'label',
+      timesUsed: 3,
+      lastUsedAt: '2026-10-01T12:00:00.000Z',
+    });
+    const actions = createCoachActions({ now: MORNING });
+    await actions.logFood({ items: [{ name: 'Chicken curry', amount: 1, unit: 'bowl', grams: 300, kcal: 900, protein: 40, carbs: 30, fat: 60 }], slot: 'dinner' });
+    const item = (await mealsOnDay(TODAY))[0]!.items[0]!;
+    expect(item.source).toBe('label');
+    expect(macrosOf(item.nutrition).kcal).toBeCloseTo(450, 6);
+  });
+
+  describe('on an earlier day', () => {
+    it('logs to that date, into the slot\'s meal, and says which day', async () => {
+      const actions = createCoachActions({ now: MORNING });
+      const first = await actions.logFood({ items: [{ name: 'Chilli', amount: 1, unit: 'bowl', grams: 400, kcal: 520, protein: 32, carbs: 55, fat: 14 }], slot: 'dinner', date: '2026-10-10' });
+      expect(first).toMatchObject({ ok: true });
+      expect(first.description).toBe('Logged Chilli for dinner on Sat 10 Oct (≈520 kcal)');
+      expect(first.result).toContain('Sat 10 Oct so far: 520 kcal');
+      await actions.logFood({ items: [{ name: 'Rice', amount: 150, unit: 'g', kcal: 195, protein: 4, carbs: 43, fat: 0.4 }], slot: 'dinner', date: '2026-10-10' });
+
+      const meals = await mealsOnDay('2026-10-10');
+      expect(meals).toHaveLength(1);
+      expect(meals[0]!.items.map((i) => i.name)).toEqual(['Chilli', 'Rice']);
+      expect(await mealsOnDay(TODAY)).toEqual([]);
+    });
+
+    it('is the same as today when the date is today', async () => {
+      const actions = createCoachActions({ now: MORNING });
+      const out = await actions.logFood({ items: [{ name: 'Porridge', amount: 1, unit: 'bowl', kcal: 310, protein: 10, carbs: 52, fat: 6 }], date: TODAY });
+      expect(out.description).toBe('Logged Porridge for breakfast (≈310 kcal)');
+      expect(await mealsOnDay(TODAY)).toHaveLength(1);
+    });
+
+    it('goes back a week and no further, never forward, and needs a real day and a meal', async () => {
+      const actions = createCoachActions({ now: MORNING });
+      const item = { name: 'Toast', amount: 1, unit: 'slice', kcal: 90, protein: 3, carbs: 17, fat: 1 };
+      expect((await actions.logFood({ items: [item], slot: 'snack', date: '2026-10-05' })).ok).toBe(true); // 7 days back
+      const tooOld = await actions.logFood({ items: [item], slot: 'snack', date: '2026-10-04' });
+      expect(tooOld.ok).toBe(false);
+      expect(tooOld.result).toContain('last 7 days');
+      expect((await actions.logFood({ items: [item], slot: 'snack', date: '2026-10-13' })).result).toBe('That date is in the future.');
+      expect((await actions.logFood({ items: [item], slot: 'snack', date: 'yesterday' })).ok).toBe(false);
+      expect((await actions.logFood({ items: [item], slot: 'snack', date: '2026-02-31' })).ok).toBe(false);
+      // The time of day says nothing about which meal an earlier day's food was.
+      const noSlot = await actions.logFood({ items: [item], date: '2026-10-10' });
+      expect(noSlot.ok).toBe(false);
+      expect(noSlot.result).toContain('Which meal');
+      expect(await db.meals.count()).toBe(1);
+    });
   });
 
   it('refuses nonsense without writing anything', async () => {
@@ -346,7 +435,12 @@ describe('edit_session', () => {
     const add = await actions.editSession({ exercise: 'Face Pull', change: 'add' });
     expect(add.description).toBe('Face Pull added today');
     expect((await getActiveSession())!.extraExerciseIds).toContain(SEED_EXERCISE_IDS['Face Pull']);
-    expect((await actions.editSession({ exercise: 'Face Pull', change: 'add' })).ok).toBe(true); // idempotent in the repo
+    // Adding it again changes nothing, and says so rather than reporting an addition.
+    const again = await actions.editSession({ exercise: 'Face Pull', change: 'add' });
+    expect(again.ok).toBe(false);
+    expect(again.result).toContain("already in today's session");
+    expect(again.description).toBeUndefined();
+    expect((await getActiveSession())!.extraExerciseIds).toEqual([SEED_EXERCISE_IDS['Incline DB Curl'], SEED_EXERCISE_IDS['Face Pull']]);
 
     expect(session.id).toBe((await getActiveSession())!.id);
   });
@@ -361,6 +455,314 @@ describe('edit_session', () => {
     expect((await actions.editSession({ exercise: 'bench', change: 'swap', swapTo: 'Bench Press' })).ok).toBe(false);
     expect((await actions.editSession({ exercise: 'bench', change: 'swap' })).ok).toBe(false);
     expect((await actions.editSession({ exercise: 'bench', change: 'sets', sets: 99 })).ok).toBe(false);
+  });
+});
+
+describe('edit_session against what is really in today\'s session', () => {
+  const INCLINE_CURL = SEED_EXERCISE_IDS['Incline DB Curl'];
+  const FACE_PULL = SEED_EXERCISE_IDS['Face Pull'];
+
+  /** Actions that write overrides for real, so what the owner would see is what is asserted. */
+  const real = () => createCoachActions({ setPlanOverride });
+
+  async function live() {
+    const session = await startSession(PUSH);
+    const bench = await rxOf('Upper (Push)', 'Bench Press (Barbell)');
+    return { session, bench };
+  }
+
+  describe('a slot that has been swapped', () => {
+    it('has no plan to change, whether it is called by the exercise swapped out or the one swapped in', async () => {
+      const actions = real();
+      const { bench } = await live();
+      await actions.editSession({ exercise: 'bench', change: 'swap', swapTo: 'Incline DB Curl' });
+
+      const original = await actions.editSession({ exercise: 'bench', change: 'sets', sets: 2 });
+      expect(original.ok).toBe(false);
+      expect(original.result).toContain('swapped for Incline DB Curl');
+      const substitute = await actions.editSession({ exercise: 'Incline DB Curl', change: 'weight', weightKg: 12 });
+      expect(substitute.ok).toBe(false);
+      expect(substitute.result).toContain('no sets, reps or weight to set');
+
+      // Nothing was written behind the owner's back.
+      expect((await getActiveSession())!.planOverrides).toBeUndefined();
+      expect((await getActiveSession())!.swaps).toEqual({ [bench.rx.id]: INCLINE_CURL });
+    });
+
+    it('is put back with undoSwap: the substitute goes, the slot is back, nothing is left over', async () => {
+      const actions = real();
+      const { bench } = await live();
+      await actions.editSession({ exercise: 'bench', change: 'swap', swapTo: 'Incline DB Curl' });
+
+      const out = await actions.editSession({ exercise: 'bench', change: 'unskip' });
+      expect(out).toMatchObject({ ok: true, description: 'Bench Press (Barbell) back in today' });
+      const after = (await getActiveSession())!;
+      expect(after.swaps).toEqual({});
+      expect(after.extraExerciseIds).toEqual([]);
+      expect(after.skippedRoutineExerciseIds).toEqual([]);
+      expect(bench.rx.id).toBeTruthy();
+    });
+
+    it('is not put back when that would delete sets already logged on the substitute', async () => {
+      const actions = real();
+      const { session } = await live();
+      await actions.editSession({ exercise: 'bench', change: 'swap', swapTo: 'Incline DB Curl' });
+      await logSet({ sessionId: session.id, routineExerciseId: null, exerciseId: INCLINE_CURL, type: 'working', weight: 12, reps: 10 });
+
+      const out = await actions.editSession({ exercise: 'bench', change: 'unskip' });
+      expect(out.ok).toBe(false);
+      expect(out.result).toContain('would delete them');
+      expect((await getActiveSession())!.extraExerciseIds).toEqual([INCLINE_CURL]);
+      expect(await db.setLogs.where('sessionId').equals(session.id).count()).toBe(1);
+    });
+
+    it('swapped again replaces the first swap and does not leave its substitute behind as an extra', async () => {
+      const actions = real();
+      const { bench } = await live();
+      await actions.editSession({ exercise: 'bench', change: 'swap', swapTo: 'Incline DB Curl' });
+
+      // By the exercise standing there now, or by the one swapped out: the slot is the same.
+      const again = await actions.editSession({ exercise: 'Incline DB Curl', change: 'swap', swapTo: 'Face Pull' });
+      expect(again).toMatchObject({ ok: true, description: 'Bench Press (Barbell) swapped for Face Pull today' });
+      const after = (await getActiveSession())!;
+      expect(after.swaps).toEqual({ [bench.rx.id]: FACE_PULL });
+      expect(after.extraExerciseIds).toEqual([FACE_PULL]);
+      expect(after.skippedRoutineExerciseIds).toEqual([bench.rx.id]);
+    });
+
+    it('is not swapped again once the substitute has sets, and may be swapped back to nothing but the original', async () => {
+      const actions = real();
+      const { session } = await live();
+      await actions.editSession({ exercise: 'bench', change: 'swap', swapTo: 'Incline DB Curl' });
+      await logSet({ sessionId: session.id, routineExerciseId: null, exerciseId: INCLINE_CURL, type: 'working', weight: 12, reps: 10 });
+
+      const blocked = await actions.editSession({ exercise: 'bench', change: 'swap', swapTo: 'Face Pull' });
+      expect(blocked.ok).toBe(false);
+      expect(blocked.result).toContain('has 1 set logged');
+      expect((await getActiveSession())!.extraExerciseIds).toEqual([INCLINE_CURL]);
+
+      const original = await actions.editSession({ exercise: 'bench', change: 'swap', swapTo: 'Bench Press' });
+      expect(original.ok).toBe(false);
+      expect(original.result).toContain('Unskip');
+    });
+
+    it('is skipped already, and a substitute cannot be skipped: the swap is what is undone', async () => {
+      const actions = real();
+      await live();
+      await actions.editSession({ exercise: 'bench', change: 'swap', swapTo: 'Incline DB Curl' });
+      const already = await actions.editSession({ exercise: 'bench', change: 'skip' });
+      expect(already).toMatchObject({ ok: true });
+      expect(already.description).toBeUndefined();
+      const sub = await actions.editSession({ exercise: 'Incline DB Curl', change: 'skip' });
+      expect(sub.ok).toBe(false);
+      expect(sub.result).toContain('unskipping Bench Press (Barbell)');
+      const unskipSub = await actions.editSession({ exercise: 'Incline DB Curl', change: 'unskip' });
+      expect(unskipSub.ok).toBe(false);
+    });
+  });
+
+  describe('swapping', () => {
+    it('refuses what the swap sheet would not offer: anything already in the session', async () => {
+      const actions = real();
+      await live();
+      // Another exercise of the routine, and one that is already an extra.
+      const inRoutine = await actions.editSession({ exercise: 'bench', change: 'swap', swapTo: 'Triceps Pushdown' });
+      expect(inRoutine.ok).toBe(false);
+      expect(inRoutine.result).toContain("already in today's session");
+      await actions.editSession({ exercise: 'Face Pull', change: 'add' });
+      const extra = await actions.editSession({ exercise: 'bench', change: 'swap', swapTo: 'Face Pull' });
+      expect(extra.ok).toBe(false);
+      expect(extra.result).toContain("already in today's session");
+      expect((await getActiveSession())!.swaps).toBeUndefined();
+    });
+
+    it('cannot swap an exercise that was only added for today', async () => {
+      const actions = real();
+      await live();
+      await actions.editSession({ exercise: 'Face Pull', change: 'add' });
+      const out = await actions.editSession({ exercise: 'Face Pull', change: 'swap', swapTo: 'Incline DB Curl' });
+      expect(out.ok).toBe(false);
+      expect(out.result).toContain('nothing to swap');
+    });
+
+    it('can swap a skipped exercise', async () => {
+      const actions = real();
+      const { bench } = await live();
+      await actions.editSession({ exercise: 'bench', change: 'skip' });
+      expect((await actions.editSession({ exercise: 'bench', change: 'swap', swapTo: 'Incline DB Curl' })).ok).toBe(true);
+      expect((await getActiveSession())!.swaps).toEqual({ [bench.rx.id]: INCLINE_CURL });
+    });
+  });
+
+  describe('sets, reps and weight', () => {
+    it('are not changed on a skipped exercise', async () => {
+      const actions = real();
+      await live();
+      await actions.editSession({ exercise: 'bench', change: 'skip' });
+      for (const input of [
+        { change: 'sets', sets: 2 },
+        { change: 'reps', repMin: 5, repMax: 5 },
+        { change: 'weight', weightKg: 50 },
+      ] as const) {
+        const out = await actions.editSession({ exercise: 'bench', ...input });
+        expect(out.ok, input.change).toBe(false);
+        expect(out.result, input.change).toContain('skipped today');
+      }
+      expect((await getActiveSession())!.planOverrides).toBeUndefined();
+    });
+
+    it('are not changed on an exercise added for today', async () => {
+      const actions = real();
+      await live();
+      await actions.editSession({ exercise: 'Face Pull', change: 'add' });
+      const out = await actions.editSession({ exercise: 'Face Pull', change: 'sets', sets: 3 });
+      expect(out.ok).toBe(false);
+      expect(out.result).toContain('added to today');
+    });
+
+    it('answer plainly that a weight on a calibrating exercise cannot be changed, instead of dropping it', async () => {
+      const actions = real();
+      await live();
+      const out = await actions.editSession({ exercise: 'Incline DB Press', change: 'weight', weightKg: 22 });
+      expect(out.ok).toBe(false);
+      expect(out.description).toBeUndefined();
+      expect(out.result).toContain('still calibrating');
+      expect((await getActiveSession())!.planOverrides).toBeUndefined();
+      // Its sets and reps are still its own to change.
+      expect((await actions.editSession({ exercise: 'Incline DB Press', change: 'sets', sets: 2 })).ok).toBe(true);
+    });
+
+    it('fill a rep bound that was not given from today\'s plan, not the saved routine', async () => {
+      const actions = real();
+      const { bench } = await live();
+      expect([bench.rx.repMin, bench.rx.repMax]).toEqual([6, 8]);
+
+      await actions.editSession({ exercise: 'bench', change: 'reps', repMin: 10, repMax: 12 });
+      // Only the top: the bottom stays at today's 10, not the routine's 6.
+      await actions.editSession({ exercise: 'bench', change: 'reps', repMax: 15 });
+      let override = (await getActiveSession())!.planOverrides![bench.rx.id]!;
+      expect([override.repMin, override.repMax]).toEqual([10, 15]);
+
+      // Only the bottom: the top stays at today's 15, not pulled down to the routine's 8.
+      await actions.editSession({ exercise: 'bench', change: 'reps', repMin: 11 });
+      override = (await getActiveSession())!.planOverrides![bench.rx.id]!;
+      expect([override.repMin, override.repMax]).toEqual([11, 15]);
+    });
+
+    it('write the override for a slot that is on, and say it is for today only', async () => {
+      const actions = real();
+      const { bench } = await live();
+      const out = await actions.editSession({ exercise: 'bench', change: 'sets', sets: 3 });
+      expect(out).toMatchObject({ ok: true, description: 'Bench Press (Barbell): 3 sets today' });
+      expect((await getActiveSession())!.planOverrides).toEqual({ [bench.rx.id]: { targetSets: 3 } });
+      expect((await rxOf('Upper (Push)', 'Bench Press (Barbell)')).rx.targetSets).toBe(4);
+    });
+  });
+
+  describe('adding', () => {
+    it('says an exercise is already in the session whether it is planned, skipped, swapped out or an extra', async () => {
+      const actions = real();
+      await live();
+      expect((await actions.editSession({ exercise: 'Triceps Pushdown', change: 'add' })).result).toContain("already in today's session");
+
+      await actions.editSession({ exercise: 'Triceps Pushdown', change: 'skip' });
+      const skipped = await actions.editSession({ exercise: 'Triceps Pushdown', change: 'add' });
+      expect(skipped.ok).toBe(false);
+      expect(skipped.result).toContain('unskip');
+
+      await actions.editSession({ exercise: 'bench', change: 'swap', swapTo: 'Incline DB Curl' });
+      const swappedOut = await actions.editSession({ exercise: 'Bench Press', change: 'add' });
+      expect(swappedOut.ok).toBe(false);
+      expect(swappedOut.result).toContain('swapped for Incline DB Curl');
+      const extra = await actions.editSession({ exercise: 'Incline DB Curl', change: 'add' });
+      expect(extra.ok).toBe(false);
+      expect(extra.result).toContain("already in today's session");
+    });
+  });
+
+  describe('once the owner is on the Summary screen', () => {
+    afterEach(() => window.history.pushState({}, '', '/'));
+
+    it('refuses every change, with a plain line, and changes nothing', async () => {
+      const actions = real();
+      const { session } = await live();
+      window.history.pushState({}, '', `/session/${session.id}/summary`);
+      for (const input of [
+        { exercise: 'bench', change: 'sets', sets: 2 },
+        { exercise: 'bench', change: 'skip' },
+        { exercise: 'Face Pull', change: 'add' },
+      ] as const) {
+        const out = await actions.editSession(input);
+        expect(out.ok, input.change).toBe(false);
+        expect(out.result, input.change).toContain('Summary screen');
+      }
+      const after = (await getActiveSession())!;
+      expect(after.planOverrides).toBeUndefined();
+      expect(after.skippedRoutineExerciseIds).toBeUndefined();
+      expect(after.extraExerciseIds).toBeUndefined();
+
+      // Anywhere else in the app it works again.
+      window.history.pushState({}, '', `/session/${session.id}`);
+      expect((await actions.editSession({ exercise: 'bench', change: 'sets', sets: 2 })).ok).toBe(true);
+    });
+  });
+});
+
+describe('edit_routine while a session is live on the routine', () => {
+  async function liveWithBenchSet() {
+    const session = await startSession(PUSH);
+    const bench = await rxOf('Upper (Push)', 'Bench Press (Barbell)');
+    await logSet({ sessionId: session.id, routineExerciseId: bench.rx.id, exerciseId: BENCH, type: 'working', weight: 65, reps: 8 });
+    return { session, bench };
+  }
+
+  it('will not remove, or change the sets, reps or weight of, an exercise that has sets logged in it', async () => {
+    const actions = createCoachActions();
+    await liveWithBenchSet();
+    const base = { routine: 'Upper (Push)', exercise: 'Bench Press' } as const;
+    for (const input of [{ change: 'remove' }, { change: 'sets', sets: 5 }, { change: 'reps', repMin: 5, repMax: 5 }, { change: 'weight', weightKg: 70 }] as const) {
+      const out = await actions.editRoutine({ ...base, ...input });
+      expect(out.ok, input.change).toBe(false);
+      expect(out.result, input.change).toBe("Bench Press (Barbell) has sets logged in today's session; change it after the owner finishes, or change today only (edit_session).");
+      expect(out.description, input.change).toBeUndefined();
+    }
+    expect((await rxOf('Upper (Push)', 'Bench Press (Barbell)')).rx).toMatchObject({ targetSets: 4, repMin: 6, repMax: 8, currentWeight: 65 });
+  });
+
+  it('still changes the exercises that have no sets yet, and routines other than the live one', async () => {
+    const actions = createCoachActions();
+    await liveWithBenchSet();
+    expect((await actions.editRoutine({ routine: 'Upper (Push)', exercise: 'Triceps Pushdown', change: 'sets', sets: 4 })).ok).toBe(true);
+    expect((await actions.editRoutine({ routine: 'Upper (Push)', exercise: 'Triceps Pushdown', change: 'remove' })).ok).toBe(true);
+    expect((await actions.editRoutine({ routine: 'Upper (Push)', exercise: 'Lateral Raise', change: 'add' })).ok).toBe(true);
+    // The same exercise in another routine is not today's.
+    expect((await actions.editRoutine({ routine: 'Arms', exercise: 'Lateral Raise', change: 'sets', sets: 4 })).ok).toBe(true);
+  });
+
+  it('can be changed once the session is over', async () => {
+    const actions = createCoachActions();
+    const { session } = await liveWithBenchSet();
+    await db.sessions.update(session.id, { endedAt: new Date().toISOString() });
+    expect((await actions.editRoutine({ routine: 'Upper (Push)', exercise: 'Bench Press', change: 'sets', sets: 5 })).ok).toBe(true);
+  });
+
+  it('counts a linked copy of the exercise that is being done today, because a weight is copied to it', async () => {
+    const actions = createCoachActions();
+    const pull = (await listRoutines()).find((r) => r.name === 'Upper (Pull)')!;
+    const curlInPull = (await routineItems(pull.id)).find((i) => i.exercise.name === 'DB Curl')!;
+    const curlInArms = await rxOf('Arms (Day 5)', 'DB Curl');
+    await db.routineExercises.update(curlInPull.rx.id, { linkProgression: true });
+    await db.routineExercises.update(curlInArms.rx.id, { linkProgression: true });
+
+    const session = await startSession(pull.id);
+    await logSet({ sessionId: session.id, routineExerciseId: curlInPull.rx.id, exerciseId: curlInPull.exercise.id, type: 'working', weight: 9, reps: 12 });
+
+    const weight = await actions.editRoutine({ routine: 'Arms', exercise: 'DB Curl', change: 'weight', weightKg: 12 });
+    expect(weight.ok).toBe(false);
+    expect(weight.result).toContain("has sets logged in today's session");
+    // Sets and reps are not shared between copies, so those are the Arms routine's own business.
+    expect((await actions.editRoutine({ routine: 'Arms', exercise: 'DB Curl', change: 'sets', sets: 5 })).ok).toBe(true);
+    expect((await rxOf('Upper (Pull)', 'DB Curl')).rx.currentWeight).toBe(9);
   });
 });
 

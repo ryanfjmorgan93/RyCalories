@@ -174,3 +174,65 @@ test.describe('a lock-in seeded from session.lockIns', () => {
     await expect(page.getByTestId('exercise-card-Barbell Back Squat')).toContainText('4 sets of 6–8 · 60 kg');
   });
 });
+
+test.describe('what Save stores is what the card showed', () => {
+  /** Writes a plan override on the live session straight into IndexedDB, as `setPlanOverride` would (the coach does this while Summary is open). */
+  async function seedTodayOverride(page: Page, sessionId: string, exerciseName: string, override: { targetSets: number }): Promise<void> {
+    await page.evaluate(
+      async ({ sessionId, exerciseName, override }) => {
+        const req = indexedDB.open('iron');
+        const idb = await new Promise<IDBDatabase>((res, rej) => {
+          req.onsuccess = () => res(req.result);
+          req.onerror = () => rej(req.error);
+        });
+        const tx = idb.transaction(['sessions', 'exercises', 'routineExercises'], 'readwrite');
+        const getAll = <T,>(name: string) =>
+          new Promise<T[]>((res, rej) => {
+            const r = tx.objectStore(name).getAll();
+            r.onsuccess = () => res(r.result as T[]);
+            r.onerror = () => rej(r.error);
+          });
+        const session = await new Promise<{ id: string; routineId: string; planOverrides?: Record<string, unknown> } | undefined>((res, rej) => {
+          const r = tx.objectStore('sessions').get(sessionId);
+          r.onsuccess = () => res(r.result);
+          r.onerror = () => rej(r.error);
+        });
+        if (!session) throw new Error('session not found');
+        const exercise = (await getAll<{ id: string; name: string }>('exercises')).find((e) => e.name === exerciseName);
+        if (!exercise) throw new Error(`exercise not found: ${exerciseName}`);
+        const rx = (await getAll<{ id: string; routineId: string; exerciseId: string }>('routineExercises')).find((r) => r.routineId === session.routineId && r.exerciseId === exercise.id);
+        if (!rx) throw new Error(`routine-exercise not found for ${exerciseName}`);
+        tx.objectStore('sessions').put({ ...session, planOverrides: { ...(session.planOverrides ?? {}), [rx.id]: override } });
+        await new Promise((res, rej) => {
+          tx.oncomplete = () => res(undefined);
+          tx.onerror = () => rej(tx.error);
+        });
+      },
+      { sessionId, exerciseName, override },
+    );
+  }
+
+  test('a change to today\'s sets while Summary is open does not move the weight it offered', async ({ page }) => {
+    await fresh(page);
+    await page.getByTestId('start-Lower (Hinge)').click();
+    await clickIfPresent(page.getByRole('button', { name: 'Start anyway' }));
+    const sessionId = sessionIdFromUrl(page);
+    await logSets(page, 'Romanian Deadlift (Barbell)', 110, [8, 8, 8, 8]);
+    await finishToSummary(page);
+
+    // Four sets at the top of 6–8: the card offers 115 kg.
+    const decision = page.getByTestId('decision-Romanian Deadlift (Barbell)');
+    await expect(decision.getByTestId('accept')).toHaveText('Accept 115 kg');
+
+    // The coach makes today six sets while the screen is open. Judged afresh, four sets would now be a miss (hold at 110).
+    await seedTodayOverride(page, sessionId, 'Romanian Deadlift (Barbell)', { targetSets: 6 });
+
+    await page.getByTestId('save-session').click();
+    await expect(page).toHaveURL(/\/$/);
+
+    // What was on the card is what was saved: the next session prescribes 115, not 110.
+    await page.getByTestId('start-Lower (Hinge)').click();
+    await clickIfPresent(page.getByRole('button', { name: 'Start anyway' }));
+    await expect(page.getByTestId('exercise-card-Romanian Deadlift (Barbell)')).toContainText('4 sets of 6–8 · 115 kg');
+  });
+});

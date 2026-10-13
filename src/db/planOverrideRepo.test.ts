@@ -283,3 +283,63 @@ describe('a session run on today\'s plan', () => {
     expect(item.decision).toMatchObject({ rule: 'hold_missing_sets', targetSets: hip.targetSets });
   });
 });
+
+describe('what the Summary showed is what Save stores', () => {
+  beforeEach(async () => {
+    await resetToSeed();
+  });
+
+  /** Four sets at the top of the range on RDL: the Summary proposes 115. */
+  async function shownProposal() {
+    const session = await startSession(HINGE);
+    const rx = await rxFor(HINGE, RDL);
+    await logWorking(session.id, rx, RDL, 110, [8, 8, 8, 8]);
+    const shown = (await buildSummary(session.id)).items.find((i) => i.exercise.id === RDL)!.decision!;
+    expect(shown).toMatchObject({ rule: 'increase', fromWeight: 110, toWeight: 115 });
+    return { session, rx, shown: { rule: shown.rule, fromWeight: shown.fromWeight, toWeight: shown.toWeight } };
+  }
+
+  it('control: with nothing carried, Save judges the plan as it is at that moment', async () => {
+    const { session, rx } = await shownProposal();
+    // The plan is made six sets while the Summary is open: four is now a miss.
+    await setPlanOverride(session.id, rx.id, { targetSets: 6 });
+    await finishSession(session.id, { choices: [{ routineExerciseId: rx.id }] });
+    expect((await rxFor(HINGE, RDL)).currentWeight).toBe(110);
+  });
+
+  it('applies the weight the Accept button showed, and stores that decision, when the plan changed under it', async () => {
+    const { session, rx, shown } = await shownProposal();
+    await setPlanOverride(session.id, rx.id, { targetSets: 6 });
+    expect((await buildSummary(session.id)).items.find((i) => i.exercise.id === RDL)!.decision).toMatchObject({ rule: 'hold_missing_sets', toWeight: 110 });
+
+    await finishSession(session.id, { choices: [{ routineExerciseId: rx.id, shown }] });
+    expect((await rxFor(HINGE, RDL)).currentWeight).toBe(115);
+    const stored = (await db.decisions.where('sessionId').equals(session.id).toArray()).find((d) => d.routineExerciseId === rx.id)!;
+    expect(stored).toMatchObject({ rule: 'increase', fromWeight: 110, toWeight: 115, accepted: true });
+    expect(stored.overrideTo).toBeUndefined();
+  });
+
+  it('keeps an override of the shown proposal an override', async () => {
+    const { session, rx, shown } = await shownProposal();
+    await setPlanOverride(session.id, rx.id, { targetSets: 6 });
+    await finishSession(session.id, { choices: [{ routineExerciseId: rx.id, overrideTo: 112.5, shown }] });
+    expect((await rxFor(HINGE, RDL)).currentWeight).toBe(112.5);
+    const stored = (await db.decisions.where('sessionId').equals(session.id).toArray()).find((d) => d.routineExerciseId === rx.id)!;
+    expect(stored).toMatchObject({ rule: 'increase', toWeight: 115, accepted: false, overrideTo: 112.5 });
+  });
+
+  it('changes nothing when the plan did not move', async () => {
+    const { session, rx, shown } = await shownProposal();
+    await finishSession(session.id, { choices: [{ routineExerciseId: rx.id, shown }] });
+    expect((await rxFor(HINGE, RDL)).currentWeight).toBe(115);
+  });
+
+  it('is ignored for a calibrating exercise, which has no weight to carry', async () => {
+    const session = await startSession(HINGE);
+    const carry = await rxFor(HINGE, CARRY);
+    expect(carry.mode).toBe('calibrating');
+    await logSet({ sessionId: session.id, routineExerciseId: carry.id, exerciseId: CARRY, type: 'working', weight: 40, reps: 1, distanceM: 30 });
+    await finishSession(session.id, { choices: [{ routineExerciseId: carry.id, shown: { rule: 'increase', fromWeight: 0, toWeight: 50 } }] });
+    expect(await rxFor(HINGE, CARRY)).toMatchObject({ mode: 'calibrating', currentWeight: carry.currentWeight });
+  });
+});

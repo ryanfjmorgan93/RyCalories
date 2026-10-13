@@ -71,6 +71,20 @@ describe('what a tool does with the model\'s input', () => {
     expect(turn.actions).toEqual(['Bench: 3 sets today']);
   });
 
+  it('hands log_food its date, which the schema offers as optional', async () => {
+    const actions = fakeActions();
+    const food = createCoachTools(actions, newTurnRecord()).find((t) => t.name === 'log_food')!;
+    const item = { name: 'Toast', amount: 1, unit: 'slice', kcal: 90, protein: 3, carbs: 17, fat: 1 };
+    const props = (food.input_schema as { properties: Record<string, unknown>; required: string[] }).properties;
+    expect(Object.keys(props)).toEqual(['items', 'slot', 'date']);
+    expect((food.input_schema as { required: string[] }).required).toEqual(['items']);
+
+    await food.run(food.parse({ items: [item], slot: 'dinner', date: '2026-10-10' }));
+    expect(actions.logFood).toHaveBeenLastCalledWith({ items: [item], slot: 'dinner', date: '2026-10-10' });
+    await food.run(food.parse({ items: [item] }));
+    expect(actions.logFood).toHaveBeenLastCalledWith({ items: [item], slot: undefined, date: undefined });
+  });
+
   it('keeps a drafted routine on the turn', async () => {
     const turn = newTurnRecord();
     const tools = createCoachTools(fakeActions(), turn);
