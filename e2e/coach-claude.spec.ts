@@ -296,6 +296,9 @@ test.describe('without the coach', () => {
       Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false });
       window.dispatchEvent(new Event('offline'));
     });
+    // Home, online at boot with a key, may already have asked for its opening line; what is under
+    // test is that nothing is sent once the phone is offline.
+    const sentOnline = seen.length;
     await page.getByTestId('coach-open').click();
     await expect(page.getByTestId('coach-unavailable')).toContainText('No connection');
 
@@ -307,6 +310,6 @@ test.describe('without the coach', () => {
     await page.getByTestId('coach-send').click();
     await expect(page.getByTestId('coach-error')).toContainText('No connection');
     await expect(page.getByTestId('coach-input')).toHaveValue('how was my week?');
-    expect(seen).toHaveLength(0);
+    expect(seen).toHaveLength(sentOnline);
   });
 });
