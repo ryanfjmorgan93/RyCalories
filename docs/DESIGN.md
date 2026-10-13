@@ -121,8 +121,10 @@ must render when this stylesheet is what failed.
   Short session, kept small: supplements are one row of pills that scrolls sideways, in time-of-day
   order (a ticked pill fills with the accent and its ink; the dose sits after the name), and the
   weigh-in is one row of last reading, field and Log.
-- **Muscle groups** are stored lower case and shown with a capital (`muscleLabel`): the filter chips,
-  row subtitles and the exercise header.
+- **Descriptors** (muscle group, compound or isolation, kind, equipment) are stored lower case and
+  shown with every word capitalised, units aside (`muscleLabel`, `labelLine`): "Lower Back ·
+  Isolation · Bodyweight +kg". Filter chips, list rows, the picker, the library preview, the exercise
+  header, the weekly sets rows and the body map readout all go through them.
 - **The Fold**: two panes from 840px (`.fold-shell`, `.fold-list`), unchanged by this pass.
 
 ## 5. The colour wheel (Settings → Look)

@@ -3,6 +3,11 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { clickIfPresent, expectClass, fresh, readRawIron } from './fresh';
 
+/** "upper back" → "Upper Back": how the app shows a stored muscle group or equipment, written out here so the test does not check the app against itself. */
+function titleCase(s: string): string {
+  return s.replace(/[a-z]+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1));
+}
+
 /**
  * The whole exercise library on show (src/screens/ExercisesScreen.tsx, src/ui/ExercisePicker.tsx),
  * against the built app, its real data and its real pictures.
@@ -107,6 +112,15 @@ async function openExercises(page: Page, owned: RawExercise[]): Promise<void> {
 const rowsOf = (page: Page) => page.locator('[data-testid^="exercise-row-"]');
 
 test.describe('the Exercises screen', () => {
+  test('the row descriptors start every word with a capital, units aside', async ({ page }) => {
+    await fresh(page);
+    const owned = await exercisesInDb(page);
+    await openExercises(page, owned);
+    const back = owned.find((e) => e.name === 'Back Extension')!;
+    await expect(page.getByTestId(`exercise-row-${back.id}`)).toContainText('Lower Back · Isolation · Bodyweight +kg');
+    await expect(page.getByRole('button', { name: 'Hamstrings', exact: true })).toBeVisible();
+  });
+
   test('shows every exercise with nothing typed, and the counts line states the loaded totals', async ({ page }) => {
     await fresh(page);
     const owned = await exercisesInDb(page);
@@ -145,18 +159,18 @@ test.describe('the Exercises screen', () => {
 
     const target = libraryEntries(owned, 'rear delts')[0]!;
     expect(target, 'the catalogue has a rear delts entry the seed does not').toBeDefined();
-    const chip = page.getByRole('button', { name: 'Rear delts', exact: true });
+    const chip = page.getByRole('button', { name: 'Rear Delts', exact: true });
     await chip.click();
     await expectClass(chip, 'bg-fg');
 
     // The list is that muscle's: the entry read from the catalogue file is on it, labelled, with its muscle and equipment.
     const row = page.getByTestId(`exercise-row-${keyOf(target)}`);
     await expect(row).toContainText(target.name);
-    await expect(row).toContainText(`Rear delts · ${target.equipment}`);
+    await expect(row).toContainText(`Rear Delts · ${titleCase(target.equipment)}`);
     await expect(row.getByTestId('library-label')).toBeVisible();
     const texts = await rowsOf(page).allTextContents();
     expect(texts.length).toBeGreaterThanOrEqual(libraryEntries(owned, 'rear delts').length);
-    for (const t of texts) expect(t).toContain('Rear delts');
+    for (const t of texts) expect(t).toContain('Rear Delts');
     // The search narrows the same list further: the chip stays on, and the entry is still there.
     await page.getByTestId('exercise-search').fill(target.name);
     await expect(rowsOf(page).first()).toContainText(target.name);
@@ -355,7 +369,7 @@ test.describe('the Exercises screen keeps its place', () => {
     const entry = libraryEntries(owned, 'rear delts')[0]!;
     await openExercises(page, owned);
 
-    const chip = page.getByRole('button', { name: 'Rear delts', exact: true });
+    const chip = page.getByRole('button', { name: 'Rear Delts', exact: true });
     await chip.click();
     await expectClass(chip, 'bg-fg');
     await page.getByTestId('exercise-search').fill(entry.name);
@@ -368,7 +382,7 @@ test.describe('the Exercises screen keeps its place', () => {
 
     // The filters are what was left, and what they show is the exercise just added, now the owner's.
     await expect(page.getByTestId('exercise-search')).toHaveValue(entry.name);
-    await expectClass(page.getByRole('button', { name: 'Rear delts', exact: true }), 'bg-fg');
+    await expectClass(page.getByRole('button', { name: 'Rear Delts', exact: true }), 'bg-fg');
     await expectClass(page.getByRole('button', { name: 'All', exact: true }), 'bg-fg', false);
     await expect(page.getByTestId('exercise-scope-all')).toHaveAttribute('aria-checked', 'true');
     await expect(page.getByTestId(`exercise-row-${id}`)).toBeVisible();
@@ -407,7 +421,7 @@ test.describe('the Exercises screen keeps its place', () => {
     await page.goto('/routines');
     await page.getByText('Exercise library').click();
     await expect(page).toHaveURL(/\/exercises$/);
-    const chip = page.getByRole('button', { name: 'Rear delts', exact: true });
+    const chip = page.getByRole('button', { name: 'Rear Delts', exact: true });
     await chip.click();
     await expectClass(chip, 'bg-fg');
     await page.getByTestId('exercise-search').fill('fly');
@@ -421,7 +435,7 @@ test.describe('the Exercises screen keeps its place', () => {
     await expect(page).toHaveURL(/\/exercises$/);
 
     await expectClass(page.getByRole('button', { name: 'All', exact: true }), 'bg-fg');
-    await expectClass(page.getByRole('button', { name: 'Rear delts', exact: true }), 'bg-fg', false);
+    await expectClass(page.getByRole('button', { name: 'Rear Delts', exact: true }), 'bg-fg', false);
     await expect(page.getByTestId('exercise-search')).toHaveValue('');
     await expect(page.getByTestId('exercise-scope-all')).toHaveAttribute('aria-checked', 'true');
   });

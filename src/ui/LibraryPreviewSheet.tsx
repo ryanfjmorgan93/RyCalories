@@ -1,3 +1,4 @@
+import { labelLine } from '@/domain/format';
 import { useState } from 'react';
 import { Button } from './components/Button';
 import { Sheet } from './components/Sheet';
@@ -41,9 +42,7 @@ export function LibraryPreviewSheet({ row, onClose, onAdded }: { row: ExerciseLi
       {row && (
         <div data-testid="library-preview">
           <div className="mb-3 flex items-center gap-2 text-sm text-muted">
-            <span>
-              {row.muscleLabel} · {row.equipment}
-            </span>
+            <span>{labelLine([row.muscleLabel, row.equipment])}</span>
             <LibraryLabel />
           </div>
           <ExerciseDemo key={row.key} slug={row.pictureKey ?? ''} name={row.name} />

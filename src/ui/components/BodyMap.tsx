@@ -1,3 +1,4 @@
+import { muscleLabel } from '@/domain/format';
 import { useState } from 'react';
 import type { MuscleGroup } from '@/domain/types';
 import { Segmented } from './Chip';
@@ -138,7 +139,8 @@ const BACK_REGIONS: Region[] = [
 const BASE_FRONT_D = silhouette(FX);
 const BASE_BACK_D = silhouette(BX);
 
-function readout(mode: BodyMapMode, group: MuscleGroup, sets: number, daysAgo: number | undefined): string {
+function readout(mode: BodyMapMode, muscle: MuscleGroup, sets: number, daysAgo: number | undefined): string {
+  const group = muscleLabel(muscle);
   if (mode === 'sets') return `${group} · ${sets} ${sets === 1 ? 'set' : 'sets'} this week`;
   if (daysAgo === undefined) return `${group} · not yet trained`;
   if (daysAgo === 0) return `${group} · today`;

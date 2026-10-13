@@ -8,7 +8,7 @@ import { addDays, dateKeyToDate, mondayOf } from '@/domain/dates';
 import { bandStatus, movingAverage, weeklyDelta } from '@/domain/bodyweight';
 import { estimateMaintenance } from '@/domain/energy';
 import { maintenanceBasisText, maintenanceFigureText, maintenanceGateText, maintenanceRateText } from '@/domain/energyText';
-import { fmtDate, fmtGrams, fmtKcal, fmtKg, fmtNum, fmtSignedKg, fmtWeekOf } from '@/domain/format';
+import { fmtDate, fmtGrams, fmtKcal, fmtKg, fmtNum, fmtSignedKg, fmtWeekOf, muscleLabel } from '@/domain/format';
 import { strengthLevel, type StrengthLevel } from '@/domain/standards';
 import { e1rmChange } from '@/domain/strength';
 import { averagesAreMeaningful, type Average, type Trend } from '@/domain/trends';
@@ -350,7 +350,7 @@ function WeeklySetsCard({ weekStart, thisWeek, settings }: { weekStart: string; 
         <div key={r.muscleGroup} data-testid={`weekly-row-${r.muscleGroup}`}>
           {i > 0 && <Divider />}
           <Row
-            title={r.muscleGroup}
+            title={muscleLabel(r.muscleGroup)}
             right={
               <span className="num font-extrabold tabular-nums">{r.target !== null ? `${r.sets} of ${r.target}` : `${r.sets}`}</span>
             }

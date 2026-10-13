@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { muscleLabel } from '@/domain/format';
+import { labelLine } from '@/domain/format';
 import { Sheet } from './components/Sheet';
 import { Button } from './components/Button';
 import { TextInput } from './components/NumberField';
@@ -13,8 +13,8 @@ import type { Exercise } from '@/domain/types';
 
 function rowDetail(row: ExerciseListRow): string {
   const e = row.exercise;
-  if (!e) return `${row.muscleLabel} · ${row.equipment}`;
-  return `${muscleLabel(e.muscleGroup)} · ${e.isCompound ? 'compound' : 'isolation'}${e.kind !== 'reps' ? ` · ${e.kind.replace('_', ' ')}` : ''}`;
+  if (!e) return labelLine([row.muscleLabel, row.equipment]);
+  return labelLine([e.muscleGroup, e.isCompound ? 'compound' : 'isolation', e.kind !== 'reps' && e.kind.replace('_', ' ')]);
 }
 
 /**

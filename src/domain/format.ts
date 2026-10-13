@@ -28,9 +28,23 @@ export function fmtRange(min: number, max: number, unit = ''): string {
   return min === max ? `${fmtNum(min)}${u}` : `${fmtNum(min)}–${fmtNum(max)}${u}`;
 }
 
-/** A muscle group as a label or a filter chip shows it: first letter capitalised ("Rear delts"). Stored values stay lower case. */
-export function muscleLabel(group: string): string {
-  return group.charAt(0).toUpperCase() + group.slice(1);
+/** Units stay as written inside a label ("+kg", "75 s"). */
+const LABEL_UNITS = new Set(['kg', 'g', 's', 'min']);
+
+/**
+ * A muscle group, equipment or other descriptor as the app shows it: every word capitalised
+ * ("Rear Delts", "Lower Back", "Bodyweight +kg"), units left as they are. Stored values stay lower case.
+ */
+export function muscleLabel(text: string): string {
+  return text.replace(/[A-Za-z]+/g, (w) => (LABEL_UNITS.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1)));
+}
+
+/**
+ * An exercise's descriptors as one line, every word capitalised: "Lower Back · Isolation ·
+ * Bodyweight +kg", "Rear Delts · Cable". Empty parts are left out.
+ */
+export function labelLine(parts: readonly (string | null | undefined | false)[]): string {
+  return parts.filter((p): p is string => typeof p === 'string' && p.trim() !== '').map(muscleLabel).join(' · ');
 }
 
 export function fmtReps(reps: number[]): string {

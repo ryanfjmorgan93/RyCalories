@@ -6,7 +6,7 @@ import { routineUsageForExercise, type RoutineUsage } from '@/db/exerciseDetailQ
 import { bestsForExercise } from '@/db/recordsQueries';
 import { lastWorkingTopWeight, lockInRoutineExercise, unlockRoutineExercise, type HistoryEntry } from '@/db/repo';
 import { lockInBlocked } from '@/domain/engine';
-import { fmtDate, fmtDateLong, fmtKg, fmtNum, fmtSetsLine, fmtWeight, muscleLabel, targetLine } from '@/domain/format';
+import { fmtDate, fmtDateLong, fmtKg, fmtNum, fmtSetsLine, fmtWeight, labelLine, targetLine } from '@/domain/format';
 import type { Bests } from '@/domain/records';
 import { strengthLevel, type StrengthStandard } from '@/domain/standards';
 import { countsForProgression, countsForRecords } from '@/domain/sets';
@@ -196,7 +196,7 @@ export function ExerciseDetailScreen() {
 // Meta
 
 function metaLine(e: Exercise): string {
-  const parts: string[] = [muscleLabel(e.muscleGroup), e.isCompound ? 'compound' : 'isolation'];
+  const parts: string[] = [e.muscleGroup, e.isCompound ? 'compound' : 'isolation'];
   if (e.kind === 'bodyweight_plus') parts.push('bodyweight +kg');
   else if (e.kind === 'carry') parts.push('carry');
   else if (e.kind === 'timed') parts.push('timed');
@@ -204,7 +204,7 @@ function metaLine(e: Exercise): string {
   if (e.unilateral) parts.push('per side');
   parts.push(`rest ${Math.round(e.defaultRestSec)} s`);
   parts.push(`+${fmtNum(e.defaultIncrement)} kg steps`);
-  return parts.join(' · ');
+  return labelLine(parts);
 }
 
 // ---------------------------------------------------------------------------

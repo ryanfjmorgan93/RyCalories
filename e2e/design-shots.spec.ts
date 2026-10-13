@@ -427,13 +427,13 @@ test('capture every screen for a design session', async ({ page, browser, contex
   const hsBox = await hamstrings.boundingBox();
   if (!hsBox) throw new Error('hamstrings region not found');
   await hamstrings.click({ position: { x: hsBox.width * 0.2, y: hsBox.height * 0.5 } });
-  await expect(page.getByTestId('body-map-readout')).toContainText('hamstrings');
+  await expect(page.getByTestId('body-map-readout')).toContainText('Hamstrings');
   await expect(page.getByTestId('body-map-readout')).toContainText('sets this week');
   await shot(page, 'progress-body-map-sets', { full: true });
 
   await page.getByRole('radio', { name: 'Last trained' }).click();
   await hamstrings.click({ position: { x: hsBox.width * 0.2, y: hsBox.height * 0.5 } });
-  await expect(page.getByTestId('body-map-readout')).toContainText('hamstrings');
+  await expect(page.getByTestId('body-map-readout')).toContainText('Hamstrings');
   await shot(page, 'progress-body-map-recency', { full: true });
 
   // ---- Cooked meals: a recipe built from typed text, one ingredient at a time -----------------

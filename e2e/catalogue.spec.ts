@@ -3,6 +3,11 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { clickIfPresent, fresh, readRawIron, waitForServiceWorker } from './fresh';
 
+/** "upper back" → "Upper Back": how the app shows a stored muscle group or equipment, written out here so the test does not check the app against itself. */
+function titleCase(s: string): string {
+  return s.replace(/[a-z]+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1));
+}
+
 /**
  * The exercise catalogue in the app (the Exercises list and its preview, the routine picker,
  * src/ui/ExerciseDemo.tsx, src/db/catalogueRepo.ts), against the built app and its real pictures. The
@@ -120,8 +125,8 @@ test.describe('catalogue in the app', () => {
     await page.getByTestId('exercise-search').fill(QUERY);
     const row = page.getByTestId(`exercise-row-${KEY}`);
     await expect(row).toContainText(entry.name);
-    // The muscle group shows with a capital (muscleLabel), as on every row and chip.
-    await expect(row).toContainText(`${entry.muscleGroup.charAt(0).toUpperCase()}${entry.muscleGroup.slice(1)} · ${entry.equipment}`);
+    // Every word capitalised (labelLine), as on every row and chip.
+    await expect(row).toContainText(`${titleCase(entry.muscleGroup)} · ${titleCase(entry.equipment)}`);
     await expect(row.locator('img')).toHaveAttribute('src', frameUrl(1));
     await expect(row.locator('img')).toHaveAttribute('loading', 'lazy');
 
