@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { EMBER } from '@/domain/accent';
 import { contrastRatio } from '@/domain/plateDiagram';
 
 /**
@@ -111,14 +112,14 @@ function compositeOverBg(tokens: Map<string, string>, tintName: string, baseName
   return toHex({ r: mix(tint.r, base.r), g: mix(tint.g, base.g), b: mix(tint.b, base.b), a: 1 });
 }
 
-const GLASS_TIERS = ['glass-1', 'glass-2', 'glass-3'] as const;
+const GLASS_TIERS = ['glass-1', 'glass-2', 'glass-3', 'glass-over'] as const;
 const TEXT_ON_FILL = [
   { text: 'c-accent-fg', fill: 'c-accent', label: 'accent-fg on accent' },
   { text: 'c-ok-fg', fill: 'c-ok', label: 'ok-fg on ok' },
   { text: 'c-record-fg', fill: 'c-record', label: 'record-fg on record' },
 ] as const;
 const STATE_TEXT = ['c-accent', 'c-ok', 'c-warn', 'c-danger', 'c-info', 'c-record'] as const;
-const SURFACES = ['c-bg', 'c-surface'] as const;
+const SURFACES = ['c-bg', 'c-surface', 'c-surface-2'] as const;
 
 describe('dark theme tokens', () => {
   it.each(['c-fg', 'c-muted', 'c-dim'])('%s reaches 4.5:1 on bg and on surface', (textToken) => {
@@ -146,6 +147,14 @@ describe('dark theme tokens', () => {
   it.each(TEXT_ON_FILL)('$label reaches 4.5:1', ({ text, fill }) => {
     const ratio = contrastRatio(opaqueHex(tokens, text), opaqueHex(tokens, fill));
     expect(ratio).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
+  });
+});
+
+describe('accent default', () => {
+  // The colour wheel's reset (src/domain/accent.ts) and the stylesheet must name the same ember.
+  it('index.css carries the same ember as the colour wheel', () => {
+    expect(opaqueHex(tokens, 'c-accent')).toBe(EMBER.accent);
+    expect(opaqueHex(tokens, 'c-accent-fg')).toBe(EMBER.accentFg);
   });
 });
 

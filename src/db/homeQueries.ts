@@ -14,6 +14,8 @@ export interface HomeRoutine extends RoutineRest {
   exerciseCount: number;
   /** The heaviest set of the routine's lead lift in its last finished session ("Barbell Row 80 kg × 8"); null when it has not been done. */
   lastTop: string | null;
+  /** The routine's exercises' picture keys, in routine order: Home shows the first that has a robot render. */
+  demos: string[];
 }
 
 /**
@@ -46,6 +48,7 @@ export async function loadHomeRoutines(today: string): Promise<HomeRoutine[]> {
       ...rest,
       exerciseCount: await db.routineExercises.where('routineId').equals(rest.routine.id).count(),
       lastTop: await lastTopFor(rest.routine.id),
+      demos: (await routineItems(rest.routine.id)).flatMap(({ exercise }) => (exercise.demo ? [exercise.demo] : [])),
     })),
   );
 }

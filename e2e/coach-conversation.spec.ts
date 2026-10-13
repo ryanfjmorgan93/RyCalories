@@ -508,7 +508,7 @@ test('Draft with coach: the first message is a build even when it reads like a q
 test('the box has no example text and no toggle', async ({ page }) => {
   await seedOwner(page);
   await openCoach(page);
-  await expect(page.getByTestId('coach-input')).toHaveAttribute('placeholder', 'Message');
+  await expect(page.getByTestId('coach-input')).toHaveAttribute('placeholder', 'Talk to me…');
   await expect(page.getByRole('textbox', { name: 'Message' })).toBeVisible();
   await expect(page.getByRole('radio')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /^(Ask|Build a routine)$/ })).toHaveCount(0);

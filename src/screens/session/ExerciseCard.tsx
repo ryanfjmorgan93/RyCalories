@@ -47,6 +47,7 @@ import { toast } from '@/ui/components/Toast';
 import { MoreIcon } from '@/ui/components/TopBar';
 import { EditSetSheet } from '@/ui/EditSetSheet';
 import { ExerciseDemo } from '@/ui/ExerciseDemo';
+import { ExerciseHero } from '@/ui/ExerciseHero';
 import { PlateSheet } from '@/ui/PlateSheet';
 import { SwapExerciseSheet } from '@/ui/SwapExerciseSheet';
 import { TodayPlanSheet } from '@/ui/TodayPlanSheet';
@@ -641,21 +642,23 @@ export function ExerciseCard({
   return (
     <div ref={ref} className="pt-3" data-current={isCurrent ? 'true' : undefined}>
       <Card className={`overflow-hidden ${isCurrent ? 'border-accent shadow-[0_0_0_1px_var(--c-accent)]' : ''}`} data-testid={testId} data-current={isCurrent ? 'true' : undefined}>
-        <div className="flex items-start gap-2 px-4 pt-3">
-          <button type="button" className="min-w-0 flex-1 text-left" onClick={() => nav(`/exercises/${exercise.id}`)}>
+        <ExerciseHero demo={exercise.demo} className="flex min-h-48 items-end">
+          <div className="absolute right-1 top-1 flex">
+            <IconButton label="Collapse" aria-expanded="true" className="text-fg" onClick={withToggleFocus(() => (reopened ? setReopened(false) : onToggleGroupExpand()))}>
+              <ChevronIcon expanded />
+            </IconButton>
+            <IconButton label="More" className="text-fg" onClick={openMenu}>
+              <MoreIcon />
+            </IconButton>
+          </div>
+          <button type="button" className="min-w-0 flex-1 px-4 pb-3 pt-12 text-left" onClick={() => nav(`/exercises/${exercise.id}`)}>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <h2 className="text-lg font-extrabold leading-tight">{exercise.name}</h2>
+              <h2 className="disp text-[2.5rem] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]">{exercise.name}</h2>
               {chips}
             </div>
-            <div className="mt-0.5 text-sm text-muted">{subtitle}</div>
+            <div className="mt-1 text-sm text-fg/85">{subtitle}</div>
           </button>
-          <IconButton label="Collapse" aria-expanded="true" onClick={withToggleFocus(() => (reopened ? setReopened(false) : onToggleGroupExpand()))}>
-            <ChevronIcon expanded />
-          </IconButton>
-          <IconButton label="More" onClick={openMenu}>
-            <MoreIcon />
-          </IconButton>
-        </div>
+        </ExerciseHero>
 
         {rx?.cue && (
           <div className="mx-4 mt-2 flex items-start gap-2 rounded-xl bg-surface-2 px-3 py-2 text-[15px] leading-snug text-fg">

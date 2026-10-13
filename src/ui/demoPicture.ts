@@ -1,4 +1,5 @@
 import { demoFrameUrl, findDemo } from '@/data/exerciseDemos';
+import { ROBOT_RENDER_KEYS } from '@/data/robotRenders';
 import { CATALOGUE_FRAME_COUNT, catalogueFrameUrl, catalogueSlugOf, isCatalogueDemo } from '@/domain/catalogue';
 
 /**
@@ -46,4 +47,22 @@ export function demoFrameSrc(demo: string | undefined, frame = 1): string | unde
   const pic = demoPicture(demo);
   if (!pic || !Number.isInteger(frame) || frame < 1 || frame > pic.frames) return undefined;
   return pic.kind === 'catalogue' ? catalogueFrameUrl(pic.slug, frame as 1 | 2) : demoFrameUrl(pic.slug, frame);
+}
+
+const ROBOTS = new Set(ROBOT_RENDER_KEYS);
+
+/**
+ * The robot render for a demo key, or undefined when the exercise has none (it then shows the
+ * accent glow and its name). Renders are bundled under public/robots/ and never fetched from
+ * anywhere else; a catalogue key's render lives under robots/cat/ so its slug cannot collide with
+ * a diagram slug.
+ */
+export function robotSrc(demo: string | undefined): string | undefined {
+  if (demo === undefined || !ROBOTS.has(demo)) return undefined;
+  return isCatalogueDemo(demo) ? `/robots/cat/${catalogueSlugOf(demo)}.webp` : `/robots/${demo}.webp`;
+}
+
+/** Of several picture keys (a routine's exercises, in order), the first that has a robot render; else the first key. */
+export function heroDemo(demos: readonly string[]): string | undefined {
+  return demos.find((d) => robotSrc(d) !== undefined) ?? demos[0];
 }

@@ -362,6 +362,11 @@ export interface Settings {
    */
   barKg?: number;
   /**
+   * The accent hue picked on the colour wheel (Settings → Look), 0–359. Absent means the signed-off
+   * ember. The colour itself is derived (src/domain/accent.ts) so it always reads on the dark surfaces.
+   */
+  accentHue?: number;
+  /**
    * Plate sizes available, in kg, one of each pair, any order. Absent on rows written before
    * this setting existed — read as `?? DEFAULT_SETTINGS.plates`.
    */

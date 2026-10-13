@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { demoFrameSrc, demoPicture, pictureFitClass } from './demoPicture';
+import { demoFrameSrc, demoPicture, pictureFitClass, robotSrc } from './demoPicture';
+import { ExerciseHero } from './ExerciseHero';
 
 /** Height in px is the size; a catalogue photograph (3:2) gets the width to match, a diagram is square. */
 const SIZES = {
@@ -19,6 +20,8 @@ const SIZES = {
  */
 export function DemoThumb({ demo, size = 'md', className = '' }: { demo: string | undefined; size?: keyof typeof SIZES; className?: string }) {
   const [failed, setFailed] = useState<string | null>(null);
+  // An exercise with a robot render shows that (on black, with the accent glow), never a photograph.
+  if (robotSrc(demo) !== undefined) return <ExerciseHero demo={demo} className={`${SIZES[size].wide} shrink-0 rounded-lg ${className}`} />;
   const pic = demoPicture(demo);
   const src = demoFrameSrc(demo, 1);
   if (!pic || !src) return null;

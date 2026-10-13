@@ -23,7 +23,7 @@ export function Card({
 export function SectionTitle({ children, right, className = '' }: { children: ReactNode; right?: ReactNode; className?: string }) {
   return (
     <div className={`flex items-end justify-between px-1 pb-2 pt-5 ${className}`}>
-      <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-muted">{children}</h2>
+      <h2 className="label">{children}</h2>
       {right}
     </div>
   );
@@ -88,7 +88,7 @@ export function Stat({ label, value, sub, tone }: { label: string; value: ReactN
   const color = tone === 'ok' ? 'text-ok' : tone === 'warn' ? 'text-warn' : tone === 'danger' ? 'text-danger' : tone === 'accent' ? 'text-accent' : 'text-fg';
   return (
     <div className="min-w-0">
-      <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">{label}</div>
+      <div className="label">{label}</div>
       <div className={`num text-2xl font-extrabold leading-tight ${color}`}>{value}</div>
       {sub && <div className="text-xs text-muted">{sub}</div>}
     </div>

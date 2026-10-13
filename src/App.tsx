@@ -7,6 +7,7 @@ import { useNow, useSessionDock } from './ui/hooks';
 import { useClaudeSpend } from './state/claudeCoach';
 import { useTimer } from './state/timer';
 import { Ambient } from './ui/Ambient';
+import { AccentSync } from './ui/accentTheme';
 import { BottomNav } from './ui/components/BottomNav';
 import { toast, ToastHost } from './ui/components/Toast';
 import { RestTimerBar } from './ui/RestTimerBar';
@@ -140,6 +141,7 @@ export function App() {
       <AndroidBackButton />
       <ShareTargetListener />
       <CoachSheetHost />
+      <AccentSync />
       <Ambient />
       <Routes>
         <Route element={<Shell />}>

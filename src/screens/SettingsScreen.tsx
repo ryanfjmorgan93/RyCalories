@@ -11,6 +11,7 @@ import { fmtNum } from '@/domain/format';
 import { calorieTargetOn } from '@/domain/nutrition';
 import { MUSCLE_GROUPS, type MuscleGroup, type Settings } from '@/domain/types';
 import { cancelRestNotification } from '@/state/native';
+import { AccentWheel } from '@/ui/AccentWheel';
 import { AboutCard } from '@/ui/AboutCard';
 import { BackupsCard } from '@/ui/BackupsCard';
 import { ClaudeSettingsCard } from '@/ui/ClaudeSettingsCard';
@@ -105,6 +106,9 @@ export function SettingsScreen() {
 
             <SectionTitle>Reminders</SectionTitle>
             <RemindersCard settings={settings} />
+
+            <SectionTitle>Look</SectionTitle>
+            <AccentWheel settings={settings} />
 
             <SectionTitle>About</SectionTitle>
             <AboutCard />

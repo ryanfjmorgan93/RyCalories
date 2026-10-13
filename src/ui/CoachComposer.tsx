@@ -29,7 +29,7 @@ export function CoachComposer({ c }: { c: CoachConversation }) {
         </div>
       ) : null}
       <form
-        className="flex items-center gap-2"
+        className="flex items-center gap-1.5 rounded-full border border-line bg-surface p-1 pl-2"
         onSubmit={(e) => {
           e.preventDefault();
           void c.submit();
@@ -37,7 +37,7 @@ export function CoachComposer({ c }: { c: CoachConversation }) {
       >
         <label className="min-w-0 flex-1">
           <span className="sr-only">Message</span>
-          <TextInput value={c.text} onChange={c.setText} placeholder={c.mic.listening ? 'Listening…' : 'Message'} testId="coach-input" />
+          <TextInput value={c.text} onChange={c.setText} placeholder={c.mic.listening ? 'Listening…' : 'Talk to me…'} testId="coach-input" className="border-transparent! bg-transparent! px-2!" />
         </label>
         {c.mic.available && (
           <button
@@ -46,12 +46,12 @@ export function CoachComposer({ c }: { c: CoachConversation }) {
             aria-pressed={c.mic.listening}
             onClick={() => void c.mic.toggle()}
             data-testid="coach-mic"
-            className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border ${c.mic.listening ? 'border-accent bg-accent text-accent-fg' : 'border-line bg-surface-2 text-fg'}`}
+            className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border ${c.mic.listening ? 'border-fg bg-fg text-bg' : 'border-accent bg-accent text-accent-fg'}`}
           >
             <MicIcon active={c.mic.listening} />
           </button>
         )}
-        <Button type="submit" variant="primary" size="md" disabled={!c.canSend} data-testid="coach-send">
+        <Button type="submit" variant="primary" size="sm" disabled={!c.canSend} data-testid="coach-send">
           {c.sendLabel}
         </Button>
       </form>

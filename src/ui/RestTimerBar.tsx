@@ -67,24 +67,24 @@ export function RestTimerBar() {
     >
       {/* What the coach says about the set just logged: nothing at all unless it has something to say. */}
       {setFacts && <CoachLine moment="set" facts={setFacts} className="mb-2" />}
-      {/* The shared real-glass layer (src/index.css .glass-fixed), so a Claude Design pass on the
-          tokens reaches the pill too; only its border takes the rest/done tint. */}
+      {/* Look A: the running timer is one solid accent block with ink on it; when the rest is over it
+          turns to the shared real glass with the done tint on its border. */}
       <div
         role="timer"
         aria-label={done ? 'Rest over' : `Rest, ${fmtDuration(remaining)} left`}
-        className="glass-fixed mb-3 flex items-center gap-2 rounded-card border p-2"
-        style={{ borderColor: `color-mix(in srgb, ${tint} 35%, transparent)` }}
+        className={`mb-3 flex items-center gap-2 rounded-card border p-2 pl-3 ${done ? 'glass-fixed' : 'border-accent bg-accent text-accent-fg'}`}
+        style={done ? { borderColor: `color-mix(in srgb, ${tint} 35%, transparent)` } : undefined}
       >
         {!done && (
           <>
             <svg width="48" height="48" viewBox="0 0 48 48" className="shrink-0" aria-hidden="true">
-              <circle cx="24" cy="24" r={RING_R} fill="none" stroke="var(--c-line)" strokeWidth="4" opacity="0.4" />
+              <circle cx="24" cy="24" r={RING_R} fill="none" stroke="currentColor" strokeWidth="4" opacity="0.2" />
               <circle
                 cx="24"
                 cy="24"
                 r={RING_R}
                 fill="none"
-                stroke={tint}
+                stroke="currentColor"
                 strokeWidth="4"
                 strokeLinecap="round"
                 strokeDasharray={RING_CIRCUMFERENCE}
@@ -94,15 +94,14 @@ export function RestTimerBar() {
               />
             </svg>
             <div className="min-w-0 flex-1">
-              <div className="truncate text-[11px] font-bold uppercase tracking-[0.12em] text-muted">{label || 'Rest'}</div>
-              <div className="num text-3xl font-extrabold leading-none">{fmtDuration(remaining)}</div>
+              <div className="truncate text-[11px] font-medium uppercase tracking-[0.12em] opacity-75">{label || 'Rest'}</div>
+              <div className="num text-4xl font-bold leading-none">{fmtDuration(remaining)}</div>
             </div>
             <button
               type="button"
               aria-label="15 seconds less"
               onClick={() => add(-15)}
-              className="h-11 min-w-11 rounded-xl px-3 text-base font-bold active:brightness-90"
-              style={{ background: 'color-mix(in srgb, var(--c-fg) 7%, transparent)' }}
+              className="h-11 min-w-11 rounded-full bg-black/12 px-3 text-base font-semibold active:brightness-90"
             >
               −15
             </button>
@@ -110,12 +109,11 @@ export function RestTimerBar() {
               type="button"
               aria-label="15 seconds more"
               onClick={() => add(15)}
-              className="h-11 min-w-11 rounded-xl px-3 text-base font-bold active:brightness-90"
-              style={{ background: 'color-mix(in srgb, var(--c-fg) 7%, transparent)' }}
+              className="h-11 min-w-11 rounded-full bg-black/12 px-3 text-base font-semibold active:brightness-90"
             >
               +15
             </button>
-            <button type="button" onClick={skip} className="h-11 rounded-xl bg-fg px-4 text-base font-bold text-bg active:brightness-90">
+            <button type="button" onClick={skip} className="h-11 rounded-full bg-black/12 px-4 text-base font-semibold active:brightness-90">
               Skip
             </button>
           </>
@@ -123,7 +121,7 @@ export function RestTimerBar() {
         {done && (
           <>
             <div className="min-w-0 flex-1 px-2 py-1 text-lg font-extrabold text-ok">Rest over</div>
-            <button type="button" onClick={skip} className="h-11 rounded-xl bg-ok px-4 text-base font-bold text-ok-fg active:brightness-90">
+            <button type="button" onClick={skip} className="h-11 rounded-full bg-ok px-4 text-base font-semibold text-ok-fg active:brightness-90">
               Dismiss
             </button>
           </>

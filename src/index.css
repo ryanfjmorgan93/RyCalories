@@ -1,21 +1,26 @@
 @import 'tailwindcss';
-/* Archivo Variable, bundled locally (offline). Only the `wdth` entry: it carries both the wght
-   100–900 and wdth 62–125% axes, so the condensed numerals in `.num` come from the same family
-   file. The package's default entry is wght-only — importing both would duplicate every glyph. */
-@import '@fontsource-variable/archivo/wdth.css';
+/* Saira Variable, bundled locally (offline). Only the `wdth` entry: it carries both the wght
+   100–900 and wdth 50–125% axes, so the condensed headlines (`.disp`) and numbers (`.num`) come
+   from the same family file as the body text. Importing the wght-only entry too would duplicate
+   every glyph. */
+@import '@fontsource-variable/saira/wdth.css';
 
-/* Palette as runtime variables. Dark only. */
+/* Palette as runtime variables. Dark only: look A (docs/DESIGN.md), a black stage, glass panels,
+   one flat accent. */
 :root {
-  --c-bg: #0b0b0d;
-  --c-surface: #151518;
-  --c-surface-2: #1f1f24;
-  --c-line: #2b2b33;
-  --c-fg: #f4f4f5;
-  --c-muted: #9a9aa4;
+  --c-bg: #000000;
+  --c-surface: #1a1a1a;
+  --c-surface-2: #1f1f22;
+  --c-line: #27272a;
+  --c-fg: #ffffff;
+  --c-muted: #a7a7a7;
   /* Never used for text below 4.5:1 against bg, surface OR a glass tile — see src/ui/tokens.test.ts. */
-  --c-dim: #8a8a94;
-  --c-accent: #ff8a2a;
-  --c-accent-fg: #140a02;
+  --c-dim: #858c96;
+  /* The default accent, ember. Settings → Look can replace these two at runtime with a hue from
+     the colour wheel (src/domain/accent.ts, applied by src/ui/accentTheme.ts); every other use of
+     the accent below is mixed from --c-accent, so it follows. */
+  --c-accent: #ff5a1f;
+  --c-accent-fg: #000000;
   --c-ok: #4ade80;
   --c-ok-fg: #03210e;
   --c-warn: #fbbf24;
@@ -29,25 +34,29 @@
 
   /* --- Phase 3 visual system -------------------------------------------------------------- */
 
-  /* Glass: Card and friends fake it (tint + border + inner highlight, no blur — it scrolls).
-     Only fixed layers (TopBar, BottomNav, the session dock, Sheet, Toast) spend the real
-     `backdrop-filter: blur(var(--blur-glass))`, over --glass-fixed-bg instead of these tiers. */
-  --glass-1: rgba(255, 255, 255, 0.07); /* most emphasis — hero cards */
-  --glass-2: rgba(255, 255, 255, 0.055); /* the default card */
-  --glass-3: rgba(255, 255, 255, 0.04); /* nested / low-emphasis rows */
-  --glass-border: rgba(255, 255, 255, 0.12);
-  --glass-highlight: rgba(255, 255, 255, 0.08); /* inset top edge, 1px */
-  --glass-fixed-bg: rgba(20, 20, 25, 0.6);
-  --glass-fixed-border: rgba(255, 255, 255, 0.1);
-  --blur-glass: 16px;
+  /* Glass: Card and friends are a thin tint + border + inner highlight, light enough that an
+     exercise render behind one shows through. No blur on anything that scrolls, except a card
+     that sits over a render (`.glass-over`). Fixed layers (TopBar, BottomNav, the session dock,
+     Sheet, Toast) spend the real `backdrop-filter: blur(var(--blur-glass))` over --glass-fixed-bg. */
+  --glass-1: rgba(255, 255, 255, 0.06); /* most emphasis — hero cards */
+  --glass-2: rgba(255, 255, 255, 0.045); /* the default card */
+  --glass-3: rgba(255, 255, 255, 0.03); /* nested / low-emphasis rows */
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-highlight: rgba(255, 255, 255, 0.1); /* inset top edge, 1px */
+  --glass-fixed-bg: rgba(10, 10, 10, 0.62);
+  --glass-fixed-border: rgba(255, 255, 255, 0.09);
+  --blur-glass: 14px;
+  /* The frosted card over a render: thinner still, with a light blur so the robot shows through. */
+  --glass-over: rgba(255, 255, 255, 0.035);
+  --blur-over: 10px;
 
   /* Radii */
-  --r-card: 1.5rem;
+  --r-card: 1.25rem;
   --r-control: 0.875rem;
   --r-pill: 1.25rem;
 
   /* Elevation. Fixed/floating layers (nav, dock, sheets) get the stronger one. */
-  --shadow-card: 0 24px 48px -28px rgba(0, 0, 0, 0.55);
+  --shadow-card: 0 0 0 transparent;
   --shadow-float: 0 18px 40px -20px rgba(0, 0, 0, 0.85);
 
   /* Motion */
@@ -67,9 +76,9 @@
 
   /* <Ambient/> ground-layer colour fields (src/ui/Ambient.tsx). Decorative — never load-bearing
      for contrast, since text never sits directly on them. */
-  --amb-ember: rgba(255, 122, 38, 0.22);
-  --amb-base: rgba(99, 102, 241, 0.14);
-  --amb-cool: rgba(125, 211, 252, 0.17);
+  --amb-ember: color-mix(in srgb, var(--c-accent) 22%, transparent);
+  --amb-base: rgba(255, 255, 255, 0.025);
+  --amb-cool: rgba(255, 255, 255, 0.03);
   --amb-done: rgba(74, 222, 128, 0.26);
   --amb-record: rgba(245, 197, 66, 0.26);
   --amb-grain-opacity: 0.08;
@@ -88,7 +97,7 @@
 }
 
 @theme inline {
-  --font-sans: 'Archivo Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+  --font-sans: 'Saira Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
     'Noto Sans', sans-serif;
   --color-bg: var(--c-bg);
   --color-surface: var(--c-surface);
@@ -220,7 +229,43 @@
   .num {
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.01em;
-    font-stretch: 75%;
+    font-stretch: 62%;
+  }
+
+  /* Headlines: Saira condensed to 58% width, weight 800, uppercase, tight leading (look A). */
+  .disp {
+    font-stretch: 58%;
+    font-weight: 800;
+    text-transform: uppercase;
+    line-height: 0.92;
+    letter-spacing: -0.01em;
+  }
+
+  /* The small uppercase label with open tracking that heads a tile, a column or a section. */
+  .label {
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--c-dim);
+  }
+
+  /* G2: the accent glow rising from under an exercise render and fading into black. Mixed from
+     --c-accent, so it follows the colour wheel; the renders themselves are lit white. Lay it over
+     the image (an absolutely placed child or ::after), under the text. */
+  .ember-glow {
+    background:
+      radial-gradient(140% 70% at 50% 122%, color-mix(in srgb, var(--c-accent) 80%, transparent) 0%,
+        color-mix(in srgb, var(--c-accent) 30%, transparent) 40%, transparent 68%),
+      linear-gradient(180deg, rgba(0, 0, 0, 0.35) 0%, transparent 30%, rgba(0, 0, 0, 0.85) 100%);
+  }
+
+  /* A glass card that sits over a render: thinner, with a light blur so the robot shows through.
+     The only scrolling surface allowed a backdrop-filter, and only a few are ever on screen. */
+  .glass-over {
+    background: var(--glass-over);
+    -webkit-backdrop-filter: blur(var(--blur-over)) saturate(140%);
+    backdrop-filter: blur(var(--blur-over)) saturate(140%);
   }
 
   /* Fake glass — Card and anything else that tints a scrolling surface. No backdrop-filter: this

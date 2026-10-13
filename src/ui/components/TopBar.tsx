@@ -48,7 +48,7 @@ export function TopBar({
           <div className="w-2" />
         )}
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-xl font-extrabold leading-tight">{title}</h1>
+          <h1 className="disp truncate pt-0.5 text-[1.75rem]">{title}</h1>
           {subtitle && <div className="truncate text-xs text-muted">{subtitle}</div>}
         </div>
         {right}

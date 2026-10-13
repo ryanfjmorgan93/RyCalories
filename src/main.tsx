@@ -11,10 +11,13 @@ import { isNative } from './state/native';
 import { startReminders } from './platform/reminders';
 import { DB_VERSION } from './db/db';
 import { renderRecovery } from './boot/recovery';
+import { applyCachedAccent } from './ui/accentTheme';
 
 // The coach's edit_session tool changes today's plan through the same function the "Change today"
 // sheet uses, so a change by voice and a change by hand are one thing.
 configureClaudeCoach({ setPlanOverride });
+// The accent picked on the colour wheel, from its local copy, before anything paints.
+applyCachedAccent();
 
 async function boot() {
   // Must run before Dexie ever opens the database — see historySafety.ts.

@@ -144,8 +144,8 @@ export function HomeScreen() {
 
         <SectionTitle right={<Button size="sm" variant="ghost" className="-mb-2 text-accent" onClick={() => nav('/routines')}>Edit</Button>}>Routines</SectionTitle>
         <div className="space-y-3" data-testid="routines-list">
-          {(routines ?? []).map((item) => (
-            <RoutineCard key={item.routine.id} item={item} settings={settings} active={!!active} onStart={() => void start(item.routine)} />
+          {(routines ?? []).map((item, i) => (
+            <RoutineCard key={item.routine.id} hero={i === 0} item={item} settings={settings} active={!!active} onStart={() => void start(item.routine)} />
           ))}
           {routines && routines.length === 0 && <EmptyState>No routines. Add one from the Routines tab.</EmptyState>}
         </div>
