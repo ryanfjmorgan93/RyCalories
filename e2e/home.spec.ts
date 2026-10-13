@@ -310,7 +310,8 @@ test.describe('the weekly review', () => {
     await fresh(page);
     // A target has to exist before it can be changed: saving Settings starts the reverse diet.
     await page.goto('/settings');
-    await page.getByRole('button', { name: 'Save' }).first().click();
+    // "Save targets", not the first "Save" on the page: that is the Claude key's, disabled until a key is typed.
+    await page.getByRole('button', { name: 'Save targets' }).click();
     await expect(page.getByText('Saved')).toBeVisible();
     await page.clock.setFixedTime(MON);
     // Push on the Friday before: inside the week the review looks back over.
@@ -349,7 +350,10 @@ test.describe('the weekly review', () => {
     await expect(page.getByTestId('today-food')).toContainText('/ 1,900');
     await page.getByTestId('review-use-calories').click();
 
-    await expect(page.getByTestId('weekly-review-applied')).toHaveText('Calorie target changed from 1,900 to 2,400 kcal from today.');
+    // The proposal is a new daily target, so it holds there: this line replaced "Calorie target
+    // changed from 1,900 to 2,400 kcal from today." when accepting stopped leaving the reverse-diet
+    // stepper running (start and ceiling both become 2,400).
+    await expect(page.getByTestId('weekly-review-applied')).toHaveText('Calories set to 2,400 a day from today.');
     await expect(page.getByTestId('review-use-calories')).toHaveCount(0);
     await expect(page.getByTestId('review-use-protein')).toBeVisible();
     await expect(page.getByTestId('today-food')).toContainText('/ 2,400');
@@ -359,6 +363,26 @@ test.describe('the weekly review', () => {
     await expect(page.getByTestId('today-food')).toContainText('/ 2,400');
     await expect(page.getByTestId('weekly-review-applied')).toHaveCount(1);
     await expect(page.getByTestId('review-use-calories')).toHaveCount(0);
+  });
+
+  test('accepting the calorie target holds it, and Settings → Targets still restarts a ramp', async ({ page }) => {
+    await bootMonday(page, { review });
+    await page.getByTestId('review-use-calories').click();
+    await expect(page.getByTestId('weekly-review-applied')).toHaveText('Calories set to 2,400 a day from today.');
+
+    await page.goto('/settings');
+    await expect(page.getByTestId('target-calorieStart')).toHaveValue('2400');
+    await expect(page.getByTestId('target-calorieCeiling')).toHaveValue('2400');
+    // Nothing left to step up to.
+    await expect(page.getByText('at ceiling')).toBeVisible();
+
+    // Raising the ceiling is how the owner starts stepping up again, from the figure it holds.
+    await page.getByTestId('target-calorieCeiling').fill('3000');
+    await page.getByRole('button', { name: 'Save targets' }).click();
+    await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+    await expect(page.getByText(/next step on/)).toBeVisible();
+    await expect(page.getByText('at ceiling')).toHaveCount(0);
+    await expect(page.getByTestId('target-calorieStart')).toHaveValue('2400');
   });
 
   test('"Use 190 g protein" moves the daily protein target', async ({ page }) => {

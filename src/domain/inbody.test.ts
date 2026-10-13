@@ -227,6 +227,46 @@ describe('missing and implausible values', () => {
     expect(p.scans[0]).toMatchObject({ weightKg: 81.5, bmrKcal: 1840 });
   });
 
+  describe('a comma group is a decimal point or a thousands separator depending on the number and the file', () => {
+    it('reads a leading "0," as a decimal, whatever else the file does: an ECW ratio of 0,385 is not 385', () => {
+      const alone = parseInbodyCsv('Date,Weight(kg),ECW/TBW\n2026-08-04,81.5,"0,385"');
+      expect(alone.scans[0]).toMatchObject({ weightKg: 81.5, ecwRatio: 0.385 });
+      // Nor in a file that writes its thousands with commas.
+      const dotFile = parseInbodyCsv('Date,Basal Metabolic Rate(kcal),ECW/TBW\n2026-08-04,"1,840","0,385"');
+      expect(dotFile.scans[0]).toMatchObject({ bmrKcal: 1840, ecwRatio: 0.385 });
+    });
+
+    it('reads 81,250 as 81.25 kg in a decimal-comma file, because 81250 is no body weight', () => {
+      const p = parseInbodyCsv('Datum;Date;Weight(kg);Skeletal Muscle Mass(kg);ECW/TBW\nx;04.08.2026;81,250;36,4;0,385\nx;05.08.2026;81,5;36,3;0,391');
+      expect(p.scans).toEqual([
+        { date: '2026-08-04', source: 'csv', weightKg: 81.25, skeletalMuscleKg: 36.4, ecwRatio: 0.385 },
+        { date: '2026-08-05', source: 'csv', weightKg: 81.5, skeletalMuscleKg: 36.3, ecwRatio: 0.391 },
+      ]);
+      expect(p.skipped).toEqual([]);
+    });
+
+    it('still reads 1,250 as a thousand two hundred and fifty kcal in a file that writes decimals with a dot', () => {
+      const p = parseInbodyCsv('Date,Weight(kg),Basal Metabolic Rate(kcal)\n2026-08-04,81.5,"1,250"\n2026-08-05,81.2,"1,840"');
+      expect(p.scans.map((s) => s.bmrKcal)).toEqual([1250, 1840]);
+    });
+
+    it('keeps a BMR with a thousands comma in a decimal-comma file, because 1.84 kcal is no metabolism either', () => {
+      const p = parseInbodyCsv('Datum;Date;Weight(kg);Basal Metabolic Rate(kcal)\nx;04.08.2026;81,5;1,840');
+      expect(p.scans[0]).toMatchObject({ weightKg: 81.5, bmrKcal: 1840 });
+    });
+
+    it('drops a number that is no reading either way rather than guessing', () => {
+      // 81,250 in a file with no decimal comma anywhere reads as 81250 (thousands), which no body has.
+      const p = parseInbodyCsv('Date,Weight(kg),Percent Body Fat(%)\n2026-08-04,"81,250",17');
+      expect(p.scans[0]).toEqual({ date: '2026-08-04', source: 'csv', bodyFatPct: 17 });
+    });
+
+    it('reads several groups and a fraction as thousands', () => {
+      const p = parseInbodyCsv('Date,Basal Metabolic Rate(kJ)\n2026-08-04,"7,700.5"');
+      expect(p.scans[0].bmrKcal).toBe(Math.round(7700.5 / 4.184));
+    });
+  });
+
   it('takes a number with a unit written in the cell', () => {
     const p = parseInbodyCsv('Date,Weight,Percent Body Fat\n2026-08-04,81.5 kg,17.3 %');
     expect(p.scans[0]).toMatchObject({ weightKg: 81.5, bodyFatPct: 17.3 });

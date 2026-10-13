@@ -91,7 +91,8 @@ async function scanCode(page: Page, code: string): Promise<void> {
 /** Save Settings once, which is what gives the app a calorie target (as the food spec does). */
 async function saveSettings(page: Page): Promise<void> {
   await page.goto('/settings');
-  await page.getByRole('button', { name: 'Save' }).first().click();
+  // "Save targets", not the first "Save" on the page: that is the Claude key's, disabled until a key is typed.
+  await page.getByRole('button', { name: 'Save targets' }).click();
   await expect(page.getByText('Saved')).toBeVisible();
 }
 

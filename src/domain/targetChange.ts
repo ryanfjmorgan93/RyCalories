@@ -3,10 +3,11 @@
  * the current settings and `today`, and saves `patch` through `saveSettings`.
  *
  * The calorie target is a reverse-diet stepper (a start figure that steps up on a schedule, up to a
- * ceiling; see `calorieTargetOn`), not a single number. "Use 2,400 kcal" therefore starts the
- * stepper afresh at 2,400 from today, which makes today's target exactly that, and it raises the
- * ceiling when 2,400 would otherwise sit above it. Protein is two numbers, a normal day and a lower
- * body day; the owner's gap between them is kept.
+ * ceiling; see `calorieTargetOn`), not a single number. The coach's proposal is "a new daily calorie
+ * target", so "Use 2,400 kcal" sets the start AND the ceiling to 2,400 from today: today's target is
+ * exactly that and it stays there. The owner restarts a ramp by raising the ceiling in Settings →
+ * Targets. Protein is two numbers, a normal day and a lower body day; the owner's gap between them
+ * is kept.
  */
 import { fmtNum } from './format';
 import { calorieTargetOn } from './nutrition';
@@ -19,18 +20,19 @@ export interface TargetChange {
   line: string;
 }
 
-/** The change that makes today's calorie target `kcal`; null when it already is. */
+/**
+ * The change that makes `kcal` the daily calorie target from today and holds it there; null when
+ * it already is the target and already holds (the stepper has nowhere left to go).
+ */
 export function calorieChange(settings: Settings, kcal: number, today: string): TargetChange | null {
   const now = calorieTargetOn(today, settings);
-  if (now && now.kcal === kcal) return null;
-  const patch: TargetChange['patch'] = { calorieStart: kcal, calorieStartDate: today };
-  let raised = false;
-  if (kcal > settings.calorieCeiling) {
-    patch.calorieCeiling = kcal;
-    raised = true;
-  }
-  const head = now ? `Calorie target changed from ${fmtNum(now.kcal)} to ${fmtNum(kcal)} kcal from today.` : `Calorie target set to ${fmtNum(kcal)} kcal from today.`;
-  return { patch, line: raised ? `${head} The ceiling went up to ${fmtNum(kcal)} kcal too.` : head };
+  if (now && now.kcal === kcal && settings.calorieCeiling === kcal) return null;
+  // Start AND ceiling are the figure, so the stepper has nothing to climb to. Setting only the
+  // start would leave "hold at 2,600" stepping up to 2,800 and 3,000 on the old schedule.
+  return {
+    patch: { calorieStart: kcal, calorieStartDate: today, calorieCeiling: kcal },
+    line: `Calories set to ${fmtNum(kcal)} a day from today.`,
+  };
 }
 
 /** The change that makes the daily protein target `grams`, keeping the lower-body day's gap; null when it already is. */

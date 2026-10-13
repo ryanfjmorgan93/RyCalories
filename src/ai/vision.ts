@@ -155,7 +155,7 @@ async function readStructured<S extends z.ZodType>(
 const MEAL_GUIDE =
   'List every distinct food or drink as its own item, in the units a person would use (slices, eggs, a bowl) with a gram weight alongside. Use UK portion sizes. Give kcal, protein, carbohydrate and fat for the whole amount of each item. If there is no food, return an empty list.';
 
-/** Keep only items whose numbers can be real, and fix a calorie figure the macros contradict. */
+/** Keep only items whose numbers can be real, and raise a calorie figure the macros contradict (never lower one). */
 export function cleanMealItems(items: readonly z.infer<typeof MealItemShape>[]): MealReadingItem[] {
   const out: MealReadingItem[] = [];
   for (const it of items) {
@@ -206,7 +206,8 @@ export async function readLabelPhoto(jpegBase64: string, deps: CallDeps = {}): P
   if (![per.kcal, per.protein, per.carbs, per.fat].every((n) => Number.isFinite(n) && n >= 0) || per.kcal > 950) {
     throw new ClaudeError('other', "I couldn't read the numbers on that label. Try a clearer photo.");
   }
-  const { macros } = reconcileMacros({ kcal: per.kcal, protein: per.protein, carbs: per.carbs, fat: per.fat });
+  // Copied exactly as printed: a label is the source, so nothing here is reconciled or "corrected".
+  const macros = { kcal: per.kcal, protein: per.protein, carbs: per.carbs, fat: per.fat };
   const brand = read.brand?.trim();
   const servingGrams = positive(read.serving_grams);
   const packGrams = positive(read.pack_grams);

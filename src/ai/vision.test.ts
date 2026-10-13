@@ -70,6 +70,19 @@ describe('readMealPhoto', () => {
     expect(items[0]).toMatchObject({ name: 'Oily salmon', kcal: 390 });
   });
 
+  it('keeps stated energy the macros do not explain: alcohol is calories no macro field carries', () => {
+    const items = cleanMealItems([
+      // A pint of lager: ~215 kcal with P2 C16 F0, which the macros alone put at 72.
+      { name: 'Lager', amount: 1, unit: 'pint', grams: 568, kcal: 215, protein: 2, carbs: 16, fat: 0, confidence: 'medium' },
+      // A 175 ml glass of white wine: ~130 kcal against 16 from the macros.
+      { name: 'White wine', amount: 175, unit: 'ml', grams: 175, kcal: 130, protein: 0.1, carbs: 4, fat: 0, confidence: 'medium' },
+    ]);
+    expect(items.map((i) => [i.name, i.kcal])).toEqual([
+      ['Lager', 215],
+      ['White wine', 130],
+    ]);
+  });
+
   it('strips a data URL prefix from the image', () => {
     expect(stripDataUrl(`data:image/jpeg;base64,${JPEG}`)).toBe(JPEG);
     expect(stripDataUrl(` ${JPEG} `)).toBe(JPEG);
@@ -104,6 +117,21 @@ describe('readLabelPhoto', () => {
     const body = fake.requests[0]!.body;
     expect(body.output_config.format.schema.required).toEqual(['name', 'per100']);
     expect(body.messages[0].content[0].source.data).toBe(JPEG);
+  });
+
+  it('copies the printed numbers exactly, even when they disagree with 4/4/9', async () => {
+    // A low-carb bar: the polyols in the 40 g of carbohydrate are ~2.4 kcal/g, so the printed 300
+    // kcal is lower than the 390 the macros imply. The label is the source; nothing is "corrected".
+    const printed = { kcal: 300, protein: 35, carbs: 40, fat: 10 };
+    const fake = fakeClaude({ content: [json({ name: 'Low carb bar', brand: 'Grenade', per100: printed })] });
+    const label = await readLabelPhoto(JPEG, { fetch: fake.fetch });
+    expect(label.per100).toEqual(printed);
+  });
+
+  it('keeps a label whose energy exceeds its macros (a drink with alcohol) as printed', async () => {
+    const printed = { kcal: 38, protein: 0.4, carbs: 2.9, fat: 0 };
+    const fake = fakeClaude({ content: [json({ name: 'Lager', per100: printed })] });
+    expect((await readLabelPhoto(JPEG, { fetch: fake.fetch })).per100).toEqual(printed);
   });
 
   it('leaves out what the label did not give', async () => {

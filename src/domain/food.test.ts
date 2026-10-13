@@ -167,6 +167,15 @@ describe('Atwater cross-check', () => {
     expect(macros.fat).toBe(30);
   });
 
+  it('never lowers a stated figure: energy the macros do not explain is left alone', () => {
+    // A pint of lager is ~215 kcal against 72 from P2 C16 F0; the rest is alcohol (7 kcal/g).
+    const lager = { kcal: 215, protein: 2, carbs: 16, fat: 0 };
+    expect(checkAtwater(lager).reason).toBe('unexplained');
+    expect(reconcileMacros(lager)).toEqual({ macros: lager, corrected: false });
+    const wine = { kcal: 130, protein: 0.1, carbs: 4, fat: 0 };
+    expect(reconcileMacros(wine)).toEqual({ macros: wine, corrected: false });
+  });
+
   it('tolerates rounding in real label values', () => {
     // A real cereal label: stated 379 kcal, macros imply 380.
     expect(checkAtwater({ kcal: 379, protein: 11, carbs: 72, fat: 4 }).ok).toBe(true);

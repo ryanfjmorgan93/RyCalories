@@ -109,11 +109,57 @@ describe('a food the owner already has', () => {
     expect(item.units).toEqual({ packGrams: 1000 });
   });
 
-  it('keeps a label figure over Claude however far apart they are', () => {
+  it('keeps a label figure over Claude when the two describe the same food, even if they differ a little', () => {
     const label = memory({ key: 'p:fage total 0', name: 'Fage Total 0%', brand: 'Fage', product: 'Total 0%', per100: { kcal: 54, protein: 10, carbs: 4, fat: 0.2 }, source: 'label' });
-    const item = itemFromReading(reading({ name: 'Fage Total 0%', amount: 1, unit: 'tub', grams: 170, kcal: 220 }), sources([label]));
+    // Claude's 100 kcal over 170 g is 59 per 100 g: the label's 54 stands.
+    const item = itemFromReading(reading({ name: 'Fage Total 0%', amount: 1, unit: 'tub', grams: 170, kcal: 100 }), sources([label]));
     expect(item.source).toBe('label');
     expect((item.nutrition as { per100: Macros }).per100.kcal).toBe(54);
+  });
+
+  // Finding 7: the raw-against-cooked guard used to run only for the table, so the owner's own raw
+  // "Rice" (360 kcal per 100 g) took Claude's 180 g of cooked rice at face value: ~648 kcal for a
+  // plate that is ~235.
+  describe('when the owner\'s food is a different state of it from the one Claude saw', () => {
+    const rawRice = () => memory({ key: 'n:rice', name: 'Rice', per100: RAW_RICE, source: 'user', typicalGrams: 75 });
+    const cookedPlate = () => reading({ name: 'Rice', amount: 1, unit: 'bowl', grams: 180, kcal: 234, protein: 5, carbs: 52, fat: 0.5 });
+
+    it("uses Claude's estimate for that food instead of the owner's raw figures", () => {
+      const item = itemFromReading(cookedPlate(), sources([rawRice()]));
+      expect(item.source).toBe('model');
+      expect(item.portion).toBe('≈ 1 bowl (180 g)');
+      expect(macrosOf(item.nutrition).kcal).toBeCloseTo(234, 6);
+      expect(knownFood(cookedPlate(), sources([rawRice()]))).toBeNull();
+    });
+
+    it("keeps the estimate out of the owner's remembered food", () => {
+      // The estimate must not teach the raw rice a 180 g portion or a bowl.
+      expect(itemFromReading(cookedPlate(), sources([rawRice()]))).toMatchObject({ remember: false });
+    });
+
+    it('still uses the owner\'s figures when Claude saw the same state of the food', () => {
+      // 60 g of dry rice: 216 kcal is 360 per 100 g.
+      const dry = reading({ name: 'Rice', amount: 60, unit: 'g', grams: 60, kcal: 216, protein: 4, carbs: 47, fat: 0.4 });
+      const item = itemFromReading(dry, sources([rawRice()]));
+      expect(item.source).toBe('user');
+      expect(macrosOf(item.nutrition).kcal).toBeCloseTo(216, 6);
+      expect(item).not.toHaveProperty('remember');
+    });
+
+    it('applies to a label too: a pack of dry pasta is not a bowl of cooked pasta', () => {
+      const dryPasta = memory({ key: 'p:tesco fusilli', name: 'Tesco Fusilli', brand: 'Tesco', product: 'Fusilli', per100: { kcal: 352, protein: 12, carbs: 71, fat: 1.5 }, source: 'label' });
+      const bowl = reading({ name: 'Tesco Fusilli', amount: 1, unit: 'bowl', grams: 220, kcal: 330, protein: 11, carbs: 66, fat: 2 });
+      const item = itemFromReading(bowl, sources([dryPasta]));
+      expect(item.source).toBe('model');
+      expect(macrosOf(item.nutrition).kcal).toBeCloseTo(330, 6);
+      expect(item).toMatchObject({ remember: false });
+    });
+
+    it('does not reach a remembered estimate or a plain unmatched food: they remember as before', () => {
+      expect(itemFromReading(reading(), sources())).not.toHaveProperty('remember');
+      const old = memory({ key: 'n:sourdough toast', name: 'Sourdough toast', per100: { kcal: 300, protein: 9, carbs: 55, fat: 3 }, source: 'model' });
+      expect(itemFromReading(reading(), sources([old]))).not.toHaveProperty('remember');
+    });
   });
 
   it("prefers the owner's remembered egg weight when Claude counted eggs", () => {

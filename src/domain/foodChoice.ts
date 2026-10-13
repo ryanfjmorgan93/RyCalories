@@ -42,6 +42,8 @@ export interface AmountItem {
   product?: string;
   unit?: { count: number; unitGrams: number; label: string; plural: string };
   units: ItemUnits;
+  /** `false` keeps the item out of food memory — see `NewMealItem.remember`. */
+  remember?: false;
 }
 
 type TableUnit = NonNullable<UnitSource['tableUnit']>;
