@@ -120,7 +120,8 @@ test.describe('catalogue in the app', () => {
     await page.getByTestId('exercise-search').fill(QUERY);
     const row = page.getByTestId(`exercise-row-${KEY}`);
     await expect(row).toContainText(entry.name);
-    await expect(row).toContainText(`${entry.muscleGroup} · ${entry.equipment}`);
+    // The muscle group shows with a capital (muscleLabel), as on every row and chip.
+    await expect(row).toContainText(`${entry.muscleGroup.charAt(0).toUpperCase()}${entry.muscleGroup.slice(1)} · ${entry.equipment}`);
     await expect(row.locator('img')).toHaveAttribute('src', frameUrl(1));
     await expect(row.locator('img')).toHaveAttribute('loading', 'lazy');
 

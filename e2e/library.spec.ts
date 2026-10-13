@@ -152,11 +152,11 @@ test.describe('the Exercises screen', () => {
     // The list is that muscle's: the entry read from the catalogue file is on it, labelled, with its muscle and equipment.
     const row = page.getByTestId(`exercise-row-${keyOf(target)}`);
     await expect(row).toContainText(target.name);
-    await expect(row).toContainText(`rear delts · ${target.equipment}`);
+    await expect(row).toContainText(`Rear delts · ${target.equipment}`);
     await expect(row.getByTestId('library-label')).toBeVisible();
     const texts = await rowsOf(page).allTextContents();
     expect(texts.length).toBeGreaterThanOrEqual(libraryEntries(owned, 'rear delts').length);
-    for (const t of texts) expect(t).toContain('rear delts');
+    for (const t of texts) expect(t).toContain('Rear delts');
     // The search narrows the same list further: the chip stays on, and the entry is still there.
     await page.getByTestId('exercise-search').fill(target.name);
     await expect(rowsOf(page).first()).toContainText(target.name);
