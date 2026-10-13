@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { clickIfPresent, createRawIronDb, fresh, IRON_SCHEMA_V2, IRON_SCHEMA_V4, readBackupFiles, readRawIron, backupsOfKind, waitForHistoryCheckSettled } from './fresh';
+import { clickIfPresent, createRawIronDb, fresh, IRON_SCHEMA_V2, IRON_SCHEMA_V5, readBackupFiles, readRawIron, backupsOfKind, waitForHistoryCheckSettled } from './fresh';
 
 /**
  * Phase 1 — "history that cannot be lost silently": automatic backups, the pre-migration raw
@@ -141,7 +141,7 @@ test.describe('upgrade safety', () => {
   test('boots straight through at the current schema, every session/set/decision/weight intact, no loss notice', async ({ page }) => {
     await page.goto('/icons/icon-192.png');
     const fixture = buildFixture(3);
-    await createRawIronDb(page, 40, IRON_SCHEMA_V4, fixture);
+    await createRawIronDb(page, 50, IRON_SCHEMA_V5, fixture);
 
     await page.goto('/');
     await expect(page.getByTestId('routines-list')).toBeVisible();
@@ -162,7 +162,7 @@ test.describe('upgrade safety', () => {
 
     // Exact counts, straight off IndexedDB.
     const raw = await readRawIron(page);
-    expect(raw.version).toBe(40);
+    expect(raw.version).toBe(50);
     expect(raw.tables.sessions).toHaveLength(fixture.sessions.length);
     expect(raw.tables.setLogs).toHaveLength(fixture.setLogs.length);
     expect(raw.tables.decisions).toHaveLength(fixture.decisions.length);

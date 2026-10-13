@@ -266,13 +266,28 @@ export const IRON_SCHEMA_V3: StoreSpec[] = [
   { name: 'recipes', keyPath: 'id', indexes: [{ name: 'name', keyPath: 'name' }, { name: 'updatedAt', keyPath: 'updatedAt' }] },
 ];
 
-/** The current Dexie schema (v4: `IRON_SCHEMA_V3` plus body scans and the coach's messages and
- * notes) — what an install already upgraded to the latest version looks like on disk. */
+/** Dexie schema v4: `IRON_SCHEMA_V3` plus body scans and the coach's messages and notes — an
+ * install that has not yet opened a build with the supplement checklist. */
 export const IRON_SCHEMA_V4: StoreSpec[] = [
   ...IRON_SCHEMA_V3,
   { name: 'bodyScans', keyPath: 'id', indexes: [{ name: 'date', keyPath: 'date' }] },
   { name: 'coachMessages', keyPath: 'id', indexes: [{ name: 'at', keyPath: 'at' }] },
   { name: 'coachNotes', keyPath: 'id', indexes: [{ name: 'createdAt', keyPath: 'createdAt' }] },
+];
+
+/** The current Dexie schema (v5: `IRON_SCHEMA_V4` plus the supplement checklist) — what an install
+ * already upgraded to the latest version looks like on disk. */
+export const IRON_SCHEMA_V5: StoreSpec[] = [
+  ...IRON_SCHEMA_V4,
+  { name: 'supplements', keyPath: 'id', indexes: [{ name: 'order', keyPath: 'order' }] },
+  {
+    name: 'supplementLogs',
+    keyPath: 'id',
+    indexes: [
+      { name: 'date', keyPath: 'date' },
+      { name: 'supplementId', keyPath: 'supplementId' },
+    ],
+  },
 ];
 
 /** Creates `iron` as raw IndexedDB at `version`, with `schema`, populated with `data`. Must run on a page that has never booted the app (see file header). */

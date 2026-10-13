@@ -12,7 +12,7 @@ import { backupsOfKind, createRawIronDb, IRON_SCHEMA_V3, readBackupFiles, readRa
  * rely on here (main.tsx's `data-history-check="done"`, set once per load after the boot-time
  * checks have finished — never a sleep), then checks:
  *
- *   - the on-disk version is now 40 (Dexie schema v4);
+ *   - the on-disk version is the current one (50 since the supplements schema, v5);
  *   - every seeded row survived unchanged, in every table;
  *   - the three new stores exist, with their indexes, and are empty;
  *   - a pre-migration backup was written from the OLD (version 30) shape, before Dexie upgraded.
@@ -160,9 +160,10 @@ test.describe('v3 → v4 migration (body scans, coach messages, coach notes)', (
     await page.goto('/');
     await waitForHistoryCheckSettled(page);
 
-    // The schema: Dexie's raw version is its declared version ×10, so 40 is schema v4.
+    // The schema: Dexie's raw version is its declared version ×10; the build upgrades to its current one.
     const raw = await readRawIron(page);
-    expect(raw.version).toBe(40);
+    // The current schema (v5, raw 50): an install this far behind upgrades straight through.
+    expect(raw.version).toBe(50);
     for (const name of ['bodyScans', 'coachMessages', 'coachNotes']) {
       expect(Object.keys(raw.tables)).toContain(name);
       expect(raw.tables[name]).toEqual([]);
@@ -239,7 +240,8 @@ test.describe('v3 → v4 migration (body scans, coach messages, coach notes)', (
     await waitForHistoryCheckSettled(page);
 
     const raw = await readRawIron(page);
-    expect(raw.version).toBe(40);
+    // The current schema (v5, raw 50): an install this far behind upgrades straight through.
+    expect(raw.version).toBe(50);
     expect(raw.tables.bodyScans).toHaveLength(1);
     expect(raw.tables.coachMessages).toHaveLength(1);
     expect(raw.tables.coachNotes).toHaveLength(1);
