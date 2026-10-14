@@ -201,7 +201,7 @@ describe('with Claude in reach, everything goes to Claude', () => {
   it('sends a request for a routine to Claude, not to the rules, and offers its draft', async () => {
     setApiKey(KEY);
     const fake = fakeClaude(
-      { content: [toolUse('t1', 'build_routine', { request: 'a push routine' })], stop_reason: 'tool_use' },
+      { content: [toolUse('t1', 'build_routine', { request: 'a push routine', effort: 'normal' })], stop_reason: 'tool_use' },
       { content: [text('Draft is ready. Save it if you like it.')] },
     );
     vi.stubGlobal('fetch', fake.fetch);

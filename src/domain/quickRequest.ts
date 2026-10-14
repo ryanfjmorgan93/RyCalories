@@ -427,7 +427,7 @@ type Reading =
   | { len: number; kind: 'cancelled' }
   | { len: number; kind: 'effort'; effort: Effort }
   | { len: number; kind: 'muscles'; muscles: MuscleGroup[]; negated: boolean; regions?: string[] }
-  | { len: number; kind: 'equipment'; equipment: Equipment; negated: boolean }
+  | { len: number; kind: 'equipment'; equipment: Equipment; negated: boolean; effort?: Effort }
   | { len: number; kind: 'patterns'; patterns: string[] }
   | { len: number; kind: 'split'; split: RoutineSplit };
 
@@ -522,7 +522,13 @@ function readAt(tokens: string[], i: number): Reading | null {
     const next = tokens[j];
     // "not light" is normal effort and "not heavy" is light: an effort word after a negation flips.
     if (next !== undefined && LIGHT_WORDS.has(next)) return { len: j + 1 - i, kind: 'effort', effort: 'normal' };
-    if (next !== undefined && HARD_WORDS.has(next)) return { len: j + 1 - i, kind: 'effort', effort: 'light' };
+    if (next !== undefined && HARD_WORDS.has(next)) {
+      // "no heavy barbell lifts": light, and no barbell. The negation reaches the equipment past the
+      // effort word, which on its own would leave "barbell" to be read as the only kind allowed.
+      const kit = EQUIPMENT_WORDS.get(tokens[j + 1] ?? '');
+      if (kit) return { len: j + 2 - i, kind: 'equipment', equipment: kit, negated: true, effort: 'light' };
+      return { len: j + 1 - i, kind: 'effort', effort: 'light' };
+    }
     // "not tired" and "not short" are read, and cancel what the word alone would have said.
     if (next !== undefined && (MOOD_WORDS.has(next) || QUICK_WORDS.has(next))) return { len: j + 1 - i, kind: 'cancelled' };
     const vocab = readVocabulary(tokens, j, true);
@@ -743,6 +749,7 @@ export function parseQuickRequest(text: string): ParsedRequest {
           break;
         case 'equipment':
           pushUnique(r.negated ? equipmentRemoved : equipmentAdded, [r.equipment]);
+          if (r.effort) explicitEffort = r.effort;
           accepted = true;
           break;
         case 'split':

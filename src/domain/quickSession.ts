@@ -112,7 +112,7 @@ export const PATTERN_PENALTY = 0.05;
 const NEW_SHARE = 0.5;
 const LIGHT_SETS_COMPOUND = 3;
 const LIGHT_SETS_ISOLATION = 2;
-const LIGHT_REPS: [number, number] = [10, 15];
+export const LIGHT_REPS: [number, number] = [10, 15];
 const COMPOUND_DEFAULT: { sets: number; repMin: number; repMax: number } = { sets: 3, repMin: 8, repMax: 10 };
 const ISOLATION_DEFAULT: { sets: number; repMin: number; repMax: number } = { sets: 3, repMin: 10, repMax: 15 };
 /**

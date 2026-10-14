@@ -66,6 +66,13 @@ export interface RoutineRequest {
   typedNiggles?: NiggleTag[];
   /** A part of a muscle asked for ("upper chest"): `unit:region`. It takes two exercises. */
   preferRegions?: string[];
+  /**
+   * An easy routine ("easy", "light", "can't be bothered"): no barbell compound, no hinge and no
+   * benchmark lift, the rule the light short session keeps (`isLightExcluded`), leaning to machines,
+   * cables and isolation lifts. The sets,
+   * reps and weights are made light after the build (`applyLight` in coachBuild.ts).
+   */
+  light?: boolean;
 }
 
 export type Tier = 'primary' | 'secondary' | 'isolation';
@@ -120,6 +127,8 @@ export interface RoutineInput extends QuickInput {
 // Constants
 
 export const DEFAULT_ROUTINE_COUNT = 6;
+/** An easy routine with no count or length asked for is this long. */
+export const LIGHT_ROUTINE_COUNT = 4;
 export const DEFAULT_SPLIT_DAY_COUNT = 6;
 const MAX_COUNT = 12;
 /** A length asked for adds exercises up to this many, and no more. */
@@ -350,6 +359,15 @@ function isHeavy(i: Info): boolean {
   return PRIMARY_PATTERNS.has(i.pattern) && !ISOLATION_PATTERNS.has(i.pattern) && (i.c.isCompound || (i.c.origin !== 'own' && i.c.equipment !== 'bodyweight'));
 }
 
+/**
+ * What an easy routine leaves out, by the light short session's own rule: a barbell compound, any
+ * hinge, and a lift with a strength standard (the big benchmark lifts). Machine and cable compounds
+ * stay: a lat pulldown or a leg press is an easy day's work.
+ */
+function isLightExcluded(i: Info): boolean {
+  return (i.c.equipment === 'barbell' && (i.c.isCompound || isHeavy(i))) || i.pattern === 'hinge' || i.c.standard !== undefined;
+}
+
 function inPart(info: Info, where: string): boolean {
   const r = info.region;
   if (r === null) return false;
@@ -533,6 +551,7 @@ function eligibleInfos(candidates: readonly Candidate[], request: RoutineRequest
     const pattern = movementPattern(c.name, c.muscleGroup);
     if (NON_ROUTINE_PATTERNS.has(pattern)) continue;
     const info: Info = { c, pattern, region: regionOf(c.name, c.muscleGroup) };
+    if (request.light && isLightExcluded(info)) continue;
     all.push(info);
     if (patterns.has(pattern)) leftOut.push(info);
     else kept.push(info);
@@ -593,7 +612,7 @@ function planDays(request: RoutineRequest): DaySpec[] {
           name: d.name,
           muscles: keep(d.muscles),
           kind: request.split === 'full-body' ? 'spread' : 'split',
-          count: clampCount(request.count, plan?.count ?? DEFAULT_SPLIT_DAY_COUNT),
+          count: clampCount(request.count, request.light ? LIGHT_ROUTINE_COUNT : (plan?.count ?? DEFAULT_SPLIT_DAY_COUNT)),
           ...(plan ? { plan } : {}),
         };
       })
@@ -603,10 +622,10 @@ function planDays(request: RoutineRequest): DaySpec[] {
   if (focus.length > 0) {
     const name = routineName(focus);
     const plan = isShoulderRequest(focus) ? PLANS.Shoulders : TYPED_PLANS.has(name) ? PLANS[name] : undefined;
-    return [{ name, muscles: focus, kind: 'typed', count: clampCount(request.count, plan?.count ?? DEFAULT_ROUTINE_COUNT), asked: focus, ...(plan ? { plan } : {}) }];
+    return [{ name, muscles: focus, kind: 'typed', count: clampCount(request.count, request.light ? LIGHT_ROUTINE_COUNT : (plan?.count ?? DEFAULT_ROUTINE_COUNT)), asked: focus, ...(plan ? { plan } : {}) }];
   }
   const spread = keep(FULL_BODY_MUSCLES);
-  return spread.length > 0 ? [{ name: 'Full body', muscles: spread, kind: 'spread', count: clampCount(request.count, DEFAULT_ROUTINE_COUNT) }] : [];
+  return spread.length > 0 ? [{ name: 'Full body', muscles: spread, kind: 'spread', count: clampCount(request.count, request.light ? LIGHT_ROUTINE_COUNT : DEFAULT_ROUTINE_COUNT) }] : [];
 }
 
 // ---------------------------------------------------------------------------
@@ -820,7 +839,8 @@ function buildDay(sh: Shared, day: DaySpec, daySeed: number, probe = false): Bui
     (i.c.origin === 'own' || newCount < MAX_NEW_EXERCISES);
 
   const drawWeight = (i: Info): number => {
-    let w = weightOf(i.c, false, true) * preference(niggleTags, i);
+    // An easy routine leans to machines, cables and isolation lifts, as the light short session does.
+    let w = weightOf(i.c, sh.request.light === true, true) * preference(niggleTags, i);
     // A name no rule can place is the last resort within its muscle.
     if (i.pattern === i.c.muscleGroup) w *= 0.2;
     if (i.c.origin !== 'own' && SPECIALTY.test(plainName(i.c.name))) w *= SPECIALTY_FACTOR;
@@ -1476,6 +1496,7 @@ export function routineRequestFrom(parsed: ParsedRequest): RoutineRequest {
   if (parsed.excludePatterns?.length) request.excludePatterns = [...parsed.excludePatterns];
   if (parsed.typedNiggles?.length) request.typedNiggles = [...parsed.typedNiggles];
   if (parsed.preferRegions?.length) request.preferRegions = [...parsed.preferRegions];
+  if (o.effort === 'light') request.light = true;
   return request;
 }
 

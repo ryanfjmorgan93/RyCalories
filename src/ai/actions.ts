@@ -122,6 +122,8 @@ export interface BuildRoutineInput {
   count?: number;
   minutes?: number;
   split?: RoutineSplit;
+  /** How hard the model read the request to be; "easy" builds a light routine. */
+  effort?: 'easy' | 'normal' | 'hard';
 }
 
 export interface BuildRoutineResult extends ActionResult {
@@ -536,6 +538,9 @@ export function createCoachActions(deps: ActionDeps = {}): CoachActions {
       if (request.count === undefined && finite(input.count)) request.count = Math.max(1, Math.min(12, Math.round(input.count)));
       if (request.minutes === undefined && finite(input.minutes)) request.minutes = Math.max(10, Math.min(90, Math.round(input.minutes)));
       if (!request.split && input.split) request.split = input.split;
+      // An easy day the words did not already say: the model read it from the conversation.
+      if (input.effort === 'easy') request.light = true;
+      if (input.effort === 'hard' && !request.light) request.intensity = Math.max(request.intensity ?? 0, 1);
       if (!requestUsable(request)) return { ok: false, result: 'Nothing to build from. Ask which muscles, a split (push pull legs, upper lower, full body), how many exercises or how long.' };
 
       const seed = deps.seed ? deps.seed() : Math.floor(Math.random() * 0x100000000);

@@ -345,6 +345,26 @@ describe('edit_routine', () => {
 });
 
 describe('build_routine', () => {
+  it('builds an easy routine when the model reads an easy day the words did not say, with no heavy lifts', async () => {
+    const actions = createCoachActions({ seed: () => 7 });
+    const out = await actions.buildRoutine({ request: 'CBA routine for a tired day', split: 'full-body', effort: 'easy' });
+    expect(out.ok).toBe(true);
+    expect(out.result).toContain('easy');
+    const rows = out.draft!.routines.flatMap((r) => r.rows);
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect([row.sets, row.repMin, row.repMax], row.name).toEqual([2, 10, 15]);
+      expect(row.name).not.toMatch(/Barbell|Deadlift|Romanian/);
+    }
+  });
+
+  it('reads "no heavy barbell lifts" as no barbell, not barbell only', async () => {
+    const actions = createCoachActions({ seed: () => 7 });
+    const out = await actions.buildRoutine({ request: 'easy full body session, no heavy barbell lifts' });
+    expect(out.result).toContain('no barbell');
+    expect(out.draft!.text).not.toMatch(/Barbell/);
+  });
+
   it('drafts a routine from the owner\'s exercises and returns it unsaved', async () => {
     const routinesBefore = await db.routines.count();
     const actions = createCoachActions({ seed: () => 7 });

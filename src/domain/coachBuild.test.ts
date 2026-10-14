@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { cand, miniInput, seededInput } from '../test/routineFixtures';
-import { SHUFFLE_TRIES, builtTurn, describeRead, emptyReasonLines, nothingFact, readUsable, requestUsable, reshuffle } from './coachBuild';
+import { SHUFFLE_TRIES, buildCoach, builtTurn, describeRead, emptyReasonLines, nothingFact, readUsable, requestUsable, reshuffle } from './coachBuild';
 import { MACRO_MUSCLES, parseQuickRequest } from './quickRequest';
 import { buildRoutines, routineRequestFrom, routineToText, type BuiltRoutine, type RoutineRequest } from './routineBuilder';
 
@@ -232,5 +232,54 @@ describe('reshuffle: a new seed that gives another routine', () => {
     const current = buildRoutines(input, request, 1);
     const { routines, seed } = reshuffle(input, request, current, () => 5);
     expect(routines).toEqual(buildRoutines(input, request, seed));
+  });
+});
+
+describe('an easy routine', () => {
+  const input = seededInput();
+  const light = (text: string, seed = 7) => buildCoach(input, routineRequestFrom(parseQuickRequest(text)), seed);
+  const byId = new Map((input.candidates ?? []).map((c) => [c.id, c]));
+
+  it('reads easy, light and can\'t be bothered as an easy routine', () => {
+    for (const text of ['easy full body', 'something light', "can't be bothered, full body"]) expect(routineRequestFrom(parseQuickRequest(text)).light, text).toBe(true);
+    expect(routineRequestFrom(parseQuickRequest('full body')).light).toBeUndefined();
+  });
+
+  it('leaves out barbell compounds, hinges and benchmark lifts, over many seeds', () => {
+    for (let seed = 1; seed <= 25; seed++) {
+      for (const r of light('easy full body', seed)) {
+        for (const row of r.rows) {
+          const c = byId.get(row.id);
+          expect(row.pattern, row.name).not.toBe('hinge');
+          if (c) {
+            expect(c.equipment === 'barbell' && c.isCompound, row.name).toBe(false);
+            expect(c.standard, row.name).toBeUndefined();
+          }
+        }
+      }
+    }
+  });
+
+  it('is 4 exercises unless asked, each 2 sets of 10–15 at two thirds of the working weight, floored to the increment', () => {
+    const [r] = light('easy full body');
+    expect(r!.rows).toHaveLength(4);
+    const normal = buildRoutines(input, { ...routineRequestFrom(parseQuickRequest('easy full body')) }, 7)[0]!;
+    for (const row of r!.rows) {
+      expect([row.sets, row.repMin, row.repMax], row.name).toEqual([2, 10, 15]);
+      const before = normal.rows.find((x) => x.id === row.id)!;
+      const c = byId.get(row.id);
+      if (before.weightKg === null || before.weightKg === 0) expect(row.weightKg).toBe(before.weightKg === 0 ? 0 : null);
+      else {
+        const inc = c?.defaultIncrement ?? 2.5;
+        expect(row.weightKg, row.name).toBeCloseTo(Math.floor((before.weightKg * 0.65) / inc + 1e-9) * inc, 5);
+        expect(row.weightKg!).toBeLessThan(before.weightKg);
+      }
+    }
+    expect(r!.reasonLines.some((l) => l.startsWith('Easy:'))).toBe(true);
+    expect(describeRead(routineRequestFrom(parseQuickRequest('easy full body')), [r!])).toContain('easy');
+  });
+
+  it('keeps an asked count', () => {
+    expect(light('easy full body, 2 exercises')[0]!.rows).toHaveLength(2);
   });
 });

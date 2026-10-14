@@ -211,7 +211,7 @@ describe('the tools do the work', () => {
   it('keeps a drafted routine on the reply and saves nothing', async () => {
     const before = await db.routines.count();
     const fake = fakeClaude(
-      { content: [toolUse('t1', 'build_routine', { request: 'a 40 minute shoulder routine' })], stop_reason: 'tool_use' },
+      { content: [toolUse('t1', 'build_routine', { request: 'a 40 minute shoulder routine', effort: 'normal' })], stop_reason: 'tool_use' },
       { content: [text('Draft is ready. Save it if you like it.')] },
     );
     const reply = await sendCoachMessage('build me a shoulder routine', { fetch: fake.fetch, ...ctx, actions: createCoachActions({ seed: () => 3 }) });

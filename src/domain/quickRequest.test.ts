@@ -423,6 +423,15 @@ describe('parseQuickRequest: negation', () => {
     expect(p.options.exclude).toBeUndefined();
   });
 
+  it('"no heavy barbell lifts" is light and no barbell, not barbell only', () => {
+    const p = parse('easy full body, no heavy barbell lifts');
+    expect(p.options.effort).toBe('light');
+    expect(p.options.equipment).toEqual(EQUIPMENT_KINDS.filter((e) => e !== 'barbell'));
+    // "no heavy" on its own is still just light.
+    expect(parse('no heavy lifts').options).toMatchObject({ effort: 'light' });
+    expect(parse('no heavy lifts').options.equipment).toBeUndefined();
+  });
+
   it('"dumbbells and cables, no cables" is dumbbells', () => {
     expect(parse('dumbbells and cables, no cables').options.equipment).toEqual(['dumbbell']);
   });

@@ -115,6 +115,10 @@ const BuildRoutineInput = z.object({
   count: z.number().optional().describe('How many exercises, if asked'),
   minutes: z.number().optional().describe('How long the routine should take, if asked'),
   split: z.enum(['ppl', 'upper-lower', 'full-body']).optional().describe('A named split, if asked'),
+  // Required, not optional: strict mode allows only so many optional parameters across all the tools.
+  effort: z
+    .enum(['easy', 'normal', 'hard'])
+    .describe('"normal" unless they asked otherwise. "easy" for a low-effort day (tired, can\'t be bothered, light): no heavy barbell lifts or hinges, 2 light sets each. "hard" for more sets.'),
 });
 
 /**
@@ -169,7 +173,7 @@ export function createCoachTools(actions: CoachActions, turn: TurnRecord): Coach
         "Draft a routine or a split from the owner's own exercises and real working weights. Nothing is saved: tell them the draft is ready and they can save it. Use for 'build me a push day' or 'a 40 minute leg routine'.",
       inputSchema: BuildRoutineInput,
       run: async (input) => {
-        const outcome = await actions.buildRoutine({ request: input.request, focus: input.focus, count: input.count, minutes: input.minutes, split: input.split });
+        const outcome = await actions.buildRoutine({ request: input.request, focus: input.focus, count: input.count, minutes: input.minutes, split: input.split, effort: input.effort });
         if (outcome.ok && outcome.draft) turn.draft = outcome.draft;
         return finish(outcome, turn);
       },

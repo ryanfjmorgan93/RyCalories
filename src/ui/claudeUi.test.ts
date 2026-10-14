@@ -225,7 +225,7 @@ describe('the coach sheet', () => {
   it('offers a drafted routine with Save, and hands it to the caller without saving anything itself', async () => {
     setApiKey(KEY);
     const fake = fakeClaude(
-      { content: [toolUse('t1', 'build_routine', { request: 'a 40 minute shoulder routine' })], stop_reason: 'tool_use' },
+      { content: [toolUse('t1', 'build_routine', { request: 'a 40 minute shoulder routine', effort: 'normal' })], stop_reason: 'tool_use' },
       { content: [text('Draft is ready. Save it if you like it.')] },
     );
     vi.stubGlobal('fetch', fake.fetch);

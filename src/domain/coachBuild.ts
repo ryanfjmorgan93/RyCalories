@@ -19,7 +19,8 @@ import { plural } from './format';
 import { REGION_LABELS, movementPattern, patternLabel, regionOf } from './movement';
 import { readEdit } from './coachIntent';
 import { MAX_MINUTES, MIN_MINUTES, parseQuickRequest, type QuickOptions, type RoutineSplit } from './quickRequest';
-import { estimateMinutes, type Candidate } from './quickSession';
+import { estimateMinutes, LIGHT_FRACTION, LIGHT_REPS, type Candidate } from './quickSession';
+import { deloadLoad } from './prescription';
 import { restSecondsFor, type RestDefaults } from './rest';
 import {
   MAX_NEW_EXERCISES,
@@ -83,7 +84,7 @@ function equipmentWords(allowed: readonly string[]): string {
  */
 export function describeRead(request: CoachRequest, routines: readonly BuiltRoutine[]): string {
   const steps = request.intensity ?? 0;
-  const effort = steps > 0 ? ['harder'] : steps < 0 ? ['easier'] : [];
+  const effort = [...(request.light ? ['easy'] : []), ...(steps > 0 ? ['harder'] : steps < 0 ? ['easier'] : [])];
   if (!requestUsable(request)) return ['nothing specific · full body by need', ...effort].join(' · ');
   const total = routines.reduce((n, r) => n + r.rows.length, 0);
   const parts: string[] = [];
@@ -236,6 +237,36 @@ export function applyIntensity(routine: BuiltRoutine, steps: number, input: Rout
   return { routine: { ...routine, rows, reasonLines, estimateMinutes: routineMinutes(rows, input) }, fact };
 }
 
+/** Sets on every lift of an easy routine. */
+const LIGHT_ROUTINE_SETS = 2;
+
+/**
+ * An easy routine's prescriptions, as the light short session sets them: two sets of 10 to 15, at
+ * about two thirds of the owner's own working weight (`LIGHT_FRACTION`, down to the exercise's
+ * increment). A row with no working weight keeps none, for the owner to pick at the first session.
+ * The heavy lifts were already left out by the generator (`RoutineRequest.light`).
+ */
+export function applyLight(routine: BuiltRoutine, input: RoutineInput): BuiltRoutine {
+  if (routine.rows.length === 0) return routine;
+  const byId = new Map((input.candidates ?? []).map((c) => [c.id, c]));
+  const rows = routine.rows.map((r) => {
+    let weightKg = r.weightKg;
+    if (weightKg !== null && weightKg > 0) {
+      const light = deloadLoad(weightKg, LIGHT_FRACTION, byId.get(r.id)?.defaultIncrement ?? 2.5);
+      weightKg = light > 0 ? light : null;
+    }
+    return { ...r, sets: Math.min(r.sets, LIGHT_ROUTINE_SETS), repMin: LIGHT_REPS[0], repMax: LIGHT_REPS[1], weightKg };
+  });
+  const estimate = routineMinutes(rows, input);
+  const lines = routine.reasonLines.filter((l) => !l.startsWith('About '));
+  return {
+    ...routine,
+    rows,
+    estimateMinutes: estimate,
+    reasonLines: [...lines, `Easy: no heavy compound lifts or hinges, ${LIGHT_ROUTINE_SETS} sets of ${LIGHT_REPS[0]}–${LIGHT_REPS[1]} at about two thirds of your working weight`, `About ${estimate} min at your pace`],
+  };
+}
+
 /** A routine never trims below this many exercises for a length asked for, as the generator's own trim never does. */
 const TRIM_FLOOR = 2;
 
@@ -264,7 +295,8 @@ export function fitMinutes(routine: BuiltRoutine, minutes: number, input: Routin
  * easier by the request's own steps, and kept to the length asked for where the steps put it over.
  */
 export function buildCoach(input: RoutineInput, request: CoachRequest, seed: number): BuiltRoutine[] {
-  const routines = buildRoutines(input, request, seed);
+  const built = buildRoutines(input, request, seed);
+  const routines = request.light ? built.map((r) => applyLight(r, input)) : built;
   const steps = request.intensity ?? 0;
   if (steps === 0) return routines;
   return routines.map((r) => {
@@ -795,6 +827,8 @@ export function buildEdit(input: RoutineInput, plan: EditPlan, previous: readonl
       if (order.length === routine.rows.length) routine = { ...routine, rows: order };
     }
   }
+  // An easy routine stays easy through every edit: the replay drew from the light pool, and its sets are light again.
+  if (request.light) routine = applyLight(routine, input);
   const steps = request.intensity ?? 0;
   if (steps !== 0) {
     routine = applyIntensity(routine, steps, input).routine;
