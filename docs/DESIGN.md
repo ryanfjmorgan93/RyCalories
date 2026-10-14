@@ -124,6 +124,10 @@ must render when this stylesheet is what failed.
   Short session, kept small: supplements are one row of pills that scrolls sideways, in time-of-day
   order (a ticked pill fills with the accent and its ink; the dose sits after the name), and the
   weigh-in is one row of last reading, field and Log.
+- **Settings → Health Connect**: one switch, weight into the bodyweight log; a reading read in is
+  marked "From Health Connect" on the bodyweight list and "Health Connect" under Home's latest.
+- **Settings → Problem reports**: how many are on the phone, the latest five, Share (Copy in a
+  browser) and Clear behind a confirm.
 - **Descriptors** (muscle group, compound or isolation, kind, equipment) are stored lower case and
   shown with every word capitalised, units aside (`muscleLabel`, `labelLine`): "Lower Back ·
   Isolation · Bodyweight +kg". Filter chips, list rows, the picker, the library preview, the exercise

@@ -872,3 +872,17 @@ describe('exercises from the app library', () => {
     expect((await getActiveSession())!.swaps).toEqual({ [bench.rx.id]: meadows.id });
   });
 });
+
+describe('report_problem', () => {
+  it('writes a coach report on the phone, with no key in it', async () => {
+    await db.problemReports.clear();
+    const actions = createCoachActions({ now: MORNING });
+    const out = await actions.reportProblem({ summary: 'Builder gave squats for an easy day', detail: 'Asked for a CBA routine; got Barbell Back Squat 4x6-8. key sk-ant-api03-SECRETSECRET' });
+    expect(out).toMatchObject({ ok: true, description: 'Problem logged: Builder gave squats for an easy day' });
+    const [r] = await db.problemReports.toArray();
+    expect(r).toMatchObject({ source: 'coach', summary: 'Builder gave squats for an easy day', at: MORNING().toISOString() });
+    expect(r!.detail).toContain('CBA routine');
+    expect(JSON.stringify(r)).not.toContain('sk-ant');
+    expect((await actions.reportProblem({ summary: ' ', detail: '' })).ok).toBe(false);
+  });
+});

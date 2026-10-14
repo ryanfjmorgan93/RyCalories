@@ -290,6 +290,8 @@ export const IRON_SCHEMA_V5: StoreSpec[] = [
   },
 ];
 
+export const IRON_SCHEMA_V6: StoreSpec[] = [...IRON_SCHEMA_V5, { name: 'problemReports', keyPath: 'id', indexes: [{ name: 'at', keyPath: 'at' }] }];
+
 /** Creates `iron` as raw IndexedDB at `version`, with `schema`, populated with `data`. Must run on a page that has never booted the app (see file header). */
 export async function createRawIronDb(page: Page, version: number, schema: StoreSpec[], data: Record<string, unknown[]>): Promise<void> {
   await page.evaluate(

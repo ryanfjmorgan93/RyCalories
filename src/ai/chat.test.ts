@@ -77,7 +77,7 @@ describe('a turn where the coach uses a tool and then answers', () => {
       expect(req.body.thinking).toBeUndefined();
       expect(req.body.tool_choice).toBeUndefined();
       expect(req.body.stream).not.toBe(true);
-      expect(req.body.tools.map((t: { name: string }) => t.name)).toEqual(['log_food', 'log_weight', 'remember', 'forget', 'edit_routine', 'edit_session', 'build_routine', 'propose_targets', 'suggest_supplement', 'tick_supplements']);
+      expect(req.body.tools.map((t: { name: string }) => t.name)).toEqual(['log_food', 'log_weight', 'remember', 'forget', 'edit_routine', 'edit_session', 'build_routine', 'propose_targets', 'suggest_supplement', 'tick_supplements', 'report_problem']);
       expect(req.body.tools.every((t: { strict: boolean }) => t.strict === true)).toBe(true);
     }
 

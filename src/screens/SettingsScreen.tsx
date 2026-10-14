@@ -23,6 +23,8 @@ import { HoldToConfirm } from '@/ui/components/HoldToConfirm';
 import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { ChevronIcon, TopBar } from '@/ui/components/TopBar';
+import { HealthConnectCard } from '@/ui/HealthConnectCard';
+import { ProblemReportsCard } from '@/ui/ProblemReportsCard';
 import { RemindersCard } from '@/ui/RemindersCard';
 import { RestoreSheet } from '@/ui/RestoreSheet';
 import { useSettings } from '@/ui/hooks';
@@ -107,8 +109,14 @@ export function SettingsScreen() {
             <SectionTitle>Reminders</SectionTitle>
             <RemindersCard settings={settings} />
 
+            <SectionTitle>Health Connect</SectionTitle>
+            <HealthConnectCard settings={settings} />
+
             <SectionTitle>Look</SectionTitle>
             <AccentWheel settings={settings} />
+
+            <SectionTitle>Problem reports</SectionTitle>
+            <ProblemReportsCard />
 
             <SectionTitle>About</SectionTitle>
             <AboutCard />

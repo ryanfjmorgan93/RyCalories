@@ -109,6 +109,12 @@ const TickSupplementsInput = z.object({
   date: z.string().optional().describe('YYYY-MM-DD for an earlier day; leave out for today'),
 });
 
+// Both required: strict mode caps the optional parameters across all the tools.
+const ReportProblemInput = z.object({
+  summary: z.string().describe('One plain line: what in the app went wrong'),
+  detail: z.string().describe('What was asked, what the app did instead, any tool result or figure that was wrong. Empty when there is nothing more.'),
+});
+
 const BuildRoutineInput = z.object({
   request: z.string().describe('What the owner asked for, in their words: "a 45 minute shoulder routine", "push pull legs"'),
   focus: z.array(z.enum(MUSCLES)).optional().describe('Muscles to train, if you can read them from the request'),
@@ -208,6 +214,13 @@ export function createCoachTools(actions: CoachActions, turn: TurnRecord): Coach
       description: "Tick supplements on the owner's checklist as taken, when they say they took them ('had my creatine', 'took all my supps').",
       inputSchema: TickSupplementsInput,
       run: async (input) => finish(await actions.tickSupplements({ names: input.names, all: input.all, date: input.date }), turn),
+    }),
+    strictTool({
+      name: 'report_problem',
+      description:
+        "Write down something in the app that is not working: the owner says something is broken, a tool fails when it should not, a draft ignores what was asked, or a figure looks wrong. It is kept on the phone for the owner to share from Settings → Problem reports.",
+      inputSchema: ReportProblemInput,
+      run: async (input) => finish(await actions.reportProblem({ summary: input.summary, detail: input.detail }), turn),
     }),
   ];
   return tools as unknown as CoachTool[];

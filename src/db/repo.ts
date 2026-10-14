@@ -1236,5 +1236,29 @@ export async function logBodyweight(date: string, kg: number, note?: string): Pr
 }
 
 export async function deleteBodyweight(id: string): Promise<void> {
+  const entry = await db.bodyweight.get(id);
   await db.bodyweight.delete(id);
+  // A reading read in from Health Connect and deleted by the owner stays deleted: the next read skips its day.
+  if (entry?.source === 'health-connect') {
+    const settings = await getSettings();
+    const skip = new Set(settings.healthWeightSkip ?? []);
+    if (!skip.has(entry.date)) await db.settings.update('settings', { healthWeightSkip: [...skip, entry.date].sort() });
+  }
+}
+
+/**
+ * Bodyweight read from Health Connect, written for the days that still have no reading: one the
+ * owner logged in the meantime keeps theirs. Returns how many were added.
+ */
+export async function importHealthWeights(readings: readonly { date: string; kg: number }[]): Promise<number> {
+  if (readings.length === 0) return 0;
+  return db.transaction('rw', db.bodyweight, async () => {
+    let added = 0;
+    for (const r of readings) {
+      if ((await db.bodyweight.where('date').equals(r.date).count()) > 0) continue;
+      await db.bodyweight.put({ id: uuid(), date: r.date, kg: r.kg, source: 'health-connect' });
+      added++;
+    }
+    return added;
+  });
 }

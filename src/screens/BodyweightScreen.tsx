@@ -147,7 +147,7 @@ export function BodyweightScreen() {
                   </div>
                 }
                 title={dateLabel(e.date)}
-                subtitle={e.note}
+                subtitle={[e.note, e.source === 'health-connect' ? 'From Health Connect' : null].filter(Boolean).join(' · ') || undefined}
                 right={<ChevronIcon />}
               />
             </div>

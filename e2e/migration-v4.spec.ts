@@ -162,8 +162,8 @@ test.describe('v3 → v4 migration (body scans, coach messages, coach notes)', (
 
     // The schema: Dexie's raw version is its declared version ×10; the build upgrades to its current one.
     const raw = await readRawIron(page);
-    // The current schema (v5, raw 50): an install this far behind upgrades straight through.
-    expect(raw.version).toBe(50);
+    // The current schema (v6, raw 60): an install this far behind upgrades straight through.
+    expect(raw.version).toBe(60);
     for (const name of ['bodyScans', 'coachMessages', 'coachNotes']) {
       expect(Object.keys(raw.tables)).toContain(name);
       expect(raw.tables[name]).toEqual([]);
@@ -240,8 +240,8 @@ test.describe('v3 → v4 migration (body scans, coach messages, coach notes)', (
     await waitForHistoryCheckSettled(page);
 
     const raw = await readRawIron(page);
-    // The current schema (v5, raw 50): an install this far behind upgrades straight through.
-    expect(raw.version).toBe(50);
+    // The current schema (v6, raw 60): an install this far behind upgrades straight through.
+    expect(raw.version).toBe(60);
     expect(raw.tables.bodyScans).toHaveLength(1);
     expect(raw.tables.coachMessages).toHaveLength(1);
     expect(raw.tables.coachNotes).toHaveLength(1);

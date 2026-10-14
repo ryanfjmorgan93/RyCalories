@@ -55,9 +55,13 @@ The owner does not check on device. Correctness has to come from the code and th
   Claude API calls (only with the owner's key: what they send the coach, a summary of their
   training, food, supplements and steps, and photos they choose), the Open Food Facts label lookup
   (switchable off; the barcode scan is the same lookup), and the Video link on an exercise (a user
-  tap that opens the browser). Nothing else. Steps are read on the phone from Health Connect (read
-  steps only, write nothing; every other health permission the plugin declares is removed in the
-  manifest) and are never stored in the database.
+  tap that opens the browser). Nothing else. Steps, and bodyweight when the owner turns it on, are
+  read on the phone from Health Connect (read only, write nothing; every other health permission
+  the plugin declares is removed in the manifest). Steps are never stored; a weight read in is
+  stored as a bodyweight entry marked `source: 'health-connect'`, only for a day with no reading of
+  the owner's own, and never again for a day they deleted. Problem reports (the coach's
+  report_problem tool, and errors nothing caught in the APK) stay on the phone until the owner
+  shares them from Settings; the Claude key is scrubbed from every report.
 - The Claude key lives only in `localStorage` (`src/ai/key.ts`), never in the Settings row, a
   backup, a CSV or a log (docs/adr/0003). Spending is capped in the app (`src/ai/spend.ts`).
 - Claude's figures are estimates (docs/adr/0004): stored with the `model` source, shown with ≈,
@@ -85,6 +89,9 @@ The owner does not check on device. Correctness has to come from the code and th
   logging produces.
   `inbody.ts` reads body-scan exports; `reminders.ts` plans the local notifications.
   `supplements.ts` is the daily supplement checklist; `dailyQuote.ts` is Home's welcome and quote.
+  `healthWeight.ts` picks the bodyweight readings to read in from Health Connect (each day's first,
+  never over the owner's own); `problemReports.ts` is what a problem report holds and the text it
+  is shared as.
   `steps.ts` turns Health Connect's raw step records into daily totals: per day the largest single
   source, never the sum across apps (a phone and a watch count the same walk), and the week
   averaged over recorded days only.
@@ -113,8 +120,9 @@ The owner does not check on device. Correctness has to come from the code and th
   session tools reach the whole exercise library by name (`findExerciseAnywhere` in
   `src/db/catalogueRepo.ts`, the paste matcher's rules); with no review step, a library entry is
   taken only when the name says exactly it, and a looser guess is named back, never added.
-- `src/platform/` — share-sheet import (InBody files), local reminders and steps from Health
-  Connect (`health.ts`, through `@capgo/capacitor-health`). There is no custom native code; plugins
+- `src/platform/` — share-sheet import (InBody files), local reminders, steps and weight from
+  Health Connect (`health.ts`, through `@capgo/capacitor-health`), and the capture of uncaught
+  errors as problem reports, in the APK only (`errorReports.ts`). There is no custom native code; plugins
   come from npm and `npx cap sync` wires them. A browser has no Health Connect, so no test reaches
   the live read: the wrapper and the store are tested with the plugin faked, e2e covers the
   "not here" state and the goal.

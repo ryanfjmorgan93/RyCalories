@@ -12,12 +12,15 @@ import { startReminders } from './platform/reminders';
 import { DB_VERSION } from './db/db';
 import { renderRecovery } from './boot/recovery';
 import { applyCachedAccent } from './ui/accentTheme';
+import { installErrorCapture } from './platform/errorReports';
 
 // The coach's edit_session tool changes today's plan through the same function the "Change today"
 // sheet uses, so a change by voice and a change by hand are one thing.
 configureClaudeCoach({ setPlanOverride });
 // The accent picked on the colour wheel, from its local copy, before anything paints.
 applyCachedAccent();
+// Errors nothing caught become problem reports on the phone (Settings → Problem reports).
+installErrorCapture();
 
 async function boot() {
   // Must run before Dexie ever opens the database — see historySafety.ts.

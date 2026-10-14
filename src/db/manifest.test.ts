@@ -35,12 +35,15 @@ describe('Health Connect', () => {
   const PLUGIN = readFileSync(fileURLToPath(new URL('../../node_modules/@capgo/capacitor-health/android/src/main/AndroidManifest.xml', import.meta.url)), 'utf8');
   const health = (xml: string) => [...xml.matchAll(/<uses-permission android:name="(android\.permission\.health\.[A-Z_]+)"([^>]*)\/>/g)];
 
-  it('keeps reading steps and removes every other health permission the plugin declares', () => {
+  it('keeps reading steps and weight and removes every other health permission the plugin declares', () => {
+    const READ = ['android.permission.health.READ_STEPS', 'android.permission.health.READ_WEIGHT'];
     const kept = health(MANIFEST).filter(([, , rest]) => !rest.includes('tools:node="remove"')).map(([, name]) => name);
     const removed = new Set(health(MANIFEST).filter(([, , rest]) => rest.includes('tools:node="remove"')).map(([, name]) => name));
-    expect(kept).toEqual(['android.permission.health.READ_STEPS']);
+    expect(kept).toEqual(READ);
+    // Nothing is ever written.
+    expect(kept.some((n) => n.includes('WRITE'))).toBe(false);
     // A plugin update that adds a kind of health data has to be removed here too.
-    for (const [, name] of health(PLUGIN)) if (name !== 'android.permission.health.READ_STEPS') expect(removed).toContain(name);
+    for (const [, name] of health(PLUGIN)) if (!READ.includes(name)) expect(removed).toContain(name);
     expect(MANIFEST).toContain('xmlns:tools="http://schemas.android.com/tools"');
   });
 

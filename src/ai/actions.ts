@@ -21,8 +21,10 @@
  * UK table before its own figures are used (docs/adr/0004), and appended to that day's meal for the
  * slot (foodRepo `logItemsToSlot`) rather than made a meal of its own.
  */
+import { BUILD_LABEL } from '@/buildInfo';
 import { findExerciseAnywhere, type ExercisePick } from '@/db/catalogueRepo';
 import { db } from '@/db/db';
+import { addProblemReport } from '@/db/problemRepo';
 import { dayTotals } from '@/db/foodRepo';
 import {
   addExtraExercise,
@@ -155,6 +157,12 @@ export interface CoachActions {
   proposeTargets: OfferActions['proposeTargets'];
   suggestSupplement: OfferActions['suggestSupplement'];
   tickSupplements: OfferActions['tickSupplements'];
+  reportProblem(input: ReportProblemInput): Promise<ActionResult>;
+}
+
+export interface ReportProblemInput {
+  summary: string;
+  detail: string;
 }
 
 export interface ActionDeps {
@@ -555,6 +563,14 @@ export function createCoachActions(deps: ActionDeps = {}): CoachActions {
         description: `Drafted ${built.map((r) => r.name).join(', ')}: ready to save`,
         draft: { routines: built, text },
       };
+    },
+
+    // ---- problems
+    async reportProblem({ summary, detail }) {
+      const screen = typeof window !== 'undefined' ? window.location.pathname : undefined;
+      const report = await addProblemReport({ source: 'coach', summary, detail, screen, build: BUILD_LABEL }, now());
+      if (!report) return fail('Nothing to report: give a one-line summary of what went wrong.');
+      return { ok: true, result: 'Logged on the phone. The owner can share it from Settings → Problem reports.', description: `Problem logged: ${report.summary}` };
     },
 
     // ---- today's session

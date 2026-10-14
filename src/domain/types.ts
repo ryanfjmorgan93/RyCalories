@@ -260,6 +260,33 @@ export interface Bodyweight {
   date: string;
   kg: number;
   note?: string;
+  /**
+   * Where the reading came from when it was not typed in: 'health-connect' for one read from Health
+   * Connect (src/platform/health.ts). Absent for the owner's own. Re-logging the day by hand drops it.
+   */
+  source?: 'health-connect';
+}
+
+/** Who filed a problem report: the coach (the owner said something is wrong, or a tool went wrong), or the app (an error nothing caught). */
+export type ProblemSource = 'coach' | 'error';
+
+/**
+ * Something in the app that did not work, kept on the phone until the owner shares it (Settings →
+ * Problem reports). Never holds the Claude key (src/domain/problemReports.ts scrubs it).
+ */
+export interface ProblemReport {
+  id: string;
+  /** ISO time it was recorded. */
+  at: string;
+  source: ProblemSource;
+  /** One line. */
+  summary: string;
+  /** What was asked, what happened, an error's message and stack. */
+  detail?: string;
+  /** The screen the app was on. */
+  screen?: string;
+  /** The build that recorded it, as Settings names it. */
+  build?: string;
 }
 
 /**
@@ -419,6 +446,10 @@ export interface Settings {
    * `DEFAULT_REMINDERS` — deliberately not part of `DEFAULT_SETTINGS`.
    */
   reminders?: import('./reminders').ReminderPrefs;
+  /** Read bodyweight from Health Connect into the log (days with no reading of the owner's own). Absent = off. */
+  healthWeight?: boolean;
+  /** Days whose Health Connect reading the owner deleted from the log: never read in again. */
+  healthWeightSkip?: string[];
 }
 
 export const DEFAULT_SETTINGS: Omit<Settings, 'id' | 'createdAt'> = {

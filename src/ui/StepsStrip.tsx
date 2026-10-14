@@ -5,17 +5,24 @@ import { fmtNum } from '@/domain/format';
 import { cleanStepGoal, STEP_GOAL_MAX, STEP_GOAL_MIN, stepWeek, type StepWeek } from '@/domain/steps';
 import type { Settings } from '@/domain/types';
 import { isNative } from '@/state/native';
+import { syncHealthWeight } from '@/state/healthWeight';
 import { askForSteps, refreshSteps, useStepsStore } from '@/state/steps';
 import { Button } from './components/Button';
 import { NumberField } from './components/NumberField';
 import { Sheet } from './components/Sheet';
 
-/** Reads the steps when Home opens and again whenever the app comes back to the front. */
+/**
+ * Reads the steps, and the weight when that is on (src/state/healthWeight.ts), when Home opens and
+ * again whenever the app comes back to the front.
+ */
 function useStepsRefresh(): void {
   useEffect(() => {
     void refreshSteps();
+    void syncHealthWeight();
     const onVisible = () => {
-      if (document.visibilityState === 'visible') void refreshSteps();
+      if (document.visibilityState !== 'visible') return;
+      void refreshSteps();
+      void syncHealthWeight();
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);

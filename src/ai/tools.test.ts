@@ -38,6 +38,7 @@ describe('the tool definitions', () => {
       'propose_targets',
       'suggest_supplement',
       'tick_supplements',
+      'report_problem',
     ]);
     expect(createCoachTools(fakeActions(), newTurnRecord()).map((t) => JSON.stringify([t.name, t.description, t.input_schema]))).toEqual(tools.map((t) => JSON.stringify([t.name, t.description, t.input_schema])));
   });

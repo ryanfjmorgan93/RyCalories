@@ -88,11 +88,13 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
-    <!-- Steps, read from Health Connect (Samsung Health writes them there). Iron reads steps and
-         nothing else, and writes nothing: @capgo/capacitor-health's own manifest declares read and
-         write for five kinds of health data, so every one but READ_STEPS is removed from the
-         merged manifest here. Guarded by src/db/manifest.test.ts. -->
+    <!-- Steps and bodyweight, read from Health Connect (Samsung Health writes them there, from the
+         phone, a scale or an InBody scan). Iron reads those two and nothing else, and writes
+         nothing: @capgo/capacitor-health's own manifest declares read and write for five kinds of
+         health data, so every one but READ_STEPS and READ_WEIGHT is removed from the merged
+         manifest here. Guarded by src/db/manifest.test.ts. -->
     <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.READ_WEIGHT" />
     <uses-permission android:name="android.permission.health.WRITE_STEPS" tools:node="remove" />
     <uses-permission android:name="android.permission.health.READ_DISTANCE" tools:node="remove" />
     <uses-permission android:name="android.permission.health.WRITE_DISTANCE" tools:node="remove" />
@@ -100,7 +102,6 @@
     <uses-permission android:name="android.permission.health.WRITE_ACTIVE_CALORIES_BURNED" tools:node="remove" />
     <uses-permission android:name="android.permission.health.READ_HEART_RATE" tools:node="remove" />
     <uses-permission android:name="android.permission.health.WRITE_HEART_RATE" tools:node="remove" />
-    <uses-permission android:name="android.permission.health.READ_WEIGHT" tools:node="remove" />
     <uses-permission android:name="android.permission.health.WRITE_WEIGHT" tools:node="remove" />
 
     <!-- On Android 11+, package visibility means resolveActivity() can return null for the camera

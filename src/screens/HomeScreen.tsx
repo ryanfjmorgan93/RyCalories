@@ -370,7 +370,7 @@ function BodyweightQuickAdd() {
   return (
     <Card className="p-4">
       <div className="flex items-end gap-4">
-        <Stat label="Latest" value={latest ? fmtKg(latest.kg) : '—'} sub={latest ? latest.date : 'no readings'} />
+        <Stat label="Latest" value={latest ? fmtKg(latest.kg) : '—'} sub={latest ? `${latest.date}${latest.source === 'health-connect' ? ' · Health Connect' : ''}` : 'no readings'} />
         {delta && (
           <Stat
             label="7-day"

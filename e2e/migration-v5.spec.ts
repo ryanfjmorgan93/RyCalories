@@ -138,7 +138,7 @@ function fixture() {
 }
 
 test.describe('v4 → v5 migration (supplements)', () => {
-  test('upgrades to version 50, keeps every row, adds two empty stores, and writes a pre-migration backup', async ({ page }) => {
+  test('upgrades to the current version, keeps every row, adds two empty stores, and writes a pre-migration backup', async ({ page }) => {
     await page.goto('/icons/icon-192.png'); // a static asset: no app JS runs, so nothing opens `iron` before this test does
     const data = fixture();
     await createRawIronDb(page, 40, IRON_SCHEMA_V4, data);
@@ -151,7 +151,8 @@ test.describe('v4 → v5 migration (supplements)', () => {
     await waitForHistoryCheckSettled(page);
 
     const raw = await readRawIron(page);
-    expect(raw.version).toBe(50);
+    // The current schema (v6, raw 60): an install this far behind upgrades straight through.
+    expect(raw.version).toBe(60);
     for (const name of ['supplements', 'supplementLogs']) {
       expect(Object.keys(raw.tables)).toContain(name);
       expect(raw.tables[name]).toEqual([]);

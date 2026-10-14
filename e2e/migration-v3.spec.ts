@@ -128,8 +128,8 @@ test.describe('v2 → v3 migration (recipes)', () => {
     // The schema: Dexie's raw version is its declared version ×10. A version-2 install opening
     // this build upgrades straight through v3 to the current schema (v4 adds body scans and the coach).
     const raw = await readRawIron(page);
-    // The current schema (v5, raw 50): an install this far behind upgrades straight through.
-    expect(raw.version).toBe(50);
+    // The current schema (v6, raw 60): an install this far behind upgrades straight through.
+    expect(raw.version).toBe(60);
     expect(Object.keys(raw.tables)).toContain('recipes');
     expect(raw.tables.recipes).toEqual([]);
 
