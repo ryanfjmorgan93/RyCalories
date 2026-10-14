@@ -12,6 +12,17 @@ the owner's credits for work that does not need them.
 - Escalating a specific agent to Opus needs a reason worth saying out loud — say it when you do it,
   do not do it by default.
 
+## Skills
+
+`.claude/skills/ponytail*` is Ponytail 5.2.0 (DietrichGebert/ponytail, MIT), copied by hand at the
+owner's request without its hooks: the smallest complete change, `/ponytail-review`,
+`/ponytail-audit`, `/ponytail-debt`. Where it differs from this file, this file wins.
+
+**Build the Ponytail way by default** (the owner asked, October 2026: "much simpler moving
+forward"). Load the `ponytail` skill before writing code: the smallest change that fully works,
+reuse what the repo has, no abstraction or option nobody asked for. The tests and product rules
+above still apply in full.
+
 ## Verification
 
 The owner does not check on device. Correctness has to come from the code and the tests.
