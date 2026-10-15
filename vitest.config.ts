@@ -19,5 +19,7 @@ export default defineConfig({
     include: ['src/**/*.test.ts'],
     environment: 'node',
     setupFiles: ['./src/test/setup.ts'],
+    // The seeded routine-builder runs take ~2 s here and nearly 6 s on a CI runner; 5 s failed build 123.
+    testTimeout: 20_000,
   },
 });
