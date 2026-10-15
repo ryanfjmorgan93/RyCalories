@@ -49,7 +49,7 @@ export function SwapExerciseSheet({
                 className="flex w-full items-center gap-3 border-b border-line px-4 py-3 text-left last:border-b-0 active:bg-surface-2 min-h-14"
               >
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-semibold">{e.name}</div>
+                  <div className="break-words font-semibold">{e.name}</div>
                   <div className="text-xs text-muted">{e.muscleGroup}</div>
                 </div>
               </button>

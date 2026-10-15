@@ -73,7 +73,7 @@ function FoldRow({
       }`}
     >
       <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${dot}`} />
-      <span className="min-w-0 flex-1 truncate text-sm font-semibold">{slot.exercise.name}</span>
+      <span className="min-w-0 flex-1 break-words text-sm font-semibold">{slot.exercise.name}</span>
       <span className="num shrink-0 text-xs font-bold text-dim">
         {isSkipped ? 'skip' : `${countedDone} of ${target}`}
       </span>

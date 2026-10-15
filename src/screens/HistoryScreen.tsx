@@ -62,7 +62,7 @@ export function HistoryScreen() {
                       onClick={() => nav(`/history/${s.id}`)}
                       title={
                         <span className="flex items-center gap-2">
-                          <span className="truncate">{s.title}</span>
+                          <span className="break-words">{s.title}</span>
                           {s.source === 'hevy' && <Chip size="sm">Hevy</Chip>}
                         </span>
                       }

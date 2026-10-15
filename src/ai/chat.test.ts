@@ -72,7 +72,7 @@ describe('a turn where the coach uses a tool and then answers', () => {
       expect(req.headers['x-api-key']).toBe(KEY);
       expect(req.body.model).toBe('claude-sonnet-5-5');
       expect(req.body.max_tokens).toBe(CHAT_MAX_TOKENS);
-      expect(req.body.output_config).toEqual({ effort: 'low' });
+      expect(req.body.output_config).toEqual({ effort: 'medium' });
       // Sonnet 5.5 rejects both of these with a 400.
       expect(req.body.thinking).toBeUndefined();
       expect(req.body.tool_choice).toBeUndefined();

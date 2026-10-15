@@ -31,7 +31,7 @@ afterEach(() => {
 const opts = (fetch: typeof globalThis.fetch, extra: Record<string, unknown> = {}) => ({ fetch, now: NOW, ...extra });
 
 describe('momentLine', () => {
-  it('returns the coach\'s line, stores it with its moment, and asks Haiku the way Haiku 5.5 allows', async () => {
+  it('returns the coach\'s line, stores it with its moment, and asks Sonnet with thinking off the way Sonnet 5.5 allows', async () => {
     const fake = fakeClaude({ content: [text('New best on bench: 80 kg for 8. Nice work.')], usage: { input_tokens: 5000, output_tokens: 30, cache_creation_input_tokens: 0 } });
     const line = await momentLine('set', { exercise: 'Bench Press (Barbell)', set: '80 kg × 8', 'previous best': '77.5 kg × 8' }, opts(fake.fetch));
     expect(line).toBe('New best on bench: 80 kg for 8. Nice work.');
@@ -41,11 +41,12 @@ describe('momentLine', () => {
     expect(rows[0]).toMatchObject({ role: 'coach', text: line, moment: 'set' });
 
     const body = fake.requests[0]!.body;
-    expect(body.model).toBe('claude-haiku-5-5');
+    expect(body.model).toBe('claude-sonnet-5-5');
     expect(body.max_tokens).toBe(200);
-    expect(body.thinking).toEqual({ type: 'disabled' });
+    // Sonnet 5.5 rejects { type: 'disabled' } with a 400; between_tools is how it turns thinking off.
+    expect(body.thinking).toEqual({ type: 'between_tools' });
     expect(body.output_config).toEqual({ effort: 'low' });
-    // Haiku 5.5 rejects non-default sampling parameters, prefill, and a forced tool.
+    // Sonnet 5.5 rejects non-default sampling parameters, prefill, and a forced tool.
     for (const banned of ['temperature', 'top_p', 'top_k', 'tool_choice', 'tools']) expect(body[banned], banned).toBeUndefined();
     const messages = body.messages as { role: string; content: string }[];
     expect(messages).toHaveLength(1);
@@ -60,10 +61,10 @@ describe('momentLine', () => {
     expect(system[1]!.text).toContain('NOW:');
   });
 
-  it('counts what it spent at Haiku\'s prices', async () => {
+  it('counts what it spent at Sonnet\'s prices', async () => {
     const fake = fakeClaude({ content: [text('Good.')], usage: { input_tokens: 4000, output_tokens: 20, cache_read_input_tokens: 6000 } });
     await momentLine('meal', {}, opts(fake.fetch));
-    expect(spendThisMonth()).toBeCloseTo(4000 * 0.1e-6 + 6000 * 0.01e-6 + 20 * 0.5e-6, 9);
+    expect(spendThisMonth()).toBeCloseTo(4000 * 2e-6 + 6000 * 0.2e-6 + 20 * 10e-6, 9);
   });
 
   it('is null, and stores nothing, when the coach has nothing to say', async () => {

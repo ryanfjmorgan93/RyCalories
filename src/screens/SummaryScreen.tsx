@@ -266,7 +266,7 @@ export function SummaryScreen() {
       <TopBar title="Summary" subtitle={summary.session.title} back={`/session/${summary.session.id}`} />
       <div className="px-4">
         <div className="pt-1">
-          <h1 className="truncate text-4xl font-extrabold leading-[0.95] tracking-tight">{summary.session.title}</h1>
+          <h1 className="break-words text-4xl font-extrabold leading-[1.15] tracking-tight">{summary.session.title}</h1>
           <div className="mt-1.5 flex items-center gap-2">
             <span className="text-sm text-muted">{fmtDate(summary.session.startedAt, { weekday: 'short', day: 'numeric', month: 'short' })}</span>
             {summary.session.deload && (
@@ -294,7 +294,7 @@ export function SummaryScreen() {
               <div key={key} data-testid="summary-record" className="flex items-start gap-3 rounded-xl border border-record/35 bg-record/10 px-3.5 py-3">
                 <RecordIcon />
                 <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-                  <span className="truncate font-semibold">{name}</span>
+                  <span className="break-words font-semibold">{name}</span>
                   <div className="flex flex-wrap gap-x-3 gap-y-1">
                     {records.map((r, i) => (
                       <span key={i} className="num shrink-0 text-sm font-bold text-record">
@@ -328,7 +328,7 @@ export function SummaryScreen() {
               {others.map((item, i) => (
                 <div key={item.rx?.id ?? `x:${item.exercise.id}`} className={`flex items-center justify-between px-4 py-3 ${i > 0 ? 'border-t border-line' : ''}`}>
                   <div className="min-w-0">
-                    <div className="truncate font-semibold">{item.exercise.name}</div>
+                    <div className="break-words font-semibold">{item.exercise.name}</div>
                     <div className="text-sm text-muted">
                       {item.status === 'skipped'
                         ? 'Skipped'
@@ -436,7 +436,7 @@ function DecisionCard({
     <Card className="p-4" data-testid={`decision-${item.exercise.name}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="truncate text-lg font-extrabold">{item.exercise.name}</div>
+          <div className="break-words text-lg font-extrabold">{item.exercise.name}</div>
           <div className={`num mt-0.5 text-base font-semibold ${tone}`} data-testid="decision-line">
             {decisionLine(d, kind)}
           </div>

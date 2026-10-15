@@ -391,8 +391,8 @@ export function FoodItemSheet({
                     className="flex min-h-14 min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left active:bg-surface-2"
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="truncate font-semibold leading-tight">{[m.brand, m.name].filter(Boolean).join(' ')}</div>
-                      <div className="num mt-0.5 truncate text-xs text-muted">
+                      <div className="break-words font-semibold leading-tight">{[m.brand, m.name].filter(Boolean).join(' ')}</div>
+                      <div className="num mt-0.5 break-words text-xs text-muted">
                         {fmtKcal(m.per100.kcal)} / 100 g{m.typicalGrams ? ` · usually ${fmtGrams(m.typicalGrams)}` : ''}
                       </div>
                     </div>

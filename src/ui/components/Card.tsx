@@ -54,9 +54,9 @@ export function Row({
     <>
       {left}
       <div className="min-w-0 flex-1">
-        <div className="truncate font-semibold leading-tight">{title}</div>
+        <div className="break-words font-semibold leading-tight">{title}</div>
         {subtitle !== undefined && subtitle !== null && subtitle !== '' && (
-          <div className="mt-0.5 truncate text-sm text-muted">{subtitle}</div>
+          <div className="mt-0.5 break-words text-sm text-muted">{subtitle}</div>
         )}
       </div>
     </>

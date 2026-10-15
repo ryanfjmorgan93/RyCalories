@@ -18,7 +18,7 @@ import { scansFromPhoto } from '@/state/inbodyPhoto';
 import { BodyCompositionCard } from '@/ui/BodyCompositionCard';
 import { BodyMap } from '@/ui/components/BodyMap';
 import { Button, IconButton } from '@/ui/components/Button';
-import { CalendarHeatmap } from '@/ui/components/CalendarHeatmap';
+import { CalendarHeatmap, StreakDots } from '@/ui/components/CalendarHeatmap';
 import { Card, Divider, EmptyState, Row, SectionTitle } from '@/ui/components/Card';
 import { Segmented } from '@/ui/components/Chip';
 import { LineChart, type ChartPoint } from '@/ui/components/LineChart';
@@ -51,7 +51,7 @@ export function ProgressScreen() {
     [today, window, settings],
   );
 
-  const calendar = useCalendar(12, today, settings);
+  const calendar = useCalendar(6, today, settings);
   // The body map is always this week. The weekly-sets card below it can be stepped back through
   // earlier weeks, so it asks for its own week rather than borrowing this one.
   const thisWeek = mondayOf(today);
@@ -147,7 +147,7 @@ export function ProgressScreen() {
               <IconButton label="Previous week" onClick={() => setWeeksBack((n) => n + 1)} data-testid="week-prev">
                 <BackIcon />
               </IconButton>
-              <div className="min-w-0 flex-1 truncate text-center text-base font-bold" data-testid="week-label">
+              <div className="min-w-0 flex-1 break-words text-center text-base font-bold" data-testid="week-label">
                 {fmtWeekOf(shownWeek, thisWeek)}
               </div>
               <IconButton label="Next week" disabled={weeksBack === 0} onClick={() => setWeeksBack((n) => Math.max(0, n - 1))} data-testid="week-next">
@@ -328,12 +328,7 @@ function CalendarCard({ calendar, today }: { calendar: NonNullable<ReturnType<ty
   return (
     <Card className="p-4">
       <CalendarHeatmap grid={calendar.grid} today={today} />
-      <div className="mt-3 flex items-baseline justify-between border-t border-line pt-3">
-        <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Streak</span>
-        <span className="num text-2xl font-extrabold tabular-nums" data-testid="streak-line">
-          {calendar.streak > 0 ? `${calendar.streak} ${calendar.streak === 1 ? 'week' : 'weeks'} · ${calendar.line}` : `This week ${calendar.thisWeek} of ${calendar.weeklyTarget}`}
-        </span>
-      </div>
+      <StreakDots thisWeek={calendar.thisWeek} target={calendar.weeklyTarget} streak={calendar.streak} className="mt-3 border-t border-line pt-3" />
     </Card>
   );
 }
@@ -393,7 +388,7 @@ function StrengthCard({ standards, changes }: { standards: StandardRow[]; change
         <div key={r.exercise.id}>
           {i > 0 && <Divider />}
           <div className="flex items-baseline justify-between gap-3 py-2">
-            <span className="min-w-0 truncate">{r.exercise.name}</span>
+            <span className="min-w-0 break-words">{r.exercise.name}</span>
             <span className="num shrink-0 text-sm text-muted">
               {fmtSignedKg(r.change.delta)} {r.change.covered ? 'in 4 weeks' : `since ${fmtDate(new Date(r.change.from).toISOString())}`}
             </span>

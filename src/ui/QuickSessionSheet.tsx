@@ -245,7 +245,7 @@ function QuickSessionBody({ onClose }: { onClose: () => void }) {
             {plan.rows.map((row, i) => (
               <div key={row.candidate.id} className="rounded-xl border border-line bg-surface-2 px-3 py-2" data-testid={`quick-row-${i}`}>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="min-w-0 truncate font-semibold">{row.candidate.name}</span>
+                  <span className="min-w-0 break-words font-semibold">{row.candidate.name}</span>
                   {row.candidate.origin !== 'own' && (
                     <Chip size="sm" tone="info" testId={`quick-new-${i}`}>
                       New

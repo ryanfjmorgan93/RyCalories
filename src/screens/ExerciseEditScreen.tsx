@@ -374,7 +374,7 @@ export function ExerciseEditScreen() {
             >
               <DemoThumb demo={row.key} size="md" />
               <div className="min-w-0">
-                <div className="truncate font-semibold">{row.name}</div>
+                <div className="break-words font-semibold">{row.name}</div>
                 <div className="text-xs text-muted">{row.detail}</div>
               </div>
             </button>

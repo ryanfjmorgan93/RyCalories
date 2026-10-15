@@ -39,7 +39,7 @@ export function TopBar({
   }, [hasBack]);
   return (
     <header className="glass-fixed pt-safe sticky top-0 z-30 border-b">
-      <div className="flex h-14 items-center gap-1 px-2">
+      <div className="flex min-h-14 items-center gap-1 px-2 py-1">
         {back ? (
           <IconButton label="Back" onClick={goBack}>
             <BackIcon />
@@ -48,8 +48,9 @@ export function TopBar({
           <div className="w-2" />
         )}
         <div className="min-w-0 flex-1">
-          <h1 className="disp truncate pt-0.5 text-[1.75rem]">{title}</h1>
-          {subtitle && <div className="truncate text-xs text-muted">{subtitle}</div>}
+          {/* A long title wraps and the bar grows: never cut off. */}
+          <h1 className="disp break-words text-[1.75rem]">{title}</h1>
+          {subtitle && <div className="break-words text-xs text-muted">{subtitle}</div>}
         </div>
         {right}
       </div>

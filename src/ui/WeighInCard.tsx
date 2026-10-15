@@ -41,7 +41,7 @@ export function WeighInCard({ today, last }: { today: string; last: Reading | nu
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <h2 className="label">Weigh-in</h2>
-          <div className="num mt-0.5 truncate text-sm text-muted" data-testid="weigh-in-last">
+          <div className="num mt-0.5 break-words text-sm text-muted" data-testid="weigh-in-last">
             {last ? `Last: ${fmtKg(last.kg)} · ${fmtDateKey(last.date)}` : 'Start the trend'}
           </div>
         </div>

@@ -222,12 +222,12 @@ export function PasteRoutineSheet({
                     <div className="flex min-h-14 items-center gap-3 py-3 pl-4 pr-3" data-testid="paste-row">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <div className="min-w-0 truncate font-semibold leading-tight" data-testid="paste-row-name">
+                          <div className="min-w-0 break-words font-semibold leading-tight" data-testid="paste-row-name">
                             {name}
                           </div>
                           {fromLibrary && <LibraryLabel />}
                         </div>
-                        <div className="mt-0.5 truncate text-sm text-muted">
+                        <div className="mt-0.5 break-words text-sm text-muted">
                           {prescription(row.line)}
                           {notUsed ? ` · ${fmtRange(row.line.repMin!, row.line.repMax ?? row.line.repMin!, 's')} not used` : ''}
                           {renamed ? ` · from “${row.line.name}”` : ''}

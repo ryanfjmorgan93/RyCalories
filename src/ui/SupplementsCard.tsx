@@ -11,8 +11,8 @@ import { Sheet } from './components/Sheet';
 import { toast } from './components/Toast';
 
 /**
- * Home's supplement checklist for today, kept small: a pill per supplement in one row that scrolls
- * sideways, in time-of-day order, tapped to tick or untick (the dose is on the pill when there is one). With
+ * Home's supplement checklist for today, kept small: a tile per supplement, three to a row and all
+ * in view, in time-of-day order, tapped to tick or untick (the dose under the name when there is one). With
  * nothing on the list it is one line offering to add some. Edit opens the list.
  */
 export function SupplementsCard({ today }: { today: string }) {
@@ -36,12 +36,11 @@ export function SupplementsCard({ today }: { today: string }) {
         {day.total === 0 ? (
           <div className="px-4 pb-3 text-sm text-muted">Nothing on the list.</div>
         ) : (
-          // One row of pills that scrolls sideways, in time-of-day order (morning first), so the card
-          // is one line high however long the list. The count in the header says how many there are;
-          // the time of day is on the list itself (Edit) and in each pill's name for a reader.
-          <ul className="no-scrollbar flex gap-2 overflow-x-auto px-4 pt-1 pb-3" data-testid="supplements-row">
+          // Every one in view at once, three to a row, in time-of-day order: the name with the dose
+          // under it, filled when taken. The time of day is on the list itself (Edit) and in each name for a reader.
+          <ul className="grid grid-cols-3 gap-1.5 px-3 pt-1 pb-3" data-testid="supplements-row">
             {day.items.map(({ supplement, taken }) => (
-              <li key={supplement.id} className="shrink-0">
+              <li key={supplement.id} className="min-w-0">
                 <button
                   type="button"
                   role="checkbox"
@@ -49,22 +48,19 @@ export function SupplementsCard({ today }: { today: string }) {
                   aria-label={`${supplement.name}${supplement.dose ? ` ${supplement.dose}` : ''}, ${SUPPLEMENT_TIME_LABEL[supplement.time].toLowerCase()}`}
                   onClick={() => void toggleSupplementTaken(supplement.id, today)}
                   data-testid={`supplement-${supplement.name}`}
-                  className={`flex min-h-11 items-center gap-2 whitespace-nowrap rounded-full border py-1.5 pr-3.5 pl-1.5 text-left text-sm transition-colors ${
+                  className={`flex min-h-11 w-full flex-col justify-center rounded-xl border px-2.5 py-1.5 text-left text-sm transition-colors ${
                     taken ? 'border-accent bg-accent text-accent-fg' : 'border-glass-border bg-white/[.04] active:bg-white/[.08]'
                   }`}
                 >
-                  <span
-                    aria-hidden="true"
-                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${taken ? 'border-accent-fg/40 bg-black/12' : 'border-line'}`}
-                  >
+                  <span className="flex min-w-0 items-center gap-1 font-medium">
                     {taken && (
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2">
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true" className="shrink-0">
                         <path d="M2.5 6.5 5 9l4.5-6" />
                       </svg>
                     )}
+                    <span className="break-words">{supplement.name}</span>
                   </span>
-                  <span className="font-medium">{supplement.name}</span>
-                  {supplement.dose && <span className={`shrink-0 ${taken ? 'text-accent-fg/70' : 'text-muted'}`}>{supplement.dose}</span>}
+                  {supplement.dose && <span className={`break-words text-xs ${taken ? 'text-accent-fg/70' : 'text-muted'}`}>{supplement.dose}</span>}
                 </button>
               </li>
             ))}
@@ -100,8 +96,8 @@ export function SupplementsSheet({ open, onClose }: { open: boolean; onClose: ()
             {list.map((s) => (
               <li key={s.id} className="flex min-h-14 items-center gap-2 pl-3">
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium">{s.name}</span>
-                  <span className="block truncate text-sm text-muted">{[s.dose, SUPPLEMENT_TIME_LABEL[s.time]].filter(Boolean).join(' · ')}</span>
+                  <span className="block break-words font-medium">{s.name}</span>
+                  <span className="block break-words text-sm text-muted">{[s.dose, SUPPLEMENT_TIME_LABEL[s.time]].filter(Boolean).join(' · ')}</span>
                 </span>
                 <IconButton label={`Remove ${s.name}`} onClick={() => void removeSupplement(s.id)} data-testid={`supplement-remove-${s.name}`}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">

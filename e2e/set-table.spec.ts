@@ -141,6 +141,22 @@ test.describe('set table', () => {
     await expect(next.getByTestId('reps-input')).toHaveValue('7');
   });
 
+  test('a logged set\'s tick sits in the same column as the live row\'s tick button', async ({ page }) => {
+    await fresh(page);
+    await page.getByTestId('start-Lower (Hinge)').click();
+    await clickIfPresent(page.getByRole('button', { name: 'Start anyway' }));
+    const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
+    await logOneSet(page, card, 110, 8);
+    const centre = async (l: import('@playwright/test').Locator) => {
+      const b = await l.boundingBox();
+      return b ? b.x + b.width / 2 : NaN;
+    };
+    const loggedTick = card.getByTestId('logged-row').first().locator('svg').last();
+    const liveTick = card.getByTestId('set-done').locator('svg');
+    // Polled: the row settles after the log; a single sample could catch it mid-move.
+    await expect.poll(async () => Math.abs((await centre(loggedTick)) - (await centre(liveTick)))).toBeLessThan(1);
+  });
+
   test('ticking the last target row plays the completion moment, then the next card is expanded', async ({ page }) => {
     await fresh(page);
     await page.getByTestId('start-Lower (Hinge)').click();

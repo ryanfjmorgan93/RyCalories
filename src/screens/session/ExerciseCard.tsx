@@ -517,10 +517,10 @@ export function ExerciseCard({
             <button type="button" onClick={withToggleFocus(onToggleGroupExpand)} aria-expanded={isGroupExpanded} className="flex min-h-14 min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left active:bg-surface-2">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <h2 className="truncate text-base font-bold leading-tight">{exercise.name}</h2>
+                  <h2 className="break-words text-base font-bold leading-tight">{exercise.name}</h2>
                   {chips}
                 </div>
-                <div className="mt-0.5 truncate text-sm text-muted">{doneLine || subtitle}</div>
+                <div className="mt-0.5 break-words text-sm text-muted">{doneLine || subtitle}</div>
               </div>
               <span className="shrink-0 text-dim">
                 <ChevronIcon expanded={isGroupExpanded} />
@@ -625,10 +625,10 @@ export function ExerciseCard({
           <button type="button" onClick={withToggleFocus(onToggleGroupExpand)} aria-expanded={false} className="flex w-full items-center gap-3 px-4 py-3 text-left active:bg-surface-2">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <h2 className="truncate text-base font-bold leading-tight">{exercise.name}</h2>
+                <h2 className="break-words text-base font-bold leading-tight">{exercise.name}</h2>
                 {chips}
               </div>
-              <div className="mt-0.5 truncate text-sm text-muted">{subtitle}</div>
+              <div className="mt-0.5 break-words text-sm text-muted">{subtitle}</div>
             </div>
             <span className="shrink-0 text-dim">
               <ChevronIcon />

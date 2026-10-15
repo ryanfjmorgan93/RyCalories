@@ -85,8 +85,8 @@ export function DoneCard({
             </svg>
           </span>
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-base font-bold leading-tight">{exerciseName}</h2>
-            <div className="num mt-0.5 truncate text-sm text-muted">{doneLine}</div>
+            <h2 className="break-words text-base font-bold leading-tight">{exerciseName}</h2>
+            <div className="num mt-0.5 break-words text-sm text-muted">{doneLine}</div>
           </div>
           <span className="shrink-0 text-dim">
             <ChevronIcon expanded={reopened} />

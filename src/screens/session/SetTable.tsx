@@ -7,7 +7,7 @@ import type { Draft } from './types';
 
 /** Grid columns shared by the header and every row, so values line up regardless of row kind. */
 function columns(kind: Exercise['kind']): string {
-  return kind === 'timed' ? '28px minmax(0,1fr) 5.25rem 2.875rem' : '28px minmax(0,1fr) 5.25rem 4.25rem 2.875rem';
+  return kind === 'timed' ? '28px minmax(0,1fr) 4.75rem 2.875rem' : '28px minmax(0,1fr) 4.75rem 3.75rem 2.875rem';
 }
 const VALUE_SPAN = { gridColumn: '3 / -2' } as const;
 
@@ -132,18 +132,17 @@ function LoggedRowView({
       style={{ gridTemplateColumns: cols }}
     >
       <RowBadge tone={tone}>{row.badge}</RowBadge>
-      <span className="num truncate text-lg font-bold" style={VALUE_SPAN}>
-        {fmtSetsLine([row.set], kind)}
-      </span>
-      <span className="flex items-center justify-end gap-1.5 pr-1">
+      <span className="flex min-w-0 items-center gap-1.5" style={VALUE_SPAN}>
+        <span className="num truncate text-lg font-bold">{fmtSetsLine([row.set], kind)}</span>
         {isRecord && (
-          <span data-testid="pr-chip" aria-label="Record" className="text-record">
+          <span data-testid="pr-chip" aria-label="Record" className="shrink-0 text-record">
             <RecordMedal />
           </span>
         )}
-        <span className="text-ok">
-          <CheckIcon size={20} />
-        </span>
+      </span>
+      {/* The same 44px box as the live row's tick button, so every tick sits in one column. */}
+      <span className="flex h-11 w-11 items-center justify-center justify-self-end text-ok">
+        <CheckIcon size={22} />
       </span>
     </button>
   );
@@ -153,7 +152,7 @@ function LaterRowView({ row, kind, cols }: { row: PendingRow; kind: Exercise['ki
   return (
     <div className="grid min-h-[46px] items-center gap-1.5 px-1 opacity-45" style={{ gridTemplateColumns: cols }}>
       <RowBadge tone="dim">{row.position + 1}</RowBadge>
-      <span className="truncate px-1 text-base text-dim">{row.previousText || '—'}</span>
+      <span className="truncate px-1 text-sm text-dim">{row.previousText || '—'}</span>
       <span className="num truncate text-center text-lg font-semibold text-dim" style={VALUE_SPAN}>
         {ghostLabel(kind, row.ghostWeight, row.ghostReps, row.ghostDistanceM, row.ghostSeconds)}
       </span>
@@ -199,7 +198,7 @@ function LiveRowView({
           type="button"
           onClick={onCopyPrevious}
           disabled={!row.previous}
-          className="num h-11 min-w-0 truncate rounded-lg px-1 text-left text-base text-muted disabled:opacity-40 active:bg-surface-2"
+          className="num h-11 min-w-0 truncate rounded-lg px-1 text-left text-sm text-muted disabled:opacity-40 active:bg-surface-2"
         >
           {row.previousText || '—'}
         </button>
@@ -252,7 +251,7 @@ function LiveRowView({
           disabled={busy}
           data-testid="set-done"
           aria-label={`Log set ${n}`}
-          className="h-11 w-11 shrink-0 justify-self-end rounded-xl bg-ok text-ok-fg active:brightness-90 disabled:opacity-40"
+          className="flex h-11 w-11 shrink-0 items-center justify-center justify-self-end rounded-xl bg-ok text-ok-fg active:brightness-90 disabled:opacity-40"
         >
           <CheckIcon size={22} />
         </button>
@@ -262,7 +261,7 @@ function LiveRowView({
           type="button"
           data-testid="plate-line"
           onClick={plateLine.onOpen}
-          className="ml-9 self-start truncate px-1 text-left text-xs font-semibold text-muted underline decoration-dotted"
+          className="ml-9 self-start break-words px-1 text-left text-xs font-semibold text-muted underline decoration-dotted"
         >
           {plateLine.label}
         </button>

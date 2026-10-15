@@ -6,7 +6,7 @@
  *      reason with nothing written, so the sheet can keep what the owner typed;
  *   2. persists the owner's turn in `coachMessages`;
  *   3. builds the context (context.ts) and sends it, the last ~20 turns as plain text and the new
- *      message, to Sonnet 5.5 through the SDK's tool runner (max_tokens 4096, effort low, tool
+ *      message, to Sonnet 5.5 through the SDK's tool runner (max_tokens 4096, effort medium, tool
  *      choice automatic), recording the spend of every request;
  *   4. persists the coach's reply with the lines for what its tools changed, and returns it.
  *
@@ -127,7 +127,7 @@ export async function sendCoachMessage(rawText: string, opts: ChatOptions = {}):
       {
         model: SONNET,
         max_tokens: CHAT_MAX_TOKENS,
-        output_config: { effort: 'low' },
+        output_config: { effort: 'medium' },
         tools,
         system: [
           { type: 'text', text: `${personaWith(CHAT_RULES)}\n\n${context.stable}`, cache_control: { type: 'ephemeral' } },

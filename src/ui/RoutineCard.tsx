@@ -85,13 +85,13 @@ export function RoutineCard({
                   <span />
                 )}
                 <div className="min-w-0">
-                  <div className="disp line-clamp-2 text-[2.5rem] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]">{routine.name}</div>
+                  <div className="disp break-words text-[2.5rem] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]">{routine.name}</div>
                   {item.lastTop && (
-                    <div className="mt-1 truncate text-sm text-fg/85" data-testid={`routine-top-${routine.name}`}>
+                    <div className="mt-1 break-words text-sm text-fg/85" data-testid={`routine-top-${routine.name}`}>
                       Last: {item.lastTop}
                     </div>
                   )}
-                  <div className="mt-0.5 truncate text-xs text-fg/75">{detail}</div>
+                  <div className="mt-0.5 break-words text-xs text-fg/75">{detail}</div>
                 </div>
               </div>
             </button>
@@ -111,18 +111,18 @@ export function RoutineCard({
           >
             <RobotThumb demo={demo} />
             <div className="min-w-0 flex-1">
-              <div className="truncate text-lg font-semibold leading-tight">{routine.name}</div>
+              <div className="break-words text-lg font-semibold leading-tight">{routine.name}</div>
               {item.label && (
                 <div className="mt-1 text-sm font-medium text-accent" data-testid={`routine-rest-${routine.name}`}>
                   {item.label}
                 </div>
               )}
               {item.lastTop && (
-                <div className="mt-0.5 truncate text-sm text-muted" data-testid={`routine-top-${routine.name}`}>
+                <div className="mt-0.5 break-words text-sm text-muted" data-testid={`routine-top-${routine.name}`}>
                   Last: {item.lastTop}
                 </div>
               )}
-              <div className="mt-0.5 truncate text-xs text-muted">{detail}</div>
+              <div className="mt-0.5 break-words text-xs text-muted">{detail}</div>
             </div>
             <ChevronIcon className={`shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
           </button>
@@ -147,7 +147,7 @@ function RoutinePlan({ routineId, name, settings }: { routineId: string; name: s
         return (
           <div key={rx.id} className="flex items-center justify-between gap-3 py-2.5" data-testid="plan-row">
             <div className="min-w-0">
-              <div className="truncate font-semibold" data-testid="plan-row-name">
+              <div className="break-words font-semibold" data-testid="plan-row-name">
                 {exercise.name}
               </div>
               <div className="num text-sm text-muted" data-testid="plan-row-scheme">

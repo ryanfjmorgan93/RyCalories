@@ -1,7 +1,7 @@
 /**
  * The coach speaking first.
  *
- * `momentLine(moment, facts)` is one small Haiku 5.5 request for a moment in the owner's day (the app
+ * `momentLine(moment, facts)` is one small Sonnet 5.5 request for a moment in the owner's day (the app
  * opening, a set, an exercise, the end of a session, a meal, the end of the day). It gets the facts
  * the caller has, the persona's quiet-unless-useful rules and the cached context, and returns one
  * or two sentences, or `null` when the coach has nothing worth saying: an empty reply, a refusal to
@@ -23,7 +23,7 @@ import { db } from '@/db/db';
 import { nowIso, toDateKey } from '@/domain/dates';
 import { uuid } from '@/domain/ids';
 import type { CoachMoment } from '@/domain/types';
-import { blockedReason, createMessage, HAIKU, SONNET, textOf, type CallDeps } from './client';
+import { blockedReason, createMessage, SONNET, textOf, type CallDeps } from './client';
 import { buildStableContext, buildVolatileContext, type ContextOptions } from './context';
 import { MOMENT_RULES, personaWith, REVIEW_RULES } from './persona';
 import { toStrictJsonSchema } from './schema';
@@ -148,9 +148,9 @@ export async function momentLine(moment: Moment, facts: MomentFacts = {}, opts: 
     const stable = await stableFor(now, opts.context, volatile.length);
     const message = await createMessage(
       {
-        model: HAIKU,
+        model: SONNET,
         max_tokens: MOMENT_MAX_TOKENS,
-        thinking: { type: 'disabled' },
+        thinking: { type: 'between_tools' },
         output_config: { effort: 'low' },
         system: [
           { type: 'text', text: `${personaWith(MOMENT_RULES)}\n\n${stable}`, cache_control: { type: 'ephemeral' } },

@@ -239,7 +239,7 @@ function ExerciseItemCard({
     >
       <div className="flex items-stretch">
         <button type="button" onClick={onOpen} className="min-w-0 flex-1 px-4 py-3 text-left active:bg-surface-2">
-          <div className="truncate text-lg font-bold leading-tight">{exercise.name}</div>
+          <div className="break-words text-lg font-bold leading-tight">{exercise.name}</div>
           <div className="mt-1 text-sm text-muted">
             {targetLine(rx, exercise.kind)} · rest {Math.round(restSec)} s
           </div>

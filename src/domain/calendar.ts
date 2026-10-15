@@ -79,14 +79,3 @@ export function streakWeeks(sessions: CalendarSession[], weeklyTarget: number, t
   }
   return streak;
 }
-
-/** One short sentence for the streak line, deterministic by count. Empty for 0. */
-export function encouragement(streak: number): string {
-  if (streak <= 0) return '';
-  if (streak === 1) return 'One week in.';
-  if (streak === 2) return 'Two weeks running.';
-  if (streak === 3) return 'Three weeks. Keep going.';
-  if (streak <= 7) return `${streak} weeks straight. Good work.`;
-  if (streak <= 11) return `${streak} weeks. That is consistency.`;
-  return `${streak} weeks without a miss.`;
-}

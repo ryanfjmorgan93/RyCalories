@@ -55,7 +55,7 @@ export function ProblemReportsCard() {
           <ul className="mt-2 space-y-2">
             {reports.slice(0, SHOWN).map((r) => (
               <li key={r.id} data-testid="problem-row">
-                <div className="line-clamp-2 text-sm font-medium">{r.summary}</div>
+                <div className="break-words text-sm font-medium">{r.summary}</div>
                 <div className="text-xs text-dim">
                   {new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(r.at))} · {r.source === 'coach' ? 'Coach' : 'App error'}
                 </div>

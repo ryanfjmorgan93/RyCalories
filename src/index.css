@@ -237,7 +237,8 @@
      tracking, so a name reads like a film title rather than a shout. */
   .disp {
     font-weight: 300;
-    line-height: 1;
+    /* Not 1: at 1 the tails of g, y and ( ) hang below the line box and any clipping box cuts them. */
+    line-height: 1.15;
     letter-spacing: -0.03em;
   }
 

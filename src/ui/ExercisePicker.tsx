@@ -97,7 +97,7 @@ export function ExercisePicker({
           >
             <DemoThumb demo={row.pictureKey} size="sm" />
             <div className="min-w-0 flex-1">
-              <div className="truncate font-semibold">{row.name}</div>
+              <div className="break-words font-semibold">{row.name}</div>
               <div className="text-xs text-muted">{rowDetail(row)}</div>
             </div>
             {!row.owned && <LibraryLabel />}

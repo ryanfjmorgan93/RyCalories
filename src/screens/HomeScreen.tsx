@@ -19,6 +19,7 @@ import { lastWeekReading, weighInDue } from '@/domain/weighIn';
 import type { Routine } from '@/domain/types';
 import { Button } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row, SectionTitle, Stat } from '@/ui/components/Card';
+import { StreakDots } from '@/ui/components/CalendarHeatmap';
 import { Chip } from '@/ui/components/Chip';
 import { NumberInput } from '@/ui/components/NumberField';
 import { Sheet } from '@/ui/components/Sheet';
@@ -174,11 +175,7 @@ export function HomeScreen() {
 
         {review && <WeeklyReviewCard review={review} />}
 
-        {calendar && (
-          <div className="mt-2 px-1 text-xs font-semibold text-muted" data-testid="streak-line">
-            {calendar.streak > 0 ? `${calendar.streak} ${calendar.streak === 1 ? 'week' : 'weeks'} · ${calendar.line}` : `This week ${calendar.thisWeek} of ${calendar.weeklyTarget}`}
-          </div>
-        )}
+        {calendar && <StreakDots thisWeek={calendar.thisWeek} target={calendar.weeklyTarget} streak={calendar.streak} className="mt-3 px-1" />}
 
         <SectionTitle right={<Button size="sm" variant="ghost" className="-mb-2 text-accent" onClick={() => nav('/routines')}>Edit</Button>}>Routines</SectionTitle>
         <div className="space-y-3" data-testid="routines-list">

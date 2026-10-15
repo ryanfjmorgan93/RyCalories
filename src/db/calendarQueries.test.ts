@@ -29,7 +29,6 @@ describe('calendarData', () => {
 
     expect(data.weeklyTarget).toBe(1);
     expect(data.streak).toBe(3);
-    expect(data.line).not.toBe('');
     expect(data.thisWeek).toBe(1);
     // 4 weeks × 7 days.
     expect(data.grid).toHaveLength(4);

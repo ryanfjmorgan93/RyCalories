@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calendarGrid, encouragement, streakWeeks, type CalendarSession } from './calendar';
+import { calendarGrid, streakWeeks, type CalendarSession } from './calendar';
 
 function s(id: string, startedAt: string, over: Partial<CalendarSession> = {}): CalendarSession {
   return { id, startedAt, endedAt: startedAt, title: 'Session', ...over };
@@ -82,20 +82,3 @@ describe('streakWeeks', () => {
   });
 });
 
-describe('encouragement', () => {
-  it('is empty at zero', () => {
-    expect(encouragement(0)).toBe('');
-  });
-
-  it('matches the exact copy for each band', () => {
-    expect(encouragement(1)).toBe('One week in.');
-    expect(encouragement(2)).toBe('Two weeks running.');
-    expect(encouragement(3)).toBe('Three weeks. Keep going.');
-    expect(encouragement(4)).toBe('4 weeks straight. Good work.');
-    expect(encouragement(7)).toBe('7 weeks straight. Good work.');
-    expect(encouragement(8)).toBe('8 weeks. That is consistency.');
-    expect(encouragement(11)).toBe('11 weeks. That is consistency.');
-    expect(encouragement(12)).toBe('12 weeks without a miss.');
-    expect(encouragement(20)).toBe('20 weeks without a miss.');
-  });
-});

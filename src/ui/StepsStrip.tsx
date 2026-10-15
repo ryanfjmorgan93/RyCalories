@@ -60,7 +60,7 @@ export function StepsStrip({ settings }: { settings: Settings }) {
       >
         <span className="flex items-baseline justify-between gap-3">
           <span className="label">Steps</span>
-          <span className={`num truncate ${counting ? 'text-lg font-semibold' : `text-sm ${access === 'needs-permission' ? 'text-accent' : 'text-muted'}`}`} data-testid="steps-today">
+          <span className={`num break-words ${counting ? 'text-lg font-semibold' : `text-sm ${access === 'needs-permission' ? 'text-accent' : 'text-muted'}`}`} data-testid="steps-today">
             {value}
           </span>
         </span>

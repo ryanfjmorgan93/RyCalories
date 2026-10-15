@@ -124,3 +124,27 @@ test('the coach offers targets and a supplement; nothing changes until each is t
   await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click();
   await expect(page.getByTestId('supplement-Creatine monohydrate')).toBeVisible();
 });
+
+test('five supplements all show at once on Home, none cut off', async ({ page }) => {
+  await fresh(page);
+  await page.getByTestId('supplements-edit').click();
+  const sheet = page.getByTestId('supplements-sheet');
+  for (const [name, dose] of [['Glutathione', '2 caps'], ['Magnesium', '3 caps'], ['Creatine', '5 g'], ['Vitamin D', '1 tab'], ['Omega-3', '2 caps']]) {
+    await sheet.getByTestId('supplement-name').fill(name);
+    await sheet.getByTestId('supplement-dose').fill(dose);
+    await sheet.getByTestId('supplement-add').click();
+    await expect(sheet).toContainText(name);
+  }
+  await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click();
+
+  const card = page.getByTestId('supplements-card');
+  await expect(card.getByRole('checkbox')).toHaveCount(5);
+  // Every pill inside the card's box: nothing scrolled off to the side or clipped.
+  await expect
+    .poll(async () => {
+      const c = await card.boundingBox();
+      const pills = await Promise.all((await card.getByRole('checkbox').all()).map((p) => p.boundingBox()));
+      return !!c && pills.every((p) => !!p && p.x >= c.x && p.x + p.width <= c.x + c.width && p.y + p.height <= c.y + c.height);
+    })
+    .toBe(true);
+});

@@ -138,7 +138,7 @@ export function ExerciseDetailScreen() {
                 onClick={() => nav(`/history/${h.session.id}`)}
                 title={
                   <span className="flex min-w-0 max-w-full items-center gap-2">
-                    <span className="min-w-0 truncate">
+                    <span className="min-w-0 break-words">
                       {fmtDateLong(h.session.startedAt)} · {h.session.title}
                     </span>
                     {h.session.source === 'hevy' && (
@@ -369,7 +369,7 @@ function DecisionRow({ d, kind }: { d: ProgressionDecision; kind: ExerciseKind }
     <div className="flex items-center gap-3 border-b border-line px-4 py-2 text-sm last:border-b-0">
       <span className="num w-14 shrink-0 text-muted">{fmtDate(d.decidedAt)}</span>
       <span className={`shrink-0 font-bold ${up ? 'text-ok' : 'text-fg'}`}>{RULE_LABEL[d.rule]}</span>
-      <span className={`num min-w-0 flex-1 truncate ${up ? 'text-ok' : 'text-muted'}`}>
+      <span className={`num min-w-0 flex-1 break-words ${up ? 'text-ok' : 'text-muted'}`}>
         {d.rule === 'calibrating' || d.rule === 'not_applicable' ? '' : `${w(d.fromWeight)} → ${w(d.toWeight)}`}
         {d.overrideTo !== undefined && <span className="text-accent"> · override to {w(d.overrideTo)}</span>}
       </span>

@@ -55,7 +55,7 @@ export const LibraryRow = memo(function LibraryRow({
           left={<DemoThumb demo={row.pictureKey} size="sm" />}
           title={
             <span className="flex items-center gap-2">
-              <span className="min-w-0 truncate">{row.name}</span>
+              <span className="min-w-0 break-words">{row.name}</span>
               <LibraryLabel />
             </span>
           }

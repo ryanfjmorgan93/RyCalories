@@ -104,7 +104,7 @@ export function FoodScreen() {
             type="button"
             onClick={() => setDate(today)}
             disabled={isToday}
-            className="min-w-0 flex-1 truncate py-2 text-center text-base font-bold disabled:opacity-100"
+            className="min-w-0 flex-1 break-words py-2 text-center text-base font-bold disabled:opacity-100"
             data-testid="day-label"
           >
             {fmtDayKey(date, today, yesterday)}

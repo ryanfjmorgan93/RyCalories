@@ -1,13 +1,15 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { clickIfPresent, fresh, logOneSet, openAdvanced } from './fresh';
+import { clippedText } from './clipped';
 import { FIXTURE_CODE } from './fixtures/ean13';
 
 /**
  * A full set of screens for a design session, seeded with realistic data: a few sessions logged
  * through the app for training history, four days of food, and bodyweight readings.
  *
- * Not a test of anything — it asserts only enough to be sure each screen has rendered its content
- * before the shutter, because a screenshot of a loading state is worse than useless to a designer.
+ * It asserts enough to be sure each screen has rendered its content before the shutter, because a
+ * screenshot of a loading state is worse than useless to a designer, and that no text on any of
+ * them is cut off: the owner kept finding clipped letters and "…" by eye.
  */
 const OUT = process.env.SHOT_DIR ?? 'test-results/design';
 
@@ -52,6 +54,8 @@ async function denyCamera(browser: Browser, context: BrowserContext, page: Page)
  */
 async function shot(page: Page, name: string, opts: { full?: boolean } = {}) {
   n += 1;
+  // Every screen this visits doubles as the check that no text on it is cut off (e2e/clipped.ts).
+  await expect.poll(() => clippedText(page), { message: `text cut off on ${name}` }).toEqual([]);
   const full = opts.full ?? false;
   const handle = full ? await page.addStyleTag({ content: PIN_NAV }) : null;
   await page.screenshot({
