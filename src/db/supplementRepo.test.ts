@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from './db';
 import { wipeAll } from './repo';
-import { addSupplement, markSupplementsTaken, removeSupplement, toggleSupplementTaken, updateSupplement } from './supplementRepo';
+import { addSupplement, markSupplementsTaken, removeSupplement, toggleSupplementTaken } from './supplementRepo';
 import { supplementDay } from '@/domain/supplements';
 
 beforeEach(async () => {
@@ -60,13 +60,10 @@ describe('ticks', () => {
 });
 
 describe('editing the list', () => {
-  it('updates a supplement and takes one off the list without losing its ticks', async () => {
+  it('takes one off the list without losing its ticks', async () => {
     const r = await addSupplement({ name: 'Zinc', dose: '15 mg', time: 'evening' });
     if (!r.ok) throw new Error('not added');
-    await updateSupplement(r.supplement.id, { dose: '', time: 'morning' });
     let row = await db.supplements.get(r.supplement.id);
-    expect(row?.time).toBe('morning');
-    expect(row && 'dose' in row).toBe(false);
     await toggleSupplementTaken(r.supplement.id, '2026-10-12');
     await removeSupplement(r.supplement.id);
     row = await db.supplements.get(r.supplement.id);

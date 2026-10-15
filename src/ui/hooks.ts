@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { db } from '@/db/db';
 import { calendarData, type CalendarData } from '@/db/calendarQueries';
-import { getMeal, loggedDays, mealsOnDay, recentMeals, suggestFoods, type MealWithItems } from '@/db/foodRepo';
+import { getMeal, mealsOnDay, recentMeals, suggestFoods, type MealWithItems } from '@/db/foodRepo';
 import { nextSessionPlan, type SessionPlan } from '@/db/planQueries';
 import { e1rmSeries, recentRecords, volumeSeries } from '@/db/recordsQueries';
 import { getRecipe, listRecipes } from '@/db/recipeRepo';
@@ -43,10 +43,6 @@ export function useExercises(): Exercise[] | undefined {
   return useLiveQuery(async () => (await db.exercises.toArray()).sort((a, b) => a.name.localeCompare(b.name)), []);
 }
 
-export function useExercise(id: string | undefined): Exercise | undefined {
-  return useLiveQuery(() => (id ? db.exercises.get(id) : undefined), [id]);
-}
-
 /** The in-progress session, or null when there is none (undefined while loading). */
 export function useActiveSession(): Session | null | undefined {
   return useLiveQuery(async () => (await getActiveSession()) ?? null, []);
@@ -65,10 +61,6 @@ export function useSessionDock(): Session | null {
   const { pathname } = useLocation();
   if (!active || pathname.startsWith('/session/')) return null;
   return active;
-}
-
-export function useSession(id: string | undefined): Session | undefined {
-  return useLiveQuery(() => (id ? db.sessions.get(id) : undefined), [id]);
 }
 
 export function useLastCompletedSession(): Session | null | undefined {
@@ -101,22 +93,6 @@ export function useNow(ms = 1000, enabled = true): number {
   return now;
 }
 
-/** True when the page is offline (navigator.onLine false). */
-export function useOffline(): boolean {
-  const [off, setOff] = useState(typeof navigator !== 'undefined' ? !navigator.onLine : false);
-  useEffect(() => {
-    const on = () => setOff(false);
-    const offH = () => setOff(true);
-    window.addEventListener('online', on);
-    window.addEventListener('offline', offH);
-    return () => {
-      window.removeEventListener('online', on);
-      window.removeEventListener('offline', offH);
-    };
-  }, []);
-  return off;
-}
-
 // ---------------------------------------------------------------------------
 // Nutrition
 
@@ -127,11 +103,6 @@ export function useDayMeals(date: string): MealWithItems[] | undefined {
 
 export function useMeal(id: string | undefined): MealWithItems | null | undefined {
   return useLiveQuery(async () => (id ? ((await getMeal(id)) ?? null) : null), [id]);
-}
-
-/** Days with anything logged, newest first. */
-export function useLoggedDays(limit = 30): string[] | undefined {
-  return useLiveQuery(() => loggedDays(limit), [limit]);
 }
 
 /** Today's date key, re-read when the tab regains focus so a session over midnight rolls over. */

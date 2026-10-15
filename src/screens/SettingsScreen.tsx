@@ -237,8 +237,8 @@ function DataCard() {
     setBusy(true);
     try {
       await fn();
-    } catch {
-      toast('Something went wrong', 'danger');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Something went wrong', 'danger');
     } finally {
       setBusy(false);
     }

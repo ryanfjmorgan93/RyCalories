@@ -9,6 +9,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from './db';
 import { getBaseline, isPendingDeletion, writeBaseline } from './lossGuard';
+import { checkForHistoryLoss } from './historySafety';
 import { deleteSession, logSet, resetToSeed, startSession, wipeAll } from './repo';
 import { SEED_EXERCISE_IDS, SEED_ROUTINE_IDS } from './seed';
 
@@ -66,5 +67,14 @@ describe('loss-guard middleware', () => {
     await new Promise((resolve) => setTimeout(resolve, 200));
 
     expect(getBaseline()).toEqual({ sessions: 5, sets: 40, build: 'test', dbVersion: 2, at: expect.any(String) });
+  });
+});
+
+describe('a delete the app was killed in the middle of', () => {
+  it('leaves no pending flag behind after the next boot check, so later losses are still caught', async () => {
+    localStorage.setItem('iron.lossPendingDeletion.v1', '1');
+    expect(isPendingDeletion()).toBe(true);
+    await checkForHistoryLoss(false);
+    expect(isPendingDeletion()).toBe(false);
   });
 });

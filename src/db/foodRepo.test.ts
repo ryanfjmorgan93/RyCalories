@@ -10,7 +10,6 @@ import {
   forgetFood,
   getMeal,
   itemsForMeal,
-  loggedDays,
   mealCountOnDay,
   mealsOnDay,
   recentMeals,
@@ -239,18 +238,6 @@ describe('repeating a meal', () => {
   });
 });
 
-describe('logged days', () => {
-  it('lists days with food, newest first, without repeating a day', async () => {
-    await addMeal({ name: 'A', date: '2026-03-01' }, []);
-    await addMeal({ name: 'B', date: '2026-03-01' }, []);
-    await addMeal({ name: 'C', date: '2026-03-03' }, []);
-    expect(await loggedDays()).toEqual(['2026-03-03', '2026-03-01']);
-  });
-
-  it('is empty before anything is logged', async () => {
-    expect(await loggedDays()).toEqual([]);
-  });
-});
 
 describe('remembering food', () => {
   it('remembers a weighed food the first time it is logged', async () => {

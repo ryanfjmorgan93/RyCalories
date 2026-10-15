@@ -17,7 +17,7 @@ import type {
   SummarySession,
   SummarySet,
 } from '@/domain/claudeSummary';
-import { addDays, isoToDateKey } from '@/domain/dates';
+import { addDays, isoToDateKey, windowStart } from '@/domain/dates';
 import { calorieTargetOn, proteinTarget } from '@/domain/nutrition';
 import { targetLine } from '@/domain/format';
 import type { Settings } from '@/domain/types';
@@ -29,11 +29,6 @@ export interface ClaudeSummaryWindows {
 }
 
 const DEFAULT_WINDOWS: ClaudeSummaryWindows = { trainingDays: 56, foodDays: 28, bodyweightDays: 56 };
-
-/** Inclusive window start for `days` days ending on `asOf`. */
-function windowStart(asOf: string, days: number): string {
-  return addDays(asOf, -(Math.max(1, days) - 1));
-}
 
 /** Completed sessions, most recent detail included, whose local start date falls in the window. Newest first. */
 async function loadSessions(asOf: string, days: number): Promise<SummarySession[]> {

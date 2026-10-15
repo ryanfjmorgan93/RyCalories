@@ -166,11 +166,6 @@ export function movementPattern(name: string, muscleGroup: MuscleGroup): string 
   return pattern;
 }
 
-/** Whether `pattern` names a movement, rather than falling back to a muscle group. */
-export function isKnownMovement(pattern: string, muscleGroup: MuscleGroup): boolean {
-  return pattern !== muscleGroup;
-}
-
 // ---------------------------------------------------------------------------
 // Regions
 

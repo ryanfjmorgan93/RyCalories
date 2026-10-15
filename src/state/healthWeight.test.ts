@@ -62,6 +62,19 @@ describe('weight from Health Connect', () => {
     expect(await db.bodyweight.count()).toBe(3);
   });
 
+  it('a reading deleted while Health Connect is still answering is not written back', async () => {
+    await saveSettings({ healthWeight: true });
+    await syncHealthWeight(now);
+    const imported = (await db.bodyweight.toArray()).find((b) => b.date === '2026-10-12')!;
+    const read = plugin.readSamples.getMockImplementation()!;
+    plugin.readSamples.mockImplementationOnce(async (q: QueryOptions) => {
+      await deleteBodyweight(imported.id);
+      return read(q);
+    });
+    await syncHealthWeight(now);
+    expect((await log()).map((r) => r[0])).toEqual(['2026-10-13', '2026-10-14']);
+  });
+
   it('a reading the owner deletes is not read in again; one they re-log by hand becomes theirs', async () => {
     await saveSettings({ healthWeight: true });
     await syncHealthWeight(now);

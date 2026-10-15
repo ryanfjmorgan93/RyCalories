@@ -1,19 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
-  amountsNeeded,
   combinedSource,
   countToGrams,
   gapsCount,
   ingredientGap,
-  ingredientMacros,
   recipeDisplayTotals,
   recipeIsComplete,
   recipeSource,
-  recipeTotalGrams,
   shareFraction,
   shareLabel,
   shareNutrition,
-  toEstimatedIngredient,
   toIngredient,
 } from './recipe';
 import { ZERO, type Macros } from './food';
@@ -47,28 +43,6 @@ describe('countToGrams', () => {
   it('treats a non-finite input as zero', () => {
     expect(countToGrams(NaN, 50)).toBe(0);
     expect(countToGrams(3, Infinity)).toBe(0);
-  });
-});
-
-describe('ingredientMacros', () => {
-  it('scales per-100g values by the ingredient weight', () => {
-    expect(ingredientMacros(ing({ grams: 100 }))).toEqual(EGG);
-    expect(ingredientMacros(ing({ grams: 50 })).kcal).toBeCloseTo(65.5, 6);
-  });
-
-  it('is zero for an ingredient with no amount yet', () => {
-    expect(ingredientMacros(ing({ grams: 0 }))).toEqual(ZERO);
-  });
-});
-
-describe('recipeTotalGrams', () => {
-  it('sums the ingredient weights', () => {
-    const ings = [ing({ grams: 150 }), ing({ id: 'i2', name: 'Bacon', per100: BACON, grams: 50 })];
-    expect(recipeTotalGrams(ings)).toBe(200);
-  });
-
-  it('is zero for no ingredients', () => {
-    expect(recipeTotalGrams([])).toBe(0);
   });
 });
 
@@ -112,17 +86,6 @@ describe('recipeIsComplete', () => {
 
   it('is true once every ingredient has a positive weight and finite figures', () => {
     expect(recipeIsComplete([ing({ grams: 100 }), ing({ id: 'i2', per100: BACON, grams: 30 })])).toBe(true);
-  });
-});
-
-describe('amountsNeeded', () => {
-  it('counts ingredients with no amount entered', () => {
-    const ings = [ing({ grams: 0 }), ing({ id: 'i2', grams: 50 }), ing({ id: 'i3', grams: 0 })];
-    expect(amountsNeeded(ings)).toBe(2);
-  });
-
-  it('is zero once every ingredient has an amount', () => {
-    expect(amountsNeeded([ing({ grams: 50 })])).toBe(0);
   });
 });
 
@@ -302,41 +265,6 @@ describe('toIngredient', () => {
     expect(i.product).toBe('Back Bacon');
     expect(i.source).toBe('label'); // the memory's own source rides along too
     expect(i.foodKey).toBe('memory:p:tesco back bacon');
-  });
-});
-
-describe('toEstimatedIngredient', () => {
-  it('fills grams from the part and marks the amount estimated', () => {
-    const candidate: IngredientCandidate = { key: 'table:17-001', name: 'Eggs, chicken, whole, raw', per100: EGG, source: 'table' };
-    const i = toEstimatedIngredient(candidate, { name: 'egg', grams: 150 }, 'id-1');
-    expect(i.name).toBe('Egg');
-    expect(i.grams).toBe(150);
-    expect(i.per100).toEqual(EGG);
-    expect(i.amountEstimated).toBe(true);
-  });
-
-  it('starts at grams 0, unmarked, for a part with no amount — "needs an amount", not an estimate', () => {
-    const i = toEstimatedIngredient(null, { name: 'mystery sauce' }, 'id-1');
-    expect(i.grams).toBe(0);
-    expect(i.amountEstimated).toBeUndefined();
-  });
-
-  it('derives a count unit\'s count from the guessed weight, rounded to one decimal, and keeps unitGrams', () => {
-    const candidate: IngredientCandidate = { key: 'table:17-001', name: 'Eggs, chicken, whole, raw', per100: EGG, source: 'table', unit: { label: 'egg', plural: 'eggs', grams: 50 } };
-    const i = toEstimatedIngredient(candidate, { name: 'egg', grams: 165 }, 'id-1');
-    expect(i.unit).toEqual({ count: 3.3, unitGrams: 50, label: 'egg', plural: 'eggs' });
-    expect(i.grams).toBe(165); // grams is the ground truth, not count * unitGrams recomputed
-  });
-
-  it('drops a bad or missing grams value to 0, never NaN or negative', () => {
-    expect(toEstimatedIngredient(null, { name: 'x', grams: NaN }, 'id-1').grams).toBe(0);
-    expect(toEstimatedIngredient(null, { name: 'x', grams: -50 }, 'id-1').grams).toBe(0);
-    expect(toEstimatedIngredient(null, { name: 'x' }, 'id-1').grams).toBe(0);
-  });
-
-  it('has no unit when the candidate has none, same as toIngredient', () => {
-    const candidate: IngredientCandidate = { key: 'table:12-001', name: 'Cheese, Cheddar, English', per100: { kcal: 416, protein: 25.4, carbs: 0.1, fat: 34.4 }, source: 'table' };
-    expect(toEstimatedIngredient(candidate, { name: 'cheddar', grams: 40 }, 'id-1').unit).toBeUndefined();
   });
 });
 

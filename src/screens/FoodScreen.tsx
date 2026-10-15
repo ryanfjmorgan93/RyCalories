@@ -55,10 +55,12 @@ export function FoodScreen() {
   // Comparing against the new value cannot work: by the time the effect runs, `today` is already
   // the new day, so `d === today` is false for the very screen that should move, and the whole
   // effect collapses into a no-op. Left that way, a meal added at 00:20 is written to yesterday.
+  // The old day is read into a local first: React may run the updater later, after the ref has moved on.
   const prevToday = useRef(today);
   useEffect(() => {
-    setDate((d) => (d === prevToday.current ? today : d));
+    const was = prevToday.current;
     prevToday.current = today;
+    setDate((d) => (d === was ? today : d));
   }, [today]);
 
   const yesterday = addDays(today, -1);

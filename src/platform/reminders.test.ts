@@ -90,6 +90,12 @@ describe('loadReminderInput', () => {
     await db.sessions.put({ id: 's', routineId: '', title: 'Open', startedAt: iso(11, 17) });
     expect((await loadReminderInput(NOW)).lastSessionDate).toBeNull();
   });
+
+  it('counts a session still going as today\'s, so the training nudge does not fire mid-workout', async () => {
+    await db.sessions.put({ id: 'done', routineId: '', title: 'Friday', startedAt: iso(9, 17), endedAt: iso(9, 18) });
+    await db.sessions.put({ id: 'live', routineId: '', title: 'Now', startedAt: iso(12, 8, 30) });
+    expect((await loadReminderInput(NOW)).lastSessionDate).toBe('2026-10-12');
+  });
 });
 
 describe('rescheduleReminders', () => {
@@ -124,6 +130,13 @@ describe('rescheduleReminders', () => {
     expect(notifications.map((n) => n.title)).toEqual(['Weigh-in']);
     const at = notifications[0].schedule.at;
     expect([at.getDay(), at.getHours(), at.getMinutes()]).toEqual([3, 7, 15]);
+  });
+
+  it('schedules the supplement reminder when it is the only one on', async () => {
+    await db.supplements.put({ id: 'c', name: 'Creatine', time: 'any', order: 0, createdAt: iso(1, 8), source: 'owner' });
+    await saveSettings({ reminders: { food: { on: false, time: '20:30' }, training: { on: false, time: '17:30', afterDays: 2 }, weighIn: { on: false, weekday: 1, time: '12:00' }, supplements: { on: true, time: '08:30' } } });
+    expect(await rescheduleReminders(NOW)).toBe('scheduled');
+    expect(plugin.schedule).toHaveBeenCalled();
   });
 
   it('does nothing at all without notification permission', async () => {

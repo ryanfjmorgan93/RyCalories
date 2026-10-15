@@ -223,5 +223,16 @@ export function createCoachTools(actions: CoachActions, turn: TurnRecord): Coach
       run: async (input) => finish(await actions.reportProblem({ summary: input.summary, detail: input.detail }), turn),
     }),
   ];
+  // The SDK runs every tool call of one reply at once, and each action reads then writes: two
+  // skips in one reply kept one. So they queue, in the order the model asked.
+  let queue: Promise<unknown> = Promise.resolve();
+  for (const t of tools as unknown as { run: (...args: unknown[]) => Promise<unknown> }[]) {
+    const run = t.run;
+    t.run = (...args) => {
+      const next = queue.then(() => run(...args));
+      queue = next.catch(() => undefined);
+      return next;
+    };
+  }
   return tools as unknown as CoachTool[];
 }

@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { seededInput } from '../test/routineFixtures';
-import type { CoachTurn } from '../domain/coach';
 import { builtTurn } from '../domain/coachBuild';
 import { parseQuickRequest } from '../domain/quickRequest';
 import { routineToText, type RoutineInput } from '../domain/routineBuilder';
@@ -14,6 +13,7 @@ import {
   subjectOf,
   type BuildEntry,
   type CoachBackend,
+  type CoachTurn,
 } from './coach';
 
 /** The owner's own 27 exercises and the real library, as the builder reads them. */

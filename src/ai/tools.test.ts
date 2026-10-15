@@ -100,6 +100,20 @@ describe('what a tool does with the model\'s input', () => {
     expect(actions.logFood).toHaveBeenLastCalledWith({ items: [item], slot: undefined, date: undefined });
   });
 
+  it('runs the calls of one reply one at a time, as the SDK starts them all at once', async () => {
+    const actions = fakeActions();
+    const order: string[] = [];
+    (actions.editSession as ReturnType<typeof vi.fn>).mockImplementation(async (input: { exercise: string }) => {
+      order.push(`start ${input.exercise}`);
+      await new Promise((r) => setTimeout(r, 5));
+      order.push(`end ${input.exercise}`);
+      return { ok: true, result: 'done' };
+    });
+    const edit = createCoachTools(actions, newTurnRecord()).find((t) => t.name === 'edit_session')!;
+    await Promise.all([edit.run({ exercise: 'a', change: 'skip' }), edit.run({ exercise: 'b', change: 'skip' })]);
+    expect(order).toEqual(['start a', 'end a', 'start b', 'end b']);
+  });
+
   it('keeps a drafted routine on the turn', async () => {
     const turn = newTurnRecord();
     const tools = createCoachTools(fakeActions(), turn);

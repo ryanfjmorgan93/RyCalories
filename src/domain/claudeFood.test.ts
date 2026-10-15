@@ -4,7 +4,7 @@ import {
   isEstimate,
   itemFromReading,
   itemsFromReadings,
-  knownFood,
+  lookupKnown,
   loggedLine,
   per100Of,
   readingConfidence,
@@ -129,7 +129,7 @@ describe('a food the owner already has', () => {
       expect(item.source).toBe('model');
       expect(item.portion).toBe('≈ 1 bowl (180 g)');
       expect(macrosOf(item.nutrition).kcal).toBeCloseTo(234, 6);
-      expect(knownFood(cookedPlate(), sources([rawRice()]))).toBeNull();
+      expect(lookupKnown(cookedPlate(), sources([rawRice()])).known).toBeNull();
     });
 
     it("keeps the estimate out of the owner's remembered food", () => {
@@ -192,7 +192,7 @@ describe('a food in the UK table', () => {
   it('does not take a raw row for a cooked food', () => {
     // Same word, "rice", but 360 kcal against 130 per 100 g: cooked rice is not raw rice.
     const rice = reading({ name: 'Rice', amount: 1, unit: 'cup', grams: 150, kcal: 195, protein: 4, carbs: 43, fat: 0.4 });
-    expect(knownFood(rice, sources())).toBeNull();
+    expect(lookupKnown(rice, sources()).known).toBeNull();
     expect(itemFromReading(rice, sources()).source).toBe('model');
   });
 
@@ -201,15 +201,15 @@ describe('a food in the UK table', () => {
     const plain: MatchSources = { ...sources(), foods: [...FOODS, { code: '18-009', name: 'Chicken', per100: CHICKEN }] };
     const curry = reading({ name: 'Chicken curry', amount: 1, unit: 'bowl', grams: 300, kcal: 450, protein: 30, carbs: 20, fat: 28 });
     expect(matchIngredient(curry.name, plain).best?.name).toBe('Chicken');
-    expect(knownFood(curry, plain)).toBeNull();
+    expect(lookupKnown(curry, plain).known).toBeNull();
     // Every word of the name found in the row is a match.
     const roast = reading({ name: 'Roast chicken', amount: 1, unit: 'portion', grams: 150, kcal: 266, protein: 40, carbs: 0, fat: 11 });
-    expect(knownFood(roast, sources())?.name).toBe('Chicken, roast, meat only');
+    expect(lookupKnown(roast, sources()).known?.name).toBe('Chicken, roast, meat only');
   });
 
   it('takes an alias for a name that also fits', () => {
     const chicken = reading({ name: 'Chicken breast', amount: 1, unit: 'fillet', grams: 150, kcal: 165, protein: 36, carbs: 0, fat: 2 });
-    expect(knownFood(chicken, sources())?.source).toBe('table');
+    expect(lookupKnown(chicken, sources()).known?.source).toBe('table');
   });
 });
 

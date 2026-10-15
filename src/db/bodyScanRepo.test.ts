@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from './db';
-import { latestScans, listScans, saveScans, SCAN_WEIGHT_NOTE } from './bodyScanRepo';
+import { listScans, saveScans, SCAN_WEIGHT_NOTE } from './bodyScanRepo';
 import { logBodyweight, wipeAll } from './repo';
 import type { ParsedScan } from '@/domain/inbody';
 
@@ -89,15 +89,7 @@ describe('saveScans', () => {
 });
 
 describe('reads', () => {
-  it('latestScans returns the newest n, newest first', async () => {
-    await saveScans(['2026-05-05', '2026-06-02', '2026-07-07', '2026-08-04'].map((d) => scan(d)));
-    expect((await latestScans(2)).map((s) => s.date)).toEqual(['2026-08-04', '2026-07-07']);
-    expect((await latestScans(10)).map((s) => s.date)).toEqual(['2026-08-04', '2026-07-07', '2026-06-02', '2026-05-05']);
-    expect(await latestScans(0)).toEqual([]);
-  });
-
   it('are empty on a fresh database', async () => {
     expect(await listScans()).toEqual([]);
-    expect(await latestScans(3)).toEqual([]);
   });
 });

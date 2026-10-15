@@ -136,18 +136,6 @@ export async function getMeal(id: string): Promise<MealWithItems | undefined> {
   return { meal, items, macros: sumItems(items) };
 }
 
-/** Days that have any meal logged, newest first. Drives the Food tab's history list. */
-export async function loggedDays(limit = 30): Promise<string[]> {
-  const dates = new Set<string>();
-  // Walk the date index backwards so a long history costs only the days we show.
-  await db.meals
-    .orderBy('date')
-    .reverse()
-    .until(() => dates.size >= limit, true)
-    .each((m) => dates.add(m.date));
-  return [...dates].slice(0, limit);
-}
-
 // ---------------------------------------------------------------------------
 // Writes
 

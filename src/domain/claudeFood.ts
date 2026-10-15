@@ -184,7 +184,7 @@ function choiceFromCandidate(c: IngredientCandidate, memories: FoodMemory[]): Fo
  * `setAside` is true when it was the owner's own entry or a label that the density check turned
  * away, so the estimate that replaces it can be kept from teaching that food anything.
  */
-function lookupKnown(r: ReadItem, sources: MatchSources): { known: FoodChoice | null; setAside: boolean } {
+export function lookupKnown(r: ReadItem, sources: MatchSources): { known: FoodChoice | null; setAside: boolean } {
   const { best } = matchIngredient(r.name, sources);
   if (!best || trustOf(best.source) <= trustOf('model')) return { known: null, setAside: false };
   const owners = trustOf(best.source) >= trustOf('label');
@@ -196,11 +196,6 @@ function lookupKnown(r: ReadItem, sources: MatchSources): { known: FoodChoice | 
   const seen = per100Of(r);
   if (seen && !densitiesAgree(seen.kcal, best.per100.kcal)) return { known: null, setAside: owners };
   return { known: choiceFromCandidate(best, sources.memories), setAside: false };
-}
-
-/** The food the app already knows for a name Claude gave, or null — see `lookupKnown` for what does not count. */
-export function knownFood(r: ReadItem, sources: MatchSources): FoodChoice | null {
-  return lookupKnown(r, sources).known;
 }
 
 /**

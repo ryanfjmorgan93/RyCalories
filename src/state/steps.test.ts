@@ -50,7 +50,9 @@ describe('steps store', () => {
     expect(access).toBe('granted');
     expect(days).toHaveLength(7);
     expect(days!.at(-1)).toEqual({ date: '2026-10-13', steps: 4321 });
-    expect(stepsSnapshot()).toBe(days);
+    expect(stepsSnapshot('2026-10-13')).toBe(days);
+    // Read yesterday and left open: not today's steps.
+    expect(stepsSnapshot('2026-10-14')).toBeNull();
   });
 
   it('runs one read at a time when Home and a resume both ask', async () => {

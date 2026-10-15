@@ -239,25 +239,28 @@ export function newRecords(
 
   // reps_at_weight only applies when that exact weight has a prior best to beat — otherwise a
   // heavier-than-ever set is a weight record, not a reps-at-weight one.
-  const repsCand = pickBest(
-    newSets,
-    // Only a weight that has been lifted before can carry a reps-at-weight record; a weight
-    // that is entirely new is a weight record, handled above.
-    (s) => (s.reps === undefined || !priorBests.repsAtWeight.has(s.weight) ? undefined : s.reps),
-    (s) => priorBests.repsAtWeight.get(s.weight) ?? null,
-    (s, priorBest) => findByRepsAtWeight(s.weight, priorBest),
-  );
-  if (repsCand !== null) {
-    const priorReps = priorBests.repsAtWeight.get(repsCand.weight) ?? null;
-    records.push({
-      kind: 'reps_at_weight',
-      value: repsCand.value,
-      weight: repsCand.weight,
-      reps: repsCand.reps,
-      setIndex: repsCand.setIndex,
-      previous: priorReps,
-      previousSource: priorReps === null ? null : sourceLabel(repsCand.holder?.source),
-    });
+  // One per weight: beating both 60 kg × 10 and 100 kg × 5 in a session is two records, not the higher rep count.
+  for (const w of new Set(newSets.map((s) => s.weight))) {
+    const repsCand = pickBest(
+      newSets,
+      // Only a weight that has been lifted before can carry a reps-at-weight record; a weight
+      // that is entirely new is a weight record, handled above.
+      (s) => (s.weight !== w || s.reps === undefined || !priorBests.repsAtWeight.has(s.weight) ? undefined : s.reps),
+      (s) => priorBests.repsAtWeight.get(s.weight) ?? null,
+      (s, priorBest) => findByRepsAtWeight(s.weight, priorBest),
+    );
+    if (repsCand !== null) {
+      const priorReps = priorBests.repsAtWeight.get(repsCand.weight) ?? null;
+      records.push({
+        kind: 'reps_at_weight',
+        value: repsCand.value,
+        weight: repsCand.weight,
+        reps: repsCand.reps,
+        setIndex: repsCand.setIndex,
+        previous: priorReps,
+        previousSource: priorReps === null ? null : sourceLabel(repsCand.holder?.source),
+      });
+    }
   }
 
   return records;

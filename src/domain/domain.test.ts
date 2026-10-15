@@ -118,6 +118,9 @@ describe('bodyweight weekly delta (§10.6)', () => {
     expect(d?.method).toBe('points');
     expect(d?.deltaKg).toBeCloseTo(0.7, 2);
   });
+  it('says nothing when the latest reading is over a week old, rather than show an old change as this week\'s', () => {
+    expect(weeklyDelta([bw('2026-09-01', 80), bw('2026-09-08', 80.7)], '2026-10-15')).toBeNull();
+  });
   it('scales point-to-point to a weekly rate', () => {
     const d = weeklyDelta([bw('2026-08-25', 74), bw('2026-09-08', 75)], '2026-09-08');
     expect(d?.deltaKg).toBeCloseTo(0.5, 2);

@@ -274,7 +274,7 @@ function HistoryNoticeCard() {
     if (busy || !notice.restoreCandidate) return;
     setBusy(true);
     try {
-      const res = await restoreHistoryNotice(notice.restoreCandidate.filename);
+      const res = await restoreHistoryNotice(notice.restoreCandidate.filename, notice.kind === 'fresh_install' ? 'replace' : 'merge');
       if (res.ok) {
         setNotice(null);
         toast('Restored', 'ok');

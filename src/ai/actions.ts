@@ -45,10 +45,12 @@ import {
 } from '@/db/repo';
 import { loadRoutineInput } from '@/db/routineBuildQueries';
 import { buildCoach, describeRead, emptyReasonLines, nothingFact, requestUsable, type CoachRequest } from '@/domain/coachBuild';
-import { dateKeyToDate, daysBetween, fmtDateKey, nowIso, toDateKey } from '@/domain/dates';
+import { nowIso, recentDayProblem, toDateKey } from '@/domain/dates';
 import { lockInBlocked, roundKg } from '@/domain/engine';
 import { matchExercise, normaliseName, type MatchCandidate } from '@/domain/exerciseMatch';
-import { displayMacros } from '@/domain/food';
+import { displayMacros, reconcileMacros } from '@/domain/food';
+import { slotForHour } from '@/domain/mealSlot';
+import { fmtDayHeading } from '@/domain/claudeSummary';
 import { fmtKg, fmtNum, fmtRange, plural } from '@/domain/format';
 import { uuid } from '@/domain/ids';
 import { effectiveRx } from '@/domain/planOverride';
@@ -183,14 +185,6 @@ function finite(n: unknown): n is number {
   return typeof n === 'number' && Number.isFinite(n);
 }
 
-/** The slot the time of day suggests: the same guess the meal screen makes. */
-export function slotForHour(hour: number): MealSlot {
-  if (hour < 11) return 'breakfast';
-  if (hour < 15) return 'lunch';
-  if (hour < 21) return 'dinner';
-  return 'snack';
-}
-
 function candidatesOf(exercises: readonly Pick<Exercise, 'id' | 'name' | 'aliases'>[]): MatchCandidate[] {
   return exercises.map((e) => ({ id: e.id, name: e.name, ...(e.aliases ? { aliases: e.aliases } : {}) }));
 }
@@ -239,21 +233,6 @@ function names(list: readonly string[], max = 12): string {
 
 function repsText(min: number, max: number): string {
   return `${fmtRange(min, max)} reps`;
-}
-
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-/** "Mon 12 Oct" from a YYYY-MM-DD key (no locale, so it reads the same everywhere). */
-function dayLabel(key: string): string {
-  return `${WEEKDAYS[dateKeyToDate(key).getDay()]} ${fmtDateKey(key)}`;
-}
-
-/** Why `day` is not one a meal can be logged for, or null: a real date, not in the future, at most a week back. */
-function checkFoodDay(day: string, today: string): string | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || toDateKey(dateKeyToDate(day)) !== day) return 'The date must be a real day, YYYY-MM-DD.';
-  if (day > today) return 'That date is in the future.';
-  if (daysBetween(day, today) > FOOD_DAYS_BACK) return `Meals can be logged for today and the last ${FOOD_DAYS_BACK} days. Older days are for the owner to fill in on the Food screen.`;
-  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -413,7 +392,7 @@ export function createCoachActions(deps: ActionDeps = {}): CoachActions {
     async logFood({ items, slot, date }) {
       if (!Array.isArray(items) || items.length === 0) return fail('Nothing to log: no foods were given.');
       const day = date ?? today();
-      const wrongDay = checkFoodDay(day, today());
+      const wrongDay = recentDayProblem(day, today(), FOOD_DAYS_BACK);
       if (wrongDay) return fail(wrongDay);
       if (day !== today() && !(slot && MEAL_SLOTS.includes(slot))) return fail('Which meal was that: breakfast, lunch, dinner or snack?');
 
@@ -425,11 +404,13 @@ export function createCoachActions(deps: ActionDeps = {}): CoachActions {
         if (![it.amount, it.kcal, it.protein, it.carbs, it.fat].every(finite) || Object.values(macros).some((v) => v < 0) || !(it.amount > 0)) {
           return fail(`The numbers for ${name} do not look right.`);
         }
-        if (it.kcal > 5000) return fail(`${name} at ${fmtNum(it.kcal)} kcal is too much for one item. Check the amount.`);
+        // The photo reader's rule: raise a calorie figure the macros contradict, never lower one.
+        const fixed = reconcileMacros(macros).macros;
+        if (fixed.kcal > 5000 || Math.max(fixed.protein, fixed.carbs, fixed.fat) > 1000) return fail(`${name} at ${fmtNum(fixed.kcal)} kcal is too much for one item. Check the amount.`);
         const unit = (it.unit ?? '').trim();
         const isGrams = /^(g|gram|grams)$/i.test(unit);
         const grams = it.grams !== undefined && finite(it.grams) && it.grams > 0 ? it.grams : isGrams ? it.amount : 0;
-        readings.push({ name, amount: it.amount, unit: unit || 'portion', grams: Math.round(grams), ...macros, confidence: 'medium' });
+        readings.push({ name, amount: it.amount, unit: unit || 'portion', grams: Math.round(grams), ...fixed, confidence: 'medium' });
       }
 
       const useSlot = slot && MEAL_SLOTS.includes(slot) ? slot : slotForHour(now().getHours());
@@ -439,10 +420,10 @@ export function createCoachActions(deps: ActionDeps = {}): CoachActions {
       const protein = logged.items.reduce((sum, i) => sum + displayMacros(i.nutrition).protein, 0);
       const totals = await dayTotals(day);
       const list = names(logged.items.map((i) => i.name), 6);
-      const on = day === today() ? '' : ` on ${dayLabel(day)}`;
+      const on = day === today() ? '' : ` on ${fmtDayHeading(day)}`;
       return {
         ok: true,
-        result: `Logged ${plural(logged.count, 'item')} for ${useSlot}${on}: ${list}, about ${fmtNum(Math.round(logged.kcal))} kcal and ${fmtNum(Math.round(protein))} g protein (estimates). ${day === today() ? 'Today' : dayLabel(day)} so far: ${fmtNum(Math.round(totals.kcal))} kcal, ${fmtNum(Math.round(totals.protein))} g protein.`,
+        result: `Logged ${plural(logged.count, 'item')} for ${useSlot}${on}: ${list}, about ${fmtNum(Math.round(logged.kcal))} kcal and ${fmtNum(Math.round(protein))} g protein (estimates). ${day === today() ? 'Today' : fmtDayHeading(day)} so far: ${fmtNum(Math.round(totals.kcal))} kcal, ${fmtNum(Math.round(totals.protein))} g protein.`,
         description: `Logged ${list} for ${useSlot}${on} (≈${fmtNum(Math.round(logged.kcal))} kcal)`,
       };
     },
@@ -451,8 +432,8 @@ export function createCoachActions(deps: ActionDeps = {}): CoachActions {
     async logWeight({ kg, date }) {
       if (!finite(kg) || kg < 30 || kg > 300) return fail('That does not look like a body weight in kg.');
       const day = date ?? today();
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return fail('The date must be YYYY-MM-DD.');
-      if (day > today()) return fail('That date is in the future.');
+      const wrongDay = recentDayProblem(day, today(), FOOD_DAYS_BACK);
+      if (wrongDay) return fail(wrongDay);
       const entry = await logBodyweight(day, kg);
       return { ok: true, result: `Logged ${fmtKg(entry.kg)} for ${day}.`, description: `Weigh-in: ${fmtKg(entry.kg)}${day === today() ? '' : ` (${day})`}` };
     },
@@ -505,6 +486,9 @@ export function createCoachActions(deps: ActionDeps = {}): CoachActions {
       const m = matchExercise(input.exercise, candidatesOf(items.map((it) => ({ id: it.rx.id, name: it.exercise.name, aliases: it.exercise.aliases }))));
       const item = m ? items.find((it) => it.rx.id === m.id) : undefined;
       if (!item) return fail(`No exercise matching "${input.exercise}" in ${routine.name}. It has: ${names(items.map((it) => it.exercise.name))}.`);
+      // A guess is fine for sets and reps; removing or reweighing the wrong exercise is not.
+      if (m!.score < 1 && (input.change === 'remove' || input.change === 'weight'))
+        return fail(`No exercise called "${input.exercise}" in ${routine.name}. The closest is ${item.exercise.name}: ask for it by that name.`);
 
       // A session is live on this routine and this exercise already has sets in it: removing it would
       // strand those sets, and a new set count, rep range or weight would move the goalposts the session
@@ -601,6 +585,8 @@ export function createCoachActions(deps: ActionDeps = {}): CoachActions {
       const m = matchExercise(input.exercise, candidatesOf(slots.map((s) => ({ id: s.key, name: s.exercise.name, aliases: s.exercise.aliases }))));
       const slot = m ? slots.find((s) => s.key === m.id) : undefined;
       if (!slot) return fail(`No exercise matching "${input.exercise}" in today's session. It has: ${names(slots.map(slotLabel))}.`);
+      if (m!.score < 1 && input.change === 'weight')
+        return fail(`No exercise called "${input.exercise}" in today's session. The closest is ${slot.exercise.name}: ask for it by that name.`);
       const name = slot.exercise.name;
 
       switch (input.change) {

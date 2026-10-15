@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { prefersReducedMotion } from './session/useCompletionHold';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { MomentFacts } from '@/ai/moments';
 import { backupAfterSessionFinish } from '@/db/historySafety';
@@ -23,14 +24,6 @@ interface Choice {
   overrideTo: number | null;
   lockIn: boolean;
   lockInAt: number | null;
-}
-
-function prefersReducedMotion(): boolean {
-  try {
-    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  } catch {
-    return false;
-  }
 }
 
 /** True once, for the life of this render, so a rebuild mid-session never replays the animation. */

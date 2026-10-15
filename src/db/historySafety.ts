@@ -21,7 +21,7 @@ import {
   writeBackupContent,
 } from './autoBackup';
 import { db, DB_NAME, DB_VERSION } from './db';
-import { getBaseline, isPendingDeletion, writeBaseline } from './lossGuard';
+import { clearPendingDeletion, getBaseline, isPendingDeletion, writeBaseline } from './lossGuard';
 import { isBackup, importBackup, type Backup } from './backup';
 import { dumpRaw } from '@/boot/recovery';
 import { BUILD_LABEL } from '@/buildInfo';
@@ -228,6 +228,9 @@ export async function checkForHistoryLoss(wasFreshInstall: boolean): Promise<His
   const current = await currentSessionSetCounts();
   const baseline = getBaseline();
   const deletionPending = isPendingDeletion();
+  // Read once, then cleared: nothing of this run can be mid-delete yet, and a flag left by a killed
+  // delete would otherwise silence every later check and stop the baseline rising.
+  clearPendingDeletion();
   const backups = await listBackups();
 
   const notice = decideHistoryNotice({
@@ -266,12 +269,16 @@ export async function loadListedBackup(filename: string): Promise<{ ok: true; ba
   }
 }
 
-/** Reads the named backup file, validates it, restores it (merge), then clears the notice and re-baselines. */
-export async function restoreHistoryNotice(filename: string): Promise<{ ok: boolean; error?: string }> {
+/**
+ * Reads the named backup file, validates it, restores it, then clears the notice and re-baselines.
+ * After a fresh install the only rows are the seed's (a made-up 74 kg for today, starter routines),
+ * so that restore replaces; after a loss it merges, keeping whatever survived.
+ */
+export async function restoreHistoryNotice(filename: string, mode: 'merge' | 'replace' = 'merge'): Promise<{ ok: boolean; error?: string }> {
   try {
     const loaded = await loadListedBackup(filename);
     if (!loaded.ok) throw new Error(loaded.error);
-    await importBackup(loaded.backup, 'merge');
+    await importBackup(loaded.backup, mode);
     clearStoredNotice();
     await rebaseline();
     return { ok: true };

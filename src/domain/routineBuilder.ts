@@ -30,6 +30,7 @@
  *     mentioned.
  */
 import { catalogueDemoKey } from './catalogue';
+import { fmtDateKey } from './dates';
 import { roundKg } from './engine';
 import { normaliseName } from './exerciseMatch';
 import { fmtKg } from './format';
@@ -404,14 +405,6 @@ function joinOr(items: readonly string[]): string {
 
 function capitalise(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-/** "2026-09-28" as "28 Sep". Read from the key itself, so no timezone can move it. */
-function fmtDay(key: string): string {
-  const [, m, d] = key.split('-').map(Number);
-  return `${d} ${MONTHS[(m ?? 1) - 1]}`;
 }
 
 function plainName(name: string): string {
@@ -1398,7 +1391,7 @@ function buildDay(sh: Shared, day: DaySpec, daySeed: number, probe = false): Bui
     const g = sh.niggles.get(tag);
     if (!g || !changedBy.has(tag)) continue;
     const rules = NIGGLE_LINES[tag]![g.level];
-    lines.push(g.typed ? `${SORE_LABELS[tag]}, as you said: ${rules}` : `${NIGGLE_LABELS[tag]} on ${fmtDay(g.date!)}: ${rules}`);
+    lines.push(g.typed ? `${SORE_LABELS[tag]}, as you said: ${rules}` : `${NIGGLE_LABELS[tag]} on ${fmtDateKey(g.date!)}: ${rules}`);
   }
   if (leftOutChanged) {
     const said = [...new Set(leftOutInfos.map((i) => i.pattern))].filter((p) => (request.excludePatterns ?? []).includes(p)).map((p) => patternLabel(p));

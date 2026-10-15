@@ -195,7 +195,7 @@ function matchTokens(name: string, foods: TableFood[]): MatchResult {
 }
 
 /** `normalise` folds case, accents and punctuation; this adds the same crude singularisation
- * `foodMemory`'s internal `words()` and `mealAnalysis`'s deduping use, so "egg" and "eggs" —
+ * `foodMemory`'s internal `words()` uses, so "egg" and "eggs" —
  * whichever way an alias, a memory or the model spelt it — fold to the same key. */
 function singularKey(s: string): string {
   return normalise(s)

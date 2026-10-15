@@ -58,8 +58,3 @@ export async function listScans(): Promise<BodyScan[]> {
   return db.bodyScans.orderBy('date').toArray();
 }
 
-/** The newest `n` scans, newest first. */
-export async function latestScans(n: number): Promise<BodyScan[]> {
-  if (n <= 0) return [];
-  return db.bodyScans.orderBy('date').reverse().limit(n).toArray();
-}

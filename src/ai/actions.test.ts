@@ -10,7 +10,8 @@ import { getActiveSession, listRoutines, logSet, resetToSeed, routineItems, setP
 import { SEED_EXERCISE_IDS, SEED_ROUTINE_IDS } from '@/db/seed';
 import { toDateKey } from '@/domain/dates';
 import { macrosOf } from '@/domain/food';
-import { createCoachActions, findRoutine, slotForHour } from './actions';
+import { slotForHour } from '@/domain/mealSlot';
+import { createCoachActions, findRoutine } from './actions';
 import { noteShortId } from './context';
 
 const PUSH = SEED_ROUTINE_IDS['Upper (Push)'];
@@ -33,6 +34,16 @@ async function rxOf(routineName: string, exerciseName: string) {
 }
 
 describe('log_food', () => {
+  it('raises a calorie figure the macros contradict, and refuses an impossible amount', async () => {
+    const actions = createCoachActions({ now: MORNING });
+    // 40 g protein, 30 g carbs and 20 g fat come to about 460 kcal, not 80.
+    expect((await actions.logFood({ items: [{ name: 'Shake', amount: 1, unit: 'glass', kcal: 80, protein: 40, carbs: 30, fat: 20 }] })).ok).toBe(true);
+    const [{ items }] = await mealsOnDay(TODAY);
+    expect(macrosOf(items[0]!.nutrition).kcal).toBeGreaterThan(400);
+    // A milligram figure typed as grams.
+    expect((await actions.logFood({ items: [{ name: 'Bar', amount: 1, unit: 'bar', kcal: 200, protein: 25000, carbs: 20, fat: 8 }] })).ok).toBe(false);
+  });
+
   it('writes one meal for the slot with its items, as model estimates, weighed when grams are given', async () => {
     const actions = createCoachActions({ now: MORNING });
     const out = await actions.logFood({
@@ -201,6 +212,12 @@ describe('log_weight', () => {
     expect((await actions.logWeight({ kg: 81, date: 'yesterday' })).ok).toBe(false);
     expect((await actions.logWeight({ kg: Number.NaN })).ok).toBe(false);
   });
+
+  it('refuses a day that does not exist, or one too far back', async () => {
+    const actions = createCoachActions({ now: MORNING });
+    for (const date of ['2026-02-30', '2026-00-00', '2025-10-12']) expect((await actions.logWeight({ kg: 81, date })).ok, date).toBe(false);
+    expect(await db.bodyweight.where('date').anyOf('2026-02-30', '2026-00-00', '2025-10-12').count()).toBe(0);
+  });
 });
 
 describe('remember and forget', () => {
@@ -251,6 +268,16 @@ describe('edit_routine', () => {
     const out = await actions.editRoutine({ routine: 'push day', exercise: 'bench press', change: 'sets', sets: 5 });
     expect(out).toMatchObject({ ok: true, description: 'Bench Press (Barbell): 5 sets in Upper (Push)' });
     expect((await rxOf('Upper (Push)', 'Bench Press (Barbell)')).rx.targetSets).toBe(5);
+  });
+
+  it('will not remove or reweigh an exercise the owner did not name: the closest is named back', async () => {
+    const actions = createCoachActions();
+    const removed = await actions.editRoutine({ routine: 'Upper (Push)', exercise: 'Dumbbell Bench Press', change: 'remove' });
+    expect(removed.ok).toBe(false);
+    expect(removed.result).toContain('The closest is Incline DB Press');
+    const weighed = await actions.editRoutine({ routine: 'Upper (Push)', exercise: 'Dumbbell Bench Press', change: 'weight', weightKg: 30 });
+    expect(weighed.ok).toBe(false);
+    expect((await rxOf('Upper (Push)', 'Incline DB Press')).rx.currentWeight).not.toBe(30);
   });
 
   it('changes a rep range, keeping the other end consistent', async () => {
@@ -422,7 +449,11 @@ describe('edit_session', () => {
     expect(reps.description).toBe('Bench Press (Barbell): 8–10 reps today');
     expect(setPlanOverride).toHaveBeenLastCalledWith(session.id, bench.rx.id, { repMin: 8, repMax: 10 });
 
-    const weight = await actions.editSession({ exercise: 'bench', change: 'weight', weightKg: 60 });
+    // A weight needs the exercise by name: a guess is named back, and nothing is written.
+    const guessed = await actions.editSession({ exercise: 'bench', change: 'weight', weightKg: 60 });
+    expect(guessed).toMatchObject({ ok: false });
+    expect(guessed.result).toContain('The closest is Bench Press (Barbell)');
+    const weight = await actions.editSession({ exercise: 'Bench Press', change: 'weight', weightKg: 60 });
     expect(weight.description).toBe('Bench Press (Barbell): 60 kg today');
     expect(setPlanOverride).toHaveBeenLastCalledWith(session.id, bench.rx.id, { weight: 60 });
 
@@ -627,7 +658,7 @@ describe('edit_session against what is really in today\'s session', () => {
         { change: 'reps', repMin: 5, repMax: 5 },
         { change: 'weight', weightKg: 50 },
       ] as const) {
-        const out = await actions.editSession({ exercise: 'bench', ...input });
+        const out = await actions.editSession({ exercise: 'Bench Press (Barbell)', ...input });
         expect(out.ok, input.change).toBe(false);
         expect(out.result, input.change).toContain('skipped today');
       }

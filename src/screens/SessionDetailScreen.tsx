@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { recordsForNewSets } from '@/db/recordsQueries';
 import { createRoutineFromSession, deleteSession, deleteSet, sessionDetail, updateSet, type SessionGroup } from '@/db/repo';
 import { sessionSeconds } from '@/db/historyQueries';
-import { fmtDateLong, fmtDuration, fmtKg, fmtNum, fmtWeight, targetLine } from '@/domain/format';
+import { fmtDateLong, fmtDuration, fmtKg, fmtNum, fmtWeight, targetLine, fmtTime } from '@/domain/format';
 import { countsForVolume, feelLabel, setBadges } from '@/domain/sets';
 import type { ExerciseKind, ProgressionDecision, Session, SetLog } from '@/domain/types';
 import { Button } from '@/ui/components/Button';
@@ -15,13 +15,6 @@ import { toast } from '@/ui/components/Toast';
 import { TopBar } from '@/ui/components/TopBar';
 import { EditSetSheet } from '@/ui/EditSetSheet';
 import { useRoutineItems } from '@/ui/hooks';
-
-const timeFmt = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' });
-
-function fmtTime(iso: string): string {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '' : timeFmt.format(d);
-}
 
 export function SessionDetailScreen() {
   const { id } = useParams();

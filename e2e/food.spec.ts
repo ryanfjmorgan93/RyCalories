@@ -572,3 +572,20 @@ test.describe('nutrition', () => {
     await expect(page.getByText('Nothing to repeat yet.')).toBeVisible();
   });
 });
+
+test.describe('left open overnight', () => {
+  test.use({ timezoneId: 'Europe/London' });
+
+  test('the Food screen moves on to the new day at midnight, so breakfast is not logged to yesterday', async ({ page }) => {
+    await page.clock.install({ time: new Date('2026-10-15T23:58:30+01:00') });
+    await fresh(page);
+    await page.goto('/food');
+    await expect(page.getByTestId('day-label')).toHaveText('Today');
+    await expect(page.getByTestId('week-day-2026-10-15')).toBeVisible();
+
+    await page.clock.fastForward('03:00');
+    // The new day has reached the screen (the week strip ends on it) before the label is read.
+    await expect(page.getByTestId('week-day-2026-10-16')).toBeVisible();
+    await expect(page.getByTestId('day-label')).toHaveText('Today');
+  });
+});

@@ -8,8 +8,8 @@ import { logBodyweight, logSet, resetToSeed, routineItems, startSession } from '
 import { SEED_EXERCISE_IDS, SEED_ROUTINE_IDS } from '@/db/seed';
 import { toDateKey } from '@/domain/dates';
 import { fromPortion } from '@/domain/food';
-import type { BodyScan, RoutineExercise, Session } from '@/domain/types';
-import { bodyScansBlock, buildCoachContext, buildStableContext, buildVolatileContext, effectiveRx, estimateTokens, MAX_CONTEXT_TOKENS, noteShortId, notesBlock, otherExercisesBlock, stepsLine } from './context';
+import type { BodyScan, Session } from '@/domain/types';
+import { bodyScansBlock, buildCoachContext, buildStableContext, buildVolatileContext, estimateTokens, MAX_CONTEXT_TOKENS, noteShortId, notesBlock, otherExercisesBlock, stepsLine } from './context';
 
 const PUSH = SEED_ROUTINE_IDS['Upper (Push)'];
 const NOW = new Date(2026, 9, 12, 14, 35, 0);
@@ -81,15 +81,6 @@ describe('the pure sections', () => {
     expect(otherExercisesBlock(exercises, new Set(['b']))).toContain('Cable Row; Face Pull');
     expect(otherExercisesBlock(exercises, new Set(['a', 'b', 'c']))).toBeNull();
     expect(otherExercisesBlock(exercises, new Set(), 2)).toContain('and 1 more');
-  });
-
-  it('applies a plan override to a routine-exercise without touching the original', () => {
-    const rx = { id: 'x', routineId: 'r', exerciseId: 'e', order: 0, targetSets: 4, targetSetsMax: 5, repMin: 6, repMax: 8, currentWeight: 65, increment: 2.5, mode: 'calibrating', optional: false } as RoutineExercise;
-    expect(effectiveRx(rx, undefined)).toEqual({ rx, changed: false });
-    const { rx: eff, changed } = effectiveRx(rx, { targetSets: 3, weight: 60 });
-    expect(changed).toBe(true);
-    expect(eff).toMatchObject({ targetSets: 3, targetSetsMax: undefined, repMin: 6, currentWeight: 60, mode: 'normal' });
-    expect(rx).toMatchObject({ targetSets: 4, currentWeight: 65, mode: 'calibrating' });
   });
 });
 

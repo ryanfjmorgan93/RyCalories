@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { Capacitor } from '@capacitor/core';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { exportBackup, exportCsv, importBackup, type Backup } from './backup';
 import { db } from './db';
 import {
@@ -580,6 +581,18 @@ describe('linked progression (§4.8 Phase 2)', () => {
 });
 
 describe('backup and export', () => {
+  it('on the phone, wipes nothing when the safety backup cannot be written', async () => {
+    // The backup write always fails under Node (no Capacitor Filesystem), as a full or revoked folder would on the phone.
+    const native = vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true);
+    try {
+      const before = await db.exercises.count();
+      await expect(wipeAll()).rejects.toThrow('No safety backup');
+      expect(await db.exercises.count()).toBe(before);
+    } finally {
+      native.mockRestore();
+    }
+  });
+
   beforeEach(async () => {
     await resetToSeed();
     await rdlSession([8, 8, 8, 8]);

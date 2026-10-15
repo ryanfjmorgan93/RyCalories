@@ -8,16 +8,9 @@
  *   drop    — a lighter set straight after a working set: counts for volume only. It would
  *             otherwise read as a missed set and force a hold.
  */
-import type { SetType } from './types';
+import type { SetLog, SetType } from './types';
 
 export const SET_TYPES: SetType[] = ['warmup', 'working', 'failure', 'drop'];
-
-export const SET_TYPE_LABEL: Record<SetType, string> = {
-  warmup: 'Warm-up',
-  working: 'Working',
-  failure: 'Failure',
-  drop: 'Drop',
-};
 
 /** Sets the progression engine decides on. */
 export function countsForProgression(type: SetType): boolean {
@@ -108,4 +101,9 @@ export function feelOf(sets: { type: SetType; rir?: number }[]): number | null {
   const first = rirs[0];
   if (first === undefined) return null;
   return rirs.every((r) => r === first) ? first : null;
+}
+
+/** A slot's sets in the order they were logged: by index, then by time for two at the same index. */
+export function byIndex(a: SetLog, b: SetLog): number {
+  return a.index - b.index || a.completedAt.localeCompare(b.completedAt);
 }

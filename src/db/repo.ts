@@ -23,7 +23,7 @@ import { normaliseName } from '@/domain/exerciseMatch';
 import { uuid } from '@/domain/ids';
 import { applyOverride, isEmptyOverride, judgedRx, mergeOverride, pruneOverride } from '@/domain/planOverride';
 import { sessionRecords, type PersonalRecord } from '@/domain/records';
-import { countsForProgression, countsForRecords, countsForVolume } from '@/domain/sets';
+import { countsForProgression, countsForRecords, countsForVolume, byIndex } from '@/domain/sets';
 import {
   DEFAULT_SETTINGS,
   type Bodyweight,
@@ -197,13 +197,6 @@ export async function deleteExercise(id: string): Promise<boolean> {
     await db.exercises.delete(id);
     return true;
   });
-}
-
-/** Case/whitespace-insensitive lookup by name or alias. */
-export async function findExerciseByName(name: string): Promise<Exercise | undefined> {
-  const key = normaliseName(name);
-  const all = await db.exercises.toArray();
-  return all.find((e) => normaliseName(e.name) === key || (e.aliases ?? []).some((a) => normaliseName(a) === key));
 }
 
 // `normaliseName` lives in `@/domain/exerciseMatch` (a pure domain module) and is re-exported here
@@ -680,10 +673,6 @@ export async function undoSwap(sessionId: string, rxId: string): Promise<void> {
     await setSkipped(sessionId, rxId, false);
     await db.sessions.update(sessionId, { swaps });
   });
-}
-
-function byIndex(a: SetLog, b: SetLog): number {
-  return a.index - b.index || a.completedAt.localeCompare(b.completedAt);
 }
 
 /** Sets logged in a session for one slot (a routine-exercise, or an extra exercise with no routine-exercise). */
@@ -1228,22 +1217,27 @@ export async function decisionsForRoutineExercise(routineExerciseId: string): Pr
  * silently delete a note the user wrote.
  */
 export async function logBodyweight(date: string, kg: number, note?: string): Promise<Bodyweight> {
-  const existing = await db.bodyweight.where('date').equals(date).first();
-  const kept = note === undefined ? existing?.note : note.trim() || undefined;
-  const entry: Bodyweight = { id: existing?.id ?? uuid(), date, kg: roundKg(kg), note: kept };
-  await db.bodyweight.put(entry);
-  return entry;
+  // One transaction, so a Health Connect import landing between the look-up and the write cannot make a second row for the day.
+  return db.transaction('rw', db.bodyweight, async () => {
+    const existing = await db.bodyweight.where('date').equals(date).first();
+    const kept = note === undefined ? existing?.note : note.trim() || undefined;
+    const entry: Bodyweight = { id: existing?.id ?? uuid(), date, kg: roundKg(kg), note: kept };
+    await db.bodyweight.put(entry);
+    return entry;
+  });
 }
 
 export async function deleteBodyweight(id: string): Promise<void> {
-  const entry = await db.bodyweight.get(id);
-  await db.bodyweight.delete(id);
-  // A reading read in from Health Connect and deleted by the owner stays deleted: the next read skips its day.
-  if (entry?.source === 'health-connect') {
-    const settings = await getSettings();
-    const skip = new Set(settings.healthWeightSkip ?? []);
-    if (!skip.has(entry.date)) await db.settings.update('settings', { healthWeightSkip: [...skip, entry.date].sort() });
-  }
+  // One transaction with the import below, so a read in flight cannot land between the delete and the skip.
+  await db.transaction('rw', db.bodyweight, db.settings, async () => {
+    const entry = await db.bodyweight.get(id);
+    await db.bodyweight.delete(id);
+    // A reading read in from Health Connect and deleted by the owner stays deleted: the next read skips its day.
+    if (entry?.source === 'health-connect') {
+      const skip = new Set((await db.settings.get('settings'))?.healthWeightSkip ?? []);
+      if (!skip.has(entry.date)) await db.settings.update('settings', { healthWeightSkip: [...skip, entry.date].sort() });
+    }
+  });
 }
 
 /**
@@ -1252,10 +1246,12 @@ export async function deleteBodyweight(id: string): Promise<void> {
  */
 export async function importHealthWeights(readings: readonly { date: string; kg: number }[]): Promise<number> {
   if (readings.length === 0) return 0;
-  return db.transaction('rw', db.bodyweight, async () => {
+  return db.transaction('rw', db.bodyweight, db.settings, async () => {
+    // Re-read here, not before the slow Health Connect read: a day deleted meanwhile stays deleted.
+    const deleted = new Set((await db.settings.get('settings'))?.healthWeightSkip ?? []);
     let added = 0;
     for (const r of readings) {
-      if ((await db.bodyweight.where('date').equals(r.date).count()) > 0) continue;
+      if (deleted.has(r.date) || (await db.bodyweight.where('date').equals(r.date).count()) > 0) continue;
       await db.bodyweight.put({ id: uuid(), date: r.date, kg: r.kg, source: 'health-connect' });
       added++;
     }

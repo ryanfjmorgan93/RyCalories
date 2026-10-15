@@ -141,6 +141,8 @@ export async function sendCoachMessage(rawText: string, opts: ChatOptions = {}):
     // The month's limit was reached with a tool call still waiting: whatever the model said alongside it
     // is about something that did not happen, so it is not shown.
     if (stoppedForCap) throw new ClaudeError('over_cap');
+    // Cut off at max_tokens, the text is a preamble to something that never ran ("Right, logging that now:").
+    if (message.stop_reason === 'max_tokens') throw new ClaudeError('other', 'That reply was cut short. Try again.');
 
     // At the step limit the model's last words are a preamble to tools it never saw the results of,
     // so what was done is said in its place.

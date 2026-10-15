@@ -131,6 +131,9 @@ describe('Atwater cross-check', () => {
   it('treats macros implying more energy than stated as the more serious error', () => {
     // 30 g of fat is 270 kcal, so 200 kcal is impossible — 35% over.
     expect(checkAtwater({ kcal: 200, protein: 0, carbs: 0, fat: 30 }).reason).toBe('impossible');
+    // At 0 kcal: real protein means the calorie figure is missing and is raised; a trace is label rounding.
+    expect(reconcileMacros({ kcal: 0, protein: 25, carbs: 0, fat: 0 }).macros.kcal).toBe(100);
+    expect(checkAtwater({ kcal: 0, protein: 0.3, carbs: 0, fat: 0 }).ok).toBe(true);
     // Whereas unexplained energy in the other direction needs to be much larger to flag,
     // because alcohol carries 7 kcal/g and appears in no macro field.
     // 5 g protein, 25 g carbs and 2 g fat imply 138 kcal, so 155 stated is an 11% shortfall: fine.

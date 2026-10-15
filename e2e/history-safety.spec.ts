@@ -318,6 +318,9 @@ test.describe('backup, loss and restore', () => {
     await expect(notice).toHaveCount(0);
 
     await expect.poll(async () => (await readRawIron(page)).tables.sessions.length, { timeout: 15_000 }).toBe(sessionsBefore);
+    // Replaced, not merged: the reseed's own made-up weigh-in for today is gone, so no day has two.
+    const bodyweight = (await readRawIron(page)).tables.bodyweight as { date: string }[];
+    expect(bodyweight).toHaveLength(before.tables.bodyweight.length);
   });
 });
 

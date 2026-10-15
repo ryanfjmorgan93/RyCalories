@@ -14,7 +14,7 @@ import { equipmentFromDemo, exerciseFromDemo, findExistingExercise, type ListDem
 import { NON_ROUTINE_PATTERNS, movementPattern } from './movement';
 import { estimateMinutes, paceReading, type Candidate, type QuickInput } from './quickSession';
 import { restSecondsFor, type RestDefaults } from './rest';
-import { countsForProgression, countsForVolume } from './sets';
+import { countsForProgression, countsForVolume, byIndex } from './sets';
 import type { Equipment, Exercise, MuscleGroup, Routine, RoutineExercise, Session, SetLog, Settings } from './types';
 
 type Base = NonNullable<Candidate['base']>;
@@ -59,10 +59,6 @@ export function routineBase(rows: { rx: RoutineExercise; routineOrder: number }[
   }
   const { rx } = [...rows].sort(byPlace)[0];
   return { sets: rx.targetSets, repMin: rx.repMin, repMax: rx.repMax, weightKg: null, mode: 'calibrating' };
-}
-
-function byIndex(a: SetLog, b: SetLog): number {
-  return a.index - b.index || a.completedAt.localeCompare(b.completedAt);
 }
 
 /**

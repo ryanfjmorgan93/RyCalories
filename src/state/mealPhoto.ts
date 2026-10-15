@@ -98,7 +98,7 @@ export async function sweepMealPhotos(): Promise<void> {
 
 /** Base64 without a data: prefix, chunked so a multi-megabyte photo never blows the call stack on
  * `String.fromCharCode(...bytes)`. */
-async function blobToBase64(blob: Blob): Promise<string> {
+export async function blobToBase64(blob: Blob): Promise<string> {
   const bytes = new Uint8Array(await blob.arrayBuffer());
   const CHUNK = 0x8000;
   let binary = '';

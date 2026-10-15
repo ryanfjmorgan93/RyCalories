@@ -12,7 +12,6 @@ import { create } from 'zustand';
 import { loadRoutineInput } from '../db/routineBuildQueries';
 import { getSettings } from '../db/repo';
 import { nowIso, toDateKey } from '../domain/dates';
-import type { CoachTurn } from '../domain/coach';
 import { applyEdit, buildCoach, buildEdit, builtTurn, describeRead, requestUsable, reshuffle, type CoachRequest } from '../domain/coachBuild';
 import { routeCoachMessage, type CoachRoute } from '../domain/coachIntent';
 import { parseQuickRequest } from '../domain/quickRequest';
@@ -27,6 +26,11 @@ export const ASK_TIMEOUT_MS = 60_000;
 
 /** What a question is answered with while no backend is plugged in. */
 export const NO_BACKEND_REPLY = "Questions go to Claude, which isn't set up yet.";
+
+export interface CoachTurn {
+  role: 'user' | 'coach';
+  text: string;
+}
 
 /** What answers a free question. */
 export interface CoachBackend {

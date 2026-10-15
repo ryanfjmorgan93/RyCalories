@@ -169,6 +169,13 @@ describe('when the model\'s tool call cannot be done', () => {
     expect((await thread()).at(-1)!.actions).toBeUndefined();
   });
 
+  it('does not store a reply cut off at max_tokens as if it were the answer', async () => {
+    const fake = fakeClaude({ content: [text('Right, logging that now:')], stop_reason: 'max_tokens' });
+    const reply = await sendCoachMessage('had two eggs on toast', { fetch: fake.fetch, ...ctx });
+    expect(reply).toMatchObject({ ok: false, stored: false });
+    expect((await thread()).some((m) => m.text.includes('logging that now'))).toBe(false);
+  });
+
   it('validates the model\'s input against the schema before running anything', async () => {
     const fake = fakeClaude(
       { content: [toolUse('toolu_9', 'log_weight', { kg: 'about eighty' })], stop_reason: 'tool_use' },

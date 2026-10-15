@@ -90,7 +90,7 @@ function markPendingDeletion(): void {
   }
 }
 
-function clearPendingDeletion(): void {
+export function clearPendingDeletion(): void {
   const s = storage();
   if (!s) return;
   try {

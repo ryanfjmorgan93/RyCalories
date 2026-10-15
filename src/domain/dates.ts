@@ -32,10 +32,6 @@ export function daysBetween(a: string, b: string): number {
   return Math.round(ms / 86400000);
 }
 
-export function isSameLocalDay(isoA: string, isoB: string): boolean {
-  return isoToDateKey(isoA) === isoToDateKey(isoB);
-}
-
 /** Monday (YYYY-MM-DD) of the local week containing `key`. Weeks run Monday to Sunday everywhere in the app. */
 export function mondayOf(key: string): string {
   const dow = dateKeyToDate(key).getDay(); // 0 = Sunday .. 6 = Saturday
@@ -60,4 +56,12 @@ export function windowStart(asOf: string, days: number): string {
 export function inWindow(date: string, asOf: string, days: number): boolean {
   const key = date.slice(0, 10);
   return key >= windowStart(asOf, days) && key <= asOf;
+}
+
+/** Why `day` is not a day the coach may log to (a real day, not ahead of `today`, at most `daysBack` back), or null. */
+export function recentDayProblem(day: string, today: string, daysBack: number): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || toDateKey(dateKeyToDate(day)) !== day) return 'The date must be a real day, YYYY-MM-DD.';
+  if (day > today) return 'That date is in the future.';
+  if (daysBetween(day, today) > daysBack) return `Only today and the last ${daysBack} days can be logged this way. Older days are for the owner to fill in themselves.`;
+  return null;
 }

@@ -1,22 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { hasNoExercises, isConsecutiveLower, suggestNextRoutine } from './schedule';
+import { isConsecutiveLower, suggestNextRoutine } from './schedule';
 import type { Routine } from './types';
 
-describe('hasNoExercises', () => {
-  it('is true for a routine that is absent from loaded counts (no rows) or counted at zero', () => {
-    expect(hasNoExercises(new Map([['a', 4]]), 'empty')).toBe(true);
-    expect(hasNoExercises(new Map([['empty', 0]]), 'empty')).toBe(true);
-  });
-
-  it('is false for a routine with at least one exercise', () => {
-    expect(hasNoExercises(new Map([['a', 1]]), 'a')).toBe(false);
-    expect(hasNoExercises(new Map([['a', 4]]), 'a')).toBe(false);
-  });
-
-  it('judges nothing while the counts are still loading', () => {
-    expect(hasNoExercises(undefined, 'a')).toBe(false);
-  });
-});
 
 describe('lastWasLower: a last session whose routine is in no list', () => {
   const week: Routine[] = [

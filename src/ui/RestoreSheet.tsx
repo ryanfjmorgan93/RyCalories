@@ -71,8 +71,8 @@ export function RestoreSheet({
       onRestored?.();
       onClose();
       if (mode === 'replace') window.location.reload();
-    } catch {
-      toast('Restore failed', 'danger');
+    } catch (e) {
+      toast(e instanceof Error ? `Restore failed: ${e.message}` : 'Restore failed', 'danger');
     } finally {
       setBusy(false);
       setReplaceOpen(false);

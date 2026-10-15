@@ -207,6 +207,12 @@ describe('newRecords: reps_at_weight', () => {
     expect(recs.find((r) => r.kind === 'weight')).toBeDefined();
   });
 
+  it('is one record per weight: beating two weights in a session is two records', () => {
+    const prior = [session('s1', [{ type: 'working', weight: 60, reps: 10 }, { type: 'working', weight: 100, reps: 5 }])];
+    const recs = newRecords('reps', [{ type: 'working', weight: 60, reps: 12 }, { type: 'working', weight: 100, reps: 6 }], prior, HIST);
+    expect(recs.filter((r) => r.kind === 'reps_at_weight').map((r) => [r.weight, r.value])).toEqual([[60, 12], [100, 6]]);
+  });
+
   it('a tie in reps at the same weight is not a record', () => {
     const prior = [session('s1', [{ type: 'working', weight: 100, reps: 5 }])];
     const recs = newRecords('reps', [{ type: 'working', weight: 100, reps: 5 }], prior, HIST);

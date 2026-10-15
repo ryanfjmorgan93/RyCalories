@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { toDateKey } from '@/domain/dates';
 import type { StepDay } from '@/domain/steps';
 import { readStepDays, requestStepsAccess, stepsAccess, type StepsAccess } from '@/platform/health';
 
@@ -38,8 +39,8 @@ export async function askForSteps(now: () => Date = () => new Date()): Promise<S
   return access;
 }
 
-/** Today's and the week's steps as last read, for the coach; null when there is nothing to say. */
-export function stepsSnapshot(): StepDay[] | null {
+/** Today's and the week's steps as last read, for the coach; null when there is nothing to say, or the week read does not end on `today`. */
+export function stepsSnapshot(today: string = toDateKey()): StepDay[] | null {
   const { access, days } = useStepsStore.getState();
-  return access === 'granted' && days && days.some((d) => d.steps !== null) ? days : null;
+  return access === 'granted' && days && days.at(-1)?.date === today && days.some((d) => d.steps !== null) ? days : null;
 }

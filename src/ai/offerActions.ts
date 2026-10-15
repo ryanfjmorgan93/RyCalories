@@ -8,7 +8,7 @@
 import { db } from '@/db/db';
 import { getSettings } from '@/db/repo';
 import { markSupplementsTaken } from '@/db/supplementRepo';
-import { toDateKey } from '@/domain/dates';
+import { recentDayProblem, toDateKey } from '@/domain/dates';
 import { fmtNum } from '@/domain/format';
 import { calorieTargetOn } from '@/domain/nutrition';
 import { cleanSupplementDose, cleanSupplementName, findSupplement, SUPPLEMENT_TIMES, supplementDay, supplementLabel } from '@/domain/supplements';
@@ -92,8 +92,8 @@ export function createOfferActions(now: () => Date = () => new Date()) {
 
     async tickSupplements(input: TickSupplementsInput): Promise<OfferResult> {
       const day = input.date ?? today();
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return { ok: false, result: 'The date must be YYYY-MM-DD.' };
-      if (day > today()) return { ok: false, result: 'That date is in the future.' };
+      const wrongDay = recentDayProblem(day, today(), 7);
+      if (wrongDay) return { ok: false, result: wrongDay };
       const supplements = await db.supplements.toArray();
       const list = supplementDay(supplements, [], day).items.map((i) => i.supplement);
       if (list.length === 0) return { ok: false, result: 'Their supplement list is empty. They add supplements on Home.' };

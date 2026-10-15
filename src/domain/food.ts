@@ -62,14 +62,6 @@ export interface FoodItem {
 
 export const ZERO: Macros = { kcal: 0, protein: 0, carbs: 0, fat: 0 };
 
-function round1(n: number): number {
-  return Math.round(n * 10) / 10;
-}
-
-export function roundMacros(m: Macros): Macros {
-  return { kcal: Math.round(m.kcal), protein: round1(m.protein), carbs: round1(m.carbs), fat: round1(m.fat) };
-}
-
 /**
  * Macros at the precision they are displayed at: whole kilocalories, whole grams.
  *
@@ -181,7 +173,8 @@ export interface AtwaterCheck {
  */
 export function checkAtwater(m: Macros, overMargin = 0.1, underMargin = 0.25): AtwaterCheck {
   const implied = atwaterKcal(m);
-  if (m.kcal <= 0) return { implied, drift: 0, ok: implied <= 0 };
+  // At 0 kcal: a trace of macros is label rounding; more is a missing calorie figure, to be raised.
+  if (m.kcal <= 0) return implied <= ABSOLUTE_FLOOR_KCAL ? { implied, drift: 0, ok: true } : { implied, drift: 0, ok: false, reason: 'impossible' };
   const drift = (implied - m.kcal) / m.kcal;
   // Purely relative margins have a fixed point at the bottom of the scale. A diet squash at
   // 3 kcal with 0.3 g of carbs implies 1.2 kcal — a 60% shortfall, so it is flagged; accepting

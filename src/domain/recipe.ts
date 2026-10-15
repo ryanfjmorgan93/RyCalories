@@ -9,9 +9,8 @@
  * raw mince.
  */
 
-import { addMacros, displayMacros, fromPer100, fromPortion, macrosOf, scaleMacros, trustOf, ZERO, type FoodSource, type Macros, type Nutrition } from './food';
+import { addMacros, displayMacros, fromPer100, fromPortion, scaleMacros, trustOf, ZERO, type FoodSource, type Macros, type Nutrition } from './food';
 import type { IngredientCandidate } from './ingredientMatch';
-import type { MealEstimatePart } from './mealAnalysis';
 import type { RecipeIngredient } from './types';
 import { fmtNum, plural } from './format';
 
@@ -19,16 +18,6 @@ import { fmtNum, plural } from './format';
 export function countToGrams(count: number, unitGrams: number): number {
   if (!Number.isFinite(count) || !Number.isFinite(unitGrams)) return 0;
   return Math.max(0, count) * Math.max(0, unitGrams);
-}
-
-/** One ingredient's macros for the weight actually recorded on it. */
-export function ingredientMacros(i: RecipeIngredient): Macros {
-  return macrosOf(fromPer100(i.per100, i.grams));
-}
-
-/** Total weight of the recipe, in grams. */
-export function recipeTotalGrams(ings: RecipeIngredient[]): number {
-  return ings.reduce((sum, i) => sum + i.grams, 0);
 }
 
 /**
@@ -55,11 +44,6 @@ function isFiniteMacros(m: Macros): boolean {
 export function recipeIsComplete(ings: RecipeIngredient[]): boolean {
   if (ings.length === 0) return false;
   return ings.every((i) => i.grams > 0 && isFiniteMacros(i.per100));
-}
-
-/** How many ingredients still need an amount entered. */
-export function amountsNeeded(ings: RecipeIngredient[]): number {
-  return ings.filter((i) => i.grams <= 0).length;
 }
 
 /**
@@ -185,32 +169,5 @@ export function toIngredient(candidate: IngredientCandidate | null, name: string
     ...(candidate?.brand ? { brand: candidate.brand } : {}),
     ...(candidate?.product ? { product: candidate.product } : {}),
     ...(unit ? { unit } : {}),
-  };
-}
-
-/**
- * Build an ingredient from "Estimate a meal out": the same matching and naming rules as
- * `toIngredient`, but with the model's guessed weight for this part filled straight in — the
- * whole point being that estimates go straight to Review, with no one-at-a-time walk to type
- * amounts nobody was going to weigh anyway.
- *
- * `grams` comes from `part.grams` (0 when the model gave none — `ingredientGap` then reports
- * "amount" needed, exactly like a fresh question-card ingredient). A count-style unit keeps its
- * `unitGrams` estimate; `count` is derived from the guessed weight, rounded to one decimal, so
- * `count * unitGrams` still reproduces `grams` (see `RecipeIngredient.unit`'s doc comment).
- *
- * `amountEstimated: true` only when a real weight was actually filled in — a part with no amount
- * is "needs an amount", the ordinary state `ingredientGap`/`amountLabel` already handle, not an
- * estimate to show "≈ … · est." for.
- */
-export function toEstimatedIngredient(candidate: IngredientCandidate | null, part: MealEstimatePart, id: string): RecipeIngredient {
-  const base = toIngredient(candidate, part.name, id);
-  const grams = part.grams !== undefined && Number.isFinite(part.grams) && part.grams > 0 ? part.grams : 0;
-  const unit = base.unit ? { ...base.unit, count: base.unit.unitGrams > 0 ? Math.round((grams / base.unit.unitGrams) * 10) / 10 : 0 } : undefined;
-  return {
-    ...base,
-    grams,
-    ...(unit ? { unit } : {}),
-    ...(grams > 0 ? { amountEstimated: true as const } : {}),
   };
 }

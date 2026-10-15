@@ -15,6 +15,7 @@
  * from this app's `iron` database) — the same plugin call either way, so Playwright exercises the
  * real write/list/prune path rather than a stand-in for it.
  */
+import { Capacitor } from '@capacitor/core';
 import { Directory, Encoding, Filesystem } from '@capacitor/filesystem';
 import {
   backupFilename,
@@ -246,7 +247,12 @@ export async function maybeAutoBackupAtBoot(): Promise<void> {
   }
 }
 
-/** Backs up before a destructive in-app operation (reset/wipe/replace-restore). Never throws or blocks the operation on failure. */
+/**
+ * Backs up before a destructive in-app operation (reset/wipe/replace-restore). On the phone a backup
+ * that could not be written stops the operation: it is the only way back from wiping or restoring
+ * the wrong thing. shortcut: a browser has no backup folder to rely on, so there it never blocks.
+ */
 export async function backupBeforeDestructiveOp(): Promise<void> {
-  await backupNow('predestr');
+  const res = await backupNow('predestr');
+  if (!res.ok && Capacitor.isNativePlatform()) throw new Error(`No safety backup could be written (${res.error}), so nothing was changed.`);
 }

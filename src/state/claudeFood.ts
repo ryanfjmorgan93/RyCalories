@@ -26,7 +26,7 @@ import { uuid } from '@/domain/ids';
 import type { MatchSources } from '@/domain/ingredientMatch';
 import { barcodeDigits, type LabelNutrition } from '@/domain/products';
 import type { MealSlot } from '@/domain/types';
-import { deleteMealPhoto, preparePhoto } from './mealPhoto';
+import { deleteMealPhoto, preparePhoto, blobToBase64 } from './mealPhoto';
 
 /** The three ways Claude does the typing for food. */
 export type FoodReadKind = 'photo' | 'describe' | 'label';
@@ -97,13 +97,6 @@ export function readFailureLine(e: unknown, what: ReadKind): string {
 export interface PreparedImage {
   base64: string;
   cachePath: string;
-}
-
-async function blobToBase64(blob: Blob): Promise<string> {
-  const bytes = new Uint8Array(await blob.arrayBuffer());
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(binary);
 }
 
 /** Scale a picked photo (src/state/mealPhoto.ts) and read it back as base64. Throws a `ClaudeError` with a plain line if it cannot. */

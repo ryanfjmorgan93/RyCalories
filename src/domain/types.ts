@@ -134,8 +134,6 @@ export interface RoutineExercise {
 }
 
 export type NiggleTag = 'lower back' | 'hamstring DOMS' | 'knee' | 'shoulder' | 'other';
-export const NIGGLE_TAGS: NiggleTag[] = ['lower back', 'hamstring DOMS', 'knee', 'shoulder', 'other'];
-
 export interface Niggle {
   tag: NiggleTag;
   severity: 1 | 2 | 3;

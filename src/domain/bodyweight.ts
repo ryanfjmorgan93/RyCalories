@@ -39,6 +39,8 @@ export function weeklyDelta(entries: Bodyweight[], asOf: string): WeeklyDelta | 
     return { deltaKg: round2(c - p), method: 'avg', currentAvg: round2(c), previousAvg: round2(p) };
   }
   const latest = sorted[sorted.length - 1];
+  // A "7-day" change needs a reading in the last 7 days; otherwise it is an old change shown as current.
+  if (daysBetween(latest.date, asOf) > 6) return null;
   const earlier = [...sorted].reverse().find((e) => daysBetween(e.date, latest.date) >= 5);
   if (!earlier) return null;
   const span = daysBetween(earlier.date, latest.date);

@@ -1,6 +1,5 @@
 import Papa from 'papaparse';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { gatherContext } from './assistantQueries';
 import { exportBackup, exportCsv, importBackup, type Backup } from './backup';
 import { calendarData } from './calendarQueries';
 import { addCatalogueExercise, addDemoExercise } from './catalogueRepo';
@@ -38,7 +37,6 @@ import {
 import { SEED_EXERCISE_IDS, SEED_EXERCISES, SEED_ROUTINE_IDS } from './seed';
 import { legDayFor, wasLegDay } from './todayQueries';
 import { weeklySetsByMuscle } from './volumeQueries';
-import { buildContextBlock } from '@/domain/assistant';
 import { exerciseFromCatalogue, isCatalogueDemo, type CatalogueEntry } from '@/domain/catalogue';
 import { addDays, toDateKey } from '@/domain/dates';
 import { exerciseFromDemo, type DemoLike } from '@/domain/library';
@@ -943,66 +941,6 @@ describe('exercise usage and the routine editor ignore quick rows', () => {
     expect(real.length).toBe(all.length - 1);
     expect(real.every((r) => r.routineId !== session.routineId)).toBe(true);
     expect(await excludeQuickRoutineExercises([])).toEqual([]);
-  });
-});
-
-describe('Ask never quotes a quick prescription', () => {
-  const today = '2026-09-08';
-
-  it('an exercise in a real routine is quoted from that routine, even from inside the quick session', async () => {
-    const settings = (await db.settings.get('settings'))!;
-    // The real row sorts after the hidden one, so a first-by-key lookup would pick the hidden one.
-    const realRx = (await db.routineExercises.where('routineId').equals(HINGE).toArray()).find((r) => r.exerciseId === RDL.id)!;
-    await db.routineExercises.delete(realRx.id);
-    await db.routineExercises.put({ ...realRx, id: 'zzzz-real-rx' });
-    const session = await startQuickSession(planOf([rowOf(RDL, { weightKg: 71.5 })]), [], 'light');
-
-    const inside = await gatherContext({ today, settings, exerciseId: RDL.id, routineId: session.routineId, sessionId: session.id });
-    expect(inside.exercise!.prescription).toBe('110 kg × 6–8 × 4');
-    expect(inside.plan).toBeUndefined();
-    const outside = await gatherContext({ today, settings, exerciseId: RDL.id });
-    expect(outside.exercise!.prescription).toBe('110 kg × 6–8 × 4');
-  });
-
-  it('an exercise only a quick session holds has no prescription to quote', async () => {
-    const settings = (await db.settings.get('settings'))!;
-    const custom = await createExercise({ ...exerciseFromCatalogue(entryOf('w')), demo: undefined, name: 'Custom move four' });
-    const session = await startQuickSession(planOf([rowOf(custom, { weightKg: 12.5 })]), [], 'light');
-
-    const inside = await gatherContext({ today, settings, exerciseId: custom.id, routineId: session.routineId });
-    expect(inside.exercise!.prescription).toBeUndefined();
-    const outside = await gatherContext({ today, settings, exerciseId: custom.id });
-    expect(outside.exercise!.prescription).toBeUndefined();
-  });
-});
-
-describe('Ask labels a quick session among the last sessions', () => {
-  const today = '2026-09-30';
-
-  it('a light and a normal quick session carry their label, and a real session none', async () => {
-    const settings = (await db.settings.get('settings'))!;
-    await realSession(HINGE, '2026-09-01T18:00:00.000Z', [{ exerciseId: RDL.id, weight: 110, reps: 8 }]);
-    await quickSession([rowOf(RDL, { weightKg: 71.5 })], 'light', '2026-09-02T18:00:00.000Z', [{ row: 0, weight: 70, reps: 12 }]);
-    await quickSession([rowOf(RDL, { weightKg: 100 })], 'normal', '2026-09-03T18:00:00.000Z', [{ row: 0, weight: 100, reps: 8 }]);
-
-    const ctx = await gatherContext({ today, settings, exerciseId: RDL.id });
-
-    // Newest first.
-    expect(ctx.exercise!.lastSessions.map((s) => s.sets)).toEqual(['quick session: 100 × 8', 'quick session (light): 70 × 12', '110 × 8']);
-    // And that is what the model is given, beside the real prescription.
-    const block = buildContextBlock(ctx);
-    expect(block).toContain('Prescription: 110 kg × 6–8 × 4');
-    expect(block).toMatch(/Last sessions: .*quick session: 100 × 8; .*quick session \(light\): 70 × 12; .* 110 × 8/);
-  });
-
-  it('a light session with nothing counted still says what it was', async () => {
-    const settings = (await db.settings.get('settings'))!;
-    const s = await quickSession([rowOf(RDL, { weightKg: 70 })], 'light', '2026-09-02T18:00:00.000Z', []);
-    await logSet({ sessionId: s.id, routineExerciseId: null, exerciseId: RDL.id, type: 'warmup', weight: 40, reps: 10 });
-
-    const ctx = await gatherContext({ today, settings, exerciseId: RDL.id });
-
-    expect(ctx.exercise!.lastSessions.map((x) => x.sets)).toEqual(['quick session (light): no working sets']);
   });
 });
 

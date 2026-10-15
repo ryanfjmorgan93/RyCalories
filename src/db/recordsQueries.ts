@@ -5,15 +5,11 @@
 import { db } from './db';
 import { isoToDateKey } from '@/domain/dates';
 import { bestsFor, newRecords, type Bests, type PersonalRecord, type RecordSession, type RecordSet } from '@/domain/records';
-import { sessionCountsForRecords } from '@/domain/sets';
+import { sessionCountsForRecords, byIndex } from '@/domain/sets';
 import { bestE1rm } from '@/domain/strength';
 import { sessionVolume } from '@/domain/volume';
 import type { Exercise, Session, SetLog } from '@/domain/types';
 import type { ChartPoint } from '@/ui/components/LineChart';
-
-function byIndex(a: SetLog, b: SetLog): number {
-  return a.index - b.index || a.completedAt.localeCompare(b.completedAt);
-}
 
 function toRecordSet(s: SetLog): RecordSet {
   return { type: s.type, weight: s.weight, reps: s.reps };

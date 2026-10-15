@@ -2,9 +2,8 @@
  * The no-AI path: turning typed meal text into separate foods with whatever amount the user
  * typed themselves. Pure functions only — no IO, no clock, no database.
  *
- * These amounts are the user's own numbers, unlike a photo recognition (which never gives
- * amounts at all — see `mealAnalysis.ts`), so they are trusted to pre-fill a card rather than
- * being asked for again. Anything this parser doesn't recognise is not an error: it becomes a
+ * These amounts are the user's own numbers, unlike a photo estimate (which is marked ≈), so they
+ * are trusted to pre-fill a card rather than being asked for again. Anything this parser doesn't recognise is not an error: it becomes a
  * plain named ingredient with no amount, same as if the user had typed only the name.
  */
 

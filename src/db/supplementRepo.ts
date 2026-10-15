@@ -44,26 +44,6 @@ export async function addSupplement(input: SupplementInput): Promise<AddSuppleme
   });
 }
 
-/** Change a supplement's name, dose or time of day. */
-export async function updateSupplement(id: string, patch: Partial<Pick<Supplement, 'name' | 'dose' | 'time'>>): Promise<void> {
-  // modify, not update: a cleared dose has to lose the key, and update({ dose: undefined }) keeps it.
-  await db.supplements
-    .where('id')
-    .equals(id)
-    .modify((s) => {
-      if (patch.name !== undefined) {
-        const name = cleanSupplementName(patch.name);
-        if (name) s.name = name;
-      }
-      if ('dose' in patch) {
-        const dose = cleanSupplementDose(patch.dose);
-        if (dose === undefined) delete s.dose;
-        else s.dose = dose;
-      }
-      if (patch.time !== undefined) s.time = patch.time;
-    });
-}
-
 /** Take a supplement off the list. Its past ticks stay. */
 export async function removeSupplement(id: string): Promise<void> {
   await db.supplements.update(id, { archived: true });

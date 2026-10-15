@@ -25,17 +25,17 @@ import {
 import { addDays, daysBetween, isoToDateKey, toDateKey } from '@/domain/dates';
 import { displayMacros, type Macros } from '@/domain/food';
 import { fmtKg, fmtNum, fmtSetsLine, fmtTime, plural, targetLine } from '@/domain/format';
-import { DEFAULT_SETTINGS, type BodyScan, type CoachMessage, type CoachNote, type Exercise, type MealItem, type RoutineExercise, type Session, type Settings } from '@/domain/types';
+import { DEFAULT_SETTINGS, type BodyScan, type CoachMessage, type CoachNote, type Exercise, type MealItem, type Settings } from '@/domain/types';
 import { loadClaudeSummaryInput } from '@/db/claudeSummaryQueries';
 import { db } from '@/db/db';
 import { cleanStepGoal, stepWeek, type StepDay } from '@/domain/steps';
 import { SUPPLEMENT_TIME_LABEL, supplementDay, supplementLabel } from '@/domain/supplements';
-import { stepsSnapshot } from '@/state/steps';
+import { refreshSteps, stepsSnapshot } from '@/state/steps';
 import { mealsOnDay } from '@/db/foodRepo';
 import { completedSessions } from '@/db/historyQueries';
 import { getActiveSession, getSettings, routineItems, setsForSlot } from '@/db/repo';
 import { dayView } from '@/db/todayQueries';
-import type { PlanOverridePatch } from './types';
+import { effectiveRx } from '@/domain/planOverride';
 
 /** The most the snapshot should run to. Tokens are estimated from characters (see `estimateTokens`). */
 export const MAX_CONTEXT_TOKENS = 6000;
@@ -69,7 +69,6 @@ export interface ContextOptions {
   steps?: StepDay[] | null;
 }
 
-type SessionWithOverrides = Session & { planOverrides?: Record<string, PlanOverridePatch> };
 
 // ---------------------------------------------------------------------------
 // Pure section builders (exported for tests)
@@ -182,31 +181,13 @@ function itemLine(i: MealItem): string {
   return `${i.name}${portion} (${approx}${fmtNum(m.kcal)} kcal, P ${approx}${fmtNum(m.protein)})`;
 }
 
-/** Plan override applied to a routine-exercise, for what the live session is actually asking of the owner today. */
-export function effectiveRx(rx: RoutineExercise, override: PlanOverridePatch | undefined): { rx: RoutineExercise; changed: boolean } {
-  if (!override) return { rx, changed: false };
-  const next = { ...rx };
-  if (override.targetSets !== undefined) {
-    next.targetSets = override.targetSets;
-    next.targetSetsMax = undefined;
-  }
-  if (override.repMin !== undefined) next.repMin = override.repMin;
-  if (override.repMax !== undefined) next.repMax = override.repMax;
-  if (override.weight !== undefined) {
-    next.currentWeight = override.weight;
-    if (next.mode === 'calibrating') next.mode = 'normal';
-  }
-  return { rx: next, changed: true };
-}
-
 // ---------------------------------------------------------------------------
 // Live session
 
 async function liveSessionBlock(now: Date): Promise<string | null> {
-  const session = (await getActiveSession()) as SessionWithOverrides | undefined;
+  const session = await getActiveSession();
   if (!session) return null;
   const items = await routineItems(session.routineId);
-  const overrides = session.planOverrides ?? {};
   const skipped = new Set(session.skippedRoutineExerciseIds ?? []);
   const swaps = session.swaps ?? {};
   const minutes = Math.max(0, Math.round((now.getTime() - Date.parse(session.startedAt)) / 60000));
@@ -217,7 +198,9 @@ async function liveSessionBlock(now: Date): Promise<string | null> {
   const exerciseName = async (id: string): Promise<string> => nameOf.get(id)?.name ?? (await db.exercises.get(id))?.name ?? 'an exercise';
 
   for (const { rx, exercise } of items) {
-    const { rx: eff, changed } = effectiveRx(rx, overrides[rx.id]);
+    // The live screen's own rule (domain/planOverride), so the coach is told the plan the owner sees.
+    const eff = effectiveRx(rx, session);
+    const changed = eff !== rx;
     const sets = (await setsForSlot(session.id, rx.id, exercise.id)).filter((s) => s.type !== 'warmup');
     if (skipped.has(rx.id)) {
       const swapId = swaps[rx.id];
@@ -314,6 +297,8 @@ export async function buildVolatileContext(opts: ContextOptions = {}): Promise<s
   const now = opts.now ?? new Date();
   const today = toDateKey(now);
   const settings = opts.settings ?? (await getSettings());
+  // Steps are otherwise only read when Home opens: read them now, so the coach is not told this morning's count.
+  if (opts.steps === undefined) await refreshSteps(() => now);
   const [view, todayMeals, live, said, lastFinished, lastMeal, weighIn, supplements, supplementLogs] = await Promise.all([
     dayView(today, settings, today),
     mealsOnDay(today),
@@ -354,7 +339,7 @@ export async function buildVolatileContext(opts: ContextOptions = {}): Promise<s
     ].join(' '),
     foodLines.join('\n'),
     supplementLine,
-    stepsLine(opts.steps !== undefined ? opts.steps : stepsSnapshot(), cleanStepGoal(settings.stepGoal)),
+    stepsLine(opts.steps !== undefined ? opts.steps : stepsSnapshot(today), cleanStepGoal(settings.stepGoal)),
     live ?? 'No session is live right now.',
     said,
   ].filter((p): p is string => !!p);

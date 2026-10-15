@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { INITIAL_COMPLETION_HOLD, nextCompletionHold, type CompletionHoldState } from '@/domain/completionHold';
 
-function prefersReducedMotion(): boolean {
+export function prefersReducedMotion(): boolean {
   try {
     return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   } catch {

@@ -14,6 +14,7 @@ import { db } from '@/db/db';
 import { sumItems } from '@/db/foodRepo';
 import { muscleSetRowsFrom } from '@/db/volumeQueries';
 import { isoToDateKey, mondayOf, toDateKey } from '@/domain/dates';
+import { isStaleSession } from '@/domain/session';
 import { isReminderId, planReminders, resolveReminders, type ReminderInput } from '@/domain/reminders';
 import { supplementDay, supplementLabel } from '@/domain/supplements';
 import { isNative } from '@/state/native';
@@ -43,8 +44,9 @@ export async function loadReminderInput(now: Date): Promise<ReminderInput> {
 
   let lastSessionDate: string | null = null;
   for (const s of sessions) {
-    if (!s.endedAt) continue;
-    const day = isoToDateKey(s.endedAt);
+    // A session still going counts (no "time to train" mid-workout); one left open for hours does not.
+    if (!s.endedAt && isStaleSession(s.startedAt, now.getTime())) continue;
+    const day = isoToDateKey(s.endedAt ?? s.startedAt);
     if (lastSessionDate === null || day > lastSessionDate) lastSessionDate = day;
   }
 
@@ -93,7 +95,7 @@ async function reschedule(now: Date): Promise<RescheduleOutcome> {
   try {
     // Read the row directly: getSettings would seed a missing one, which is a write this has no business making.
     const prefs = resolveReminders((await db.settings.get('settings'))?.reminders);
-    if (!prefs.food.on && !prefs.training.on && !prefs.weighIn.on) {
+    if (!prefs.food.on && !prefs.training.on && !prefs.weighIn.on && !prefs.supplements.on) {
       await cancelOwnPending();
       return 'off';
     }
