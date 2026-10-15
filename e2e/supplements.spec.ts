@@ -73,7 +73,7 @@ test('the coach offers targets and a supplement; nothing changes until each is t
     if (request.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
     const body = request.postDataJSON() as Record<string, any>;
     let reply: FakeReply;
-    if (String(body.model).includes('haiku')) reply = { content: [text('')] };
+    if (body.thinking?.type === 'between_tools') reply = { content: [text('')] };
     else if ((body.output_config as { format?: unknown } | undefined)?.format) reply = { content: [text('{"review":"A steady week."}')] };
     else {
       const last = (body.messages as { content: unknown }[]).at(-1)!;

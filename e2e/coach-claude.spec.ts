@@ -51,7 +51,8 @@ function momentReply(body: Record<string, any>): FakeReply {
   return { content: [text('')] };
 }
 
-const isHaiku = (body: Record<string, any>) => String(body.model).includes('haiku');
+/** A moment (a coach line): the one call made with thinking off. */
+const isMoment = (body: Record<string, any>) => body.thinking?.type === 'between_tools';
 
 /** A key in localStorage before the app boots (and again after `fresh` clears storage and reloads). */
 async function withKey(page: Page): Promise<void> {
@@ -137,7 +138,7 @@ test.describe('the coach in a session', () => {
   test('"only 2 sets of bench today" changes today only: the bench card shows 2 sets, and the thread says what was done', async ({ page }) => {
     await withKey(page);
     const seen = await mockClaude(page, (body) => {
-      if (isHaiku(body)) return momentReply(body);
+      if (isMoment(body)) return momentReply(body);
       const last = (body.messages as { content: unknown }[]).at(-1)!;
       const afterTool = Array.isArray(last.content) && (last.content as { type: string }[]).some((b) => b.type === 'tool_result');
       return afterTool
@@ -161,7 +162,7 @@ test.describe('the coach in a session', () => {
     // Claude was asked as Sonnet, with the owner's words last, and the tool result went back to it.
     // (Home may also have asked for Monday's weekly review on the way in: a structured Sonnet call,
     // not part of this conversation.)
-    const chat = seen.filter((s) => !isHaiku(s.body) && !(s.body.output_config as { format?: unknown } | undefined)?.format);
+    const chat = seen.filter((s) => !isMoment(s.body) && !(s.body.output_config as { format?: unknown } | undefined)?.format);
     expect(chat).toHaveLength(2);
     expect(chat[0]!.body.model).toBe('claude-sonnet-5-5');
     expect(lastUserText(chat[0]!.body)).toBe('only 2 sets of bench today');
@@ -176,7 +177,7 @@ test.describe('the coach in a session', () => {
 
   test('after a set the rest bar carries the coach\'s line; after the exercise and the session, theirs', async ({ page }) => {
     await withKey(page);
-    const seen = await mockClaude(page, (body) => (isHaiku(body) ? momentReply(body) : { content: [text('')] }));
+    const seen = await mockClaude(page, (body) => (isMoment(body) ? momentReply(body) : { content: [text('')] }));
     const bench = await startPush(page);
 
     await tickSet(bench, 65, 8);
@@ -184,7 +185,7 @@ test.describe('the coach in a session', () => {
     await expect(rest).toBeVisible();
     await expect(rest.getByTestId('coach-line-set')).toHaveText(SET_LINE);
     // What the coach was told about the set.
-    const asked = seen.find((s) => isHaiku(s.body) && lastUserText(s.body).includes('has just logged a set'))!;
+    const asked = seen.find((s) => isMoment(s.body) && lastUserText(s.body).includes('has just logged a set'))!;
     const facts = lastUserText(asked.body);
     expect(facts).toContain(`exercise: ${BENCH}`);
     expect(facts).toContain('setNumber: 1');
@@ -204,7 +205,7 @@ test.describe('the coach in a session', () => {
     await expect(page.getByTestId('coach-line-exercise')).toHaveCount(0);
     await bench.getByTestId('feel-Good').click();
     await expect(bench.getByTestId('coach-line-exercise')).toHaveText(EXERCISE_LINE);
-    const done = seen.find((s) => isHaiku(s.body) && lastUserText(s.body).includes('finished the last set of an exercise'))!;
+    const done = seen.find((s) => isMoment(s.body) && lastUserText(s.body).includes('finished the last set of an exercise'))!;
     const told = lastUserText(done.body);
     expect(told).toContain(`exercise: ${BENCH}`);
     expect(told).toContain('effort: Good');
@@ -215,7 +216,7 @@ test.describe('the coach in a session', () => {
     await clickIfPresent(page.getByRole('dialog').getByRole('button', { name: 'Finish', exact: true }));
     await expect(page).toHaveURL(/\/summary$/);
     await expect(page.getByTestId('coach-line-session')).toHaveText(SESSION_LINE);
-    const wrap = seen.find((s) => isHaiku(s.body) && lastUserText(s.body).includes('finished their session'))!;
+    const wrap = seen.find((s) => isMoment(s.body) && lastUserText(s.body).includes('finished their session'))!;
     expect(lastUserText(wrap.body)).toContain('nextTime:');
     expect(lastUserText(wrap.body)).toContain(BENCH);
   });
@@ -233,7 +234,7 @@ test.describe('without the coach', () => {
       },
       [KEY],
     );
-    const seen = await mockClaude(page, (body) => (isHaiku(body) ? { content: [text(SET_LINE)] } : { content: [text('never')] }));
+    const seen = await mockClaude(page, (body) => (isMoment(body) ? { content: [text(SET_LINE)] } : { content: [text('never')] }));
     // Said once, when it was found out: on opening the app over the cap.
     await fresh(page);
     await expect(page.getByTestId('toast')).toContainText("The coach is paused until the 1st: this month's $15 cap is reached. Tracking carries on.");

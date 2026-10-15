@@ -40,7 +40,7 @@ function kindOf(body: Record<string, any>): Kind {
   if ('items' in props) return 'meal';
   if ('per100' in props) return 'label';
   if ('weight_kg' in props) return 'inbody';
-  if (String(body?.model ?? '').includes('haiku')) return 'moment';
+  if (body?.thinking?.type === 'between_tools') return 'moment';
   return 'other';
 }
 
@@ -399,7 +399,7 @@ test.describe('the coach on the Food screen', () => {
     await expect(page.getByTestId('coach-line-meal')).toHaveText('Two eggs is a good start. Add a green next time to round out the plate.', { timeout: 25_000 });
     expect(claude.of('moment')).toHaveLength(1);
     const asked = claude.of('moment')[0]!.body;
-    expect(asked.model).toBe('claude-haiku-5-5');
+    expect(asked.model).toBe('claude-sonnet-5-5');
     const prompt = String(asked.messages[0].content);
     expect(prompt).toContain('just logged a meal');
     expect(prompt).toContain('Eggs, chicken, whole, raw: 2 eggs (100 g), 131 kcal');

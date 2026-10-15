@@ -94,13 +94,16 @@ async function seedSessions(page: Page, seeds: SeedSession[]): Promise<void> {
 
 interface ClaudeCall {
   model: string;
+  /** A coach line (thinking off), not the review. */
+  moment: boolean;
   /** The user's message (the facts the app sent). */
   asked: string;
 }
 
 /**
- * Answers every request to the Anthropic API: Haiku (the coach line) with `line`, Sonnet (the
- * review) with whatever `review(callNumber)` returns. Nothing leaves the machine.
+ * Answers every request to the Anthropic API: the coach line (a moment: Sonnet with thinking off,
+ * `between_tools`) with `line`, the review with whatever `review(callNumber)` returns. Nothing
+ * leaves the machine.
  */
 async function mockClaude(page: Page, replies: { line?: string; review?: (n: number) => { review: string; propose_calories?: number; propose_protein?: number } }): Promise<ClaudeCall[]> {
   const calls: ClaudeCall[] = [];
@@ -112,11 +115,12 @@ async function mockClaude(page: Page, replies: { line?: string; review?: (n: num
       await route.fulfill({ status: 204, headers: cors });
       return;
     }
-    const body = JSON.parse(request.postData() ?? '{}') as { model: string; messages: { role: string; content: unknown }[] };
+    const body = JSON.parse(request.postData() ?? '{}') as { model: string; thinking?: { type: string }; messages: { role: string; content: unknown }[] };
     const last = [...body.messages].reverse().find((m) => m.role === 'user');
     const asked = typeof last?.content === 'string' ? last.content : JSON.stringify(last?.content);
-    calls.push({ model: body.model, asked });
-    const reply = body.model.includes('haiku') ? (replies.line ?? '') : JSON.stringify(replies.review?.(++reviews) ?? { review: 'A fine week.' });
+    const moment = body.thinking?.type === 'between_tools';
+    calls.push({ model: body.model, moment, asked });
+    const reply = moment ? (replies.line ?? '') : JSON.stringify(replies.review?.(++reviews) ?? { review: 'A fine week.' });
     await route.fulfill({
       status: 200,
       headers: { ...cors, 'content-type': 'application/json' },
@@ -130,8 +134,8 @@ async function setKey(page: Page): Promise<void> {
   await page.evaluate((key) => localStorage.setItem('iron.claudeKey', key), FAKE_KEY);
 }
 
-const sonnet = (calls: ClaudeCall[]) => calls.filter((c) => c.model.includes('sonnet'));
-const haiku = (calls: ClaudeCall[]) => calls.filter((c) => c.model.includes('haiku'));
+const reviewCalls = (calls: ClaudeCall[]) => calls.filter((c) => !c.moment);
+const momentCalls = (calls: ClaudeCall[]) => calls.filter((c) => c.moment);
 
 /** A Home with a few days of training behind it. */
 async function bootWith(page: Page, now: Date, seeds: SeedSession[] = []): Promise<void> {
@@ -330,8 +334,8 @@ test.describe('the weekly review', () => {
     await expect(page.getByTestId('review-use-protein')).toHaveText('Use 190 g protein');
 
     // One Sonnet request, carrying the past seven days.
-    expect(sonnet(calls)).toHaveLength(1);
-    const asked = sonnet(calls)[0].asked;
+    expect(reviewCalls(calls)).toHaveLength(1);
+    const asked = reviewCalls(calls)[0].asked;
     expect(asked).toContain('- period: 5 Oct to 11 Oct');
     expect(asked).toContain('- sessions: 1');
     expect(asked).toContain('- sessionNames: Upper (Push)');
@@ -341,7 +345,7 @@ test.describe('the weekly review', () => {
     // It does not ask again on a reload.
     await page.reload();
     await expect(page.getByTestId('weekly-review')).toBeVisible();
-    expect(sonnet(calls)).toHaveLength(1);
+    expect(reviewCalls(calls)).toHaveLength(1);
   });
 
   test('"Use 2,400 kcal" saves the calorie target and says what changed; the protein button is still there', async ({ page }) => {
@@ -408,12 +412,12 @@ test.describe('the weekly review', () => {
     await page.reload();
     await expect(page.getByTestId('routines-list')).toBeVisible();
     await expect(page.getByTestId('weekly-review')).toHaveCount(0);
-    expect(sonnet(calls)).toHaveLength(1);
+    expect(reviewCalls(calls)).toHaveLength(1);
 
     await page.clock.setFixedTime(NEXT_MON);
     await page.reload();
     await expect(page.getByTestId('weekly-review-text')).toHaveText('A quieter week. How are you doing?');
-    expect(sonnet(calls)).toHaveLength(2);
+    expect(reviewCalls(calls)).toHaveLength(2);
   });
 
   test('stays through the week until dismissed, without asking again', async ({ page }) => {
@@ -423,7 +427,7 @@ test.describe('the weekly review', () => {
     await page.reload();
     await expect(page.getByTestId('weekly-review')).toBeVisible();
     await expect(page.getByTestId('review-use-calories')).toBeVisible();
-    expect(sonnet(calls)).toHaveLength(1);
+    expect(reviewCalls(calls)).toHaveLength(1);
   });
 
   test('is not written on a day that is not Monday', async ({ page }) => {
@@ -434,7 +438,7 @@ test.describe('the weekly review', () => {
     await page.reload();
     await expect(page.getByTestId('routines-list')).toBeVisible();
     await expect(page.getByTestId('weekly-review')).toHaveCount(0);
-    expect(sonnet(calls)).toHaveLength(0);
+    expect(reviewCalls(calls)).toHaveLength(0);
   });
 
   test('does not appear when Claude cannot be called: no key, no card, no coach line, and Home still works', async ({ page }) => {
@@ -482,7 +486,7 @@ test.describe('the coach line', () => {
 
     const line = page.getByTestId('coach-line-open');
     await expect(line).toHaveText('Back is your most rested region: six days. Pull today?');
-    const asked = haiku(calls).map((c) => c.asked).join('\n');
+    const asked = momentCalls(calls).map((c) => c.asked).join('\n');
     expect(asked).toContain('- weekday: Wednesday');
     expect(asked).toContain('- timeOfDay: morning');
     expect(asked).toContain('- mostRestedRegion: Back');
@@ -491,7 +495,7 @@ test.describe('the coach line', () => {
     expect(asked).toContain('- proteinTargetGrams: 200');
     expect(asked).toContain('- weighInDue: false');
     // Asked once, not once per query that arrived while Home loaded.
-    expect(haiku(calls)).toHaveLength(1);
+    expect(momentCalls(calls)).toHaveLength(1);
   });
 
   test('is absent when the coach says nothing', async ({ page }) => {
