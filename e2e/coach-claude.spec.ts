@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { lastUserText, messageBody, text, toolUse, type FakeReply } from '../src/test/fakeClaude';
+import { cited, lastUserText, messageBody, text, toolUse, webSearch, type FakeReply } from '../src/test/fakeClaude';
+import { clippedText } from './clipped';
 import { clickIfPresent, fresh, logOneSet, readRawIron } from './fresh';
 
 /**
@@ -202,6 +203,38 @@ test.describe('the coach in a session', () => {
     // The routine's own plan was written: Bench Press 4 sets at 65 kg, the bottom of 6–8.
     const sets = (await readRawIron(page)).tables.setLogs as { weight: number; reps: number }[];
     expect(sets.filter((x) => x.weight === 65 && x.reps === 6).length).toBeGreaterThanOrEqual(4);
+  });
+
+  test('a looked-up answer shows the pages it came from, as links that open in the browser', async ({ page }) => {
+    await withKey(page);
+    const menu = { url: 'https://www.nandos.co.uk/food/nutrition', title: "Nutrition | Nando's" };
+    const seen = await mockClaude(page, (body) =>
+      isMoment(body)
+        ? { content: [text('')] }
+        : {
+            content: [
+              ...webSearch('srvtoolu_1', "Nando's boneless thighs nutrition", [menu]),
+              text("Nando's lists "),
+              cited('4 boneless thighs at 422 kcal and 72 g protein', menu),
+              text('.'),
+            ],
+            usage: { input_tokens: 900, output_tokens: 60, server_tool_use: { web_search_requests: 1 } },
+          },
+    );
+    await fresh(page);
+    await page.getByTestId('coach-fab').click();
+    const sheet = page.getByRole('dialog').filter({ has: page.getByTestId('coach-thread') });
+    await page.getByTestId('coach-input').fill("How much protein in Nando's 4 boneless thighs?");
+    await page.getByTestId('coach-send').click();
+
+    await expect(sheet.getByTestId('coach-bubble').last()).toContainText("Nando's lists 4 boneless thighs at 422 kcal and 72 g protein.");
+    const link = sheet.getByTestId('coach-sources').getByRole('link', { name: "Source: Nutrition | Nando's" });
+    await expect(link).toHaveAttribute('href', menu.url);
+    await expect(link).toHaveAttribute('target', '_blank');
+    // The chat asked with the web search tool on, last in the list.
+    const chat = seen.find((x) => lastUserText(x.body).includes("Nando's 4 boneless thighs"))!;
+    expect((chat.body.tools as { name: string }[]).at(-1)!.name).toBe('web_search');
+    expect(await clippedText(page)).toEqual([]);
   });
 
   test('after a set the rest bar carries the coach\'s line; after the exercise and the session, theirs', async ({ page }) => {

@@ -28,7 +28,7 @@ import { uuid } from '@/domain/ids';
 import type { CoachMessage } from '@/domain/types';
 import { recordUncaughtError } from '@/platform/errorReports';
 import { createCoachActions, type CoachActions } from './actions';
-import { assertCanCall, blockedReason, CLAUDE_ERROR_MESSAGES, ClaudeError, runToolLoop, SONNET, textOf, toClaudeError, type CallDeps, type ClaudeErrorKind } from './client';
+import { assertCanCall, blockedReason, CLAUDE_ERROR_MESSAGES, ClaudeError, runToolLoop, SONNET, sourcesOf, textOf, toClaudeError, type CallDeps, type ClaudeErrorKind } from './client';
 import { buildCoachContext, type ContextOptions } from './context';
 import { redactKeys } from './key';
 import { CHAT_RULES, personaWith } from './persona';
@@ -97,6 +97,15 @@ function laterThan(previous: string): string {
   return now > previous ? now : new Date(Date.parse(previous) + 1).toISOString();
 }
 
+/**
+ * Anthropic's web search, run on their side: the coach looks up a chain's or a brand's own nutrition
+ * figures (CHAT_RULES says when). Last in the list, so the tools before it keep their cached order.
+ * Called directly, not through code execution ("dynamic filtering"), which would bring a second
+ * server tool into a request full of strict ones. At most three searches a request; each is
+ * charged (prices.ts) and counts towards the cap.
+ */
+const WEB_SEARCH = { type: 'web_search_20260209', name: 'web_search', max_uses: 3, allowed_callers: ['direct'] } satisfies Anthropic.Beta.Messages.BetaWebSearchTool20260209;
+
 const EMPTY_REPLY = "I didn't have an answer for that. Try asking another way.";
 const STOPPED_REPLY = 'That took more steps than I am allowed in one go, so I stopped. Nothing was changed.';
 
@@ -123,7 +132,7 @@ export async function sendCoachMessage(rawText: string, opts: ChatOptions = {}):
   try {
     assertCanCall();
     const context = await buildCoachContext(opts.context);
-    const tools = createCoachTools(opts.actions ?? createCoachActions(), turn);
+    const tools = [...createCoachTools(opts.actions ?? createCoachActions(), turn), WEB_SEARCH];
     const { message, stoppedForCap, hitIterationLimit } = await runToolLoop(
       {
         model: SONNET,
@@ -152,7 +161,15 @@ export async function sendCoachMessage(rawText: string, opts: ChatOptions = {}):
     if (!reply) reply = hitIterationLimit ? STOPPED_REPLY : EMPTY_REPLY;
     reply = redactKeys(reply);
 
-    const row: CoachMessage = { id: uuid(), at: laterThan(userAt), role: 'coach', text: reply, ...(turn.actions.length > 0 ? { actions: [...turn.actions] } : {}) };
+    const sources = hitIterationLimit ? [] : sourcesOf(message.content);
+    const row: CoachMessage = {
+      id: uuid(),
+      at: laterThan(userAt),
+      role: 'coach',
+      text: reply,
+      ...(turn.actions.length > 0 ? { actions: [...turn.actions] } : {}),
+      ...(sources.length > 0 ? { sources } : {}),
+    };
     await db.coachMessages.put(row);
     return { ok: true, text: reply, actions: turn.actions, draft: turn.draft, offer: turn.offer, stored };
   } catch (e) {

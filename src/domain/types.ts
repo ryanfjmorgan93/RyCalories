@@ -328,6 +328,8 @@ export interface CoachMessage {
   moment?: CoachMoment;
   /** Short descriptions of what the coach changed in this turn ("Bench press: 3 sets today"). */
   actions?: string[];
+  /** The web pages the reply cited, when the coach searched; shown under it as links. */
+  sources?: { title: string; url: string }[];
 }
 
 export type CoachMoment =

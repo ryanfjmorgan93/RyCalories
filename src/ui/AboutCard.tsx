@@ -40,7 +40,7 @@ export function AboutCard() {
         <p>Leaves the device: Open Food Facts lookups (switchable above) and the Video link (opens the browser).</p>
         <p>Steps, and weight when it is on, are read from Health Connect on this phone. Problem reports stay on this phone until you share them.</p>
         <p data-testid="about-claude-line">
-          With a Claude key set, what you send to the coach, a summary of your training, food, supplements and steps, and any photos you choose go to Anthropic&apos;s API.
+          With a Claude key set, what you send to the coach, a summary of your training, food, supplements and steps, and any photos you choose go to Anthropic&apos;s API. When the coach looks something up, Anthropic runs the web search; a source under its reply opens in the browser when you tap it.
         </p>
       </div>
     </Card>

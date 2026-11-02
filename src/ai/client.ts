@@ -269,10 +269,30 @@ export async function testConnection(deps: CallDeps = {}): Promise<string> {
 
 /** The text of a message's text blocks, joined and trimmed. Thinking and tool blocks are skipped. */
 export function textOf(content: ReadonlyArray<{ type: string }>): string {
-  const parts: string[] = [];
+  // An answer drawn from a web search comes as many text blocks, split wherever a citation starts or
+  // ends, so neighbouring blocks join with nothing between them. Text either side of a tool call is
+  // a new paragraph.
+  let out = '';
+  let gap = false;
   for (const block of content) {
     const text = (block as { text?: unknown }).text;
-    if (block.type === 'text' && typeof text === 'string') parts.push(text);
+    if (block.type === 'text' && typeof text === 'string') {
+      out += (gap && out ? '\n\n' : '') + text;
+      gap = false;
+    } else gap = true;
   }
-  return parts.join('\n').trim();
+  return out.trim();
+}
+
+/** The web pages an answer cited, once each, in the order first cited. */
+export function sourcesOf(content: ReadonlyArray<{ type: string }>): { title: string; url: string }[] {
+  const seen = new Map<string, string>();
+  for (const block of content) {
+    const citations = (block as { citations?: unknown }).citations;
+    if (block.type !== 'text' || !Array.isArray(citations)) continue;
+    for (const c of citations as { type?: string; url?: unknown; title?: unknown }[]) {
+      if (c.type === 'web_search_result_location' && typeof c.url === 'string' && !seen.has(c.url)) seen.set(c.url, typeof c.title === 'string' && c.title ? c.title : c.url);
+    }
+  }
+  return [...seen].map(([url, title]) => ({ title, url }));
 }

@@ -181,6 +181,17 @@ function ClaudeBubble({ message }: { message: CoachMessage }) {
           ))}
         </ul>
       )}
+      {!mine && message.sources && message.sources.length > 0 && (
+        <ul className="mt-1 max-w-[88%] px-1" data-testid="coach-sources">
+          {message.sources.map((s) => (
+            <li key={s.url}>
+              <a href={s.url} target="_blank" rel="noopener noreferrer" className="inline-block break-words py-1.5 text-sm font-semibold text-accent">
+                Source: {s.title}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

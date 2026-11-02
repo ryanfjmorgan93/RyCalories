@@ -10,10 +10,21 @@ export interface FakeUsage {
   output_tokens: number;
   cache_creation_input_tokens?: number;
   cache_read_input_tokens?: number;
+  server_tool_use?: { web_search_requests: number };
+}
+
+export interface FakeCitation {
+  type: 'web_search_result_location';
+  url: string;
+  title: string;
+  cited_text: string;
+  encrypted_index: string;
 }
 
 export type FakeBlock =
-  | { type: 'text'; text: string }
+  | { type: 'text'; text: string; citations?: FakeCitation[] }
+  | { type: 'server_tool_use'; id: string; name: 'web_search'; input: { query: string } }
+  | { type: 'web_search_tool_result'; tool_use_id: string; content: { type: 'web_search_result'; url: string; title: string; encrypted_content: string; page_age: string | null }[] }
   | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
   | { type: 'thinking'; thinking: string; signature: string };
 
@@ -38,6 +49,17 @@ export type FakeScript = FakeReply | ((request: FakeRequest, index: number) => F
 
 export const text = (t: string): FakeBlock => ({ type: 'text', text: t });
 export const toolUse = (id: string, name: string, input: Record<string, unknown>): FakeBlock => ({ type: 'tool_use', id, name, input });
+/** A web search Anthropic ran, and the pages it found: the two blocks the API returns for one search. */
+export const webSearch = (id: string, query: string, pages: { url: string; title: string }[]): FakeBlock[] => [
+  { type: 'server_tool_use', id, name: 'web_search', input: { query } },
+  { type: 'web_search_tool_result', tool_use_id: id, content: pages.map((p) => ({ type: 'web_search_result', ...p, encrypted_content: 'enc', page_age: null })) },
+];
+/** Text drawn from a page the search found, citing it as the API does. */
+export const cited = (t: string, page: { url: string; title: string }): FakeBlock => ({
+  type: 'text',
+  text: t,
+  citations: [{ type: 'web_search_result_location', url: page.url, title: page.title, cited_text: t, encrypted_index: 'idx' }],
+});
 
 /** The JSON body of a successful Messages API response. */
 export function messageBody(reply: FakeReply, model: string): Record<string, unknown> {

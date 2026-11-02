@@ -10,7 +10,7 @@ import { mealsOnDay } from '@/db/foodRepo';
 import { listRoutines, resetToSeed, routineItems } from '@/db/repo';
 import { toDateKey } from '@/domain/dates';
 import type { CoachMessage } from '@/domain/types';
-import { fakeClaude, lastUserText, systemText, text, toolUse, type FakeRequest } from '@/test/fakeClaude';
+import { cited, fakeClaude, lastUserText, systemText, text, toolUse, webSearch, type FakeRequest } from '@/test/fakeClaude';
 import { createCoachActions } from './actions';
 import { CHAT_MAX_TOKENS, historyTurns, sendCoachMessage } from './chat';
 import { CLAUDE_ERROR_MESSAGES, MAX_TOOL_ITERATIONS } from './client';
@@ -77,9 +77,11 @@ describe('a turn where the coach uses a tool and then answers', () => {
       expect(req.body.thinking).toBeUndefined();
       expect(req.body.tool_choice).toBeUndefined();
       expect(req.body.stream).not.toBe(true);
-      expect(req.body.tools.map((t: { name: string }) => t.name)).toEqual(['log_food', 'log_weight', 'remember', 'forget', 'edit_routine', 'edit_session', 'build_routine', 'propose_targets', 'suggest_supplement', 'tick_supplements', 'report_problem', 'log_past_session']);
-      // Strict on every tool but log_past_session (see tools.ts: build 127 had it strict and chat failed).
-      expect(req.body.tools.filter((t: { strict: boolean }) => t.strict !== true).map((t: { name: string }) => t.name)).toEqual(['log_past_session']);
+      expect(req.body.tools.map((t: { name: string }) => t.name)).toEqual(['log_food', 'log_weight', 'remember', 'forget', 'edit_routine', 'edit_session', 'build_routine', 'propose_targets', 'suggest_supplement', 'tick_supplements', 'report_problem', 'log_past_session', 'web_search']);
+      // Strict on every tool of ours but log_past_session (see tools.ts: build 127 had it strict and chat failed).
+      expect(req.body.tools.filter((t: { strict: boolean }) => t.strict !== true).map((t: { name: string }) => t.name)).toEqual(['log_past_session', 'web_search']);
+      // Anthropic's web search, last so the cached order of the rest holds, capped and called directly.
+      expect(req.body.tools.at(-1)).toEqual({ type: 'web_search_20260209', name: 'web_search', max_uses: 3, allowed_callers: ['direct'] });
     }
 
     // The tools and the persona and stable context are one cached prefix; the volatile part follows it, uncached.
@@ -251,6 +253,42 @@ describe('the tools do the work', () => {
     expect(reply.actions).toEqual([]);
     expect(reply.text).not.toContain('Checking');
     expect(reply.text).toContain('Nothing was changed');
+  });
+});
+
+describe('an answer drawn from a web search', () => {
+  const menu = { url: 'https://www.nandos.co.uk/food/nutrition', title: "Nutrition | Nando's" };
+  const chips = { url: 'https://www.nandos.co.uk/food/menu/sides', title: "Sides | Nando's" };
+
+  it('is stored as one reply with the pages it cited, and the search is charged', async () => {
+    const fake = fakeClaude({
+      content: [
+        text("I'll check Nando's own figures."),
+        ...webSearch('srvtoolu_1', "Nando's boneless thighs nutrition", [menu, chips]),
+        text("Nando's lists "),
+        cited('4 boneless thighs at 422 kcal and 72 g protein', menu),
+        text(', and regular chips at '),
+        cited('425 kcal', chips),
+        text('.'),
+      ],
+      usage: { input_tokens: 1000, output_tokens: 100, server_tool_use: { web_search_requests: 1 } },
+    });
+    const reply = await sendCoachMessage("How much protein is in Nando's boneless thighs?", { fetch: fake.fetch, ...ctx });
+
+    expect(reply.ok).toBe(true);
+    const coach = (await thread()).find((r) => r.role === 'coach')!;
+    expect(coach.text).toBe("I'll check Nando's own figures.\n\nNando's lists 4 boneless thighs at 422 kcal and 72 g protein, and regular chips at 425 kcal.");
+    expect(coach.sources).toEqual([menu, chips]);
+    // One request: the search ran on Anthropic's side, nothing for the app to run.
+    expect(fake.requests).toHaveLength(1);
+    // $2/M in + $10/M out, plus $0.01 for the search.
+    expect(spendThisMonth()).toBeCloseTo(1000 * 2e-6 + 100 * 10e-6 + 0.01, 6);
+  });
+
+  it('stores no sources when nothing was searched', async () => {
+    const fake = fakeClaude({ content: [text('≈30 g protein in 100 g of cooked chicken breast.')] });
+    await sendCoachMessage('protein in chicken?', { fetch: fake.fetch, ...ctx });
+    expect((await thread()).find((r) => r.role === 'coach')).not.toHaveProperty('sources');
   });
 });
 

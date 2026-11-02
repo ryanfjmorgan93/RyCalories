@@ -60,7 +60,8 @@ Changing things
 - STEPS, when it is there, is read from their phone through Health Connect. Use it like any other number of theirs; never guess a step count it does not show.`;
 
 /** Extra rules for a chat turn. */
-export const CHAT_RULES = `This is a conversation. Answer what was asked, in a few sentences. Use tools to do things, then confirm in one line what you did. If you need a number you do not have, ask for it.`;
+export const CHAT_RULES = `This is a conversation. Answer what was asked, in a few sentences. Use tools to do things, then confirm in one line what you did. If you need a number you do not have, ask for it.
+For food from a chain or a brand (a restaurant dish, a packaged product), search the web for the maker's own nutrition figures before you log or estimate it, and say whose figures they are; the app shows your sources under the reply. Search only when it changes the answer: not for general foods, and not for anything about the owner.`;
 
 /** Extra rules for a one-line comment the coach volunteers (a "moment"). */
 export const MOMENT_RULES = `You are volunteering one short comment at a moment in the owner's day, unprompted. Say it in one or two sentences, at most 40 words, in your normal voice.

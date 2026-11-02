@@ -38,6 +38,8 @@ export interface UsageLike {
   output_tokens?: number | null;
   cache_creation_input_tokens?: number | null;
   cache_read_input_tokens?: number | null;
+  /** Searches the coach ran on the web, billed per search on top of the tokens. */
+  server_tool_use?: { web_search_requests?: number | null } | null;
 }
 
 /** Tokens in the prompt as billed: the uncached part plus what was written to and read from the cache. */
@@ -58,6 +60,9 @@ function n(v: number | null | undefined): number {
   return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0;
 }
 
+/** What one web search costs: $10 per 1,000 (Anthropic's price), on top of the tokens its results add. */
+export const WEB_SEARCH_USD = 0.01;
+
 /** Dollars one response cost. */
 export function costUsd(model: string, usage: UsageLike): number {
   const price = priceFor(model, promptTokens(usage));
@@ -66,6 +71,7 @@ export function costUsd(model: string, usage: UsageLike): number {
     n(usage.input_tokens) * perToken(price.input) +
     n(usage.cache_creation_input_tokens) * perToken(price.input * CACHE_WRITE_MULT) +
     n(usage.cache_read_input_tokens) * perToken(price.input * CACHE_READ_MULT) +
-    n(usage.output_tokens) * perToken(price.output)
+    n(usage.output_tokens) * perToken(price.output) +
+    n(usage.server_tool_use?.web_search_requests) * WEB_SEARCH_USD
   );
 }

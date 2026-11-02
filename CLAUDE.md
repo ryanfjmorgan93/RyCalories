@@ -64,7 +64,8 @@ The owner does not check on device. Correctness has to come from the code and th
   Monday weigh-in and the daily supplement checklist (`src/domain/reminders.ts`).
 - Tracking must work fully offline. Three things leave the device, all listed in Settings → About:
   Claude API calls (only with the owner's key: what they send the coach, a summary of their
-  training, food, supplements and steps, and photos they choose), the Open Food Facts label lookup
+  training, food, supplements and steps, and photos they choose; the chat's web search runs on
+  Anthropic's side, and a cited source opens in the browser only on a tap), the Open Food Facts label lookup
   (switchable off; the barcode scan is the same lookup), and the Video link on an exercise (a user
   tap that opens the browser). Nothing else. Steps, and bodyweight when the owner turns it on, are
   read on the phone from Health Connect (read only, write nothing; every other health permission
@@ -136,7 +137,9 @@ The owner does not check on device. Correctness has to come from the code and th
   session tools reach the whole exercise library by name (`findExerciseAnywhere` in
   `src/db/catalogueRepo.ts`, the paste matcher's rules); with no review step, a library entry is
   taken only when the name says exactly it, and a looser guess is named back, never added.
-  `log_past_session` fills in a workout trained but not logged (the last 7 days): the owner's own
+  Chat carries Anthropic's web search (`web_search`, direct, at most 3 a request, $0.01 each in
+  `prices.ts`) for a chain's or brand's own nutrition figures; the pages it cites are stored on the
+  reply and shown under it, as Anthropic requires. `log_past_session` fills in a workout trained but not logged (the last 7 days): the owner's own
   sets, or their routine "as planned" at the bottom of each rep range. It is stored with
   `source: 'coach'`, shown as "Filled in" with no made-up time, and writes no weight decision.
 - `src/platform/` — share-sheet import (InBody files), local reminders, steps and weight from
