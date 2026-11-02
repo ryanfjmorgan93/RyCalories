@@ -303,6 +303,36 @@ test.describe('the coach in a session', () => {
     await expect(page.getByRole('button', { name: /^Dinner Dinner · .* · 1 item$/ })).toBeVisible();
   });
 
+  test('"start push day" starts the session and the app opens it; a calorie target asked for is set at once', async ({ page }) => {
+    await withKey(page);
+    await mockClaude(page, (body) => {
+      if (isMoment(body)) return { content: [text('')] };
+      const asked = lastUserText(body);
+      const last = (body.messages as { content: unknown }[]).at(-1)!;
+      const afterTool = Array.isArray(last.content) && (last.content as { type: string }[]).some((b) => b.type === 'tool_result');
+      if (afterTool) return { content: [text('Done.')] };
+      if (asked.includes('2600')) return { content: [toolUse('toolu_1', 'change_setting', { setting: 'calorie_target', value: 2600 })], stop_reason: 'tool_use' };
+      return { content: [toolUse('toolu_2', 'session', { action: 'start', routine: 'Upper (Push)' })], stop_reason: 'tool_use' };
+    });
+    await fresh(page);
+    await page.getByTestId('coach-fab').click();
+    const sheet = page.getByRole('dialog').filter({ has: page.getByTestId('coach-thread') });
+    await page.getByTestId('coach-input').fill('Set my calories to 2600');
+    await page.getByTestId('coach-send').click();
+    await expect(sheet.getByTestId('coach-actions').last()).toContainText('Calories set to 2,600 a day from today.');
+    const settings = (await readRawIron(page)).tables.settings as { calorieStart: number; calorieCeiling: number }[];
+    expect([settings[0]!.calorieStart, settings[0]!.calorieCeiling]).toEqual([2600, 2600]);
+
+    await page.getByTestId('coach-input').fill('Start push day');
+    await page.getByTestId('coach-send').click();
+    // The app goes to the session the coach started, and the sheet is out of the way.
+    await expect(page).toHaveURL(/\/session\/[0-9a-f-]+$/);
+    await expect(page.getByTestId('exercise-card-Bench Press (Barbell)')).toBeVisible();
+    await expect(sheet).toHaveCount(0);
+    const sessions = (await readRawIron(page)).tables.sessions as { title: string; endedAt?: string }[];
+    expect(sessions.filter((x) => !x.endedAt).map((x) => x.title)).toEqual(['Upper (Push)']);
+  });
+
   test('after a set the rest bar carries the coach\'s line; after the exercise and the session, theirs', async ({ page }) => {
     await withKey(page);
     const seen = await mockClaude(page, (body) => (isMoment(body) ? momentReply(body) : { content: [text('')] }));
