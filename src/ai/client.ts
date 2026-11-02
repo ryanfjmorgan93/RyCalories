@@ -216,7 +216,7 @@ export interface ToolLoopResult {
 }
 
 /** Most requests one turn may make: a tool call, its result, and a few more steps. A runaway loop costs money. */
-export const MAX_TOOL_ITERATIONS = 6;
+export const MAX_TOOL_ITERATIONS = 8;
 
 /**
  * Run the SDK's tool runner: guard, then each request in turn, recording the spend of every one as

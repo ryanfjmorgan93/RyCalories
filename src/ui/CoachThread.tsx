@@ -162,13 +162,18 @@ function Bubble({ children, testId }: { children: ReactNode; testId?: string }) 
   );
 }
 
+/** The coach is asked for plain text; markdown bold that slips through shows as bold, not as asterisks. */
+function withBold(text: string): ReactNode[] {
+  return text.split(/\*\*(.+?)\*\*/g).map((part, i) => (i % 2 === 1 ? <strong key={i}>{part}</strong> : part));
+}
+
 /** One stored turn: the owner's, or the coach's with a line for each thing it changed. */
 function ClaudeBubble({ message }: { message: CoachMessage }) {
   const mine = message.role === 'user';
   return (
     <div className={`flex flex-col ${mine ? 'items-end' : 'items-start'}`} data-testid={mine ? 'coach-user-bubble' : 'coach-bubble'}>
       {!mine && message.moment && <div className="mb-1 px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-dim">{MOMENT_LABEL[message.moment]}</div>}
-      <div className={`max-w-[88%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-base leading-snug ${mine ? 'bg-accent text-accent-fg' : 'border border-line bg-surface-2 text-fg'}`}>{message.text}</div>
+      <div className={`max-w-[88%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-base leading-snug ${mine ? 'bg-accent text-accent-fg' : 'border border-line bg-surface-2 text-fg'}`}>{mine ? message.text : withBold(message.text)}</div>
       {!mine && message.actions && message.actions.length > 0 && (
         <ul className="mt-1.5 max-w-[88%] space-y-0.5 px-1" data-testid="coach-actions">
           {message.actions.map((line, i) => (

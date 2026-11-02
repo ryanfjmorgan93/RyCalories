@@ -139,7 +139,12 @@ The owner does not check on device. Correctness has to come from the code and th
   taken only when the name says exactly it, and a looser guess is named back, never added.
   Chat carries Anthropic's web search (`web_search`, direct, at most 3 a request, $0.01 each in
   `prices.ts`) for a chain's or brand's own nutrition figures; the pages it cites are stored on the
-  reply and shown under it, as Anthropic requires. `log_past_session` fills in a workout trained but not logged (the last 7 days): the owner's own
+  reply and shown under it, as Anthropic requires. `recordActions.ts` is the coach's hands on what is
+  already logged, through the same data code as the screens: `find_entries` (a day's food, weigh-in
+  or sessions, with short ids), `edit_food`, `edit_training`, `delete_weight` and `change_setting`;
+  it may replace only its own estimates' figures. Only the first eleven tools are strict: a
+  twelfth strict schema made every chat fail in build 127, so every tool added since is not.
+  `log_past_session` fills in a workout trained but not logged (the last 7 days): the owner's own
   sets, or their routine "as planned" at the bottom of each rep range. It is stored with
   `source: 'coach'`, shown as "Filled in" with no made-up time, and writes no weight decision.
 - `src/platform/` — share-sheet import (InBody files), local reminders, steps and weight from

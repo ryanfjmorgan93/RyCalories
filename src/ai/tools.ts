@@ -17,6 +17,7 @@ import { FOCUSABLE_MUSCLES } from '@/domain/quickRequest';
 import { SUPPLEMENT_TIMES } from '@/domain/supplements';
 import { MEAL_SLOTS, type MuscleGroup, type SupplementTime } from '@/domain/types';
 import type { ActionResult, CoachActions } from './actions';
+import { COACH_SETTINGS } from './recordActions';
 import { strictTool } from './schema';
 import type { TurnRecord } from './types';
 
@@ -128,6 +129,37 @@ const LogPastSessionInput = z.object({
       }),
     )
     .describe('The sets they told you, in their numbers. Empty when as_planned. Never fill in a weight or rep count they did not give.'),
+});
+
+// The tools below are not strict (see log_past_session in createCoachTools), so optional fields cost nothing.
+const FindEntriesInput = z.object({
+  date: z.string().describe('The day, YYYY-MM-DD'),
+  kind: z.enum(['food', 'weight', 'sessions']).describe('What to look up'),
+});
+
+const EditFoodInput = z.object({
+  id: z.string().describe('The food\'s id from find_entries'),
+  delete: z.boolean().describe('true to delete it'),
+  name: z.string().optional().describe('A new name'),
+  scale: z.number().optional().describe('Multiply the amount eaten: 0.5 for half, 2 for two'),
+  kcal: z.number().optional().describe('New kcal for the whole amount (only your own estimates can be replaced)'),
+  protein: z.number().optional().describe('New protein in g'),
+  carbs: z.number().optional().describe('New carbs in g'),
+  fat: z.number().optional().describe('New fat in g'),
+});
+
+const EditTrainingInput = z.object({
+  id: z.string().describe('A set\'s id, or a session\'s id, from find_entries'),
+  delete: z.boolean().describe('true to delete the set, or the whole session'),
+  weight_kg: z.number().optional().describe('The set\'s new weight in kg'),
+  reps: z.number().optional().describe('The set\'s new rep count'),
+});
+
+const DeleteWeightInput = z.object({ date: z.string().describe('The day of the weigh-in to delete, YYYY-MM-DD') });
+
+const ChangeSettingInput = z.object({
+  setting: z.enum([...(Object.keys(COACH_SETTINGS) as (keyof typeof COACH_SETTINGS)[]), 'sex']).describe('Which setting'),
+  value: z.union([z.number(), z.string()]).describe('The new value: a number, or male / female for sex'),
 });
 
 const BuildRoutineInput = z.object({
@@ -256,6 +288,37 @@ export function createCoachTools(actions: CoachActions, turn: TurnRecord): Coach
           }),
           turn,
         ),
+    }), strict: false },
+    // Not strict either, for the same reason: the coach's hands on what is already logged (recordActions.ts).
+    { ...strictTool({
+      name: 'find_entries',
+      description: "Look up what is logged on a day: its food, its weigh-in, or its sessions with every set. Each entry comes with a short id in square brackets, which edit_food and edit_training take. Use it before changing or deleting anything already logged.",
+      inputSchema: FindEntriesInput,
+      run: async (input) => finish(await actions.findEntries(input), turn),
+    }), strict: false },
+    { ...strictTool({
+      name: 'edit_food',
+      description: "Change or delete a logged food, by its id from find_entries: delete it, rename it, scale the amount eaten, or give new figures. Only your own estimates (marked ≈) take new figures; a label's, the UK table's or the owner's own can be scaled, not replaced. To correct a food, edit it; never delete it and log it again.",
+      inputSchema: EditFoodInput,
+      run: async (input) => finish(await actions.editFood(input), turn),
+    }), strict: false },
+    { ...strictTool({
+      name: 'edit_training',
+      description: "Change or delete a logged set (its weight or reps), or delete a whole session, by its id from find_entries. Not for the session still going. Delete a whole session only when the owner clearly asked for that session to go.",
+      inputSchema: EditTrainingInput,
+      run: async (input) => finish(await actions.editTraining({ id: input.id, delete: input.delete, weightKg: input.weight_kg, reps: input.reps }), turn),
+    }), strict: false },
+    { ...strictTool({
+      name: 'delete_weight',
+      description: 'Delete the weigh-in on a day. To correct one, use log_weight with the right figure instead: it replaces the day\'s reading.',
+      inputSchema: DeleteWeightInput,
+      run: async (input) => finish(await actions.deleteWeight(input.date), turn),
+    }), strict: false },
+    { ...strictTool({
+      name: 'change_setting',
+      description: "Change a setting when the owner asks for it: a protein target, the step goal, sessions per week, the bodyweight goal range, rest times, or their year of birth or sex (used to compare lifts). Calorie targets go through propose_targets.",
+      inputSchema: ChangeSettingInput,
+      run: async (input) => finish(await actions.changeSetting(input), turn),
     }), strict: false },
   ];
   // The SDK runs every tool call of one reply at once, and each action reads then writes: two

@@ -237,6 +237,72 @@ test.describe('the coach in a session', () => {
     expect(await clippedText(page)).toEqual([]);
   });
 
+  test('the coach fixes a logged dinner: looks the day up, corrects one food, deletes another', async ({ page }) => {
+    await withKey(page);
+    const lastToolResult = (body: Record<string, any>): string | null => {
+      const last = (body.messages as { content: unknown }[]).at(-1)!;
+      const block = Array.isArray(last.content) ? (last.content as { type: string; content?: unknown }[]).find((b) => b.type === 'tool_result') : undefined;
+      return block ? String(block.content) : null;
+    };
+    await mockClaude(page, (body) => {
+      if (isMoment(body)) return { content: [text('')] };
+      const asked = lastUserText(body);
+      const result = lastToolResult(body);
+      if (asked.includes('Nando')) {
+        return result === null
+          ? {
+              content: [
+                toolUse('toolu_1', 'log_food', {
+                  slot: 'dinner',
+                  items: [
+                    { name: "Nando's 4 boneless thighs", amount: 1, unit: 'portion', grams: 0, kcal: 900, protein: 90, carbs: 2, fat: 55 },
+                    { name: "Nando's regular chips", amount: 1, unit: 'portion', grams: 0, kcal: 500, protein: 6, carbs: 70, fat: 20 },
+                  ],
+                }),
+              ],
+              stop_reason: 'tool_use',
+            }
+          : { content: [text('Logged.')] };
+      }
+      // "Use the real figures": look the day up, then change what is there by the ids it gave.
+      if (result === null) return { content: [toolUse('toolu_2', 'find_entries', { date: new Date().toLocaleDateString('en-CA'), kind: 'food' })], stop_reason: 'tool_use' };
+      if (result.startsWith('Food on')) {
+        const idOf = (name: string) => result.match(new RegExp(`\\[([0-9a-f]{8})\\] ${name}`))![1];
+        return {
+          content: [
+            toolUse('toolu_3', 'edit_food', { id: idOf("Nando's 4 boneless thighs"), delete: false, kcal: 706, protein: 85.5, carbs: 0.3, fat: 37.2 }),
+            toolUse('toolu_4', 'edit_food', { id: idOf("Nando's regular chips"), delete: true }),
+          ],
+          stop_reason: 'tool_use',
+        };
+      }
+      return { content: [text('Done: the thighs are now **706 kcal** and the chips are gone.')] };
+    });
+    await fresh(page);
+    await page.getByTestId('coach-fab').click();
+    const sheet = page.getByRole('dialog').filter({ has: page.getByTestId('coach-thread') });
+    await page.getByTestId('coach-input').fill("I had 4 boneless thighs and chips at Nando's");
+    await page.getByTestId('coach-send').click();
+    await expect(sheet.getByTestId('coach-actions').first()).toContainText("Logged Nando's 4 boneless thighs");
+
+    await page.getByTestId('coach-input').fill('Use the real figures for the thighs and take the chips off');
+    await page.getByTestId('coach-send').click();
+    const changed = sheet.getByTestId('coach-actions').last();
+    await expect(changed).toContainText("Changed Nando's 4 boneless thighs (dinner, ");
+    await expect(changed).toContainText("Deleted Nando's regular chips (dinner, ");
+    // Markdown bold reads as bold, not as asterisks.
+    const reply = sheet.getByTestId('coach-bubble').last();
+    await expect(reply.locator('strong')).toHaveText('706 kcal');
+    await expect(reply).not.toContainText('**');
+
+    const items = (await readRawIron(page)).tables.mealItems as { name: string; nutrition: { basis: string; macros: { kcal: number } } }[];
+    expect(items.map((i) => [i.name, i.nutrition.macros.kcal])).toEqual([["Nando's 4 boneless thighs", 706]]);
+    await closeSheet(page);
+    await page.goto('/food');
+    // The Food screen reads the same rows: one item left in dinner.
+    await expect(page.getByRole('button', { name: /^Dinner Dinner · .* · 1 item$/ })).toBeVisible();
+  });
+
   test('after a set the rest bar carries the coach\'s line; after the exercise and the session, theirs', async ({ page }) => {
     await withKey(page);
     const seen = await mockClaude(page, (body) => (isMoment(body) ? momentReply(body) : { content: [text('')] }));

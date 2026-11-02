@@ -77,9 +77,9 @@ describe('a turn where the coach uses a tool and then answers', () => {
       expect(req.body.thinking).toBeUndefined();
       expect(req.body.tool_choice).toBeUndefined();
       expect(req.body.stream).not.toBe(true);
-      expect(req.body.tools.map((t: { name: string }) => t.name)).toEqual(['log_food', 'log_weight', 'remember', 'forget', 'edit_routine', 'edit_session', 'build_routine', 'propose_targets', 'suggest_supplement', 'tick_supplements', 'report_problem', 'log_past_session', 'web_search']);
+      expect(req.body.tools.map((t: { name: string }) => t.name)).toEqual(['log_food', 'log_weight', 'remember', 'forget', 'edit_routine', 'edit_session', 'build_routine', 'propose_targets', 'suggest_supplement', 'tick_supplements', 'report_problem', 'log_past_session', 'find_entries', 'edit_food', 'edit_training', 'delete_weight', 'change_setting', 'web_search']);
       // Strict on every tool of ours but log_past_session (see tools.ts: build 127 had it strict and chat failed).
-      expect(req.body.tools.filter((t: { strict: boolean }) => t.strict !== true).map((t: { name: string }) => t.name)).toEqual(['log_past_session', 'web_search']);
+      expect(req.body.tools.filter((t: { strict: boolean }) => t.strict === true)).toHaveLength(11);
       // Anthropic's web search, last so the cached order of the rest holds, capped and called directly.
       expect(req.body.tools.at(-1)).toEqual({ type: 'web_search_20260209', name: 'web_search', max_uses: 3, allowed_callers: ['direct'] });
     }

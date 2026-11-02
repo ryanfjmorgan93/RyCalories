@@ -26,7 +26,7 @@ function fakeActions(): { [K in keyof CoachActions]: ReturnType<typeof vi.fn> } 
 describe('the tool definitions', () => {
   const tools = createCoachTools(fakeActions(), newTurnRecord());
 
-  it('are the same twelve, in the same order, every time (the order is part of the cache key)', () => {
+  it('are the same seventeen, in the same order, every time (the order is part of the cache key)', () => {
     expect(tools.map((t) => t.name)).toEqual([
       'log_food',
       'log_weight',
@@ -40,16 +40,22 @@ describe('the tool definitions', () => {
       'tick_supplements',
       'report_problem',
       'log_past_session',
+      'find_entries',
+      'edit_food',
+      'edit_training',
+      'delete_weight',
+      'change_setting',
     ]);
     expect(createCoachTools(fakeActions(), newTurnRecord()).map((t) => JSON.stringify([t.name, t.description, t.input_schema]))).toEqual(tools.map((t) => JSON.stringify([t.name, t.description, t.input_schema])));
   });
 
-  it('are strict, bar log_past_session, with schemas strict mode accepts', () => {
+  it('are strict up to log_past_session and not after it, with schemas strict mode accepts', () => {
     let optional = 0;
     let unions = 0;
     for (const tool of tools) {
-      // The strict set is build 126's, which worked; build 127 added a twelfth and chat failed.
-      expect(tool.strict, tool.name).toBe(tool.name !== 'log_past_session');
+      // Build 127 added a twelfth strict tool and chat failed, so the strict set stays build 126's eleven.
+      expect(tool.strict, tool.name).toBe(tools.indexOf(tool) < 11);
+      if (!tool.strict) continue;
       const { problems, stats } = strictSchemaProblems(tool.input_schema);
       expect(problems, tool.name).toEqual([]);
       optional += stats.optional;
