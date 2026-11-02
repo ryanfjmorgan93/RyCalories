@@ -26,6 +26,7 @@ import { findExerciseAnywhere, type ExercisePick } from '@/db/catalogueRepo';
 import { db } from '@/db/db';
 import { addProblemReport } from '@/db/problemRepo';
 import { dayTotals } from '@/db/foodRepo';
+import { sessionsOn } from '@/db/todayQueries';
 import {
   addExtraExercise,
   addRoutineExercise,
@@ -35,6 +36,7 @@ import {
   listRoutines,
   lockInRoutineExercise,
   logBodyweight,
+  logPastSession,
   removeRoutineExercise,
   routineItems,
   setSkipped,
@@ -160,6 +162,18 @@ export interface CoachActions {
   suggestSupplement: OfferActions['suggestSupplement'];
   tickSupplements: OfferActions['tickSupplements'];
   reportProblem(input: ReportProblemInput): Promise<ActionResult>;
+  logPastSession(input: LogPastSessionInput): Promise<ActionResult>;
+}
+
+export interface LogPastSessionInput {
+  /** YYYY-MM-DD, today or the last week. */
+  date: string;
+  /** The routine they did, or '' for none. */
+  routine: string;
+  /** With a routine and no sets given: their routine's own plan, at the bottom of each rep range. */
+  asPlanned: boolean;
+  /** The sets they say they did. Empty with `asPlanned`. */
+  exercises: { name: string; sets: { weightKg: number; reps: number }[] }[];
 }
 
 export interface ReportProblemInput {
@@ -555,6 +569,59 @@ export function createCoachActions(deps: ActionDeps = {}): CoachActions {
       const report = await addProblemReport({ source: 'coach', summary, detail, screen, build: BUILD_LABEL }, now());
       if (!report) return fail('Nothing to report: give a one-line summary of what went wrong.');
       return { ok: true, result: 'Logged on the phone. The owner can share it from Settings → Problem reports.', description: `Problem logged: ${report.summary}` };
+    },
+
+    // ---- a session trained and not logged
+    async logPastSession({ date, routine: routineName, asPlanned, exercises }) {
+      const wrongDay = recentDayProblem(date, today(), FOOD_DAYS_BACK);
+      if (wrongDay) return fail(wrongDay);
+      const routines = await listRoutines();
+      const routine = routineName.trim() ? findRoutine(routineName, routines) : null;
+      if (routineName.trim() && !routine) return fail(`No routine called "${routineName}". They have: ${names(routines.map((r) => r.name))}.`);
+      if (routine && (await sessionsOn(date)).some((x) => x.routineId === routine.id && x.endedAt)) return fail(`${routine.name} is already logged on ${fmtDayHeading(date)}.`);
+      const items = routine ? await routineItems(routine.id) : [];
+
+      const sets: { exerciseId: string; routineExerciseId: string | null; weight: number; reps: number }[] = [];
+      const left: string[] = [];
+      if (exercises.length > 0) {
+        // The owner's own numbers only (CLAUDE.md): every set is checked before anything is written.
+        for (const e of exercises) {
+          if (e.sets.length === 0 || e.sets.some((x) => !finite(x.weightKg) || x.weightKg < 0 || x.weightKg > 1000 || !Number.isInteger(x.reps) || x.reps < 1 || x.reps > 100)) {
+            return fail(`The sets for ${e.name} do not look right: each needs a weight in kg (0 for bodyweight) and whole reps.`);
+          }
+        }
+        for (const e of exercises) {
+          const pick = await findExerciseAnywhere(e.name);
+          if (!pick || pick.kind === 'closest') return notFound(e.name, pick);
+          const exercise = pick.kind === 'owned' ? pick.exercise : await pick.add();
+          if (exercise.kind !== 'reps' && exercise.kind !== 'bodyweight_plus') return fail(`${exercise.name} is timed or a carry: the owner logs that one by hand.`);
+          const rx = items.find((it) => it.exercise.id === exercise.id)?.rx;
+          for (const x of e.sets) sets.push({ exerciseId: exercise.id, routineExerciseId: rx?.id ?? null, weight: roundKg(x.weightKg), reps: x.reps });
+        }
+      } else if (asPlanned && routine) {
+        for (const { rx, exercise } of items) {
+          // No weight yet (calibrating), optional, or not reps: nothing of theirs to copy, so it is left out and said.
+          if (rx.optional || rx.mode !== 'normal' || (exercise.kind !== 'reps' && exercise.kind !== 'bodyweight_plus')) {
+            left.push(exercise.name);
+            continue;
+          }
+          for (let i = 0; i < rx.targetSets; i++) sets.push({ exerciseId: exercise.id, routineExerciseId: rx.id, weight: rx.currentWeight, reps: rx.repMin });
+        }
+      } else {
+        return fail('Which exercises did they do, with each set\'s weight and reps? If they did a routine as planned, name it and pass as_planned.');
+      }
+      if (sets.length === 0) return fail('Nothing to log: no sets.');
+
+      const title = routine?.name ?? 'Workout';
+      await logPastSession({ date, routineId: routine?.id ?? '', title, sets });
+      const exerciseCount = new Set(sets.map((x) => x.exerciseId)).size;
+      const how = exercises.length > 0 ? '' : ' as planned, at the bottom of each rep range';
+      const leftOut = left.length > 0 ? ` Left out (no weight of theirs to copy, or not reps): ${names(left)}.` : '';
+      return {
+        ok: true,
+        result: `Logged ${title} on ${fmtDayHeading(date)}${how}: ${plural(exerciseCount, 'exercise')}, ${plural(sets.length, 'set')}. It counts for History, the calendar, the streak and records; it does not change any routine weight.${leftOut}`,
+        description: `Filled in ${title} on ${fmtDayHeading(date)} (${plural(sets.length, 'set')})`,
+      };
     },
 
     // ---- today's session

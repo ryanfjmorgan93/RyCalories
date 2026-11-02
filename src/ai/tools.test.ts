@@ -26,7 +26,7 @@ function fakeActions(): { [K in keyof CoachActions]: ReturnType<typeof vi.fn> } 
 describe('the tool definitions', () => {
   const tools = createCoachTools(fakeActions(), newTurnRecord());
 
-  it('are the same ten, in the same order, every time (the order is part of the cache key)', () => {
+  it('are the same twelve, in the same order, every time (the order is part of the cache key)', () => {
     expect(tools.map((t) => t.name)).toEqual([
       'log_food',
       'log_weight',
@@ -39,6 +39,7 @@ describe('the tool definitions', () => {
       'suggest_supplement',
       'tick_supplements',
       'report_problem',
+      'log_past_session',
     ]);
     expect(createCoachTools(fakeActions(), newTurnRecord()).map((t) => JSON.stringify([t.name, t.description, t.input_schema]))).toEqual(tools.map((t) => JSON.stringify([t.name, t.description, t.input_schema])));
   });

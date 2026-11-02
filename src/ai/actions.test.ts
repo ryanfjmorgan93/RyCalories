@@ -917,3 +917,50 @@ describe('report_problem', () => {
     expect((await actions.reportProblem({ summary: ' ', detail: '' })).ok).toBe(false);
   });
 });
+
+describe('log_past_session', () => {
+  it('fills in a routine done as planned: their own plan at the bottom of each rep range, no weight changed', async () => {
+    const actions = createCoachActions({ now: MORNING });
+    const items = await routineItems(SEED_ROUTINE_IDS['Upper (Push)']);
+    const before = items.map(({ rx }) => rx.currentWeight);
+    const out = await actions.logPastSession({ date: '2026-10-10', routine: 'push', asPlanned: true, exercises: [] });
+    expect(out.ok).toBe(true);
+
+    const session = (await db.sessions.toArray()).find((x) => x.source === 'coach')!;
+    expect(session).toMatchObject({ routineId: SEED_ROUTINE_IDS['Upper (Push)'], title: 'Upper (Push)' });
+    expect(toDateKey(new Date(session.startedAt))).toBe('2026-10-10');
+    expect(session.endedAt).toBeDefined();
+    const sets = await db.setLogs.where('sessionId').equals(session.id).toArray();
+    const planned = items.filter(({ rx, exercise }) => !rx.optional && rx.mode === 'normal' && (exercise.kind === 'reps' || exercise.kind === 'bodyweight_plus'));
+    expect(sets).toHaveLength(planned.reduce((n, { rx }) => n + rx.targetSets, 0));
+    for (const { rx } of planned) {
+      for (const st of sets.filter((x) => x.routineExerciseId === rx.id)) expect([st.weight, st.reps, st.type]).toEqual([rx.currentWeight, rx.repMin, 'working']);
+    }
+    // No decision, so the next prescription is what it was.
+    expect((await routineItems(SEED_ROUTINE_IDS['Upper (Push)'])).map(({ rx }) => rx.currentWeight)).toEqual(before);
+    expect(await db.decisions.count()).toBe(0);
+    // The same routine on the same day is not logged twice.
+    expect((await actions.logPastSession({ date: '2026-10-10', routine: 'Upper (Push)', asPlanned: true, exercises: [] })).ok).toBe(false);
+  });
+
+  it('logs the sets the owner gives, in their numbers, with or without a routine', async () => {
+    const actions = createCoachActions({ now: MORNING });
+    const out = await actions.logPastSession({ date: '2026-10-11', routine: '', asPlanned: false, exercises: [{ name: 'Bench Press', sets: [{ weightKg: 80, reps: 8 }, { weightKg: 80, reps: 7 }] }] });
+    expect(out.ok).toBe(true);
+    const session = (await db.sessions.toArray()).find((x) => x.source === 'coach')!;
+    expect(session.title).toBe('Workout');
+    const sets = (await db.setLogs.where('sessionId').equals(session.id).toArray()).sort((a, b) => a.index - b.index);
+    expect(sets.map((x) => [x.exerciseId, x.weight, x.reps, x.index])).toEqual([
+      [SEED_EXERCISE_IDS['Bench Press (Barbell)'], 80, 8, 0],
+      [SEED_EXERCISE_IDS['Bench Press (Barbell)'], 80, 7, 1],
+    ]);
+  });
+
+  it('writes nothing for a guessed number, a day too far back, or no sets at all', async () => {
+    const actions = createCoachActions({ now: MORNING });
+    expect((await actions.logPastSession({ date: '2026-10-11', routine: '', asPlanned: false, exercises: [{ name: 'Bench Press', sets: [{ weightKg: 80, reps: 7.5 }] }] })).ok).toBe(false);
+    expect((await actions.logPastSession({ date: '2026-09-01', routine: 'Upper (Push)', asPlanned: true, exercises: [] })).ok).toBe(false);
+    expect((await actions.logPastSession({ date: '2026-10-11', routine: 'Upper (Push)', asPlanned: false, exercises: [] })).ok).toBe(false);
+    expect((await db.sessions.toArray()).filter((x) => x.source === 'coach')).toHaveLength(0);
+  });
+});

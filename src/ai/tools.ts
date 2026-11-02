@@ -115,6 +115,21 @@ const ReportProblemInput = z.object({
   detail: z.string().describe('What was asked, what the app did instead, any tool result or figure that was wrong. Empty when there is nothing more.'),
 });
 
+// Every field required: strict mode allows only so many optional parameters across all the tools.
+const LogPastSessionInput = z.object({
+  date: z.string().describe('The day they trained, YYYY-MM-DD: today or within the last 7 days'),
+  routine: z.string().describe('The routine they did, by name, or "" if it was not one of their routines'),
+  as_planned: z.boolean().describe('true only when they say they did the routine as planned and gave no sets: their own plan is copied at the bottom of each rep range'),
+  exercises: z
+    .array(
+      z.object({
+        name: z.string().describe('The exercise, by its usual name'),
+        sets: z.array(z.object({ weight_kg: z.number().describe('kg as they said it; 0 for bodyweight'), reps: z.number().describe('Whole reps') })),
+      }),
+    )
+    .describe('The sets they told you, in their numbers. Empty when as_planned. Never fill in a weight or rep count they did not give.'),
+});
+
 const BuildRoutineInput = z.object({
   request: z.string().describe('What the owner asked for, in their words: "a 45 minute shoulder routine", "push pull legs"'),
   focus: z.array(z.enum(MUSCLES)).optional().describe('Muscles to train, if you can read them from the request'),
@@ -221,6 +236,22 @@ export function createCoachTools(actions: CoachActions, turn: TurnRecord): Coach
         "Write down something in the app that is not working: the owner says something is broken, a tool fails when it should not, a draft ignores what was asked, or a figure looks wrong. It is kept on the phone for the owner to share from Settings → Problem reports.",
       inputSchema: ReportProblemInput,
       run: async (input) => finish(await actions.reportProblem({ summary: input.summary, detail: input.detail }), turn),
+    }),
+    strictTool({
+      name: 'log_past_session',
+      description:
+        "Fill in a workout the owner did but did not log (today or the last 7 days). Use the sets they tell you; if they say they did a routine as planned, pass as_planned and no exercises. Ask for what you do not know (which day, which routine, the sets) rather than guess. It counts for History, the calendar, the streak and records, and changes no routine weight.",
+      inputSchema: LogPastSessionInput,
+      run: async (input) =>
+        finish(
+          await actions.logPastSession({
+            date: input.date,
+            routine: input.routine,
+            asPlanned: input.as_planned,
+            exercises: input.exercises.map((e) => ({ name: e.name, sets: e.sets.map((x) => ({ weightKg: x.weight_kg, reps: x.reps })) })),
+          }),
+          turn,
+        ),
     }),
   ];
   // The SDK runs every tool call of one reply at once, and each action reads then writes: two

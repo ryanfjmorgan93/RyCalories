@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
 import { completedSessions, sessionSeconds, setCountsBySession } from '@/db/historyQueries';
-import { fmtDateTime, fmtMinutes } from '@/domain/format';
+import { fmtDateLong, fmtDateTime, fmtMinutes } from '@/domain/format';
 import type { Session } from '@/domain/types';
 import { Card, Divider, EmptyState, Row, SectionTitle } from '@/ui/components/Card';
 import { Chip } from '@/ui/components/Chip';
@@ -64,9 +64,10 @@ export function HistoryScreen() {
                         <span className="flex items-center gap-2">
                           <span className="break-words">{s.title}</span>
                           {s.source === 'hevy' && <Chip size="sm">Hevy</Chip>}
+                          {s.source === 'coach' && <Chip size="sm">Filled in</Chip>}
                         </span>
                       }
-                      subtitle={`${fmtDateTime(s.startedAt)} · ${fmtMinutes(sessionSeconds(s))} · ${n} ${n === 1 ? 'set' : 'sets'}`}
+                      subtitle={`${s.source === 'coach' ? fmtDateLong(s.startedAt) : `${fmtDateTime(s.startedAt)} · ${fmtMinutes(sessionSeconds(s))}`} · ${n} ${n === 1 ? 'set' : 'sets'}`}
                       right={<ChevronIcon />}
                     />
                   </div>

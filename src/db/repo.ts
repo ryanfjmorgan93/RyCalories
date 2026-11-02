@@ -5,7 +5,7 @@
 import { backupBeforeDestructiveOp } from './autoBackup';
 import { db } from './db';
 import { SEED_BODYWEIGHT_KG, SEED_EXERCISES, SEED_ROUTINES, SEED_ROUTINE_EXERCISES } from './seed';
-import { nowIso, toDateKey } from '@/domain/dates';
+import { dateKeyToDate, nowIso, toDateKey } from '@/domain/dates';
 import {
   decide,
   detectStall,
@@ -495,6 +495,36 @@ export async function startSession(routineId: string, opts?: { deload?: boolean 
     await db.sessions.put(s);
     return s;
   });
+}
+
+/**
+ * A session the owner trained but did not log, filled in afterwards (the coach's log_past_session):
+ * finished, on `date`, with these working sets, marked `source: 'coach'`. It counts for History, the
+ * calendar, the streak, recency and records; no weight decision is written, so the routine's next
+ * prescription is what it was. The time was not given, so it is set at midday on that day.
+ */
+export async function logPastSession(input: {
+  date: string;
+  routineId: string;
+  title: string;
+  sets: readonly { exerciseId: string; routineExerciseId: string | null; weight: number; reps: number }[];
+}): Promise<Session> {
+  const midday = dateKeyToDate(input.date);
+  midday.setHours(12);
+  const at = midday.toISOString();
+  const session: Session = { id: uuid(), routineId: input.routineId, title: input.title, startedAt: at, endedAt: at, source: 'coach' };
+  const next = new Map<string, number>();
+  const logs: SetLog[] = input.sets.map((st) => {
+    const slot = `${st.routineExerciseId ?? ''}:${st.exerciseId}`;
+    const index = next.get(slot) ?? 0;
+    next.set(slot, index + 1);
+    return { id: uuid(), sessionId: session.id, routineExerciseId: st.routineExerciseId, exerciseId: st.exerciseId, index, type: 'working', weight: st.weight, reps: st.reps, completedAt: at };
+  });
+  await db.transaction('rw', db.sessions, db.setLogs, async () => {
+    await db.sessions.add(session);
+    await db.setLogs.bulkAdd(logs);
+  });
+  return session;
 }
 
 /**

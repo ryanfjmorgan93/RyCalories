@@ -155,8 +155,8 @@ export interface Session {
   skippedRoutineExerciseIds?: string[];
   /** Exercises added for this session only (no routine-exercise, so no progression). */
   extraExerciseIds?: string[];
-  /** Where the record came from. Absent = logged in this app. */
-  source?: 'hevy' | 'backup';
+  /** Where the record came from. Absent = logged in this app; 'coach' = filled in afterwards by the coach (no weight decision). */
+  source?: 'hevy' | 'backup' | 'coach';
   /** Leg-day checklist state. */
   checklist?: { electrolytes?: boolean; protein?: boolean };
   /** True when this session started as a deload: prescriptions were reduced and no weight decision was written. */

@@ -175,6 +175,35 @@ test.describe('the coach in a session', () => {
     expect(rx.filter((r) => r.currentWeight === 65 && r.targetSets === 2)).toHaveLength(0);
   });
 
+  test('"I did push day yesterday as planned" is filled in: in History, marked as filled in, with the routine\'s sets', async ({ page }) => {
+    await withKey(page);
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const yesterday = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    await mockClaude(page, (body) => {
+      if (isMoment(body)) return { content: [text('')] };
+      const last = (body.messages as { content: unknown }[]).at(-1)!;
+      const afterTool = Array.isArray(last.content) && (last.content as { type: string }[]).some((b) => b.type === 'tool_result');
+      return afterTool
+        ? { content: [text('Filled in yesterday\'s push day.')] }
+        : { content: [toolUse('toolu_1', 'log_past_session', { date: yesterday, routine: 'Upper (Push)', as_planned: true, exercises: [] })], stop_reason: 'tool_use' };
+    });
+    await fresh(page);
+    await page.getByTestId('coach-fab').click();
+    const sheet = page.getByRole('dialog').filter({ has: page.getByTestId('coach-thread') });
+    await page.getByTestId('coach-input').fill('I did push day yesterday as planned but forgot to log it');
+    await page.getByTestId('coach-send').click();
+    await expect(sheet.getByTestId('coach-actions')).toContainText('Filled in Upper (Push)');
+    await closeSheet(page);
+
+    await page.goto('/history');
+    const row = page.getByRole('button', { name: /Upper \(Push\)/ }).filter({ hasText: 'Filled in' });
+    await expect(row).toBeVisible();
+    // The routine's own plan was written: Bench Press 4 sets at 65 kg, the bottom of 6–8.
+    const sets = (await readRawIron(page)).tables.setLogs as { weight: number; reps: number }[];
+    expect(sets.filter((x) => x.weight === 65 && x.reps === 6).length).toBeGreaterThanOrEqual(4);
+  });
+
   test('after a set the rest bar carries the coach\'s line; after the exercise and the session, theirs', async ({ page }) => {
     await withKey(page);
     const seen = await mockClaude(page, (body) => (isMoment(body) ? momentReply(body) : { content: [text('')] }));

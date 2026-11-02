@@ -131,6 +131,9 @@ The owner does not check on device. Correctness has to come from the code and th
   session tools reach the whole exercise library by name (`findExerciseAnywhere` in
   `src/db/catalogueRepo.ts`, the paste matcher's rules); with no review step, a library entry is
   taken only when the name says exactly it, and a looser guess is named back, never added.
+  `log_past_session` fills in a workout trained but not logged (the last 7 days): the owner's own
+  sets, or their routine "as planned" at the bottom of each rep range. It is stored with
+  `source: 'coach'`, shown as "Filled in" with no made-up time, and writes no weight decision.
 - `src/platform/` — share-sheet import (InBody files), local reminders, steps and weight from
   Health Connect (`health.ts`, through `@capgo/capacitor-health`), and the capture of uncaught
   errors as problem reports, in the APK only (`errorReports.ts`). There is no custom native code; plugins

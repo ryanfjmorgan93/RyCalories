@@ -18,7 +18,7 @@ export interface RecordSet {
 export interface RecordSession {
   sessionId: string;
   startedAt: string;
-  source?: 'hevy' | 'backup';
+  source?: 'hevy' | 'backup' | 'coach';
   sets: RecordSet[];
 }
 

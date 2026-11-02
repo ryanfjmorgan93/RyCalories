@@ -9,7 +9,7 @@ import { acknowledgeFilePickerNotice, dismissHistoryNotice, restoreHistoryNotice
 import { isBackup, type Backup } from '@/db/backup';
 import { useHistoryNoticeStore } from '@/state/historyNotice';
 import { ZERO } from '@/domain/food';
-import { fmtDateTime, fmtKg, fmtMinutes, fmtNum, plural } from '@/domain/format';
+import { fmtDateLong, fmtDateTime, fmtKg, fmtMinutes, fmtNum, plural } from '@/domain/format';
 import { mostRestedRegion, openFacts } from '@/domain/homeToday';
 import { regionRecency } from '@/domain/routineOrder';
 import { isConsecutiveLower } from '@/domain/schedule';
@@ -207,7 +207,7 @@ export function HomeScreen() {
               <Row
                 onClick={() => nav(`/history/${s.id}`)}
                 title={s.title}
-                subtitle={`${fmtDateTime(s.startedAt)}${s.durationSec ? ` · ${fmtMinutes(s.durationSec)}` : ''}${s.source === 'hevy' ? ' · Hevy' : ''}`}
+                subtitle={`${s.source === 'coach' ? fmtDateLong(s.startedAt) : fmtDateTime(s.startedAt)}${s.durationSec ? ` · ${fmtMinutes(s.durationSec)}` : ''}${s.source === 'hevy' ? ' · Hevy' : s.source === 'coach' ? ' · Filled in' : ''}`}
                 right={<ChevronIcon />}
               />
             </div>

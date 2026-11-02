@@ -55,7 +55,7 @@ export function SessionDetailScreen() {
     <div>
       <TopBar
         title={session.title}
-        subtitle={`${fmtDateLong(session.startedAt)}, ${fmtTime(session.startedAt)}${session.deload ? ' · Deload' : ''}`}
+        subtitle={`${fmtDateLong(session.startedAt)}${session.source === 'coach' ? '' : `, ${fmtTime(session.startedAt)}`}${session.deload ? ' · Deload' : ''}`}
         back
         right={
           <Button size="md" variant="ghost" onClick={() => setDeleteOpen(true)} data-testid="delete-session">
@@ -65,7 +65,7 @@ export function SessionDetailScreen() {
       />
       <div className="px-4">
         <Card className="mt-2 flex items-center gap-6 px-4 py-3">
-          <Stat label="Time" value={fmtDuration(sessionSeconds(session))} />
+          <Stat label="Time" value={session.source === 'coach' ? '–' : fmtDuration(sessionSeconds(session))} />
           <Stat label="Sets" value={working} sub={warmups > 0 ? `+${warmups} warm-up` : undefined} />
           <Stat label="Exercises" value={groups.length} />
         </Card>
@@ -73,6 +73,11 @@ export function SessionDetailScreen() {
         {session.source === 'hevy' && (
           <div className="mt-3">
             <Chip size="sm">Imported from Hevy</Chip>
+          </div>
+        )}
+        {session.source === 'coach' && (
+          <div className="mt-3">
+            <Chip size="sm">Filled in afterwards</Chip>
           </div>
         )}
 
