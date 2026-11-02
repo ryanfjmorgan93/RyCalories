@@ -12,7 +12,13 @@ const EXERCISE_CATALOGUE_ATTRIBUTION = {
 /** The generated exercise-media attributions, plus the exercise catalogue's and the bundled UK food
  * table's — appended, never hand-edited into `exerciseDemos.ts` itself (see `src/data/ukFoodTable.ts`'s
  * doc comment). */
-const ALL_ATTRIBUTIONS = [...ATTRIBUTIONS, EXERCISE_CATALOGUE_ATTRIBUTION, UK_FOOD_TABLE_ATTRIBUTION];
+const LIFT_STANDARDS_ATTRIBUTION = {
+  name: 'Meet results: OpenPowerlifting (public domain)',
+  url: 'https://www.openpowerlifting.org/',
+  licence: 'Contributed to the public domain. Built into src/data/liftStandards.json by scripts/lift-standards.py.',
+};
+
+const ALL_ATTRIBUTIONS = [...ATTRIBUTIONS, EXERCISE_CATALOGUE_ATTRIBUTION, UK_FOOD_TABLE_ATTRIBUTION, LIFT_STANDARDS_ATTRIBUTION];
 
 /** Third-party attribution and the one fact about what this app sends off the device. */
 export function AboutCard() {

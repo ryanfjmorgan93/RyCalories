@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
 import { db } from '@/db/db';
@@ -9,6 +9,7 @@ import { bandStatus, movingAverage, weeklyDelta } from '@/domain/bodyweight';
 import { estimateMaintenance } from '@/domain/energy';
 import { maintenanceBasisText, maintenanceFigureText, maintenanceGateText, maintenanceRateText } from '@/domain/energyText';
 import { fmtDate, fmtGrams, fmtKcal, fmtKg, fmtNum, fmtSignedKg, fmtWeekOf, muscleLabel } from '@/domain/format';
+import { groupText, liftStanding, standingText, type CompareSex, type LiftStanding, type LiftTable, type MeetLift } from '@/domain/liftStandards';
 import { strengthLevel, type StrengthLevel } from '@/domain/standards';
 import { e1rmChange } from '@/domain/strength';
 import { averagesAreMeaningful, type Average, type Trend } from '@/domain/trends';
@@ -76,10 +77,16 @@ export function ProgressScreen() {
       const bests = await bestsForExercise(e.id);
       if (bests.e1rm === null) continue;
       const s = strengthLevel(e.standard, bests.e1rm, latestBodyweightKg);
-      out.push({ exercise: e, ratio: s.ratio, level: s.level, next: s.next });
+      out.push({ exercise: e, e1rm: bests.e1rm, ratio: s.ratio, level: s.level, next: s.next });
     }
     return out;
   }, [exercises, latestBodyweightKg]);
+
+  const liftTable = useLiftTable();
+  const meet =
+    settings?.birthYear && settings.sex && latestBodyweightKg != null
+      ? { sex: settings.sex, age: Number(today.slice(0, 4)) - settings.birthYear, bodyweightKg: latestBodyweightKg, table: liftTable }
+      : null;
 
   const changeRows = useLiveQuery(async () => {
     if (!exercises) return [] as ChangeRow[];
@@ -160,7 +167,7 @@ export function ProgressScreen() {
             <WeeklySetsCard key={shownWeek} weekStart={shownWeek} thisWeek={thisWeek} settings={settings} />
 
             <SectionTitle>Strength</SectionTitle>
-            <StrengthCard standards={standardsRows ?? []} changes={changeRows ?? []} />
+            <StrengthCard standards={standardsRows ?? []} changes={changeRows ?? []} meet={meet} onSettings={() => nav('/settings')} />
 
             <SectionTitle>Recent PRs</SectionTitle>
             <RecentPRsCard records={recentRecords ?? []} />
@@ -180,6 +187,7 @@ export function ProgressScreen() {
 
 interface StandardRow {
   exercise: Exercise;
+  e1rm: number;
   ratio: number;
   level: StrengthLevel | 'untrained';
   next: { level: StrengthLevel; ratio: number; kg: number } | null;
@@ -365,24 +373,76 @@ const LEVEL_LABEL: Record<StrengthLevel | 'untrained', string> = {
   elite: 'elite',
 };
 
-function StrengthCard({ standards, changes }: { standards: StandardRow[]; changes: ChangeRow[] }) {
+const MEET_LIFTS: readonly string[] = ['squat', 'bench', 'deadlift'] satisfies MeetLift[];
+
+/** The meet-results table, loaded when Progress first opens (100 KB, not in the main bundle). */
+function useLiftTable(): LiftTable | null {
+  const [table, setTable] = useState<LiftTable | null>(null);
+  useEffect(() => {
+    void import('@/data/liftStandards.json').then((m) => setTable(m.default as LiftTable));
+  }, []);
+  return table;
+}
+
+type Meet = { sex: CompareSex; age: number; bodyweightKg: number; table: LiftTable | null };
+
+/** An estimate shown to the half kilo, rounded down so it never flatters; the comparison uses the same figure. */
+const e1rmShown = (kg: number) => Math.floor(kg * 2) / 2;
+
+function StrengthCard({ standards, changes, meet, onSettings }: { standards: StandardRow[]; changes: ChangeRow[]; meet: Meet | null; onSettings: () => void }) {
   if (standards.length === 0 && changes.length === 0) {
     return <EmptyState>No e1RM history yet.</EmptyState>;
   }
+  const standing = (r: StandardRow): LiftStanding | null =>
+    meet?.table && r.exercise.standard && MEET_LIFTS.includes(r.exercise.standard)
+      ? liftStanding(meet.table, { ...meet, lift: r.exercise.standard as MeetLift, e1rmKg: e1rmShown(r.e1rm) })
+      : null;
+  const shown = standards.map(standing);
+  const group = shown.find((s) => s !== null);
+  const hasMeetLift = standards.some((r) => r.exercise.standard && MEET_LIFTS.includes(r.exercise.standard));
   return (
     <Card className="p-4" data-testid="strength-card">
-      {standards.map((r, i) => (
-        <div key={r.exercise.id}>
-          {i > 0 && <Divider />}
-          <div className="py-2">
-            <div className="font-semibold">{r.exercise.name}</div>
-            <div className="num text-sm text-muted">
-              {fmtNum(r.ratio)} × bodyweight · {LEVEL_LABEL[r.level]}
-              {r.next ? ` · next ${fmtNum(r.next.ratio)} × = ${fmtKg(r.next.kg)}` : ''}
+      {standards.map((r, i) => {
+        const s = shown[i];
+        return (
+          <div key={r.exercise.id}>
+            {i > 0 && <Divider />}
+            <div className="py-2">
+              <div className="font-semibold">{r.exercise.name}</div>
+              {s ? (
+                <div className="num text-sm text-muted" data-testid={`meet-${r.exercise.standard}`}>
+                  <div>
+                    {fmtKg(e1rmShown(r.e1rm))} e1RM · {standingText(s)}
+                  </div>
+                  <div>
+                    Elite (top 1%): {fmtKg(s.eliteKg)} · {s.n.toLocaleString('en-GB')} lifters
+                  </div>
+                </div>
+              ) : (
+                <div className="num text-sm text-muted">
+                  {fmtNum(r.ratio)} × bodyweight · {LEVEL_LABEL[r.level]}
+                  {r.next ? ` · next ${fmtNum(r.next.ratio)} × = ${fmtKg(r.next.kg)}` : ''}
+                </div>
+              )}
             </div>
           </div>
+        );
+      })}
+      {group && meet?.table && (
+        <p className="mt-1 text-xs text-muted" data-testid="meet-group">
+          {groupText(meet.sex, group)}: best lifts made at raw powerlifting meets (OpenPowerlifting,{' '}
+          {new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(new Date(meet.table.date))}). Yours is your best
+          estimated 1RM. Body fat is not part of it: meets record bodyweight only.
+        </p>
+      )}
+      {!meet && hasMeetLift && (
+        <div className="mt-1 flex items-center justify-between gap-3">
+          <p className="min-w-0 text-xs text-muted">Year of birth and sex compare your squat, bench and deadlift with lifters at meets.</p>
+          <Button size="md" variant="secondary" onClick={onSettings} data-testid="meet-settings">
+            Add
+          </Button>
         </div>
-      ))}
+      )}
       {standards.length > 0 && changes.length > 0 && <Divider />}
       {changes.map((r, i) => (
         <div key={r.exercise.id}>

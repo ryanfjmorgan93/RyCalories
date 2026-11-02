@@ -448,6 +448,9 @@ export interface Settings {
   healthWeight?: boolean;
   /** Days whose Health Connect reading the owner deleted from the log: never read in again. */
   healthWeightSkip?: string[];
+  /** Year of birth and sex, used only to compare lifts with lifters at meets (src/domain/liftStandards.ts). Absent = not given. */
+  birthYear?: number;
+  sex?: 'male' | 'female';
 }
 
 export const DEFAULT_SETTINGS: Omit<Settings, 'id' | 'createdAt'> = {

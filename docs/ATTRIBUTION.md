@@ -59,6 +59,13 @@ the equipment turned to the same satin metal with no branding, then cut out (BiR
 placed on one shared black stage. They are bundled with the app and never fetched at runtime. See
 docs/DESIGN.md §3.
 
+## Meet results — OpenPowerlifting
+
+`src/data/liftStandards.json` (Progress → Strength) is built by hand with
+`scripts/lift-standards.py` from the OpenPowerlifting CSV (https://www.openpowerlifting.org/,
+download of 31 October 2026). OpenPowerlifting data is contributed to the public domain; the app
+credits it anyway, in Settings → About and under the comparison itself.
+
 ## Font — IBM Plex Sans
 
 IBM Plex Sans (`@fontsource-variable/ibm-plex-sans`, bundled), by IBM, under the SIL Open Font

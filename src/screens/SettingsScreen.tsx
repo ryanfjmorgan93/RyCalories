@@ -17,7 +17,7 @@ import { BackupsCard } from '@/ui/BackupsCard';
 import { ClaudeSettingsCard } from '@/ui/ClaudeSettingsCard';
 import { Button } from '@/ui/components/Button';
 import { Card, Divider, SectionTitle, Stat } from '@/ui/components/Card';
-import { Chip, Toggle } from '@/ui/components/Chip';
+import { Chip, Segmented, Toggle } from '@/ui/components/Chip';
 import { NumberField, NumberInput } from '@/ui/components/NumberField';
 import { HoldToConfirm } from '@/ui/components/HoldToConfirm';
 import { Confirm, Sheet } from '@/ui/components/Sheet';
@@ -105,6 +105,9 @@ export function SettingsScreen() {
           <>
             <SectionTitle>Targets</SectionTitle>
             <TargetsCard settings={settings} />
+
+            <SectionTitle>About you</SectionTitle>
+            <AboutYouCard settings={settings} />
 
             <SectionTitle>Reminders</SectionTitle>
             <RemindersCard settings={settings} />
@@ -389,6 +392,36 @@ function TargetsCard({ settings }: { settings: Settings }) {
     </Card>
   );
 }
+
+/** Year of birth and sex: only for comparing lifts with lifters at meets (Progress → Strength). */
+function AboutYouCard({ settings }: { settings: Settings }) {
+  const [year, setYear] = useState<number | null>(settings.birthYear ?? null);
+  useOwnedReseed(settings, ABOUT_YOU_OWNED_KEYS, () => setYear(settings.birthYear ?? null));
+  const latest = new Date().getFullYear() - 13;
+  const saveYear = () => {
+    if (year !== null && year >= 1900 && year <= latest) void saveSettings({ birthYear: year });
+    else setYear(settings.birthYear ?? null);
+  };
+  return (
+    <Card className="p-4" data-testid="about-you-card">
+      <Field label="Year of birth">
+        <NumberInput value={year} onChange={setYear} mode="numeric" placeholder="none" testId="birth-year" onBlur={saveYear} />
+      </Field>
+      <div className="mt-3 mb-1 px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Compare lifts with</div>
+      <Segmented
+        value={settings.sex ?? ''}
+        onChange={(sex) => void saveSettings({ sex: sex as 'male' | 'female' })}
+        options={[
+          { value: 'male', label: 'Men', testId: 'sex-male' },
+          { value: 'female', label: 'Women', testId: 'sex-female' },
+        ]}
+      />
+      <p className="mt-2 px-1 text-xs text-muted">Used only on Progress, to compare your squat, bench and deadlift with lifters at meets.</p>
+    </Card>
+  );
+}
+
+const ABOUT_YOU_OWNED_KEYS: (keyof Settings)[] = ['birthYear'];
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
