@@ -44,11 +44,12 @@ describe('the tool definitions', () => {
     expect(createCoachTools(fakeActions(), newTurnRecord()).map((t) => JSON.stringify([t.name, t.description, t.input_schema]))).toEqual(tools.map((t) => JSON.stringify([t.name, t.description, t.input_schema])));
   });
 
-  it('are all strict, with schemas strict mode accepts', () => {
+  it('are strict, bar log_past_session, with schemas strict mode accepts', () => {
     let optional = 0;
     let unions = 0;
     for (const tool of tools) {
-      expect(tool.strict, tool.name).toBe(true);
+      // The strict set is build 126's, which worked; build 127 added a twelfth and chat failed.
+      expect(tool.strict, tool.name).toBe(tool.name !== 'log_past_session');
       const { problems, stats } = strictSchemaProblems(tool.input_schema);
       expect(problems, tool.name).toEqual([]);
       optional += stats.optional;

@@ -71,7 +71,7 @@ The owner does not check on device. Correctness has to come from the code and th
   the plugin declares is removed in the manifest). Steps are never stored; a weight read in is
   stored as a bodyweight entry marked `source: 'health-connect'`, only for a day with no reading of
   the owner's own, and never again for a day they deleted. Problem reports (the coach's
-  report_problem tool, and errors nothing caught in the APK) stay on the phone until the owner
+  report_problem tool, a coach reply that failed for a reason the app has no words for, and errors nothing caught in the APK) stay on the phone until the owner
   shares them from Settings; the Claude key is scrubbed from every report.
 - The Claude key lives only in `localStorage` (`src/ai/key.ts`), never in the Settings row, a
   backup, a CSV or a log (docs/adr/0003). Spending is capped in the app (`src/ai/spend.ts`).

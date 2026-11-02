@@ -1,5 +1,6 @@
 /**
- * Errors nothing in the app caught, written down as problem reports on the phone (Settings →
+ * Errors nothing in the app caught (and a coach reply that failed for a reason the app has no words
+ * for), written down as problem reports on the phone (Settings →
  * Problem reports), so a crash the owner only saw as "it stopped working" can be shared with
  * whoever fixes the app. Only in the APK: in a browser (development, the test suites) the console
  * already shows them, and a report written behind a test's back would change what it reads.

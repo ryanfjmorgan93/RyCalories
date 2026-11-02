@@ -26,8 +26,9 @@ import { db } from '@/db/db';
 import { nowIso } from '@/domain/dates';
 import { uuid } from '@/domain/ids';
 import type { CoachMessage } from '@/domain/types';
+import { recordUncaughtError } from '@/platform/errorReports';
 import { createCoachActions, type CoachActions } from './actions';
-import { assertCanCall, blockedReason, ClaudeError, runToolLoop, SONNET, textOf, toClaudeError, type CallDeps, type ClaudeErrorKind } from './client';
+import { assertCanCall, blockedReason, CLAUDE_ERROR_MESSAGES, ClaudeError, runToolLoop, SONNET, textOf, toClaudeError, type CallDeps, type ClaudeErrorKind } from './client';
 import { buildCoachContext, type ContextOptions } from './context';
 import { redactKeys } from './key';
 import { CHAT_RULES, personaWith } from './persona';
@@ -156,6 +157,9 @@ export async function sendCoachMessage(rawText: string, opts: ChatOptions = {}):
     return { ok: true, text: reply, actions: turn.actions, draft: turn.draft, offer: turn.offer, stored };
   } catch (e) {
     const error = toClaudeError(e);
+    // The owner sees only the app's own line; what actually broke is kept as a problem report (key
+    // scrubbed) to share from Settings.
+    if (error.message === CLAUDE_ERROR_MESSAGES.other) await recordUncaughtError(error.cause ?? e, 'coach');
     if (turn.actions.length > 0) {
       await db.coachMessages.put({ id: uuid(), at: laterThan(userAt), role: 'coach', text: `${error.message} These changes were made first.`, actions: [...turn.actions] });
     } else {

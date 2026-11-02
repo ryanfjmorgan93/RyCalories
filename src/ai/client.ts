@@ -38,8 +38,9 @@ export const CLAUDE_ERROR_MESSAGES: Record<ClaudeErrorKind, string> = {
 
 export class ClaudeError extends Error {
   readonly kind: ClaudeErrorKind;
-  constructor(kind: ClaudeErrorKind, message?: string) {
-    super(message ?? CLAUDE_ERROR_MESSAGES[kind]);
+  /** `cause`: what actually went wrong, for a problem report; never shown. */
+  constructor(kind: ClaudeErrorKind, message?: string, cause?: unknown) {
+    super(message ?? CLAUDE_ERROR_MESSAGES[kind], cause === undefined ? undefined : { cause });
     this.name = 'ClaudeError';
     this.kind = kind;
   }
@@ -68,10 +69,10 @@ export function toClaudeError(e: unknown): ClaudeError {
       case 529:
         return new ClaudeError('busy');
       default:
-        return new ClaudeError('other');
+        return new ClaudeError('other', undefined, e);
     }
   }
-  return new ClaudeError('other');
+  return new ClaudeError('other', undefined, e);
 }
 
 // ---------------------------------------------------------------------------

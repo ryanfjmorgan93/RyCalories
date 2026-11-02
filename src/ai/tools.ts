@@ -237,7 +237,11 @@ export function createCoachTools(actions: CoachActions, turn: TurnRecord): Coach
       inputSchema: ReportProblemInput,
       run: async (input) => finish(await actions.reportProblem({ summary: input.summary, detail: input.detail }), turn),
     }),
-    strictTool({
+    // Not strict: the API compiles every strict schema into one grammar with a size limit it does not
+    // publish ("Schema is too complex for compilation", a 400). Build 127, the first with this one
+    // strict (lists in lists), failed on chat; the eleven above are build 126's set, which worked.
+    // Zod still checks the input before `run`; a bad one goes back to the model as a tool error.
+    { ...strictTool({
       name: 'log_past_session',
       description:
         "Fill in a workout the owner did but did not log (today or the last 7 days). Use the sets they tell you; if they say they did a routine as planned, pass as_planned and no exercises. Ask for what you do not know (which day, which routine, the sets) rather than guess. It counts for History, the calendar, the streak and records, and changes no routine weight.",
@@ -252,7 +256,7 @@ export function createCoachTools(actions: CoachActions, turn: TurnRecord): Coach
           }),
           turn,
         ),
-    }),
+    }), strict: false },
   ];
   // The SDK runs every tool call of one reply at once, and each action reads then writes: two
   // skips in one reply kept one. So they queue, in the order the model asked.

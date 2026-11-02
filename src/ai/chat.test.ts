@@ -78,7 +78,8 @@ describe('a turn where the coach uses a tool and then answers', () => {
       expect(req.body.tool_choice).toBeUndefined();
       expect(req.body.stream).not.toBe(true);
       expect(req.body.tools.map((t: { name: string }) => t.name)).toEqual(['log_food', 'log_weight', 'remember', 'forget', 'edit_routine', 'edit_session', 'build_routine', 'propose_targets', 'suggest_supplement', 'tick_supplements', 'report_problem', 'log_past_session']);
-      expect(req.body.tools.every((t: { strict: boolean }) => t.strict === true)).toBe(true);
+      // Strict on every tool but log_past_session (see tools.ts: build 127 had it strict and chat failed).
+      expect(req.body.tools.filter((t: { strict: boolean }) => t.strict !== true).map((t: { name: string }) => t.name)).toEqual(['log_past_session']);
     }
 
     // The tools and the persona and stable context are one cached prefix; the volatile part follows it, uncached.
@@ -282,6 +283,16 @@ describe('when Claude cannot be reached or answers with an error', () => {
     const retry = fakeClaude({ content: [text('A good one.')] });
     expect((await sendCoachMessage('how was my week?', { fetch: retry.fetch, ...ctx })).stored).toBe(true);
     expect((await thread()).map((r) => `${r.role}: ${r.text}`)).toEqual(['user: how was my week?', 'coach: A good one.']);
+  });
+
+  it('keeps the reason for a refused request as a problem report, key scrubbed, while the owner sees the app\'s own line', async () => {
+    await db.problemReports.clear();
+    const fake = fakeClaude({ status: 400, error: { type: 'invalid_request_error', message: `Schema is too complex for compilation. ${KEY}` } });
+    const reply = await sendCoachMessage('I did push day yesterday', { fetch: fake.fetch, ...ctx });
+    expect(reply).toMatchObject({ ok: false, error: 'other', text: CLAUDE_ERROR_MESSAGES.other });
+    const reports = await db.problemReports.toArray();
+    expect(reports.map((r) => [r.source, r.screen, r.summary.includes('Schema is too complex for compilation')])).toEqual([['error', 'coach', true]]);
+    expect(JSON.stringify(reports)).not.toContain(KEY);
   });
 
   it('takes the owner\'s turn back out when a tool call it asked for hit the spend cap unrun', async () => {
