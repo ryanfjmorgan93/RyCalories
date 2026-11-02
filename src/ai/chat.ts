@@ -58,6 +58,8 @@ export interface ChatReply {
   draft: TurnRecord['draft'];
   /** Targets or supplements offered this turn, applied only if the owner taps. */
   offer: TurnRecord['offer'];
+  /** A screen to open now: a session the coach started, or its finish screen. */
+  open: TurnRecord['open'];
   /**
    * The owner's message is in the thread. False when nothing was sent, and when the turn failed
    * before anything changed (the message is taken back out), so the sheet hands the text back to be sent later.
@@ -115,7 +117,7 @@ export async function sendCoachMessage(rawText: string, opts: ChatOptions = {}):
   const text = redactKeys(rawText.trim());
   const turn = newTurnRecord();
   let stored = false;
-  const fail = (error: ClaudeError): ChatReply => ({ ok: false, text: error.message, actions: turn.actions, draft: turn.draft, offer: turn.offer, stored, error: error.kind });
+  const fail = (error: ClaudeError): ChatReply => ({ ok: false, text: error.message, actions: turn.actions, draft: turn.draft, offer: turn.offer, open: turn.open, stored, error: error.kind });
   if (!text) return fail(new ClaudeError('other', 'Say something first.'));
 
   // Nothing is written when Claude cannot be called at all: the sheet keeps the text for next time.
@@ -171,7 +173,7 @@ export async function sendCoachMessage(rawText: string, opts: ChatOptions = {}):
       ...(sources.length > 0 ? { sources } : {}),
     };
     await db.coachMessages.put(row);
-    return { ok: true, text: reply, actions: turn.actions, draft: turn.draft, offer: turn.offer, stored };
+    return { ok: true, text: reply, actions: turn.actions, draft: turn.draft, offer: turn.offer, open: turn.open, stored };
   } catch (e) {
     const error = toClaudeError(e);
     // The owner sees only the app's own line; what actually broke is kept as a problem report (key

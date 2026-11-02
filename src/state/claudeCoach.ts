@@ -50,6 +50,9 @@ export interface ClaudeCoachState {
   draft: TurnRecord['draft'];
   /** The targets or supplements the coach most recently offered, until taken or dismissed. */
   offer: TurnRecord['offer'];
+  /** A screen the coach's last reply asked to open (CoachSheetHost goes there and clears it). */
+  open: TurnRecord['open'];
+  clearOpen: () => void;
   /** Send a message. Resolves with the reply, or null when it was ignored (empty, or one already in flight). */
   send: (text: string) => Promise<ChatReply | null>;
   clearError: () => void;
@@ -70,6 +73,8 @@ export function createClaudeCoachStore(deps: ClaudeCoachDeps) {
     lastError: null,
     draft: null,
     offer: null,
+    open: null,
+    clearOpen: () => set({ open: null }),
 
     send: async (text) => {
       const message = text.trim();
@@ -77,7 +82,7 @@ export function createClaudeCoachStore(deps: ClaudeCoachDeps) {
       set({ busy: true, lastError: null });
       try {
         const reply = await deps.send(message);
-        set((s) => ({ busy: false, lastError: reply.ok ? null : reply.text, draft: reply.draft ?? s.draft, offer: reply.offer ?? s.offer }));
+        set((s) => ({ busy: false, lastError: reply.ok ? null : reply.text, draft: reply.draft ?? s.draft, offer: reply.offer ?? s.offer, open: reply.open ?? null }));
         return reply;
       } catch {
         // sendCoachMessage reports every expected failure as a reply; this is a bug or a broken database.

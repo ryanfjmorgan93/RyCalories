@@ -142,7 +142,13 @@ The owner does not check on device. Correctness has to come from the code and th
   reply and shown under it, as Anthropic requires. `recordActions.ts` is the coach's hands on what is
   already logged, through the same data code as the screens: `find_entries` (a day's food, weigh-in
   or sessions, with short ids), `edit_food`, `edit_training`, `delete_weight` and `change_setting`;
-  it may replace only its own estimates' figures. Only the first eleven tools are strict: a
+  it may replace only its own estimates' figures. `controlActions.ts` runs the rest when asked:
+  the supplement checklist, whole routines (rename, delete, restore, copy), recipes (log a share,
+  delete), phone reminders, and the session (start it, open its finish screen, discard it); a
+  delete takes the exact name, never a near one. Starting or finishing hands back a screen to open
+  (`open`), which CoachSheetHost goes to; next time's weights are still chosen on the summary.
+  Calorie and protein targets set on request go through `domain/targetChange.ts`, as the offer's
+  tap does. Only the first eleven tools are strict: a
   twelfth strict schema made every chat fail in build 127, so every tool added since is not.
   `log_past_session` fills in a workout trained but not logged (the last 7 days): the owner's own
   sets, or their routine "as planned" at the bottom of each rep range. It is stored with

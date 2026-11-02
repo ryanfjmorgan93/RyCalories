@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { builtRowKeys, routineToText, type BuiltRoutine } from '@/domain/routineBuilder';
+import { useClaudeCoach } from '@/state/claudeCoach';
 import { useCoachSheet } from '@/state/coachSheet';
 import { CoachSheet } from './CoachSheet';
 import { PasteRoutineSheet } from './PasteRoutineSheet';
@@ -21,6 +22,14 @@ export function CoachSheetHost() {
   const build = useCoachSheet((s) => s.build);
   const closeCoach = useCoachSheet((s) => s.closeCoach);
   const [review, setReview] = useState<{ text: string; known: ReadonlyMap<string, readonly string[]> } | null>(null);
+  // The coach started a session or is finishing one: go there, as the owner's own tap would.
+  const go = useClaudeCoach((s) => s.open);
+  useEffect(() => {
+    if (!go) return;
+    useClaudeCoach.getState().clearOpen();
+    closeCoach();
+    nav(go);
+  }, [go, closeCoach, nav]);
 
   function saveDraft(routines: BuiltRoutine[]) {
     setReview({ text: routineToText(routines), known: builtRowKeys(routines) });

@@ -142,11 +142,14 @@ describe('weigh-ins and settings', () => {
 
   it('changes a setting the owner names, within its range, and nothing else', async () => {
     const actions = createCoachActions({ now: NOW });
-    expect(await actions.changeSetting({ setting: 'protein_target', value: 180 })).toMatchObject({ ok: true, description: 'protein target: 180 g' });
+    // Protein moves the way the offer's button moves it: the lower-body days keep their gap.
+    expect(await actions.changeSetting({ setting: 'protein_target', value: 180 })).toMatchObject({ ok: true, description: 'Protein target changed from 170 g to 180 g (lower-body days 200 g to 210 g).' });
+    expect(await actions.changeSetting({ setting: 'calorie_target', value: 2500 })).toMatchObject({ ok: true, description: 'Calories set to 2,500 a day from today.' });
+    expect((await actions.changeSetting({ setting: 'calorie_target', value: 200 })).ok).toBe(false);
     expect(await actions.changeSetting({ setting: 'sex', value: 'Male' })).toMatchObject({ ok: true });
     expect(await actions.changeSetting({ setting: 'step_goal', value: '12000' })).toMatchObject({ ok: true });
     expect((await actions.changeSetting({ setting: 'protein_target', value: 4000 })).ok).toBe(false);
     expect((await actions.changeSetting({ setting: 'theme' as never, value: 'light' })).ok).toBe(false);
-    expect(await getSettings()).toMatchObject({ proteinTarget: 180, sex: 'male', stepGoal: 12000 });
+    expect(await getSettings()).toMatchObject({ proteinTarget: 180, proteinTargetLegDay: 210, calorieStart: 2500, calorieCeiling: 2500, calorieStartDate: TODAY, sex: 'male', stepGoal: 12000 });
   });
 });

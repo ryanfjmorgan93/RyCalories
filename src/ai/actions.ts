@@ -46,6 +46,7 @@ import {
   updateRoutineExercise,
 } from '@/db/repo';
 import { loadRoutineInput } from '@/db/routineBuildQueries';
+import { createControlActions, type ControlActions } from './controlActions';
 import { createRecordActions, type RecordActions } from './recordActions';
 import { buildCoach, describeRead, emptyReasonLines, nothingFact, requestUsable, type CoachRequest } from '@/domain/coachBuild';
 import { nowIso, recentDayProblem, toDateKey } from '@/domain/dates';
@@ -75,6 +76,8 @@ export interface ActionResult {
   result: string;
   /** One short line for the owner, when something changed. */
   description?: string;
+  /** A screen for the app to open once the reply is in (a session just started, its finish screen). */
+  open?: string;
 }
 
 export interface LogFoodItem {
@@ -151,7 +154,7 @@ export interface EditSessionInput {
   swapTo?: string;
 }
 
-export interface CoachActions extends RecordActions {
+export interface CoachActions extends RecordActions, ControlActions {
   logFood(input: LogFoodInput): Promise<ActionResult>;
   logWeight(input: LogWeightInput): Promise<ActionResult>;
   remember(text: string): Promise<ActionResult>;
@@ -403,7 +406,8 @@ export function createCoachActions(deps: ActionDeps = {}): CoachActions {
 
   return {
     ...createOfferActions(now),
-    ...createRecordActions(),
+    ...createRecordActions(now),
+    ...createControlActions(now),
     // ---- food
     async logFood({ items, slot, date }) {
       if (!Array.isArray(items) || items.length === 0) return fail('Nothing to log: no foods were given.');

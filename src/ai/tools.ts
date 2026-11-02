@@ -35,6 +35,7 @@ export type CoachTool = BetaRunnableTool<any> & CoachToolFields;
 function finish(outcome: ActionResult, turn: TurnRecord): string {
   if (!outcome.ok) throw new Error(outcome.result);
   if (outcome.description) turn.actions.push(outcome.description);
+  if (outcome.open) turn.open = outcome.open;
   return outcome.result;
 }
 
@@ -158,8 +159,42 @@ const EditTrainingInput = z.object({
 const DeleteWeightInput = z.object({ date: z.string().describe('The day of the weigh-in to delete, YYYY-MM-DD') });
 
 const ChangeSettingInput = z.object({
-  setting: z.enum([...(Object.keys(COACH_SETTINGS) as (keyof typeof COACH_SETTINGS)[]), 'sex']).describe('Which setting'),
+  setting: z.enum([...(Object.keys(COACH_SETTINGS) as (keyof typeof COACH_SETTINGS)[]), 'sex', 'calorie_target', 'protein_target']).describe('Which setting'),
   value: z.union([z.number(), z.string()]).describe('The new value: a number, or male / female for sex'),
+});
+
+const EditSupplementInput = z.object({
+  action: z.enum(['add', 'remove', 'change']).describe('Add to the checklist, remove from it, or change its dose or time'),
+  name: z.string().describe('The supplement, as the owner names it'),
+  dose: z.string().optional().describe('The dose as on the tub: "5 g", "1 capsule"'),
+  time: z.enum(SUPPLEMENT_TIMES as unknown as [SupplementTime, ...SupplementTime[]]).optional().describe('morning, midday, evening or any'),
+});
+
+const ManageRoutineInput = z.object({
+  routine: z.string().describe('The routine, by name'),
+  action: z.enum(['rename', 'delete', 'restore', 'copy']).describe('Rename it, delete it, bring a deleted one back, or copy it'),
+  new_name: z.string().optional().describe('The new name, for rename'),
+});
+
+const RecipeInput = z.object({
+  action: z.enum(['log', 'delete']).describe('Log a share of the recipe as eaten, or delete the recipe'),
+  recipe: z.string().describe('The recipe, by name'),
+  portions: z.number().optional().describe('Portions eaten, of the portions the recipe makes; 1 if not said'),
+  slot: z.enum(MEAL_SLOTS).optional().describe('breakfast, lunch, dinner or snack; leave out for the time of day (needed with a date)'),
+  date: z.string().optional().describe('YYYY-MM-DD for an earlier day; leave out for today'),
+});
+
+const SetReminderInput = z.object({
+  reminder: z.enum(['food', 'training', 'weigh_in', 'supplements']).describe('Which phone reminder'),
+  on: z.boolean().describe('On or off'),
+  time: z.string().optional().describe('HH:MM, 24-hour'),
+  weekday: z.number().optional().describe('Weigh-in only: 0 Sunday to 6 Saturday'),
+  after_days: z.number().optional().describe('Training only: days without a session before it fires'),
+});
+
+const SessionInput = z.object({
+  action: z.enum(['start', 'finish', 'discard']).describe('Start a routine, open the finish screen for the session going, or discard the session going'),
+  routine: z.string().optional().describe('The routine to start, by name'),
 });
 
 const BuildRoutineInput = z.object({
@@ -316,9 +351,39 @@ export function createCoachTools(actions: CoachActions, turn: TurnRecord): Coach
     }), strict: false },
     { ...strictTool({
       name: 'change_setting',
-      description: "Change a setting when the owner asks for it: a protein target, the step goal, sessions per week, the bodyweight goal range, rest times, or their year of birth or sex (used to compare lifts). Calorie targets go through propose_targets.",
+      description: "Change a setting when the owner asks for it: the daily calorie or protein target (held from today), the lower-body day's protein, the step goal, sessions per week, the bodyweight goal range, rest times, or their year of birth or sex (used to compare lifts). To suggest a target they have not asked for, use propose_targets instead.",
       inputSchema: ChangeSettingInput,
       run: async (input) => finish(await actions.changeSetting(input), turn),
+    }), strict: false },
+    { ...strictTool({
+      name: 'edit_supplement',
+      description: 'Add a supplement to the daily checklist, remove one, or change its dose or time, when the owner asks. To suggest one they have not asked for, use suggest_supplement.',
+      inputSchema: EditSupplementInput,
+      run: async (input) => finish(await actions.editSupplement(input), turn),
+    }), strict: false },
+    { ...strictTool({
+      name: 'manage_routine',
+      description: "Rename, delete, restore (a deleted one) or copy a whole routine. To change the exercises in it, use edit_routine.",
+      inputSchema: ManageRoutineInput,
+      run: async (input) => finish(await actions.manageRoutine({ routine: input.routine, action: input.action, newName: input.new_name }), turn),
+    }), strict: false },
+    { ...strictTool({
+      name: 'recipe',
+      description: "Log a share of one of the owner's saved recipes as eaten (its own figures), or delete a recipe. The recipes are listed in the context.",
+      inputSchema: RecipeInput,
+      run: async (input) => finish(await actions.recipe(input), turn),
+    }), strict: false },
+    { ...strictTool({
+      name: 'set_reminder',
+      description: "Turn a phone reminder on or off, or change when it fires: the evening food reminder, the training nudge after days without a session, the weekly weigh-in, the morning supplements.",
+      inputSchema: SetReminderInput,
+      run: async (input) => finish(await actions.setReminder({ reminder: input.reminder, on: input.on, time: input.time, weekday: input.weekday, afterDays: input.after_days }), turn),
+    }), strict: false },
+    { ...strictTool({
+      name: 'session',
+      description: "Start a routine's session (the app opens it), open the finish screen for the session going (the owner checks next time's weights and saves there), or discard the session going and everything logged in it. Discard only when the owner clearly asked for it.",
+      inputSchema: SessionInput,
+      run: async (input) => finish(await actions.session(input), turn),
     }), strict: false },
   ];
   // The SDK runs every tool call of one reply at once, and each action reads then writes: two

@@ -9,7 +9,8 @@
  */
 import { db } from '@/db/db';
 import { deleteItem, mealsOnDay, updateItem } from '@/db/foodRepo';
-import { deleteBodyweight, deleteSession, deleteSet, getActiveSession, saveSettings, updateSet } from '@/db/repo';
+import { deleteBodyweight, deleteSession, deleteSet, getActiveSession, getSettings, saveSettings, updateSet } from '@/db/repo';
+import { calorieChange, proteinChange } from '@/domain/targetChange';
 import { sessionsOn } from '@/db/todayQueries';
 import { fmtDayHeading } from '@/domain/claudeSummary';
 import { dateKeyToDate, toDateKey } from '@/domain/dates';
@@ -40,7 +41,6 @@ export interface EditTrainingInput {
 
 /** Settings the coach may change when the owner asks, with the range each takes. */
 export const COACH_SETTINGS = {
-  protein_target: { key: 'proteinTarget', min: 40, max: 400, unit: 'g' },
   leg_day_protein_target: { key: 'proteinTargetLegDay', min: 40, max: 400, unit: 'g' },
   step_goal: { key: 'stepGoal', min: 1000, max: 50_000, unit: 'steps' },
   sessions_per_week: { key: 'weeklySessionTarget', min: 1, max: 14, unit: 'sessions' },
@@ -50,7 +50,7 @@ export const COACH_SETTINGS = {
   rest_isolation_seconds: { key: 'restIsolationSec', min: 15, max: 900, unit: 's' },
   birth_year: { key: 'birthYear', min: 1900, max: 2100, unit: '' },
 } as const satisfies Record<string, { key: keyof Settings; min: number; max: number; unit: string }>;
-export type CoachSetting = keyof typeof COACH_SETTINGS | 'sex';
+export type CoachSetting = keyof typeof COACH_SETTINGS | 'sex' | 'calorie_target' | 'protein_target';
 
 export interface RecordActions {
   findEntries(input: { date: string; kind: 'food' | 'weight' | 'sessions' }): Promise<ActionResult>;
@@ -88,7 +88,7 @@ function itemText(i: MealItem): string {
   return `[${shortId(i.id)}] ${i.name}${portion}: ${macroText(displayMacros(i.nutrition), i.source === 'model' ? '≈' : '')}, from ${SOURCE_WORDS[i.source]}`;
 }
 
-export function createRecordActions(): RecordActions {
+export function createRecordActions(now: () => Date = () => new Date()): RecordActions {
   return {
     async findEntries({ date, kind }) {
       if (!isValidDateKey(date)) return fail('Give the day as YYYY-MM-DD.');
@@ -219,8 +219,20 @@ export function createRecordActions(): RecordActions {
         await saveSettings({ sex });
         return { ok: true, result: `Lifts are now compared with ${sex === 'male' ? 'men' : 'women'}.`, description: `Compare lifts with: ${sex === 'male' ? 'men' : 'women'}` };
       }
+      if (setting === 'calorie_target' || setting === 'protein_target') {
+        // The same change the offer's "Use …" button makes: a calorie figure holds from today (start
+        // and ceiling both), and protein keeps the lower-body days' gap.
+        const n = typeof value === 'number' ? value : Number(value);
+        const calories = setting === 'calorie_target';
+        if (!finite(n) || (calories ? n < 1000 || n > 6000 : n < 40 || n > 400)) return fail(calories ? 'A daily calorie target from 1,000 to 6,000 kcal.' : 'A daily protein target from 40 to 400 g.');
+        const settings = await getSettings();
+        const change = calories ? calorieChange(settings, Math.round(n), toDateKey(now())) : proteinChange(settings, Math.round(n));
+        if (!change) return { ok: true, result: `It is already ${fmtNum(Math.round(n))}${calories ? ' kcal' : ' g'}.` };
+        await saveSettings(change.patch);
+        return { ok: true, result: change.line, description: change.line };
+      }
       const spec = COACH_SETTINGS[setting as keyof typeof COACH_SETTINGS];
-      if (!spec) return fail(`"${String(setting)}" is not a setting I can change. I can change: ${[...Object.keys(COACH_SETTINGS), 'sex'].join(', ')}.`);
+      if (!spec) return fail(`"${String(setting)}" is not a setting I can change. I can change: ${[...Object.keys(COACH_SETTINGS), 'sex', 'calorie_target', 'protein_target'].join(', ')}.`);
       const n = typeof value === 'number' ? value : Number(value);
       if (!finite(n) || n < spec.min || n > spec.max) return fail(`${setting} takes a number from ${spec.min} to ${spec.max}.`);
       const v = spec.unit === 'kg' ? Math.round(n * 10) / 10 : Math.round(n);

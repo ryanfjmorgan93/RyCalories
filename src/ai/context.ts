@@ -25,7 +25,7 @@ import {
 import { addDays, daysBetween, isoToDateKey, toDateKey } from '@/domain/dates';
 import { displayMacros, type Macros } from '@/domain/food';
 import { fmtKg, fmtNum, fmtSetsLine, fmtTime, plural, targetLine } from '@/domain/format';
-import { DEFAULT_SETTINGS, type BodyScan, type CoachMessage, type CoachNote, type Exercise, type MealItem, type Settings } from '@/domain/types';
+import { DEFAULT_SETTINGS, type BodyScan, type CoachMessage, type CoachNote, type Exercise, type MealItem, type Recipe, type Settings } from '@/domain/types';
 import { loadClaudeSummaryInput } from '@/db/claudeSummaryQueries';
 import { db } from '@/db/db';
 import { cleanStepGoal, stepWeek, type StepDay } from '@/domain/steps';
@@ -76,6 +76,13 @@ export interface ContextOptions {
 /** The short id the coach is shown for a note, and later gives back to forget it. */
 export function noteShortId(id: string): string {
   return id.slice(0, NOTES_SHORT_ID);
+}
+
+/** The owner's saved recipes by name, for the recipe tool. */
+export function recipesLine(recipes: readonly Pick<Recipe, 'name' | 'portionsMade'>[]): string {
+  if (recipes.length === 0) return 'RECIPES: none saved.';
+  const named = [...recipes].sort((a, b) => a.name.localeCompare(b.name)).map((r) => `${r.name} (makes ${plural(r.portionsMade, 'portion')})`);
+  return `RECIPES: ${named.join('; ')}`;
 }
 
 export function notesBlock(notes: readonly CoachNote[]): string {
@@ -357,17 +364,18 @@ export async function buildStableContext(opts: ContextOptions & { volatileChars?
   const budget = budgetChars(opts) - (opts.volatileChars ?? 0);
 
   const include = { training: true, food: true, bodyweight: true, routines: true };
-  const [input, notes, scans, exercises, routineExercises] = await Promise.all([
+  const [input, notes, scans, exercises, routineExercises, recipes] = await Promise.all([
     loadClaudeSummaryInput(today, include, settings, WINDOWS),
     db.coachNotes.toArray(),
     db.bodyScans.toArray(),
     db.exercises.toArray(),
     db.routineExercises.toArray(),
+    db.recipes.toArray(),
   ]);
 
   const head = [`OWNER'S DATA · weights in kg · dates are day, month, year`, goalsLine(settings)].join('\n');
   const others = otherExercisesBlock(exercises, new Set(routineExercises.map((r) => r.exerciseId)));
-  const fixed = [head, notesBlock(notes), buildRoutinesBlock(input), ...(others ? [others] : []), bodyScansBlock(scans)];
+  const fixed = [head, notesBlock(notes), buildRoutinesBlock(input), ...(others ? [others] : []), recipesLine(recipes), bodyScansBlock(scans)];
   let stable = '';
   for (const level of LEVELS) {
     const h = historyBlocks(input, today, level);

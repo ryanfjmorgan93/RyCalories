@@ -46,8 +46,10 @@ export interface TurnRecord {
   draft: { routines: BuiltRoutine[]; text: string } | null;
   /** Targets and supplements offered this turn, until the owner takes them or dismisses them. */
   offer: CoachOffer | null;
+  /** A screen to open once the reply is in: the session the coach started, or its finish screen. */
+  open: string | null;
 }
 
 export function newTurnRecord(): TurnRecord {
-  return { actions: [], draft: null, offer: null };
+  return { actions: [], draft: null, offer: null, open: null };
 }

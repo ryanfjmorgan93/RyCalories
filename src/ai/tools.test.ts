@@ -26,7 +26,7 @@ function fakeActions(): { [K in keyof CoachActions]: ReturnType<typeof vi.fn> } 
 describe('the tool definitions', () => {
   const tools = createCoachTools(fakeActions(), newTurnRecord());
 
-  it('are the same seventeen, in the same order, every time (the order is part of the cache key)', () => {
+  it('are the same twenty-two, in the same order, every time (the order is part of the cache key)', () => {
     expect(tools.map((t) => t.name)).toEqual([
       'log_food',
       'log_weight',
@@ -45,6 +45,11 @@ describe('the tool definitions', () => {
       'edit_training',
       'delete_weight',
       'change_setting',
+      'edit_supplement',
+      'manage_routine',
+      'recipe',
+      'set_reminder',
+      'session',
     ]);
     expect(createCoachTools(fakeActions(), newTurnRecord()).map((t) => JSON.stringify([t.name, t.description, t.input_schema]))).toEqual(tools.map((t) => JSON.stringify([t.name, t.description, t.input_schema])));
   });
@@ -64,7 +69,8 @@ describe('the tool definitions', () => {
     // Strict mode documents 24 optional parameters and 16 union-typed parameters per request.
     expect(optional).toBeLessThanOrEqual(24);
     expect(unions).toBeLessThanOrEqual(16);
-    expect(tools.length).toBeLessThanOrEqual(20);
+    // Strict mode allows 20 strict tools a request; the rest are not counted.
+    expect(tools.filter((t) => t.strict).length).toBeLessThanOrEqual(20);
   });
 
   it('keep their enums in the schema the API sees', () => {
