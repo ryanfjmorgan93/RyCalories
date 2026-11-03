@@ -2,10 +2,13 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
 import { listScans } from '@/db/bodyScanRepo';
+import { saveSettings } from '@/db/repo';
 import { dateKeyToDate } from '@/domain/dates';
 import { fmtDate, fmtNum } from '@/domain/format';
 import { decodeInbodyBytes, parseInbodyCsv, scanDeltas, type ParsedInbody, type ScanChange } from '@/domain/inbody';
-import type { BodyScan } from '@/domain/types';
+import { scanTargetLines, scanTargets } from '@/domain/scanTargets';
+import { calorieChange, proteinChange } from '@/domain/targetChange';
+import type { BodyLimb, BodyScan, Settings } from '@/domain/types';
 import { useInbodyShare } from '@/state/inbodyShare';
 import { BodyScanImportSheet } from '@/ui/BodyScanImportSheet';
 import { Button } from '@/ui/components/Button';
@@ -13,6 +16,7 @@ import { Card, Divider, Row } from '@/ui/components/Card';
 import { LineChart, type ChartPoint } from '@/ui/components/LineChart';
 import { toast } from '@/ui/components/Toast';
 import { ChevronIcon } from '@/ui/components/TopBar';
+import { useSettings, useToday } from '@/ui/hooks';
 
 export interface BodyCompositionCardProps {
   /**
@@ -48,6 +52,16 @@ const MEASURES: MeasureRow[] = [
   { key: 'body-fat-kg', label: 'Fat mass', unit: 'kg', value: (s) => s.bodyFatKg, change: 'bodyFatKg' },
   { key: 'body-fat-pct', label: 'Body fat', unit: '%', value: (s) => s.bodyFatPct, change: 'bodyFatPct' },
   { key: 'weight', label: 'Weight', unit: 'kg', value: (s) => s.weightKg, change: 'weightKg' },
+  { key: 'lean-mass', label: 'Lean mass', unit: 'kg', value: (s) => s.leanMassKg, change: 'leanMassKg' },
+  { key: 'body-water', label: 'Body water', unit: 'L', value: (s) => s.totalBodyWaterL, change: 'totalBodyWaterL' },
+];
+
+const LIMBS: { limb: BodyLimb; label: string }[] = [
+  { limb: 'rightArm', label: 'Right arm' },
+  { limb: 'leftArm', label: 'Left arm' },
+  { limb: 'trunk', label: 'Trunk' },
+  { limb: 'rightLeg', label: 'Right leg' },
+  { limb: 'leftLeg', label: 'Left leg' },
 ];
 
 /**
@@ -179,6 +193,8 @@ export function BodyCompositionCard({ onPhoto }: BodyCompositionCardProps) {
   const point = (s: BodyScan, y: number | undefined): ChartPoint[] => (y === undefined ? [] : [{ t: dateKeyToDate(s.date).getTime(), y }]);
   const muscle = scans.flatMap((s) => point(s, s.skeletalMuscleKg));
   const fat = scans.flatMap((s) => point(s, s.bodyFatKg));
+  const fatPct = scans.flatMap((s) => point(s, s.bodyFatPct));
+  const limbs = LIMBS.filter(({ limb }) => latest.segmentalLeanKg?.[limb] !== undefined || latest.segmentalFatKg?.[limb] !== undefined);
   return (
     <Card data-testid="body-card">
       {hidden}
@@ -213,8 +229,24 @@ export function BodyCompositionCard({ onPhoto }: BodyCompositionCardProps) {
           </div>
         )}
 
-        {muscle.length >= 2 && <TrendChart title="Skeletal muscle" testId="body-chart-skeletal-muscle" points={muscle} tone="accent" />}
-        {fat.length >= 2 && <TrendChart title="Fat mass" testId="body-chart-fat-mass" points={fat} tone="info" />}
+        {limbs.length > 0 && (
+          <div className="mt-3 border-t border-line pt-3" data-testid="body-segments">
+            <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)] gap-x-2 gap-y-1.5 text-sm">
+              <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">By limb</span>
+              <span className="text-right text-xs font-semibold text-muted">Lean</span>
+              <span className="text-right text-xs font-semibold text-muted">Fat</span>
+              {limbs.map(({ limb, label }) => (
+                <LimbLine key={limb} label={label} lean={latest.segmentalLeanKg?.[limb]} fat={latest.segmentalFatKg?.[limb]} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        <ScanTargetsBlock scan={latest} />
+
+        {muscle.length >= 2 && <TrendChart title="Skeletal muscle" unit="kg" testId="body-chart-skeletal-muscle" points={muscle} tone="accent" />}
+        {fat.length >= 2 && <TrendChart title="Fat mass" unit="kg" testId="body-chart-fat-mass" points={fat} tone="info" />}
+        {fatPct.length >= 2 && <TrendChart title="Body fat" unit="%" testId="body-chart-fat-pct" points={fatPct} tone="info" />}
 
         <div className="mt-4">{buttons(false)}</div>
       </div>
@@ -264,11 +296,63 @@ function MeasureLine({
 }
 
 /** One measure over time. Two small charts rather than one with two lines: muscle and fat mass sit tens of kilograms apart, and on a shared axis a kilogram of change vanishes. */
-function TrendChart({ title, testId, points, tone }: { title: string; testId: string; points: ChartPoint[]; tone: 'accent' | 'info' }) {
+function TrendChart({ title, unit, testId, points, tone }: { title: string; unit: string; testId: string; points: ChartPoint[]; tone: 'accent' | 'info' }) {
   return (
     <div className="mt-4" data-testid={testId}>
-      <div className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">{title} (kg)</div>
-      <LineChart points={points} unit="kg" height={130} tone={tone} />
+      <div className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">
+        {title} ({unit})
+      </div>
+      <LineChart points={points} unit={unit} height={130} tone={tone} />
+    </div>
+  );
+}
+
+function LimbLine({ label, lean, fat }: { label: string; lean?: number; fat?: number }) {
+  return (
+    <>
+      <span className="text-muted">{label}</span>
+      <span className="num text-right font-semibold tabular-nums">{lean === undefined ? '—' : `${fmtNum(lean)} kg`}</span>
+      <span className="num text-right font-semibold tabular-nums">{fat === undefined ? '—' : `${fmtNum(fat)} kg`}</span>
+    </>
+  );
+}
+
+/**
+ * The daily targets the latest scan points to (domain/scanTargets.ts), with the sums they came
+ * from, and one tap to use them: the same change the coach's offer applies. Says so when the
+ * targets already match.
+ */
+function ScanTargetsBlock({ scan }: { scan: BodyScan }) {
+  const settings = useSettings();
+  const today = useToday();
+  if (!settings) return null;
+  const t = scanTargets(scan, settings);
+  const lines = scanTargetLines(t);
+  if (lines.length === 0) return null;
+  const changes = [t.calories ? calorieChange(settings, t.calories.kcal, today) : null, t.protein ? proteinChange(settings, t.protein.grams) : null].filter(
+    (c): c is NonNullable<typeof c> => c !== null,
+  );
+  const apply = async () => {
+    await saveSettings(Object.assign({}, ...changes.map((c) => c.patch)) as Partial<Settings>);
+    toast('Targets updated from your scan', 'ok');
+  };
+  return (
+    <div className="mt-3 border-t border-line pt-3" data-testid="body-targets">
+      <div className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Targets from this scan</div>
+      {lines.map((l) => (
+        <p key={l} className="num text-sm text-fg">
+          {l}
+        </p>
+      ))}
+      {changes.length > 0 ? (
+        <Button size="md" variant="primary" className="mt-3" onClick={() => void apply()} data-testid="body-targets-use">
+          Use these targets
+        </Button>
+      ) : (
+        <p className="mt-2 text-sm text-muted" data-testid="body-targets-match">
+          Your targets match this scan.
+        </p>
+      )}
     </div>
   );
 }

@@ -743,7 +743,7 @@ export function parseInbodyCsv(text: string): ParsedInbody {
 // ---------------------------------------------------------------------------
 // Comparisons
 
-export type ScanFigures = Pick<BodyScan, 'date' | 'weightKg' | 'skeletalMuscleKg' | 'bodyFatKg' | 'bodyFatPct'>;
+export type ScanFigures = Pick<BodyScan, 'date' | 'weightKg' | 'skeletalMuscleKg' | 'bodyFatKg' | 'bodyFatPct' | 'leanMassKg' | 'totalBodyWaterL'>;
 
 /** Latest minus earlier for each headline measure; null when either scan lacks it. */
 export interface ScanChange {
@@ -751,6 +751,8 @@ export interface ScanChange {
   skeletalMuscleKg: number | null;
   bodyFatKg: number | null;
   bodyFatPct: number | null;
+  leanMassKg: number | null;
+  totalBodyWaterL: number | null;
 }
 
 export interface ScanComparison<T extends ScanFigures> {
@@ -783,6 +785,8 @@ function compare<T extends ScanFigures>(latest: T, earlier: T): ScanComparison<T
       skeletalMuscleKg: diff(latest.skeletalMuscleKg, earlier.skeletalMuscleKg),
       bodyFatKg: diff(latest.bodyFatKg, earlier.bodyFatKg),
       bodyFatPct: diff(latest.bodyFatPct, earlier.bodyFatPct),
+      leanMassKg: diff(latest.leanMassKg, earlier.leanMassKg),
+      totalBodyWaterL: diff(latest.totalBodyWaterL, earlier.totalBodyWaterL),
     },
   };
 }

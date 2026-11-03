@@ -87,6 +87,38 @@ test.describe('InBody import', () => {
     expect(await rowCount(page, 'bodyScans')).toBe(4);
   });
 
+  test('more of the scan: lean mass, body water, each limb, body fat over time, and targets from it to use', async ({ page }) => {
+    await chooseFile(page, FULL);
+    await save(page);
+    await expect(page.getByTestId('body-latest-lean-mass')).toHaveText('67.4 kg');
+    await expect(page.getByTestId('body-previous-lean-mass')).toHaveText('+0.7');
+    await expect(page.getByTestId('body-latest-body-water')).toHaveText('49.1 L');
+    await expect(page.getByTestId('body-previous-body-water')).toHaveText('+0.3');
+    const limbs = page.getByTestId('body-segments');
+    await expect(limbs).toContainText('Right arm3.6 kg0.6 kg');
+    await expect(limbs).toContainText('Trunk29.6 kg6.2 kg');
+    await expect(page.getByTestId('body-chart-fat-pct')).toBeVisible();
+
+    // BMR 1,840 × 1.55 (3 sessions a week, the default) = 2,852, + 410 for 0.25–0.5 kg a week = 3,262 → 3,250.
+    // 2.5 g × 67.4 kg lean = 168.5 → 170 g, which is already the target.
+    const targets = page.getByTestId('body-targets');
+    await expect(targets).toContainText('≈3,250 kcal: BMR 1,840 × 1.55 (3 sessions a week) = 2,852 to maintain, + 410 for gaining 0.25–0.5 kg a week');
+    await expect(targets).toContainText('170 g protein: 2.5 g per kg of lean mass (67.4 kg)');
+    await page.getByTestId('body-targets-use').click();
+    await expect(page.getByTestId('body-targets-match')).toHaveText('Your targets match this scan.');
+    const settings = await page.evaluate(
+      () =>
+        new Promise<Record<string, unknown>>((resolve) => {
+          const open = indexedDB.open('iron');
+          open.onsuccess = () => {
+            const get = open.result.transaction('settings').objectStore('settings').get('settings');
+            get.onsuccess = () => resolve(get.result);
+          };
+        }),
+    );
+    expect([settings.calorieStart, settings.calorieCeiling, settings.proteinTarget]).toEqual([3250, 3250, 170]);
+  });
+
   test('importing the same file again replaces the scans rather than adding to them', async ({ page }) => {
     await chooseFile(page, FULL);
     await save(page);

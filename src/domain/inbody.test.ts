@@ -418,7 +418,7 @@ describe('scanDeltas', () => {
     expect(d.latest?.date).toBe('2026-08-04');
     expect(d.vsPrevious?.scan.date).toBe('2026-07-07');
     expect(d.vsPrevious?.days).toBe(28);
-    expect(d.vsPrevious?.change).toEqual({ weightKg: 0.4, skeletalMuscleKg: 0.4, bodyFatKg: -0.3, bodyFatPct: -0.5 });
+    expect(d.vsPrevious?.change).toEqual({ weightKg: 0.4, skeletalMuscleKg: 0.4, bodyFatKg: -0.3, bodyFatPct: -0.5, leanMassKg: null, totalBodyWaterL: null });
   });
 
   it('picks the scan nearest eight weeks back, between six and ten weeks', () => {
