@@ -172,7 +172,10 @@ export function goalsLine(settings: Settings): string {
     `bodyweight ${fmtNum(s.bodyweightTargetMin)}–${fmtNum(s.bodyweightTargetMax)} kg`,
     `gain ${fmtNum(s.weeklyGainTargetMin)}–${fmtNum(s.weeklyGainTargetMax)} kg a week`,
     `protein ${fmtNum(s.proteinTarget)} g (${fmtNum(s.proteinTargetLegDay)} g on leg days)`,
+    ...(s.carbTarget !== undefined ? [`carbs ${fmtNum(s.carbTarget)} g`] : []),
+    ...(s.fatTarget !== undefined ? [`fat ${fmtNum(s.fatTarget)} g`] : []),
   ];
+  if (s.goal) parts.unshift(`goal ${s.goal.replace('_', ' ')} (targets worked out by the app: ${(s.targetsBasis ?? []).join(' ')})`);
   if (s.weeklySessionTarget) parts.push(`${plural(s.weeklySessionTarget, 'session')} a week`);
   return `GOALS: ${parts.join(' · ')}`;
 }

@@ -2,13 +2,10 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
 import { listScans } from '@/db/bodyScanRepo';
-import { saveSettings } from '@/db/repo';
 import { dateKeyToDate } from '@/domain/dates';
 import { fmtDate, fmtNum } from '@/domain/format';
 import { decodeInbodyBytes, parseInbodyCsv, scanDeltas, type ParsedInbody, type ScanChange } from '@/domain/inbody';
-import { scanTargetLines, scanTargets } from '@/domain/scanTargets';
-import { calorieChange, proteinChange } from '@/domain/targetChange';
-import type { BodyLimb, BodyScan, Settings } from '@/domain/types';
+import type { BodyLimb, BodyScan } from '@/domain/types';
 import { useInbodyShare } from '@/state/inbodyShare';
 import { BodyScanImportSheet } from '@/ui/BodyScanImportSheet';
 import { Button } from '@/ui/components/Button';
@@ -16,7 +13,6 @@ import { Card, Divider, Row } from '@/ui/components/Card';
 import { LineChart, type ChartPoint } from '@/ui/components/LineChart';
 import { toast } from '@/ui/components/Toast';
 import { ChevronIcon } from '@/ui/components/TopBar';
-import { useSettings, useToday } from '@/ui/hooks';
 
 export interface BodyCompositionCardProps {
   /**
@@ -242,8 +238,6 @@ export function BodyCompositionCard({ onPhoto }: BodyCompositionCardProps) {
           </div>
         )}
 
-        <ScanTargetsBlock scan={latest} />
-
         {muscle.length >= 2 && <TrendChart title="Skeletal muscle" unit="kg" testId="body-chart-skeletal-muscle" points={muscle} tone="accent" />}
         {fat.length >= 2 && <TrendChart title="Fat mass" unit="kg" testId="body-chart-fat-mass" points={fat} tone="info" />}
         {fatPct.length >= 2 && <TrendChart title="Body fat" unit="%" testId="body-chart-fat-pct" points={fatPct} tone="info" />}
@@ -314,45 +308,5 @@ function LimbLine({ label, lean, fat }: { label: string; lean?: number; fat?: nu
       <span className="num text-right font-semibold tabular-nums">{lean === undefined ? '—' : `${fmtNum(lean)} kg`}</span>
       <span className="num text-right font-semibold tabular-nums">{fat === undefined ? '—' : `${fmtNum(fat)} kg`}</span>
     </>
-  );
-}
-
-/**
- * The daily targets the latest scan points to (domain/scanTargets.ts), with the sums they came
- * from, and one tap to use them: the same change the coach's offer applies. Says so when the
- * targets already match.
- */
-function ScanTargetsBlock({ scan }: { scan: BodyScan }) {
-  const settings = useSettings();
-  const today = useToday();
-  if (!settings) return null;
-  const t = scanTargets(scan, settings);
-  const lines = scanTargetLines(t);
-  if (lines.length === 0) return null;
-  const changes = [t.calories ? calorieChange(settings, t.calories.kcal, today) : null, t.protein ? proteinChange(settings, t.protein.grams) : null].filter(
-    (c): c is NonNullable<typeof c> => c !== null,
-  );
-  const apply = async () => {
-    await saveSettings(Object.assign({}, ...changes.map((c) => c.patch)) as Partial<Settings>);
-    toast('Targets updated from your scan', 'ok');
-  };
-  return (
-    <div className="mt-3 border-t border-line pt-3" data-testid="body-targets">
-      <div className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Targets from this scan</div>
-      {lines.map((l) => (
-        <p key={l} className="num text-sm text-fg">
-          {l}
-        </p>
-      ))}
-      {changes.length > 0 ? (
-        <Button size="md" variant="primary" className="mt-3" onClick={() => void apply()} data-testid="body-targets-use">
-          Use these targets
-        </Button>
-      ) : (
-        <p className="mt-2 text-sm text-muted" data-testid="body-targets-match">
-          Your targets match this scan.
-        </p>
-      )}
-    </div>
   );
 }

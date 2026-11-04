@@ -159,8 +159,8 @@ const EditTrainingInput = z.object({
 const DeleteWeightInput = z.object({ date: z.string().describe('The day of the weigh-in to delete, YYYY-MM-DD') });
 
 const ChangeSettingInput = z.object({
-  setting: z.enum([...(Object.keys(COACH_SETTINGS) as (keyof typeof COACH_SETTINGS)[]), 'sex', 'calorie_target', 'protein_target']).describe('Which setting'),
-  value: z.union([z.number(), z.string()]).describe('The new value: a number, or male / female for sex'),
+  setting: z.enum([...(Object.keys(COACH_SETTINGS) as (keyof typeof COACH_SETTINGS)[]), 'sex', 'calorie_target', 'protein_target', 'goal']).describe('Which setting'),
+  value: z.union([z.number(), z.string()]).describe('The new value: a number; male / female for sex; lean_gain, faster_gain, recomp or fat_loss for goal'),
 });
 
 const EditSupplementInput = z.object({
@@ -351,7 +351,7 @@ export function createCoachTools(actions: CoachActions, turn: TurnRecord): Coach
     }), strict: false },
     { ...strictTool({
       name: 'change_setting',
-      description: "Change a setting when the owner asks for it: the daily calorie or protein target (held from today), the lower-body day's protein, the step goal, sessions per week, the bodyweight goal range, rest times, or their year of birth or sex (used to compare lifts). To suggest a target they have not asked for, use propose_targets instead.",
+      description: "Change a setting when the owner asks for it: their goal (lean_gain, faster_gain, recomp, fat_loss), from which calories and macros are worked out and kept up to date; a daily calorie or protein figure of their own (this ends the goal's working-out); the step goal, sessions per week, the bodyweight goal range, rest times, or their year of birth or sex. To suggest a target they have not asked for, use propose_targets instead.",
       inputSchema: ChangeSettingInput,
       run: async (input) => finish(await actions.changeSetting(input), turn),
     }), strict: false },

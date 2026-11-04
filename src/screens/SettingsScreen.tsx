@@ -6,7 +6,7 @@ import { resetToSeed, saveSettings, wipeAll } from '@/db/repo';
 import { applyRestDefaults, dataCounts } from '@/db/settingsQueries';
 import { clearProductCache } from '@/db/productRepo';
 import { DB_VERSION } from '@/db/db';
-import { dateKeyToDate, toDateKey } from '@/domain/dates';
+import { toDateKey } from '@/domain/dates';
 import { fmtNum, muscleLabel } from '@/domain/format';
 import { calorieTargetOn } from '@/domain/nutrition';
 import { MUSCLE_GROUPS, type MuscleGroup, type Settings } from '@/domain/types';
@@ -18,6 +18,8 @@ import { ClaudeSettingsCard } from '@/ui/ClaudeSettingsCard';
 import { Button } from '@/ui/components/Button';
 import { Card, Divider, SectionTitle, Stat } from '@/ui/components/Card';
 import { Chip, Segmented, Toggle } from '@/ui/components/Chip';
+import { refreshGoalTargets } from '@/state/goalTargets';
+import { GOALS, type Goal } from '@/domain/goalTargets';
 import { NumberField, NumberInput } from '@/ui/components/NumberField';
 import { HoldToConfirm } from '@/ui/components/HoldToConfirm';
 import { Confirm, Sheet } from '@/ui/components/Sheet';
@@ -299,22 +301,21 @@ function DataCard() {
 
 type TargetKey =
   | 'calorieStart'
-  | 'calorieStep'
-  | 'calorieStepDays'
-  | 'calorieCeiling'
   | 'proteinTarget'
   | 'proteinTargetLegDay'
+  | 'carbTarget'
+  | 'fatTarget'
   | 'weeklyGainTargetMin'
   | 'weeklyGainTargetMax'
   | 'bodyweightTargetMin'
   | 'bodyweightTargetMax';
 
+// The owner's own targets: one daily calorie figure, held (no steps), and the macros.
 const TARGET_FIELDS: { key: TargetKey; label: string; mode?: 'numeric' }[] = [
-  { key: 'calorieStart', label: 'Calories start', mode: 'numeric' },
-  { key: 'calorieStep', label: 'Step (kcal)', mode: 'numeric' },
-  { key: 'calorieStepDays', label: 'Step every (days)', mode: 'numeric' },
-  { key: 'calorieCeiling', label: 'Calorie ceiling', mode: 'numeric' },
+  { key: 'calorieStart', label: 'Calories', mode: 'numeric' },
   { key: 'proteinTarget', label: 'Protein (g)', mode: 'numeric' },
+  { key: 'carbTarget', label: 'Carbs (g)', mode: 'numeric' },
+  { key: 'fatTarget', label: 'Fat (g)', mode: 'numeric' },
   { key: 'proteinTargetLegDay', label: 'Protein leg day (g)', mode: 'numeric' },
   { key: 'weeklyGainTargetMin', label: 'Weekly gain min (kg)' },
   { key: 'weeklyGainTargetMax', label: 'Weekly gain max (kg)' },
@@ -322,73 +323,106 @@ const TARGET_FIELDS: { key: TargetKey; label: string; mode?: 'numeric' }[] = [
   { key: 'bodyweightTargetMax', label: 'Bodyweight max (kg)' },
 ];
 
-function fmtKey(key: string): string {
-  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(dateKeyToDate(key));
-}
-
 function draftFromTargets(settings: Settings): Record<TargetKey, number | null> {
-  return Object.fromEntries(TARGET_FIELDS.map((f) => [f.key, settings[f.key]])) as Record<TargetKey, number | null>;
+  return Object.fromEntries(TARGET_FIELDS.map((f) => [f.key, settings[f.key] ?? null])) as Record<TargetKey, number | null>;
 }
 
-const TARGETS_OWNED_KEYS: (keyof Settings)[] = [...TARGET_FIELDS.map((f) => f.key), 'calorieStartDate'];
+const TARGETS_OWNED_KEYS: (keyof Settings)[] = [...TARGET_FIELDS.map((f) => f.key), 'goal'];
 
+/**
+ * Targets: pick a goal and they are worked out (domain/goalTargets.ts) and kept up to date, each
+ * with the sum it came from; or "My own" and type them in. Either way the calorie figure is held,
+ * day after day: no steps.
+ */
 function TargetsCard({ settings }: { settings: Settings }) {
   const [draft, setDraft] = useState<Record<TargetKey, number | null>>(() => draftFromTargets(settings));
-  const [startDate, setStartDate] = useState(settings.calorieStartDate ?? '');
-  useOwnedReseed(settings, TARGETS_OWNED_KEYS, () => {
-    setDraft(draftFromTargets(settings));
-    setStartDate(settings.calorieStartDate ?? '');
-  });
+  const [busy, setBusy] = useState(false);
+  useOwnedReseed(settings, TARGETS_OWNED_KEYS, () => setDraft(draftFromTargets(settings)));
   const today = calorieTargetOn(toDateKey(), settings);
+
+  const pick = async (goal: Goal | null) => {
+    if (busy || goal === (settings.goal ?? null)) return;
+    setBusy(true);
+    try {
+      await saveSettings({ goal: goal ?? undefined, ...(goal ? {} : { targetsBasis: undefined }) });
+      if (goal) await refreshGoalTargets();
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const save = async () => {
     const patch: Partial<Settings> = {};
     for (const f of TARGET_FIELDS) {
       const v = draft[f.key];
       if (v !== null) patch[f.key] = v;
+      else if (f.key === 'carbTarget' || f.key === 'fatTarget') patch[f.key] = undefined;
     }
-    if (startDate) patch.calorieStartDate = startDate;
+    // One figure, held: the ceiling is the figure, so nothing steps.
+    if (patch.calorieStart !== undefined) patch.calorieCeiling = patch.calorieStart;
     await saveSettings(patch);
     toast('Saved', 'ok');
   };
 
+  const figures: { label: string; value: string }[] = [
+    { label: 'Calories', value: today ? `${fmtNum(today.kcal)} kcal` : '—' },
+    { label: 'Protein', value: `${fmtNum(settings.proteinTarget)} g` },
+    { label: 'Carbs', value: settings.carbTarget !== undefined ? `${fmtNum(settings.carbTarget)} g` : '—' },
+    { label: 'Fat', value: settings.fatTarget !== undefined ? `${fmtNum(settings.fatTarget)} g` : '—' },
+  ];
+
   return (
-    <Card className="p-4">
-      <div className="flex items-end gap-6">
-        <Stat label="Today" value={today ? `${fmtNum(today.kcal)} kcal` : '—'} sub={today ? (today.nextStepOn ? `next step on ${fmtKey(today.nextStepOn)}` : 'at ceiling') : 'starts when you first save'} />
-      </div>
-      <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3">
-        {TARGET_FIELDS.map((f) => (
-          <Field key={f.key} label={f.label}>
-            <NumberInput
-              value={draft[f.key]}
-              mode={f.mode}
-              onChange={(v) => setDraft((d) => ({ ...d, [f.key]: v }))}
-              // A blanked field is dropped from the save patch (its old value is what stays), so a
-              // box left empty at Save time would show "Saved" while quietly keeping the number it
-              // had before. Refilling from the saved value on blur means the box can never lie
-              // about what Save is about to do with it.
-              onBlur={() => setDraft((d) => (d[f.key] === null ? { ...d, [f.key]: settings[f.key] } : d))}
-              testId={`target-${f.key}`}
-            />
-          </Field>
+    <Card className="p-4" data-testid="targets-card">
+      <div className="mb-2 px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Goal</div>
+      <div className="flex flex-wrap gap-2">
+        {GOALS.map((g) => (
+          <Chip key={g.goal} active={settings.goal === g.goal} onClick={() => void pick(g.goal)} testId={`goal-${g.goal}`}>
+            {g.label}
+          </Chip>
         ))}
-        <Field label="Reverse diet start">
-          <input
-            type="date"
-            value={startDate}
-            max={toDateKey()}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="num h-12 w-full rounded-xl border border-line bg-surface-2 px-3 text-base font-bold outline-none focus:border-accent"
-          />
-        </Field>
+        <Chip active={!settings.goal} onClick={() => void pick(null)} testId="goal-own">
+          My own
+        </Chip>
       </div>
-      <div className="mt-2 text-sm text-muted">
-        {settings.calorieStartDate ? `Reverse diet start: ${fmtKey(settings.calorieStartDate)}` : 'Reverse diet start: starts when you first save'}
-      </div>
-      <Button variant="primary" full className="mt-4" onClick={() => void save()} data-testid="save-targets">
-        Save targets
-      </Button>
+
+      {settings.goal ? (
+        <div data-testid="goal-targets">
+          <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3">
+            {figures.map((f) => (
+              <Stat key={f.label} label={f.label} value={f.value} />
+            ))}
+          </div>
+          <ul className="mt-3 space-y-1.5 text-sm text-muted" data-testid="goal-basis">
+            {(settings.targetsBasis ?? []).map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <>
+          <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3">
+            {TARGET_FIELDS.map((f) => (
+              <Field key={f.key} label={f.label}>
+                <NumberInput
+                  value={draft[f.key]}
+                  mode={f.mode}
+                  onChange={(v) => setDraft((d) => ({ ...d, [f.key]: v }))}
+                  // A blanked field is dropped from the save patch (its old value is what stays), so a
+                  // box left empty at Save time would show "Saved" while quietly keeping the number it
+                  // had before. Refilling from the saved value on blur means the box can never lie
+                  // about what Save is about to do with it. Carbs and fat may be left empty: no target.
+                  onBlur={() => setDraft((d) => (d[f.key] === null && f.key !== 'carbTarget' && f.key !== 'fatTarget' ? { ...d, [f.key]: settings[f.key] ?? null } : d))}
+                  placeholder={f.key === 'carbTarget' || f.key === 'fatTarget' ? 'none' : undefined}
+                  testId={`target-${f.key}`}
+                />
+              </Field>
+            ))}
+          </div>
+          <Button variant="primary" full className="mt-4" onClick={() => void save()} data-testid="save-targets">
+            Save targets
+          </Button>
+        </>
+      )}
     </Card>
   );
 }

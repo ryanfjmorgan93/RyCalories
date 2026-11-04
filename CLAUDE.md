@@ -99,10 +99,13 @@ The owner does not check on device. Correctness has to come from the code and th
   `recipe.ts`, `mealText.ts`, `ingredientMatch.ts`, `foodUnits.ts` and `foodChoice.ts` are food:
   natural units, matching to remembered foods and the UK table, and the one item shape every way of
   logging produces.
-  `inbody.ts` reads body-scan exports; `scanTargets.ts` turns the latest scan into daily targets
-  (protein 2.5 g per kg of lean mass; calories BMR × an activity factor for the sessions a week,
-  plus the weekly gain target's surplus), shown with their sums on the Body card and applied only
-  on a tap; `reminders.ts` plans the local notifications.
+  `inbody.ts` reads body-scan exports; `goalTargets.ts` is the daily calories and macros from the
+  owner's goal (lean gain, faster gain, recomp, fat loss; Settings → Targets): maintenance measured
+  (energy.ts) when its gates pass, else the scan's BMR × 1.35 plus walking and lifting; the goal's
+  rate as % of bodyweight a week; protein, fat and carbs from published ranges, each figure with
+  the sum it came from. `state/goalTargets.ts` saves them at start-up, after a scan and on a goal
+  change. There is no reverse-diet stepping any more (the owner refused it, November 2026): a
+  calorie target is one figure, held. `reminders.ts` plans the local notifications.
   `supplements.ts` is the daily supplement checklist; `dailyQuote.ts` is Home's welcome and quote.
   `healthWeight.ts` picks the bodyweight readings to read in from Health Connect (each day's first,
   never over the owner's own); `problemReports.ts` is what a problem report holds and the text it

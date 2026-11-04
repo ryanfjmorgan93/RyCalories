@@ -30,7 +30,8 @@ export function calorieChange(settings: Settings, kcal: number, today: string): 
   // Start AND ceiling are the figure, so the stepper has nothing to climb to. Setting only the
   // start would leave "hold at 2,600" stepping up to 2,800 and 3,000 on the old schedule.
   return {
-    patch: { calorieStart: kcal, calorieStartDate: today, calorieCeiling: kcal },
+    // A figure chosen by hand is the owner's own: the goal stops working the targets out.
+    patch: { calorieStart: kcal, calorieStartDate: today, calorieCeiling: kcal, goal: undefined },
     line: `Calories set to ${fmtNum(kcal)} a day from today.`,
   };
 }
@@ -41,7 +42,7 @@ export function proteinChange(settings: Settings, grams: number): TargetChange |
   const gap = settings.proteinTargetLegDay - settings.proteinTarget;
   const legDay = grams + gap;
   return {
-    patch: { proteinTarget: grams, proteinTargetLegDay: legDay },
+    patch: { proteinTarget: grams, proteinTargetLegDay: legDay, goal: undefined },
     line: `Protein target changed from ${fmtNum(settings.proteinTarget)} g to ${fmtNum(grams)} g (lower-body days ${fmtNum(settings.proteinTargetLegDay)} g to ${fmtNum(legDay)} g).`,
   };
 }

@@ -368,24 +368,23 @@ test.describe('the weekly review', () => {
     await expect(page.getByTestId('review-use-calories')).toHaveCount(0);
   });
 
-  test('accepting the calorie target holds it, and Settings → Targets still restarts a ramp', async ({ page }) => {
+  test('accepting the calorie target makes it the owner\'s own, held with no steps; a goal works them out instead', async ({ page }) => {
     await bootMonday(page, { review });
     await page.getByTestId('review-use-calories').click();
     await expect(page.getByTestId('weekly-review-applied')).toHaveText('Calories set to 2,400 a day from today.');
 
     await page.goto('/settings');
     await expect(page.getByTestId('target-calorieStart')).toHaveValue('2400');
-    await expect(page.getByTestId('target-calorieCeiling')).toHaveValue('2400');
-    // Nothing left to step up to.
-    await expect(page.getByText('at ceiling')).toBeVisible();
+    // One figure, held: there is nothing to step and no ramp to set up.
+    await expect(page.getByTestId('target-calorieCeiling')).toHaveCount(0);
+    await expect(page.getByText(/next step/)).toHaveCount(0);
 
-    // Raising the ceiling is how the owner starts stepping up again, from the figure it holds.
-    await page.getByTestId('target-calorieCeiling').fill('3000');
-    await page.getByRole('button', { name: 'Save targets' }).click();
-    await expect(page.getByText('Saved', { exact: true })).toBeVisible();
-    await expect(page.getByText(/next step on/)).toBeVisible();
-    await expect(page.getByText('at ceiling')).toHaveCount(0);
-    await expect(page.getByTestId('target-calorieStart')).toHaveValue('2400');
+    // A goal takes over: with no scan and under two weeks of logs there is nothing to work from yet, and it says so.
+    await page.getByTestId('goal-recomp').click();
+    await expect(page.getByTestId('goal-basis')).toHaveText(
+      'Log a weigh-in and import an InBody scan, or log two weeks of food and weigh-ins, to work the targets out.',
+    );
+    await expect(page.getByTestId('target-calorieStart')).toHaveCount(0);
   });
 
   test('"Use 190 g protein" moves the daily protein target', async ({ page }) => {

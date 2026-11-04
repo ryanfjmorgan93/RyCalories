@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/db';
 import { saveScans, type SaveScansResult } from '@/db/bodyScanRepo';
+import { refreshGoalTargets } from '@/state/goalTargets';
 import { dateKeyToDate } from '@/domain/dates';
 import { fmtDate, fmtNum, plural } from '@/domain/format';
 import type { ParsedInbody, ParsedScan } from '@/domain/inbody';
@@ -53,6 +54,8 @@ export function BodyScanImportSheet({
     setBusy(true);
     try {
       const result = await saveScans(scans);
+      // A new scan moves the goal's targets (lean mass, BMR): work them out again.
+      void refreshGoalTargets();
       toast(savedLine(result), 'ok');
       onSaved?.(result);
       onClose();

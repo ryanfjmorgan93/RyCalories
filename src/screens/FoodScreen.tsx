@@ -262,6 +262,18 @@ function DaySummary({ date, today }: { date: string; today: string }) {
         <div className="h-4" />
         <TargetBar label="Protein" value={eaten.protein} target={view?.proteinTarget ?? null} unit="g" tone="ok" testId="protein-bar" />
         <div className="h-4" />
+        {settings?.carbTarget !== undefined && (
+          <>
+            <TargetBar label="Carbs" value={eaten.carbs} target={settings.carbTarget} unit="g" testId="carbs-bar" />
+            <div className="h-4" />
+          </>
+        )}
+        {settings?.fatTarget !== undefined && (
+          <>
+            <TargetBar label="Fat" value={eaten.fat} target={settings.fatTarget} unit="g" testId="fat-bar" />
+            <div className="h-4" />
+          </>
+        )}
         <MacroSplit m={eaten} />
         <div className="mt-2 flex items-center justify-between text-xs text-muted">
           <MacroLine m={eaten} />

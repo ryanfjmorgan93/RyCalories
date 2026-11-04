@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { GOALS } from '@/domain/goalTargets';
 import { useNavigate } from 'react-router-dom';
 import { db } from '@/db/db';
 import { logBodyweight, startSession } from '@/db/repo';
@@ -136,7 +137,7 @@ export function HomeScreen() {
             <Stat
               label="Calories"
               value={`${fmtNum(Math.round(eaten.kcal))} / ${fmtNum(kcal.kcal)}`}
-              sub={kcal.nextStepOn ? `+${settings.calorieStep} in ${kcal.daysUntilNextStep} d` : 'at ceiling'}
+              sub={settings.goal ? (GOALS.find((g) => g.goal === settings.goal)?.label ?? 'goal') : kcal.nextStepOn ? `+${settings.calorieStep} in ${kcal.daysUntilNextStep} d` : 'daily target'}
             />
           ) : (
             <Stat label="Calories" value={fmtNum(Math.round(eaten.kcal))} sub="no target set" />

@@ -13,6 +13,7 @@ import { DB_VERSION } from './db/db';
 import { renderRecovery } from './boot/recovery';
 import { applyCachedAccent } from './ui/accentTheme';
 import { installErrorCapture } from './platform/errorReports';
+import { refreshGoalTargets } from './state/goalTargets';
 
 // The coach's edit_session tool changes today's plan through the same function the "Change today"
 // sheet uses, so a change by voice and a change by hand are one thing.
@@ -33,6 +34,8 @@ async function boot() {
       <App />
     </StrictMode>,
   );
+  // The goal's targets follow the latest scan, weigh-ins, measured maintenance and steps.
+  void refreshGoalTargets().catch(() => undefined);
   // The service worker is what makes the web install work offline. Inside the Android shell the
   // assets are already on disk, so skip it there.
   if (import.meta.env.PROD && !isNative()) {

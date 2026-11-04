@@ -450,6 +450,16 @@ export interface Settings {
   healthWeight?: boolean;
   /** Days whose Health Connect reading the owner deleted from the log: never read in again. */
   healthWeightSkip?: string[];
+  /**
+   * The body goal the targets are worked out from (src/domain/goalTargets.ts, kept up to date by
+   * src/state/goalTargets.ts). Absent: the targets are the owner's own, typed in Settings.
+   */
+  goal?: import('./goalTargets').Goal;
+  /** Daily carbs and fat in grams, set with a goal (or by hand); absent means no target. */
+  carbTarget?: number;
+  fatTarget?: number;
+  /** The sums the goal's targets were last worked out from, one line each, as Settings shows them. */
+  targetsBasis?: string[];
   /** Year of birth and sex, used only to compare lifts with lifters at meets (src/domain/liftStandards.ts). Absent = not given. */
   birthYear?: number;
   sex?: 'male' | 'female';

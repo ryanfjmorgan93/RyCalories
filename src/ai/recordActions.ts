@@ -10,7 +10,9 @@
 import { db } from '@/db/db';
 import { deleteItem, mealsOnDay, updateItem } from '@/db/foodRepo';
 import { deleteBodyweight, deleteSession, deleteSet, getActiveSession, getSettings, saveSettings, updateSet } from '@/db/repo';
+import { GOALS } from '@/domain/goalTargets';
 import { calorieChange, proteinChange } from '@/domain/targetChange';
+import { refreshGoalTargets } from '@/state/goalTargets';
 import { sessionsOn } from '@/db/todayQueries';
 import { fmtDayHeading } from '@/domain/claudeSummary';
 import { dateKeyToDate, toDateKey } from '@/domain/dates';
@@ -50,7 +52,7 @@ export const COACH_SETTINGS = {
   rest_isolation_seconds: { key: 'restIsolationSec', min: 15, max: 900, unit: 's' },
   birth_year: { key: 'birthYear', min: 1900, max: 2100, unit: '' },
 } as const satisfies Record<string, { key: keyof Settings; min: number; max: number; unit: string }>;
-export type CoachSetting = keyof typeof COACH_SETTINGS | 'sex' | 'calorie_target' | 'protein_target';
+export type CoachSetting = keyof typeof COACH_SETTINGS | 'sex' | 'calorie_target' | 'protein_target' | 'goal';
 
 export interface RecordActions {
   findEntries(input: { date: string; kind: 'food' | 'weight' | 'sessions' }): Promise<ActionResult>;
@@ -218,6 +220,14 @@ export function createRecordActions(now: () => Date = () => new Date()): RecordA
         if (sex !== 'male' && sex !== 'female') return fail('Sex is male or female.');
         await saveSettings({ sex });
         return { ok: true, result: `Lifts are now compared with ${sex === 'male' ? 'men' : 'women'}.`, description: `Compare lifts with: ${sex === 'male' ? 'men' : 'women'}` };
+      }
+      if (setting === 'goal') {
+        const goal = GOALS.find((g) => g.goal === String(value) || g.label.toLowerCase() === String(value).toLowerCase());
+        if (!goal) return fail(`The goal is one of: ${GOALS.map((g) => g.goal).join(', ')}.`);
+        await saveSettings({ goal: goal.goal });
+        const next = await refreshGoalTargets(now());
+        const basis = next?.targetsBasis?.join(' ') ?? '';
+        return { ok: true, result: `Goal set to ${goal.label}. ${basis}`, description: `Goal: ${goal.label}` };
       }
       if (setting === 'calorie_target' || setting === 'protein_target') {
         // The same change the offer's "Use …" button makes: a calorie figure holds from today (start

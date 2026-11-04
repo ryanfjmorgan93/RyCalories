@@ -99,24 +99,31 @@ test.describe('InBody import', () => {
     await expect(limbs).toContainText('Trunk29.6 kg6.2 kg');
     await expect(page.getByTestId('body-chart-fat-pct')).toBeVisible();
 
-    // BMR 1,840 × 1.55 (3 sessions a week, the default) = 2,852, + 410 for 0.25–0.5 kg a week = 3,262 → 3,250.
-    // 2.5 g × 67.4 kg lean = 168.5 → 170 g, which is already the target.
-    const targets = page.getByTestId('body-targets');
-    await expect(targets).toContainText('≈3,250 kcal: BMR 1,840 × 1.55 (3 sessions a week) = 2,852 to maintain, + 410 for gaining 0.25–0.5 kg a week');
-    await expect(targets).toContainText('170 g protein: 2.5 g per kg of lean mass (67.4 kg)');
-    await page.getByTestId('body-targets-use').click();
-    await expect(page.getByTestId('body-targets-match')).toHaveText('Your targets match this scan.');
-    const settings = await page.evaluate(
-      () =>
-        new Promise<Record<string, unknown>>((resolve) => {
-          const open = indexedDB.open('iron');
-          open.onsuccess = () => {
-            const get = open.result.transaction('settings').objectStore('settings').get('settings');
-            get.onsuccess = () => resolve(get.result);
-          };
-        }),
-    );
-    expect([settings.calorieStart, settings.calorieCeiling, settings.proteinTarget]).toEqual([3250, 3250, 170]);
+  });
+
+  test('with a goal, the targets come from the scan: worked out with their sums, held, and on Food as bars', async ({ page }) => {
+    await chooseFile(page, FULL);
+    await save(page);
+    await page.goto('/settings');
+    await page.getByTestId('goal-recomp').click();
+    const basis = page.getByTestId('goal-basis');
+    // Seed: 74 kg today, 3 sessions a week, routines of 50 min on average; the file: BMR 1,840 and
+    // 67.4 kg lean mass; no steps in a browser. 2,484 + 6,000 × 74 × 0.5/1,330 (167)
+    // + 3 × 4 × 74 × 50/60 / 7 (106) = 2,757 → 2,750 kcal; fat 25% = 76 g → 75.
+    await expect(basis).toContainText('1,840 resting (your InBody BMR) × 1.35 for everyday living and digestion = 2,484');
+    await expect(basis).toContainText('6,000 steps a day (assumed: steps not read)');
+    await expect(basis).toContainText('+ 167 for 6,000 steps a day (assumed: steps not read), + 106 for 3 sessions a week of 50 min');
+    await expect(basis).toContainText('Calories 2,750: maintenance, for a recomp.');
+    await expect(basis).toContainText('Protein 175 g: 2.6 g per kg of lean mass (67.4 kg; 2.6 to 3.5 for a recomp in trained lifters).');
+    await expect(basis).toContainText('Fat 75 g: 25% of calories');
+    await expect(page.getByTestId('goal-targets')).toContainText('2,750 kcal');
+
+    await page.goto('/food');
+    await expect(page.getByTestId('calories-bar')).toContainText('2750 kcal');
+    await expect(page.getByTestId('carbs-bar')).toBeVisible();
+    await expect(page.getByTestId('fat-bar')).toContainText('75');
+    await page.goto('/');
+    await expect(page.getByTestId('today-food')).toContainText('Recomp');
   });
 
   test('importing the same file again replaces the scans rather than adding to them', async ({ page }) => {
