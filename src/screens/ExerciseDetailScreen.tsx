@@ -8,7 +8,6 @@ import { lastWorkingTopWeight, lockInRoutineExercise, unlockRoutineExercise, typ
 import { lockInBlocked } from '@/domain/engine';
 import { fmtDate, fmtDateLong, fmtKg, fmtNum, fmtSetsLine, fmtWeight, labelLine, targetLine } from '@/domain/format';
 import type { Bests } from '@/domain/records';
-import { strengthLevel, type StrengthStandard } from '@/domain/standards';
 import { countsForProgression, countsForRecords } from '@/domain/sets';
 import type { Exercise, ExerciseKind, ProgressionDecision, ProgressionRule, RoutineExercise, SetLog } from '@/domain/types';
 import { Button } from '@/ui/components/Button';
@@ -44,11 +43,6 @@ export function ExerciseDetailScreen() {
   const series = useExerciseSeries(id);
   const history = series?.history;
   const bests = useLiveQuery(() => (id ? bestsForExercise(id) : undefined), [id]);
-  const bodyweightKg = useLiveQuery(async () => {
-    const rows = await db.bodyweight.toArray();
-    if (rows.length === 0) return null;
-    return [...rows].sort((a, b) => b.date.localeCompare(a.date))[0].kg;
-  }, []);
 
   const [lockRx, setLockRx] = useState<RoutineExercise | null>(null);
   const [unlockRx, setUnlockRx] = useState<RoutineExercise | null>(null);
@@ -125,7 +119,7 @@ export function ExerciseDetailScreen() {
         {bests && (bests.weight !== null || bests.e1rm !== null || bests.setVolume !== null) && (
           <>
             <SectionTitle>Records</SectionTitle>
-            <RecordsCard bests={bests} kind={kind} standard={exercise.standard} bodyweightKg={bodyweightKg ?? null} />
+            <RecordsCard bests={bests} kind={kind} />
           </>
         )}
 
@@ -260,13 +254,9 @@ function RecordRow({ label, value }: { label: string; value: string }) {
 function RecordsCard({
   bests,
   kind,
-  standard,
-  bodyweightKg,
 }: {
   bests: Bests;
   kind: ExerciseKind;
-  standard?: StrengthStandard;
-  bodyweightKg: number | null;
 }) {
   const topWeights = [...bests.repsAtWeight.entries()].sort((a, b) => b[0] - a[0]).slice(0, 3);
   return (
@@ -277,14 +267,6 @@ function RecordsCard({
       {topWeights.map(([w, reps]) => (
         <RecordRow key={w} label={`At ${fmtWeight(kind, w)}`} value={`${reps} reps`} />
       ))}
-      {standard && bodyweightKg !== null && bests.e1rm !== null && (
-        <div className="mt-1 border-t border-line pt-2 text-sm text-muted">
-          {(() => {
-            const s = strengthLevel(standard, bests.e1rm as number, bodyweightKg);
-            return `${fmtNum(s.ratio)} × bodyweight · ${s.level}`;
-          })()}
-        </div>
-      )}
     </Card>
   );
 }

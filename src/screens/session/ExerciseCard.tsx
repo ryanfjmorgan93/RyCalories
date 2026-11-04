@@ -49,6 +49,7 @@ import { EditSetSheet } from '@/ui/EditSetSheet';
 import { ExerciseDemo } from '@/ui/ExerciseDemo';
 import { ExerciseHero } from '@/ui/ExerciseHero';
 import { PlateSheet } from '@/ui/PlateSheet';
+import { StrengthLine } from '@/ui/StrengthLine';
 import { SwapExerciseSheet } from '@/ui/SwapExerciseSheet';
 import { TodayPlanSheet } from '@/ui/TodayPlanSheet';
 import { CompletionMoment } from './CompletionMoment';
@@ -657,6 +658,7 @@ export function ExerciseCard({
               {chips}
             </div>
             <div className="mt-1 text-sm text-fg/85">{subtitle}</div>
+            <StrengthLine exercise={exercise} settings={settings} />
           </button>
         </ExerciseHero>
 

@@ -26,6 +26,8 @@ export interface LiftStanding {
   n: number;
   /** The top 1%'s line. */
   eliteKg: number;
+  /** The typical (median) lifter's best. */
+  medianKg: number;
   /** Rounded down; 0 is below the bottom 5%, 99 is the top 1%. */
   beatsPct: number;
 }
@@ -67,17 +69,18 @@ export function liftStanding(
   const weightClass = weightClassFor(input.bodyweightKg, table.classes[sex]);
   const cell = table.cells[`${sex}|${band}|${weightClass}|${input.lift}`];
   if (!cell) return null;
-  return { band, weightClass, n: cell.n, eliteKg: cell.kg[cell.kg.length - 1]!, beatsPct: beats(input.e1rmKg, table.pcts, cell.kg) };
+  return {
+    band,
+    weightClass,
+    n: cell.n,
+    eliteKg: cell.kg[cell.kg.length - 1]!,
+    medianKg: cell.kg[table.pcts.indexOf(50)]!,
+    beatsPct: beats(input.e1rmKg, table.pcts, cell.kg),
+  };
 }
 
-export function standingText(s: LiftStanding): string {
-  if (s.beatsPct >= 99) return 'Top 1% of raw lifters at meets';
-  if (s.beatsPct < 5) return 'Beats fewer than 5% of raw lifters at meets';
-  return `Beats ${s.beatsPct}% of raw lifters at meets`;
-}
-
-/** "Men 24–34, 83 kg class"; the oldest band reads "80+". */
+/** "men 24–34, 83 kg"; the oldest band reads "80+". */
 export function groupText(sex: CompareSex, s: Pick<LiftStanding, 'band' | 'weightClass'>): string {
   const band = s.band.endsWith('-999') ? `${s.band.split('-')[0]}+` : s.band.replace('-', '–');
-  return `${sex === 'male' ? 'Men' : 'Women'} ${band}, ${s.weightClass} kg class`;
+  return `${sex === 'male' ? 'men' : 'women'} ${band}, ${s.weightClass} kg`;
 }

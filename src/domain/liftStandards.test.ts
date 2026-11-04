@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import table from '@/data/liftStandards.json';
-import { ageBand, groupText, liftStanding, standingText, weightClassFor, type LiftTable } from './liftStandards';
+import { ageBand, groupText, liftStanding, weightClassFor, type LiftTable } from './liftStandards';
 
 const PCTS = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 99];
 // Squat bests of 100 kg at the 5th percentile, rising 10 kg a step to 290 kg at the 95th, 330 kg at the 99th.
@@ -32,28 +32,25 @@ describe('the group a lifter is compared with', () => {
   });
 
   it('is named as the owner reads it', () => {
-    expect(groupText('male', { band: '24-34', weightClass: '83' })).toBe('Men 24–34, 83 kg class');
-    expect(groupText('female', { band: '80-999', weightClass: '84+' })).toBe('Women 80+, 84+ kg class');
+    expect(groupText('male', { band: '24-34', weightClass: '83' })).toBe('men 24–34, 83 kg');
+    expect(groupText('female', { band: '80-999', weightClass: '84+' })).toBe('women 80+, 84+ kg');
   });
 });
 
 describe('where a lift stands', () => {
-  it('gives the elite line and the share beaten, rounded down', () => {
-    expect(squat(195)).toEqual({ band: '24-34', weightClass: '83', n: 24677, eliteKg: 330, beatsPct: 52 });
-    expect(standingText(squat(195)!)).toBe('Beats 52% of raw lifters at meets');
+  it('gives the elite and median lines and the share beaten, rounded down', () => {
+    expect(squat(195)).toEqual({ band: '24-34', weightClass: '83', n: 24677, eliteKg: 330, medianKg: 190, beatsPct: 52 });
   });
 
   it('never rounds a tie up into a win: equal to a line is not beating it', () => {
     expect(squat(190)!.beatsPct).toBe(50);
     expect(squat(100)!.beatsPct).toBe(0);
-    expect(standingText(squat(100)!)).toBe('Beats fewer than 5% of raw lifters at meets');
     expect(squat(330)!.beatsPct).toBe(99);
     expect(squat(329)!.beatsPct).toBe(98);
   });
 
   it('is the top 1% only above the elite line', () => {
     expect(squat(331)!.beatsPct).toBe(99);
-    expect(standingText(squat(331)!)).toBe('Top 1% of raw lifters at meets');
   });
 
   it('says nothing for a group the table does not have', () => {

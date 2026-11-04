@@ -1,25 +1,31 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { expect, test } from '@playwright/test';
-import { liftStanding, standingText, type LiftTable } from '../src/domain/liftStandards';
+import { expect, test, type Page } from '@playwright/test';
+import { liftStanding, type LiftTable } from '../src/domain/liftStandards';
+import { strengthStanding } from '../src/domain/standards';
 import { clickIfPresent, fresh } from './fresh';
 
 /**
- * Progress → Strength compares the squat with raw lifters at meets once Settings → About you has a
- * year of birth and sex: a real finished session, the real committed table, the seed's 74 kg.
+ * In a session, the squat shows its level under its name once Settings → About you has a sex and
+ * a year of birth: a real finished session, the real committed table, the seed's 74 kg.
  */
 
 const table = JSON.parse(readFileSync(fileURLToPath(new URL('../src/data/liftStandards.json', import.meta.url)), 'utf8')) as LiftTable;
 
-test('a logged squat is compared with raw lifters of the same sex, age group and class', async ({ page }) => {
-  await fresh(page);
+async function startLower(page: Page) {
+  await page.goto('/');
   await page.getByTestId('start-Lower (Squat)').click();
   await clickIfPresent(page.getByRole('button', { name: 'Start anyway' }));
   await expect(page).toHaveURL(/\/session\//);
-  const card = page.getByTestId('exercise-card-Barbell Back Squat');
-  await card.getByTestId('weight-input').fill('140');
-  await card.getByTestId('reps-input').fill('5');
-  await card.getByTestId('set-done').click();
+  return page.getByTestId('exercise-card-Barbell Back Squat');
+}
+
+test('the squat shows its level and the next mark under its name in the session', async ({ page }) => {
+  await fresh(page);
+  const first = await startLower(page);
+  await first.getByTestId('weight-input').fill('140');
+  await first.getByTestId('reps-input').fill('5');
+  await first.getByTestId('set-done').click();
   await clickIfPresent(page.getByTestId('rest-timer').getByRole('button', { name: 'Skip' }));
   await page.getByTestId('finish-session').click();
   await clickIfPresent(page.getByRole('dialog').getByRole('button', { name: 'Finish', exact: true }));
@@ -27,15 +33,7 @@ test('a logged squat is compared with raw lifters of the same sex, age group and
   await page.getByTestId('save-session').click();
   await expect(page).toHaveURL(/\/$/);
 
-  // No year of birth or sex yet: the old bodyweight-multiple line, and a way to add them.
-  await page.goto('/progress');
-  const strength = page.getByTestId('strength-card');
-  await expect(strength).toContainText('Barbell Back Squat');
-  await expect(strength).toContainText('× bodyweight');
-  await expect(page.getByTestId('meet-squat')).toHaveCount(0);
-  await page.getByTestId('meet-settings').click();
-  await expect(page).toHaveURL(/\/settings$/);
-
+  await page.goto('/settings');
   const born = new Date().getFullYear() - 30;
   await page.getByTestId('birth-year').fill(String(born));
   await page.getByTestId('birth-year').blur();
@@ -48,16 +46,16 @@ test('a logged squat is compared with raw lifters of the same sex, age group and
     };
   }))).toEqual([born, 'male']);
 
-  await page.goto('/progress');
-  const meet = page.getByTestId('meet-squat');
-  await expect(meet).toContainText('e1RM');
-  const e1rmKg = Number((await meet.textContent())!.match(/([\d.]+) kg e1RM/)![1]);
-  const expected = liftStanding(table, { sex: 'male', age: 30, bodyweightKg: 74, lift: 'squat', e1rmKg })!;
-  expect(expected.weightClass).toBe('74');
-  await expect(meet).toContainText(standingText(expected));
-  await expect(meet).toContainText(`Elite (top 1%): ${expected.eliteKg} kg · ${expected.n.toLocaleString('en-GB')} lifters`);
-  await expect(page.getByTestId('meet-group')).toContainText('Men 24–34, 74 kg class');
-  await expect(page.getByTestId('meet-group')).toContainText('Body fat is not part of it');
-  await expect(strength.getByText('× bodyweight')).toHaveCount(0);
-  await expect(page.getByTestId('meet-settings')).toHaveCount(0);
+  const card = await startLower(page);
+  const line = card.getByTestId('strength-line');
+  await expect(line).toContainText('× bodyweight');
+  const e1rmKg = Number((await line.textContent())!.match(/e1RM ([\d.]+) kg/)![1]);
+  const meet = liftStanding(table, { sex: 'male', age: 30, bodyweightKg: 74, lift: 'squat', e1rmKg })!;
+  expect(meet.weightClass).toBe('74');
+  const s = strengthStanding({ standard: 'squat', sex: 'male', e1rmKg, bodyweightKg: 74, meet })!;
+  // 140 × 5 is well over 1.5 × 74 kg: highly advanced, and competition powerlifters come next.
+  expect(s.level).toBe('Highly advanced');
+  await expect(line).toContainText(`${s.level} · ${s.head}`);
+  await expect(line).toContainText(s.next!);
+  await expect(line).toContainText('the average competition powerlifter (men 24–34, 74 kg)');
 });

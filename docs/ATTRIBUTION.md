@@ -61,10 +61,14 @@ docs/DESIGN.md §3.
 
 ## Meet results — OpenPowerlifting
 
-`src/data/liftStandards.json` (Progress → Strength) is built by hand with
+`src/data/liftStandards.json` (the level line under a squat, bench or deadlift in a session) is built by hand with
 `scripts/lift-standards.py` from the OpenPowerlifting CSV (https://www.openpowerlifting.org/,
 download of 31 October 2026). OpenPowerlifting data is contributed to the public domain; the app
-credits it anyway, in Settings → About and under the comparison itself.
+credits it anyway, in Settings → About.
+
+The levels below the meet results (beginner, intermediate, advanced, highly advanced) are the
+1RM-to-bodyweight bands of Santos Junior et al. (2021), "Classification and Determination Model of
+Resistance Training Status", Strength and Conditioning Journal 43(5):77–86 (`src/domain/standards.ts`).
 
 ## Font — IBM Plex Sans
 
