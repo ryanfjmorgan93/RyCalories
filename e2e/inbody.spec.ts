@@ -107,19 +107,20 @@ test.describe('InBody import', () => {
     await page.goto('/settings');
     await page.getByTestId('goal-recomp').click();
     const basis = page.getByTestId('goal-basis');
-    // Seed: 74 kg today, 3 sessions a week, routines of 50 min on average; the file: BMR 1,840 and
-    // 67.4 kg lean mass; no steps in a browser. 2,484 + 6,000 × 74 × 0.5/1,330 (167)
-    // + 3 × 4 × 74 × 50/60 / 7 (106) = 2,757 → 2,750 kcal; fat 25% = 76 g → 75.
-    await expect(basis).toContainText('1,840 resting (your InBody BMR) × 1.35 for everyday living and digestion = 2,484');
-    await expect(basis).toContainText('6,000 steps a day (assumed: steps not read)');
-    await expect(basis).toContainText('+ 167 for 6,000 steps a day (assumed: steps not read), + 106 for 3 sessions a week of 50 min');
-    await expect(basis).toContainText('Calories 2,750: maintenance, for a recomp.');
+    // Seed: 74 kg today and no sessions logged; the file: BMR 1,840 and 67.4 kg lean mass; no steps
+    // in a browser. 2,484 + 6,000 × 74 × 0.5/1,330 (167) + 0 lifting = 2,651 → 2,650 kcal; fat 25% =
+    // 74 g → 75. No food logged and one weigh-in: the measured figure says what it still needs.
+    await expect(basis).toContainText('Maintenance ≈2,651 kcal, estimated: 1,840 resting (your InBody BMR) × 1.35 for everyday living and digestion = 2,484');
+    await expect(basis).toContainText('+ 167 for 6,000 steps a day (assumed: steps not read), + 0 for no sessions logged in the last 4 weeks.');
+    await expect(basis).toContainText('Calories 2,650: maintenance, for a recomp.');
     await expect(basis).toContainText('Protein 175 g: 2.6 g per kg of lean mass (67.4 kg; 2.6 to 3.5 for a recomp in trained lifters).');
     await expect(basis).toContainText('Fat 75 g: 25% of calories');
-    await expect(page.getByTestId('goal-targets')).toContainText('2,750 kcal');
+    await expect(basis).toContainText('The exact figure is measured: average food eaten − weight change × 7,700 kcal ÷ days');
+    await expect(basis).toContainText('Still needs food logged on 22 of the last 27 days (0 so far), and a weigh-in in the first of the 4 weeks.');
+    await expect(page.getByTestId('goal-targets')).toContainText('2,650 kcal');
 
     await page.goto('/food');
-    await expect(page.getByTestId('calories-bar')).toContainText('2750 kcal');
+    await expect(page.getByTestId('calories-bar')).toContainText('2650 kcal');
     await expect(page.getByTestId('carbs-bar')).toBeVisible();
     await expect(page.getByTestId('fat-bar')).toContainText('75');
     await page.goto('/');

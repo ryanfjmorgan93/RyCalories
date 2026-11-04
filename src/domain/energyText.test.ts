@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { addDays } from './dates';
 import { estimateMaintenance } from './energy';
-import { dateRangeText, maintenanceBasisText, maintenanceFigureText, maintenanceGateText, maintenanceRateText } from './energyText';
+import { dateRangeText, maintenanceBasisText, maintenanceFigureText, maintenanceGateText, maintenanceNeedsText, maintenanceRateText } from './energyText';
 import type { DayRecord } from './trends';
 import type { Bodyweight } from './types';
 
@@ -113,5 +113,20 @@ describe('the gate line', () => {
     const gone = new Set([1, 5, 8, 12, 16, 19]);
     const m = estimateMaintenance(window(28, (i) => (gone.has(i) ? undefined : 2400)), LOSS);
     expect(maintenanceGateText(m)).toBe('Needs 23 of 28 days logged (22 of 28)');
+  });
+});
+
+describe('everything the figure still needs', () => {
+  it('is null when there is a figure', () => {
+    expect(maintenanceNeedsText(estimateMaintenance(window(28), LOSS))).toBeNull();
+  });
+
+  it('names every gap at once, with the counts', () => {
+    const m = estimateMaintenance(window(28, (i) => (i < 10 ? 2400 : undefined)), readings([21, 79.6]));
+    expect(maintenanceNeedsText(m)).toBe('Still needs food logged on 23 of the last 28 days (10 so far), and a weigh-in in the first of the 4 weeks');
+  });
+
+  it('names weigh-ins too close together', () => {
+    expect(maintenanceNeedsText(estimateMaintenance(window(20), readings([1, 80], [14, 79.8])))).toBe('Still needs weigh-ins at least 14 days apart');
   });
 });

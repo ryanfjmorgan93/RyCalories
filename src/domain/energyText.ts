@@ -54,3 +54,21 @@ export function maintenanceGateText(m: Maintenance): string | null {
       return `Needs ${loggedDaysNeeded(m.totalDays)} of ${m.totalDays} days logged (${m.loggedDays} of ${m.totalDays})`;
   }
 }
+
+/**
+ * Everything the measured figure still needs, all at once, with the owner's counts: "Still needs
+ * food logged on 22 of the last 27 days (15 so far), and a weigh-in in the first of the 4 weeks".
+ * Null when there is a figure.
+ */
+export function maintenanceNeedsText(m: Maintenance): string | null {
+  if (m.basis === 'ok') return null;
+  const needs: string[] = [];
+  const want = loggedDaysNeeded(m.totalDays);
+  if (m.loggedDays < want) needs.push(`food logged on ${want} of the last ${m.totalDays} days (${m.loggedDays} so far)`);
+  const weeks = `of the ${Math.ceil(m.totalDays / 7)} weeks`;
+  if (m.weighInsStart === 0 && m.weighInsEnd === 0) needs.push(`a weigh-in in the first and the last ${weeks}`);
+  else if (m.weighInsStart === 0) needs.push(`a weigh-in in the first ${weeks}`);
+  else if (m.weighInsEnd === 0) needs.push(`a weigh-in in the last ${weeks}`);
+  else if (m.spanDays < MIN_SPAN_DAYS) needs.push(`weigh-ins at least ${MIN_SPAN_DAYS} days apart`);
+  return needs.length > 0 ? `Still needs ${needs.join(', and ')}` : maintenanceGateText(m);
+}

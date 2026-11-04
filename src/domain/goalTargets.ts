@@ -3,13 +3,15 @@
  * is passed in. Each figure comes with the sum it was made from, so it can be checked.
  *
  * Maintenance (what keeps weight steady):
- *   - measured, when energy.ts has it: the owner's logged intake against their weight trend. This
- *     is the most accurate source there is, so it wins whenever its gates pass;
- *   - otherwise worked out: resting energy from the InBody scan (its BMR; else Cunningham,
+ *   - measured, when energy.ts's gates pass: energy balance, average intake − weight change ×
+ *     7,700 ÷ days. It counts everything burned, whatever the activity, so it wins whenever it can
+ *     be had, and the sum is shown with the owner's own numbers;
+ *   - otherwise estimated: resting energy from the InBody scan (its BMR; else Cunningham,
  *     500 + 22 × lean mass), × 1.35 for everyday living and digesting food (a sedentary day comes
  *     to about 1.4 × resting with light walking: FAO/WHO/UNU 2004), plus walking at
- *     0.5 kcal per kg per km (ACSM) and about 1,330 steps to the km, plus lifting at about 4 METs
- *     above resting (Compendium of Physical Activities, resistance training ≈ 5 METs).
+ *     0.5 kcal per kg per km (ACSM) and about 1,330 steps to the km, plus the lifting actually
+ *     logged at about 4 METs above resting (Compendium of Physical Activities, resistance training
+ *     ≈ 5 METs). The last line says what the measured figure still needs.
  * Calories: maintenance, plus or minus the energy for the goal's rate at 7,700 kcal a kg:
  *   lean gain 0.25% of bodyweight a week, faster gain 0.5% (Iraki et al. 2019, 0.25 to 0.5%),
  *   recomp 0, fat loss 0.75% (Helms et al. 2014, 0.5 to 1%).
@@ -42,10 +44,12 @@ export interface TargetInputs {
   bmrKcal?: number;
   /** Average over the days recorded; absent when steps cannot be read. */
   stepsPerDay?: number;
-  sessionsPerWeek: number;
-  sessionMinutes: number;
+  /** Finished sessions with a real duration in the last `days` days, and their minutes in all. */
+  training: { sessions: number; minutes: number; days: number };
   /** energy.ts, when its gates pass. */
-  measured?: { kcal: number; days: number };
+  measured?: { intakeAvg: number; loggedDays: number; totalDays: number; deltaKg: number; spanDays: number };
+  /** What the measured figure still needs (energyText.maintenanceGateText), when there is none. */
+  measuredGate?: string;
 }
 
 export interface GoalTargets {
@@ -65,19 +69,35 @@ export function goalTargets(i: TargetInputs): GoalTargets | null {
   const lines: string[] = [];
   let maintenance: number;
   if (i.measured) {
-    maintenance = i.measured.kcal;
-    lines.push(`Maintenance ${n(maintenance)} kcal: measured from your food and weigh-ins over ${i.measured.days} days.`);
+    const m = i.measured;
+    // Shown to 10 g and whole kcal, and summed from what is shown, so the line adds up.
+    const kg = Math.round(m.deltaKg * 100) / 100;
+    const intake = Math.round(m.intakeAvg);
+    const stored = Math.round((kg * KCAL_PER_KG) / m.spanDays);
+    maintenance = intake - stored;
+    const ate = `you ate ${n(intake)} kcal a day on average (${m.loggedDays} of ${m.totalDays} days logged)`;
+    const moved =
+      kg === 0
+        ? `and your weight held, so maintenance is what you ate`
+        : `and ${kg > 0 ? 'gained' : 'lost'} ${Math.abs(kg).toFixed(2)} kg in ${m.spanDays} days (first week's weigh-ins against last week's): ${Math.abs(kg).toFixed(2)} × 7,700 ÷ ${m.spanDays} = ${n(Math.abs(stored))} a day ${kg > 0 ? 'stored' : 'drawn from your body'}, so ${n(intake)} ${kg > 0 ? '−' : '+'} ${n(Math.abs(stored))}`;
+    lines.push(`Maintenance ${n(maintenance)} kcal, measured: ${ate} ${moved}. This counts everything you burned, whatever you did.`);
   } else {
     const rmr = i.bmrKcal ?? (i.leanMassKg !== undefined ? 500 + 22 * i.leanMassKg : undefined);
     if (rmr === undefined || !(i.weightKg > 0)) return null;
     const living = rmr * LIVING_FACTOR;
     const steps = i.stepsPerDay ?? ASSUMED_STEPS;
     const walking = steps * i.weightKg * WALK_KCAL_PER_KG_PER_STEP;
-    const lifting = (i.sessionsPerWeek * LIFT_NET_METS * i.weightKg * (i.sessionMinutes / 60)) / 7;
+    const t = i.training;
+    const lifting = (LIFT_NET_METS * i.weightKg * (t.minutes / 60)) / t.days;
     maintenance = Math.round(living + walking + lifting);
     const source = i.bmrKcal !== undefined ? 'your InBody BMR' : `500 + 22 × ${i.leanMassKg} kg lean mass`;
+    const span = t.days % 7 === 0 ? `${t.days / 7} weeks` : `${t.days} days`;
+    const trained =
+      t.sessions === 0
+        ? `no sessions logged in the last ${span}`
+        : `your ${t.sessions} session${t.sessions === 1 ? '' : 's'} in the last ${span} (${n(t.minutes)} min in all)`;
     lines.push(
-      `Maintenance ≈${n(maintenance)} kcal: ${n(rmr)} resting (${source}) × ${LIVING_FACTOR} for everyday living and digestion = ${n(living)}, + ${n(walking)} for ${n(steps)} steps a day${i.stepsPerDay === undefined ? ' (assumed: steps not read)' : ''}, + ${n(lifting)} for ${i.sessionsPerWeek} sessions a week of ${i.sessionMinutes} min. Replaced by your measured maintenance once two weeks of food and weigh-ins are in.`,
+      `Maintenance ≈${n(maintenance)} kcal, estimated: ${n(rmr)} resting (${source}) × ${LIVING_FACTOR} for everyday living and digestion = ${n(living)}, + ${n(walking)} for ${n(steps)} steps a day${i.stepsPerDay === undefined ? ' (assumed: steps not read)' : ''}, + ${n(lifting)} for ${trained}.`,
     );
   }
 
@@ -109,5 +129,10 @@ export function goalTargets(i: TargetInputs): GoalTargets | null {
   const carbs = Math.max(0, to5((kcal - protein * 4 - fat * 9) / 4));
   lines.push(`Carbs ${n(carbs)} g: the rest (${(carbs / i.weightKg).toFixed(1)} g per kg of bodyweight).`);
 
+  if (!i.measured) {
+    lines.push(
+      `The exact figure is measured: average food eaten − weight change × 7,700 kcal ÷ days, over the last 4 weeks. It counts everything you burn and replaces the estimate once it has the data.${i.measuredGate ? ` ${i.measuredGate}.` : ''}`,
+    );
+  }
   return { kcal, protein, carbs, fat, maintenance, lines };
 }

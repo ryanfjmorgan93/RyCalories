@@ -379,10 +379,10 @@ test.describe('the weekly review', () => {
     await expect(page.getByTestId('target-calorieCeiling')).toHaveCount(0);
     await expect(page.getByText(/next step/)).toHaveCount(0);
 
-    // A goal takes over: with no scan and under two weeks of logs there is nothing to work from yet, and it says so.
+    // A goal takes over: with no scan and no 4 weeks of logs there is nothing to work from yet, and it says so.
     await page.getByTestId('goal-recomp').click();
     await expect(page.getByTestId('goal-basis')).toHaveText(
-      'Log a weigh-in and import an InBody scan, or log two weeks of food and weigh-ins, to work the targets out.',
+      'Log a weigh-in and import an InBody scan to estimate the targets, or log food and weigh in for 4 weeks to measure them.',
     );
     await expect(page.getByTestId('target-calorieStart')).toHaveCount(0);
   });

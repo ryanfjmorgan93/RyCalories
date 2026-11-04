@@ -101,7 +101,9 @@ The owner does not check on device. Correctness has to come from the code and th
   logging produces.
   `inbody.ts` reads body-scan exports; `goalTargets.ts` is the daily calories and macros from the
   owner's goal (lean gain, faster gain, recomp, fat loss; Settings → Targets): maintenance measured
-  (energy.ts) when its gates pass, else the scan's BMR × 1.35 plus walking and lifting; the goal's
+  (energy.ts: food eaten against weight change, the sum shown with the owner's numbers) when its
+  gates pass, else the scan's BMR × 1.35 plus walking and the lifting actually logged in 4 weeks,
+  with what the measured figure still needs; the goal's
   rate as % of bodyweight a week; protein, fat and carbs from published ranges, each figure with
   the sum it came from. `state/goalTargets.ts` saves them at start-up, after a scan and on a goal
   change. There is no reverse-diet stepping any more (the owner refused it, November 2026): a
