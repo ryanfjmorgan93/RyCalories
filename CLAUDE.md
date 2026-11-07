@@ -62,7 +62,11 @@ The owner does not check on device. Correctness has to come from the code and th
   third-party dataset content shown only behind a "How to" tap; leave it alone. Phone
   notifications are deterministic and limited to the food reminder, the training nudge, the
   Monday weigh-in and the daily supplement checklist (`src/domain/reminders.ts`).
-- Tracking must work fully offline. Three things leave the device, all listed in Settings → About:
+- Tracking must work fully offline. Four things leave the device, all listed in Settings → About:
+  Android's Google backup of the database (about once a day, when Google backup is on in the
+  phone's settings; `android/app/src/main/res/xml/data_extraction_rules.xml` includes the WebView's
+  `app_webview/` and excludes its Local Storage, where the Claude key lives, guarded by
+  `src/db/manifest.test.ts`; it restores only into an APK signed with the committed keystore),
   Claude API calls (only with the owner's key: what they send the coach, a summary of their
   training, food, supplements and steps, and photos they choose; the chat's web search runs on
   Anthropic's side, and a cited source opens in the browser only on a tap), the Open Food Facts label lookup

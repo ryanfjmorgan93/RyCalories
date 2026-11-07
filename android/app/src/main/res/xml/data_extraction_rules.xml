@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android Auto Backup (Google backup, about once a day) and device-to-device transfer: the app's
+  database, so a new phone set up from the Google backup gets it back. The database is the WebView's
+  IndexedDB under app_webview/ (Default/ on current WebViews, the folder itself on old ones).
+
+  Never backed up: the WebView's Local Storage, which holds the Claude key and the cloud backup
+  passphrase's vault (src/ai/key.ts, src/cloud/sync.ts), and its GPU cache. Meal photos in files/
+  are not included either; nothing shows them, and they would eat the 25 MB limit.
+  Guarded by src/db/manifest.test.ts.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="root" path="app_webview/" />
+        <exclude domain="root" path="app_webview/Default/Local Storage/" />
+        <exclude domain="root" path="app_webview/Local Storage/" />
+        <exclude domain="root" path="app_webview/Default/GPUCache/" />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="root" path="app_webview/" />
+        <exclude domain="root" path="app_webview/Default/Local Storage/" />
+        <exclude domain="root" path="app_webview/Local Storage/" />
+        <exclude domain="root" path="app_webview/Default/GPUCache/" />
+    </device-transfer>
+</data-extraction-rules>

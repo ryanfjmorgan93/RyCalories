@@ -70,6 +70,12 @@ export function BackupsCard() {
       <div className="text-sm text-muted">
         {isNative() ? 'Kept in Documents/Iron on this phone.' : "Kept in this browser's storage."}
       </div>
+      {isNative() && (
+        <div className="mt-1 text-sm text-muted" data-testid="google-backup-line">
+          With Google backup on (phone Settings → Google → Backup), Android also copies the database to your Google account about once a
+          day, and a new phone set up from that backup gets it back. The Claude key is never in it.
+        </div>
+      )}
       <div className="mt-2 text-sm">
         {newest ? (
           <>

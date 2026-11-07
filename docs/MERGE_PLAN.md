@@ -65,9 +65,11 @@ copying `meals.json` and your photos to Google Drive. That contradicts the zero-
 principle the whole project is built on. The merged app should set explicit extraction
 rules, and the old app should be uninstalled rather than left dormant.
 
-**Iron itself is closed:** its manifest sets `android:allowBackup="false"`, guarded by
-`src/db/manifest.test.ts`. Its own backups (Documents/Iron, Settings → Export) are the only copy
-that leaves the app's storage.
+**Iron itself was closed** (`android:allowBackup="false"`) until November 2026, when a stolen phone
+took every byte of it: its only backups were in Documents/Iron on that phone. At the owner's request
+Google backup is now on with explicit rules (`res/xml/data_extraction_rules.xml`): the WebView's
+`app_webview/` (the IndexedDB) goes, its Local Storage (the Claude key) never does, and it is listed
+in Settings → About. `src/db/manifest.test.ts` reads the real files.
 
 ### 2.3 The bar
 
@@ -979,10 +981,12 @@ counts drop below a baseline without an in-app delete, and a Backups card in Set
   read the browser's `Notification`, which in the WebView says "Not supported here"; on the phone
   it now asks the plugin.
 - **`allowBackup="true"` with no rules is a cloud upload nobody listed.** Capacitor's template
-  ships it on, and Settings → About lists what leaves the device: Android's Auto Backup copies
-  the whole IndexedDB to the owner's Google account behind that list. It is off, and a test
-  reads the real manifest, because a regenerated `android/` or a `cap` upgrade would quietly put
+  ships it on with no rules, which would copy Local Storage (the Claude key) too. Iron's backup is
+  on only through `data_extraction_rules.xml`, listed in Settings → About, and a test reads the
+  real manifest and rules, because a regenerated `android/` or a `cap` upgrade would quietly put
   the template's line back.
+- **A phone's own folder is not a backup.** Documents/Iron went with the stolen phone in November
+  2026. Google backup (daily) is the copy that survives losing the phone.
 
 ### 6.12 Short session and the catalogue — traps paid for
 
