@@ -76,6 +76,8 @@ export async function startQuickSession(
       increment: row.candidate.defaultIncrement,
       mode: row.mode,
       optional: false,
+      // Only a carry the owner picked has these: without them its card has no distance to show.
+      ...(row.distanceMinM !== undefined && row.distanceMaxM !== undefined ? { distanceMinM: row.distanceMinM, distanceMaxM: row.distanceMaxM } : {}),
     }));
     await db.routineExercises.bulkPut(rxs);
 

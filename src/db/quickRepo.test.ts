@@ -197,6 +197,19 @@ describe('startQuickSession: what it writes', () => {
     expect(session.routineId).not.toBe('');
   });
 
+  it('writes a carry row\'s distance, and gives no other row one', async () => {
+    const carry = ex(SEED_EXERCISE_IDS["Farmer's Carry"]);
+    const session = await startQuickSession(
+      planOf([rowOf(BENCH), rowOf(carry, { sets: 3, repMin: 1, repMax: 1, weightKg: null, mode: 'calibrating', distanceMinM: 20, distanceMaxM: 25 })]),
+      [],
+      'normal',
+    );
+    const rows = await db.routineExercises.where('routineId').equals(session.routineId).sortBy('order');
+    expect(rows[1]).toMatchObject({ exerciseId: carry.id, targetSets: 3, repMin: 1, repMax: 1, currentWeight: 0, mode: 'calibrating', distanceMinM: 20, distanceMaxM: 25 });
+    expect(rows[0]).not.toHaveProperty('distanceMinM');
+    expect(rows[0]).not.toHaveProperty('distanceMaxM');
+  });
+
   it('is a lower-body routine only when MORE than half of its rows are lower body', async () => {
     const two = await startQuickSession(planOf([rowOf(LEG_CURL), rowOf(HIP_THRUST), rowOf(BENCH)]), [], 'light');
     expect((await db.routines.get(two.routineId))!.isLowerBody).toBe(true);

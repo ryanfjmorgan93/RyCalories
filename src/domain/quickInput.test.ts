@@ -86,6 +86,21 @@ describe('routineBase', () => {
     expect(routineBase([])).toBeUndefined();
   });
 
+  it('carries a carry row\'s distance with the row its numbers come from, calibrating or not', () => {
+    expect(routineBase([row('a', { mode: 'calibrating', targetSets: 3, repMin: 1, repMax: 1, distanceMinM: 30, distanceMaxM: 40 })])).toEqual({
+      sets: 3,
+      repMin: 1,
+      repMax: 1,
+      weightKg: null,
+      mode: 'calibrating',
+      distanceMinM: 30,
+      distanceMaxM: 40,
+    });
+    // The lighter normal row wins, and it is that row's distance that comes with it.
+    const base = routineBase([row('a', { currentWeight: 60, distanceMinM: 30, distanceMaxM: 40 }), row('b', { currentWeight: 50, distanceMinM: 20, distanceMaxM: 20 })]);
+    expect(base).toMatchObject({ weightKg: 50, distanceMinM: 20, distanceMaxM: 20 });
+  });
+
   it('takes the sets, reps and weight of the lowest normal-mode weight', () => {
     const base = routineBase([
       row('a', { currentWeight: 60, targetSets: 4, repMin: 6, repMax: 8 }),

@@ -14,8 +14,8 @@ One visit to the gym, started from a routine (or a short session) and finished o
 _Avoid_: Workout (as a noun for the record)
 
 **Short session**:
-A one-off session generated on request (a few exercises, a time, an effort), kept out of the
-routines list.
+A one-off session, suggested on request (a few exercises, a time, an effort) or made of the
+exercises the owner picks (My own), kept out of the routines list.
 _Avoid_: Quick workout, random workout
 
 **Plan override**:

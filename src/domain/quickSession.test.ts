@@ -8,6 +8,7 @@ import { restSecondsFor } from './rest';
 import {
   estimateMinutes,
   generateQuickSession,
+  ownQuickPlan,
   paceFactor,
   paceReading,
   type Candidate,
@@ -1461,5 +1462,97 @@ describe('the estimate against the five seeded routines', () => {
 
   it('the seeded routines really are the five the anchor assumes', () => {
     expect(SEED_ROUTINES.map((r) => r.name)).toEqual(Object.keys(expected));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The owner's own list ("My own")
+
+describe('the owner\'s own list', () => {
+  const base = (weightKg: number | null, over: Partial<NonNullable<Candidate['base']>> = {}): NonNullable<Candidate['base']> => ({
+    sets: 4,
+    repMin: 6,
+    repMax: 8,
+    weightKg,
+    mode: weightKg === null ? 'calibrating' : 'normal',
+    ...over,
+  });
+  const bench = cand({ id: 'bench', name: 'Bench Press (Barbell)', equipment: 'barbell', isCompound: true, defaultRestSec: 150, standard: 'bench', base: base(75) });
+  const curl = cand({ id: 'curl', name: 'DB Curl', muscleGroup: 'biceps', equipment: 'dumbbell', base: base(12, { sets: 3, repMin: 10, repMax: 12 }) });
+  const raise = cand({ id: 'raise', name: 'Lateral Raise', muscleGroup: 'shoulders', equipment: 'dumbbell', base: base(8, { sets: 3, repMin: 12, repMax: 15 }) });
+  const fly = cand({ id: 'fly', name: 'Cable Fly', equipment: 'cable' });
+
+  it('is exactly those exercises in that order: nothing chosen, reordered, capped or added', () => {
+    // An isolation lift first and the compound last stays that way (the generator puts compounds first),
+    // and three for one muscle are all kept (the generator takes two).
+    const chest = [1, 2, 3].map((i) => cand({ id: `chest-${i}`, base: base(20) }));
+    const plan = ownQuickPlan(input([bench, curl, raise, fly, ...chest]), ['curl', 'chest-1', 'chest-2', 'chest-3', 'bench'], 'normal');
+    expect(plan.rows.map((r) => r.candidate.id)).toEqual(['curl', 'chest-1', 'chest-2', 'chest-3', 'bench']);
+    expect(plan).toMatchObject({ shortfall: 0, unmet: [], relaxed: false, focus: ['biceps', 'chest'] });
+  });
+
+  it.each(['normal', 'light'] as const)('gives each exercise the row a generated %s plan gives it', (effort) => {
+    // Isolation dumbbell lifts with known weights and one never done: all of them a generated plan can hold, light or not.
+    const pool = [curl, raise, fly];
+    const made = generateQuickSession(input(pool), opts({ effort, count: 3, focus: ['biceps', 'shoulders', 'chest'] }), 7);
+    expect(made.rows).toHaveLength(3);
+    const own = ownQuickPlan(input(pool), made.rows.map((r) => r.candidate.id), effort);
+    expect(own.rows).toEqual(made.rows);
+    expect(own.estimateMin).toBe(made.estimateMin);
+  });
+
+  it('takes its numbers from what the owner already does, and none when they have never done it', () => {
+    const plan = ownQuickPlan(input([bench, curl, fly], { recency: { chest: 3 } }), ['bench', 'fly'], 'normal');
+    expect(plan.rows[0]).toMatchObject({ sets: 4, repMin: 6, repMax: 8, weightKg: 75, mode: 'normal', restSec: 150, daysSince: 3 });
+    // Never done: the default sets and reps, and the weight is theirs to pick.
+    expect(plan.rows[1]).toMatchObject({ sets: 3, repMin: 10, repMax: 15, weightKg: null, mode: 'calibrating' });
+  });
+
+  it('keeps a barbell lift on a light day, which a generated light plan leaves out', () => {
+    expect(generateQuickSession(input([bench, curl]), opts({ effort: 'light', count: 2 }), 1).rows.map((r) => r.candidate.id)).toEqual(['curl']);
+    const [row] = ownQuickPlan(input([bench, curl]), ['bench'], 'light').rows;
+    // 65% of 75 kg is 48.75: 47.5 on a 20 kg bar with these plates, three light sets of 10 to 15.
+    expect(row).toMatchObject({ sets: 3, repMin: 10, repMax: 15, weightKg: 47.5, mode: 'normal' });
+  });
+
+  it('skips an exercise that is no longer there, and takes one named twice once', () => {
+    expect(ownQuickPlan(input([bench, curl]), ['curl', 'gone', 'curl', 'bench'], 'normal').rows.map((r) => r.candidate.id)).toEqual(['curl', 'bench']);
+    expect(ownQuickPlan(input([bench]), [], 'normal')).toMatchObject({ rows: [], estimateMin: 0 });
+  });
+
+  it('the minutes are the owner\'s pace over those rows', () => {
+    // Curl: 60 s to set up, 3 sets of 40 s, 2 rests of 75 s = 330 s. Bench: 60 + 4 × 40 + 3 × 150 = 670 s.
+    // 1,000 s is 17 min at pace 1 and 25 min at the owner's measured 1.5.
+    expect(ownQuickPlan(input([bench, curl]), ['curl', 'bench'], 'normal').estimateMin).toBe(17);
+    expect(ownQuickPlan(input([bench, curl], { pace: 1.5 }), ['curl', 'bench'], 'normal').estimateMin).toBe(25);
+    expect(ownQuickPlan(input([bench, curl], { pace: 1.5 }), ['curl'], 'normal').estimateMin).toBe(8);
+  });
+
+  it('a carry is walks at its load and a hold is its seconds, light or not', () => {
+    const carry = cand({ id: 'carry', name: "Farmer's Carry", kind: 'carry', muscleGroup: 'forearms', defaultIncrement: 2, defaultRestSec: 0, base: base(56, { sets: 3, repMin: 1, repMax: 1, distanceMinM: 20, distanceMaxM: 25 }) });
+    const plank = cand({ id: 'plank', name: 'Plank', kind: 'timed', muscleGroup: 'abs', base: base(0, { sets: 3, repMin: 45, repMax: 60 }) });
+    const hang = cand({ id: 'hang', name: 'Dead Hang', kind: 'timed', muscleGroup: 'forearms' });
+    const walk = cand({ id: 'walk', name: 'Suitcase Carry', kind: 'carry', muscleGroup: 'abs' });
+    const pool = input([carry, plank, hang, walk]);
+
+    const normal = ownQuickPlan(pool, ['carry', 'plank', 'hang', 'walk'], 'normal').rows;
+    // With no rest of its own, a carry rests as carries do (90 s here).
+    // The walk is the one their routine gives it (20 to 25 m).
+    expect(normal[0]).toMatchObject({ sets: 3, repMin: 1, repMax: 1, weightKg: 56, mode: 'normal', restSec: 90, distanceMinM: 20, distanceMaxM: 25 });
+    expect(normal[1]).toMatchObject({ sets: 3, repMin: 45, repMax: 60, weightKg: 0, mode: 'normal' });
+    // Never done: a hold is 30 to 60 seconds, a carry is one walk a set at a load they pick.
+    expect(normal[2]).toMatchObject({ sets: 3, repMin: 30, repMax: 60, weightKg: 0, mode: 'normal' });
+    expect(normal[3]).toMatchObject({ sets: 3, repMin: 1, repMax: 1, weightKg: null, mode: 'calibrating', distanceMinM: 30, distanceMaxM: 40 });
+    // Only a carry has a distance.
+    expect(normal[1]).not.toHaveProperty('distanceMinM');
+    expect(ownQuickPlan(input([bench]), ['bench'], 'normal').rows[0]).not.toHaveProperty('distanceMinM');
+
+    const light = ownQuickPlan(pool, ['carry', 'plank', 'walk'], 'light').rows;
+    // Light is fewer walks (two, as for any light isolation lift) at a lighter load (65% of 56 is 36.4: 36 on a
+    // 2 kg step), over the same distance; a walk and a hold keep their own range, never 10 to 15.
+    expect(light[0]).toMatchObject({ sets: 2, repMin: 1, repMax: 1, weightKg: 36, mode: 'normal', distanceMinM: 20, distanceMaxM: 25 });
+    expect(light[1]).toEqual(normal[1]);
+    // A carry never done has no load to lighten: it is still theirs to pick.
+    expect(light[2]).toMatchObject({ sets: 2, repMin: 1, repMax: 1, weightKg: null, mode: 'calibrating', distanceMinM: 30, distanceMaxM: 40 });
   });
 });

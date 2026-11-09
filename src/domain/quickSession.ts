@@ -37,8 +37,8 @@ export interface Candidate {
   demoSlug?: string;
   /** Whole days since this exercise was last logged. Absent = never. */
   daysSinceUsed?: number;
-  /** What the owner already does for it: their routine's prescription or their last top set. */
-  base?: { sets: number; repMin: number; repMax: number; weightKg: number | null; mode: ProgressionMode };
+  /** What the owner already does for it: their routine's prescription or their last top set. A carry's routine row gives its distance too. */
+  base?: { sets: number; repMin: number; repMax: number; weightKg: number | null; mode: ProgressionMode; distanceMinM?: number; distanceMaxM?: number };
 }
 
 export interface QuickInput {
@@ -69,6 +69,9 @@ export interface QuickRow {
   restSec: number;
   /** Days since the row's muscle group was last trained; null = never. */
   daysSince: number | null;
+  /** A carry's walk, in metres: the owner's routine's, else what a new routine row gets. Absent for anything else. */
+  distanceMinM?: number;
+  distanceMaxM?: number;
 }
 
 export interface QuickPlan {
@@ -115,6 +118,10 @@ const LIGHT_SETS_ISOLATION = 2;
 export const LIGHT_REPS: [number, number] = [10, 15];
 const COMPOUND_DEFAULT: { sets: number; repMin: number; repMax: number } = { sets: 3, repMin: 8, repMax: 10 };
 const ISOLATION_DEFAULT: { sets: number; repMin: number; repMax: number } = { sets: 3, repMin: 10, repMax: 15 };
+/** A carry is one walk a set, of 30 to 40 m, and a hold is its seconds (30 to 60): what a new routine row gives them (`defaultRoutineExercise`). */
+const CARRY_DEFAULT: { sets: number; repMin: number; repMax: number } = { sets: 3, repMin: 1, repMax: 1 };
+const CARRY_DISTANCE_M: [number, number] = [30, 40];
+const TIMED_DEFAULT: { sets: number; repMin: number; repMax: number } = { sets: 3, repMin: 30, repMax: 60 };
 /**
  * Hinge patterns load the lower back too heavily for a session the owner did not want to do: the
  * deadlift family and good mornings, extensions, and the hip-driven swings, cleans and snatches,
@@ -251,11 +258,26 @@ interface Prescription {
   repMax: number;
   weightKg: number | null;
   mode: ProgressionMode;
+  distanceMinM?: number;
+  distanceMaxM?: number;
 }
 
 function prescribeRow(c: Candidate, light: boolean, barKg: number, plates: number[]): Prescription {
   const known = baseWeight(c);
-  const fallback = c.isCompound ? COMPOUND_DEFAULT : ISOLATION_DEFAULT;
+  // The generator never draws a carry or a hold (`eligiblePool`): these two are only ever the owner's own pick.
+  const steady = c.kind === 'carry' || c.kind === 'timed';
+  const fallback = c.kind === 'carry' ? CARRY_DEFAULT : c.kind === 'timed' ? TIMED_DEFAULT : c.isCompound ? COMPOUND_DEFAULT : ISOLATION_DEFAULT;
+  const b = c.base;
+  const repsOk = b && positiveInt(b.repMin) && positiveInt(b.repMax) && b.repMax >= b.repMin;
+  const repMin = repsOk ? b.repMin : fallback.repMin;
+  const repMax = repsOk ? b.repMax : fallback.repMax;
+  const baseSets = b && positiveInt(b.sets) ? b.sets : fallback.sets;
+  // A carry is nothing without how far: the owner's routine says, or it is the default walk.
+  const walkOk = b && finite(b.distanceMinM) && finite(b.distanceMaxM) && b.distanceMinM > 0 && b.distanceMaxM >= b.distanceMinM;
+  const walk = c.kind !== 'carry' ? {} : walkOk ? { distanceMinM: b.distanceMinM, distanceMaxM: b.distanceMaxM } : { distanceMinM: CARRY_DISTANCE_M[0], distanceMaxM: CARRY_DISTANCE_M[1] };
+
+  // A hold has no weight to choose and nothing to lighten: it is its sets and its seconds.
+  if (c.kind === 'timed') return { sets: baseSets, repMin, repMax, weightKg: 0, mode: 'normal' };
 
   if (light) {
     const sets = c.isCompound ? LIGHT_SETS_COMPOUND : LIGHT_SETS_ISOLATION;
@@ -268,15 +290,57 @@ function prescribeRow(c: Candidate, light: boolean, barKg: number, plates: numbe
       // added weight can honestly be nothing, which is bodyweight alone.
       if (weightKg > known * LIGHT_FRACTION + 1e-6 || (weightKg <= 0 && known > 0 && c.kind !== 'bodyweight_plus')) weightKg = null;
     }
-    return { sets, repMin: LIGHT_REPS[0], repMax: LIGHT_REPS[1], weightKg, mode: weightKg === null ? 'calibrating' : 'normal' };
+    // A carry is lightened by its load; a walk has no rep range to swap for the light one.
+    const reps = steady ? [repMin, repMax] : LIGHT_REPS;
+    return { sets, repMin: reps[0]!, repMax: reps[1]!, weightKg, mode: weightKg === null ? 'calibrating' : 'normal', ...walk };
   }
 
-  const b = c.base;
-  const sets = b && positiveInt(b.sets) ? b.sets : fallback.sets;
-  const repsOk = b && positiveInt(b.repMin) && positiveInt(b.repMax) && b.repMax >= b.repMin;
-  const repMin = repsOk ? b.repMin : fallback.repMin;
-  const repMax = repsOk ? b.repMax : fallback.repMax;
-  return { sets, repMin, repMax, weightKg: known === null ? null : roundKg(known), mode: known === null ? 'calibrating' : 'normal' };
+  return { sets: baseSets, repMin, repMax, weightKg: known === null ? null : roundKg(known), mode: known === null ? 'calibrating' : 'normal', ...walk };
+}
+
+/**
+ * A candidate as a row, for this input: sets, reps and weight from what the owner already does for
+ * it, its rest, and how long its muscle has rested. The one place a row is made, so an exercise the
+ * owner picked by hand reads exactly as it would in a generated plan.
+ */
+function rowMaker(input: QuickInput, light: boolean): (c: Candidate) => QuickRow {
+  const restDefaults: RestDefaults = {
+    restCompoundSec: positiveOr(input.settings?.restCompoundSec, DEFAULT_SETTINGS.restCompoundSec),
+    restIsolationSec: positiveOr(input.settings?.restIsolationSec, DEFAULT_SETTINGS.restIsolationSec),
+    restCarrySec: positiveOr(input.settings?.restCarrySec, DEFAULT_SETTINGS.restCarrySec),
+  };
+  const barKg = positiveOr(input.settings?.barKg, DEFAULT_SETTINGS.barKg!);
+  const plates = Array.isArray(input.settings?.plates) ? input.settings.plates! : DEFAULT_SETTINGS.plates!;
+  const recency = input.recency ?? {};
+  return (c) => {
+    const recent = recency[c.muscleGroup];
+    return {
+      candidate: c,
+      ...prescribeRow(c, light, barKg, plates),
+      restSec: Math.max(0, restSecondsFor(null, { defaultRestSec: finite(c.defaultRestSec) ? c.defaultRestSec : 0, kind: c.kind, isCompound: c.isCompound }, restDefaults)),
+      daysSince: finite(recent) ? recent : null,
+    };
+  };
+}
+
+/**
+ * The owner's own list as a plan: exactly these exercises, in this order, each prescribed as the
+ * generator would prescribe it. Nothing is chosen, capped, reordered or left out: a barbell lift on
+ * a light day is theirs to pick. An id with no candidate (an exercise since deleted) is skipped.
+ */
+export function ownQuickPlan(input: QuickInput, ids: readonly string[], effort: 'light' | 'normal'): QuickPlan {
+  const byId = new Map((input.candidates ?? []).map((c) => [c.id, c]));
+  const rowFor = rowMaker(input, effort === 'light');
+  const rows = [...new Set(ids)].flatMap((id) => (byId.has(id) ? [rowFor(byId.get(id)!)] : []));
+  return {
+    rows,
+    estimateMin: estimateMinutes(rows, paceOf(input.pace)),
+    shortfall: 0,
+    unmet: [],
+    relaxed: false,
+    focus: [...new Set(rows.map((r) => r.candidate.muscleGroup))],
+    seed: 0,
+  };
 }
 
 /**
@@ -304,13 +368,6 @@ export function generateQuickSession(input: QuickInput, options: QuickOptions, s
   const light = options.effort === 'light';
   const pace = paceOf(input.pace);
 
-  const restDefaults: RestDefaults = {
-    restCompoundSec: positiveOr(input.settings?.restCompoundSec, DEFAULT_SETTINGS.restCompoundSec),
-    restIsolationSec: positiveOr(input.settings?.restIsolationSec, DEFAULT_SETTINGS.restIsolationSec),
-    restCarrySec: positiveOr(input.settings?.restCarrySec, DEFAULT_SETTINGS.restCarrySec),
-  };
-  const barKg = positiveOr(input.settings?.barKg, DEFAULT_SETTINGS.barKg!);
-  const plates = Array.isArray(input.settings?.plates) ? input.settings.plates! : DEFAULT_SETTINGS.plates!;
   const recency = input.recency ?? {};
   const weeklySets = input.weeklySets ?? {};
 
@@ -319,17 +376,8 @@ export function generateQuickSession(input: QuickInput, options: QuickOptions, s
   const ceiling = Math.max(TIME_CEILING_MIN, minutesTarget);
 
   const pool = eligiblePool(input.candidates ?? [], options, light);
-  const rowOf = new Map<string, QuickRow>();
-  for (const c of pool) {
-    const rx = prescribeRow(c, light, barKg, plates);
-    const recent = recency[c.muscleGroup];
-    rowOf.set(c.id, {
-      candidate: c,
-      ...rx,
-      restSec: Math.max(0, restSecondsFor(null, { defaultRestSec: finite(c.defaultRestSec) ? c.defaultRestSec : 0, kind: c.kind, isCompound: c.isCompound }, restDefaults)),
-      daysSince: finite(recent) ? recent : null,
-    });
-  }
+  const rowFor = rowMaker(input, light);
+  const rowOf = new Map<string, QuickRow>(pool.map((c) => [c.id, rowFor(c)]));
 
   const byGroup = new Map<MuscleGroup, Candidate[]>();
   for (const c of pool) {

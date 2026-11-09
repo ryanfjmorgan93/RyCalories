@@ -50,15 +50,17 @@ function byPlace(a: { routineOrder: number; rx: RoutineExercise }, b: { routineO
  */
 export function routineBase(rows: { rx: RoutineExercise; routineOrder: number }[]): Base | undefined {
   if (rows.length === 0) return undefined;
+  // A carry's distance goes with the row its sets and load come from.
+  const walk = (rx: RoutineExercise) => (rx.distanceMinM !== undefined && rx.distanceMaxM !== undefined ? { distanceMinM: rx.distanceMinM, distanceMaxM: rx.distanceMaxM } : {});
   const normal = rows
     .filter((r) => r.rx.mode === 'normal' && Number.isFinite(r.rx.currentWeight) && r.rx.currentWeight >= 0)
     .sort((a, b) => a.rx.currentWeight - b.rx.currentWeight || byPlace(a, b));
   if (normal.length > 0) {
     const { rx } = normal[0];
-    return { sets: rx.targetSets, repMin: rx.repMin, repMax: rx.repMax, weightKg: rx.currentWeight, mode: 'normal' };
+    return { sets: rx.targetSets, repMin: rx.repMin, repMax: rx.repMax, weightKg: rx.currentWeight, mode: 'normal', ...walk(rx) };
   }
   const { rx } = [...rows].sort(byPlace)[0];
-  return { sets: rx.targetSets, repMin: rx.repMin, repMax: rx.repMax, weightKg: null, mode: 'calibrating' };
+  return { sets: rx.targetSets, repMin: rx.repMin, repMax: rx.repMax, weightKg: null, mode: 'calibrating', ...walk(rx) };
 }
 
 /**
