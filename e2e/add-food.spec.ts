@@ -270,10 +270,15 @@ test.describe('add food', () => {
       await expect(page.getByTestId(id)).toBeVisible();
       expect((await page.getByTestId(id).boundingBox())!.height).toBeGreaterThanOrEqual(44);
     }
-    // Beside one another, in a row.
-    const [a, b, c] = await Promise.all(['add-food-scan', 'add-food-photo', 'add-food-describe'].map((id) => page.getByTestId(id).boundingBox()));
-    expect(Math.abs(a!.y - b!.y)).toBeLessThan(2);
-    expect(Math.abs(b!.y - c!.y)).toBeLessThan(2);
+    // Beside one another, in a row. All three are read in one frame: the sheet is still sliding up
+    // when they first show, and three reads a few milliseconds apart differ by how far it moved
+    // between them (2.7 px on a slow runner, which failed build 0814f4b for no fault of the row).
+    const tops = await page.evaluate(
+      (ids) => ids.map((id) => document.querySelector(`[data-testid="${id}"]`)!.getBoundingClientRect().top),
+      ['add-food-scan', 'add-food-photo', 'add-food-describe'],
+    );
+    expect(Math.abs(tops[0]! - tops[1]!)).toBeLessThan(2);
+    expect(Math.abs(tops[1]! - tops[2]!)).toBeLessThan(2);
   });
 
   test('"Some" of an item is a count to step to: four eggs', async ({ page }) => {
