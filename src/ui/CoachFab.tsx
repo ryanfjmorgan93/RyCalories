@@ -63,7 +63,7 @@ export function CoachMark({ size = 42 }: { size?: number }) {
   );
 }
 
-/** The dumbbell of the Iron app icon (public/icons/icon.svg), scaled into the head. */
+/** The dumbbell the app's first icon was, scaled into the head. (The app icon is a plate now; the coach keeps its dumbbell.) */
 function Dumbbell() {
   return (
     <>

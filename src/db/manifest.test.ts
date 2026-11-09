@@ -70,3 +70,52 @@ describe('Health Connect', () => {
     expect(MANIFEST).toContain('<package android:name="com.google.android.apps.healthdata" />');
   });
 });
+
+/**
+ * The launcher icon (assets/app-icon/plate.svg, rendered by scripts/app-icon.mjs). What can be
+ * checked here is the wiring and the file sizes Android expects per density: a foreground of the
+ * wrong size is drawn too big or too small, and nothing else would say so. How it looks on a real
+ * launcher cannot be tested without a phone.
+ */
+describe('the launcher icon', () => {
+  const RES = '../../android/app/src/main/res';
+  const size = (path: string): [number, number] => {
+    const png = readFileSync(fileURLToPath(new URL(path, import.meta.url)));
+    expect(png.subarray(1, 4).toString('latin1'), path).toBe('PNG');
+    return [png.readUInt32BE(16), png.readUInt32BE(20)];
+  };
+
+  it('is an adaptive icon: the plate over the tile, round or not', () => {
+    for (const name of ['ic_launcher', 'ic_launcher_round']) {
+      const xml = read(`android/app/src/main/res/mipmap-anydpi-v26/${name}.xml`);
+      expect(xml).toContain('<background android:drawable="@drawable/ic_launcher_background"/>');
+      expect(xml).toContain('<foreground android:drawable="@mipmap/ic_launcher_foreground"/>');
+    }
+    // The tile is the gradient, not the template's teal grid; the splash screen shows the same plate.
+    const tile = read('android/app/src/main/res/drawable/ic_launcher_background.xml');
+    expect(tile).toContain('android:type="radial"');
+    expect(tile).not.toContain('#26A69A');
+    expect(read('android/app/src/main/res/values/styles.xml')).toContain('<item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>');
+  });
+
+  it.each([
+    ['mdpi', 1],
+    ['hdpi', 1.5],
+    ['xhdpi', 2],
+    ['xxhdpi', 3],
+    ['xxxhdpi', 4],
+  ] as const)('has every file at the size %s asks for', (density, k) => {
+    // A layer is 108 dp, a plain icon 48 dp.
+    expect(size(`${RES}/mipmap-${density}/ic_launcher_foreground.png`)).toEqual([108 * k, 108 * k]);
+    expect(size(`${RES}/mipmap-${density}/ic_launcher.png`)).toEqual([48 * k, 48 * k]);
+    expect(size(`${RES}/mipmap-${density}/ic_launcher_round.png`)).toEqual([48 * k, 48 * k]);
+  });
+
+  it('has the web icons the manifest in vite.config.ts names', () => {
+    expect(size('../../public/icons/icon-192.png')).toEqual([192, 192]);
+    expect(size('../../public/icons/icon-512.png')).toEqual([512, 512]);
+    expect(size('../../public/icons/icon-512-maskable.png')).toEqual([512, 512]);
+    // The browser-tab icon is drawn as an image, where HTML inside SVG does not render.
+    expect(read('public/icons/icon.svg')).not.toContain('foreignObject');
+  });
+});
