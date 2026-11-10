@@ -85,7 +85,7 @@ export function ExercisePicker({
           Catalogue not loaded
         </div>
       )}
-      <div className="mt-3 max-h-[55dvh] overflow-y-auto rounded-xl border border-line" data-testid="picker-list">
+      <div className="mt-3 max-h-[55dvh] overflow-y-auto border-y border-line" data-testid="picker-list">
         {visible.map((row) => (
           <button
             key={row.key}

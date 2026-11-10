@@ -30,8 +30,8 @@ function useStepsRefresh(): void {
 }
 
 /**
- * Today's steps as a frosted strip under the Calories and Protein tiles: the count against the
- * goal, with a bar. The count is the count; the bar stops at full but the number does not. Tapped,
+ * Today's steps as a row on a hairline under Home's Calories and Protein figures: the count
+ * against the goal, with a bar. The count is the count; the bar stops at full but the number does not. Tapped,
  * it opens the week.
  */
 export function StepsStrip({ settings }: { settings: Settings }) {
@@ -54,7 +54,7 @@ export function StepsStrip({ settings }: { settings: Settings }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="glass-over glass-card block w-full rounded-[1rem] border border-glass-border px-3 py-2.5 text-left"
+        className="mt-4 block min-h-11 w-full border-t border-line pt-3 text-left"
         data-testid="steps-strip"
         data-access={access}
       >
@@ -65,8 +65,8 @@ export function StepsStrip({ settings }: { settings: Settings }) {
           </span>
         </span>
         {counting && (
-          <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-white/10" aria-hidden="true">
-            <span className="block h-full rounded-full bg-accent" style={{ width: `${Math.min(100, (week!.today! / goal) * 100)}%` }} />
+          <span className="mt-2 block h-0.5 bg-line" aria-hidden="true">
+            <span className="block h-full bg-accent" style={{ width: `${Math.min(100, (week!.today! / goal) * 100)}%` }} />
           </span>
         )}
       </button>

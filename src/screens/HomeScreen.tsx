@@ -130,36 +130,31 @@ export function HomeScreen() {
   });
 
   // Eaten against target, and a tap through to the day. The targets alone were only ever half the
-  // number worth knowing. The figures are as they are: over target reads as over. Drawn as frosted
-  // glass over the cover routine's render when there is one.
+  // number worth knowing. The figures are as they are: over target reads as over, and its bar turns.
   const todayTiles =
     settings && (kcal || protein !== null) ? (
-      <button type="button" onClick={() => nav('/food')} className="grid w-full grid-cols-2 gap-2 text-left" data-testid="today-food">
-        <span className="glass-over glass-card block rounded-[1rem] border border-glass-border px-3 py-3">
-          {kcal ? (
-            <Stat
-              label="Calories"
-              value={`${fmtNum(Math.round(eaten.kcal))} / ${fmtNum(kcal.kcal)}`}
-              sub={settings.goal ? (GOALS.find((g) => g.goal === settings.goal)?.label ?? 'goal') : kcal.nextStepOn ? `+${settings.calorieStep} in ${kcal.daysUntilNextStep} d` : 'daily target'}
-            />
-          ) : (
-            <Stat label="Calories" value={fmtNum(Math.round(eaten.kcal))} sub="no target set" />
-          )}
-        </span>
+      <button type="button" onClick={() => nav('/food')} className="grid w-full grid-cols-2 gap-5 pt-1 text-left" data-testid="today-food">
+        <TodayFigure
+          label="Calories"
+          value={fmtNum(Math.round(eaten.kcal))}
+          target={kcal ? fmtNum(kcal.kcal) : null}
+          ratio={kcal ? eaten.kcal / kcal.kcal : null}
+          sub={!kcal ? 'no target set' : settings.goal ? (GOALS.find((g) => g.goal === settings.goal)?.label ?? 'goal') : kcal.nextStepOn ? `+${settings.calorieStep} in ${kcal.daysUntilNextStep} d` : 'daily target'}
+        />
         {protein !== null && (
-          <span className="glass-over glass-card block rounded-[1rem] border border-glass-border px-3 py-3">
-            <Stat
-              label="Protein"
-              value={`${fmtNum(Math.round(eaten.protein))} / ${protein} g`}
-              sub={view?.legDay ? (view.legDayBasis === 'planned' ? 'lower-body planned' : 'lower-body day') : 'default'}
-            />
-          </span>
+          <TodayFigure
+            label="Protein"
+            value={fmtNum(Math.round(eaten.protein))}
+            target={`${protein} g`}
+            ratio={protein > 0 ? eaten.protein / protein : null}
+            sub={view?.legDay ? (view.legDayBasis === 'planned' ? 'lower-body planned' : 'lower-body day') : 'default'}
+          />
         )}
       </button>
     ) : null;
-  // Steps sit under the two tiles, on the same glass.
+  // The day's numbers sit open under the routine that leads: food, then steps on a hairline.
   const todayOverlay = settings ? (
-    <div className="space-y-2">
+    <div className="pb-1">
       {todayTiles}
       <StepsStrip settings={settings} />
     </div>
@@ -179,16 +174,17 @@ export function HomeScreen() {
 
         {review && <WeeklyReviewCard review={review} />}
 
-        {calendar && <StreakDots thisWeek={calendar.thisWeek} target={calendar.weeklyTarget} streak={calendar.streak} className="mt-3 px-1" />}
+        {calendar && <StreakDots thisWeek={calendar.thisWeek} target={calendar.weeklyTarget} streak={calendar.streak} className="mt-3" />}
 
         {game && <LevelHeader game={game} />}
 
-        <SectionTitle right={<Button size="sm" variant="ghost" className="-mb-2 text-accent" onClick={() => nav('/routines')}>Edit</Button>}>Routines</SectionTitle>
+        <SectionTitle right={<Button size="sm" variant="ghost" className="-my-2 -mr-3" onClick={() => nav('/routines')}>Edit</Button>}>Routines</SectionTitle>
         <div className="space-y-3" data-testid="routines-list">
           {(routines ?? []).map((item, i) => (
             <Fragment key={item.routine.id}>
-              <RoutineCard hero={i === 0} overlay={i === 0 ? todayOverlay : undefined} item={item} settings={settings} active={!!active} onStart={() => void start(item.routine)} />
-              {/* Today's hand sits under the routine that leads, so Start stays in reach above it. */}
+              <RoutineCard hero={i === 0} item={item} settings={settings} active={!!active} onStart={() => void start(item.routine)} />
+              {/* The day's numbers and today's hand sit under the routine that leads, so Start stays in reach above them. */}
+              {i === 0 && todayOverlay}
               {i === 0 && game && <TodaysHand game={game} />}
             </Fragment>
           ))}
@@ -197,7 +193,7 @@ export function HomeScreen() {
 
         {/* A short session needs no routine, so it is there with none. */}
         {!active && (
-          <Button size="lg" variant="outline" full className="mt-3" onClick={() => setQuickOpen(true)} data-testid="short-session">
+          <Button size="lg" variant="outline" full className="mt-4" onClick={() => setQuickOpen(true)} data-testid="short-session">
             Short session
           </Button>
         )}
@@ -211,7 +207,7 @@ export function HomeScreen() {
         <SupplementsCard today={todayKey} />
         {weighIn === true && <WeighInCard today={todayKey} last={readings ? lastWeekReading(readings, todayKey) : null} />}
 
-        <SectionTitle right={<Button size="sm" variant="ghost" className="-mb-2 text-accent" onClick={() => nav('/history')}>All</Button>}>Recent sessions</SectionTitle>
+        <SectionTitle right={<Button size="sm" variant="ghost" className="-my-2 -mr-3" onClick={() => nav('/history')}>All</Button>}>Recent sessions</SectionTitle>
         <Card>
           {(recent ?? []).map((s, i) => (
             <div key={s.id}>
@@ -412,13 +408,32 @@ function BodyweightQuickAdd() {
   );
 }
 
+/** One of the day's two food figures on Home: what was eaten, large, against its target, with a hairline bar. */
+function TodayFigure({ label, value, target, ratio, sub }: { label: string; value: string; target: string | null; ratio: number | null; sub: string }) {
+  return (
+    <span className="block min-w-0">
+      <span className="label block">{label}</span>
+      <span className="mt-1.5 block whitespace-nowrap">
+        <span className="fig text-[2rem]">{value}</span>
+        {target !== null && <span className="num text-sm text-muted"> / {target}</span>}
+      </span>
+      {ratio !== null && (
+        <span className="mt-2.5 block h-0.5 bg-line" aria-hidden="true">
+          <span className={`block h-full ${ratio > 1 ? 'bg-warn' : 'bg-accent'}`} style={{ width: `${Math.min(100, ratio * 100)}%` }} />
+        </span>
+      )}
+      <span className="mt-1.5 block text-xs text-muted">{sub}</span>
+    </span>
+  );
+}
+
 /** One line a day, chosen by date from a fixed list (src/domain/dailyQuote.ts). */
 function QuoteOfTheDay({ today }: { today: string }) {
   const q = quoteOfTheDay(today);
   return (
-    <figure className="px-1 pt-4" data-testid="quote-of-the-day">
+    <figure className="pt-4" data-testid="quote-of-the-day">
       <blockquote className="text-[17px] font-light leading-snug tracking-[-0.01em] text-fg">“{q.text}”</blockquote>
-      <figcaption className="label mt-2">{q.author}</figcaption>
+      <figcaption className="mt-1.5 text-xs text-muted">{q.author}</figcaption>
     </figure>
   );
 }

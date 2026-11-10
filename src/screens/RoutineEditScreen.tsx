@@ -252,7 +252,7 @@ function ExerciseItemCard({
               ))}
             </div>
           )}
-          {rx.cue && <div className="mt-2 text-[15px] font-semibold leading-snug text-accent">{rx.cue}</div>}
+          {rx.cue && <div className="mt-2 border-l border-accent/60 pl-3 text-[15px] leading-snug text-fg/85">{rx.cue}</div>}
         </button>
         <div className="flex flex-col items-center justify-center border-l border-line px-1">
           <IconButton label="Move up" disabled={!canUp} onClick={onUp}>
@@ -308,7 +308,7 @@ function RoutineSettingsSheet({ open, routine, onClose }: { open: boolean; routi
 }
 
 function FieldLabel({ children }: { children: string }) {
-  return <div className="mb-1 mt-3 px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">{children}</div>;
+  return <div className="mb-1 mt-3 px-1 label">{children}</div>;
 }
 
 function UpIcon() {

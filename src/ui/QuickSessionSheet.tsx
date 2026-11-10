@@ -198,7 +198,7 @@ function QuickSessionBody({ onClose }: { onClose: () => void }) {
         {!own && (
           <>
             <label className="mt-4 block">
-              <span className="block pb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Request</span>
+              <span className="block pb-2 label">Request</span>
               <TextInput value={draft.text} onChange={type} testId="quick-request" />
             </label>
 
@@ -341,7 +341,7 @@ function QuickSessionBody({ onClose }: { onClose: () => void }) {
 function Group({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="mt-4">
-      <div className="pb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-muted">{label}</div>
+      <div className="pb-2 label">{label}</div>
       <div className="flex flex-wrap gap-2">{children}</div>
     </div>
   );

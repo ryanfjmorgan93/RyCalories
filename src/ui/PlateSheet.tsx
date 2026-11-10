@@ -14,7 +14,7 @@ export function PlateSheet({ open, onClose, weight, plates }: { open: boolean; o
   return (
     <Sheet open={open} onClose={onClose} title="Plates">
       <div className="text-center">
-        <div className="num text-4xl font-extrabold">{fmtKg(weight)}</div>
+        <div className="fig text-[2.75rem]">{fmtKg(weight)}</div>
       </div>
       {load && diagram ? (
         <>

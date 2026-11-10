@@ -382,7 +382,7 @@ function ItemList({
               subtitle={grams !== null ? (item.portion.includes(fmtGrams(grams)) ? item.portion : fmtGrams(grams)) : item.portion}
               right={
                 <div className="text-right">
-                  <div className="num font-extrabold tabular-nums">
+                  <div className="num text-lg tabular-nums">
                     {approx ? `${ESTIMATE_MARK} ` : ''}
                     {fmtKcal(m.kcal)}
                   </div>
@@ -395,9 +395,9 @@ function ItemList({
       })}
       <Divider />
       <div className="flex items-center justify-between px-4 py-3">
-        <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Total</span>
+        <span className="label">Total</span>
         <div className="text-right">
-          <div className="num font-extrabold tabular-nums" data-testid="meal-total">
+          <div className="num text-lg tabular-nums" data-testid="meal-total">
             {items.some(isEstimate) ? `${ESTIMATE_MARK} ` : ''}
             {fmtKcal(macros.kcal)}
           </div>

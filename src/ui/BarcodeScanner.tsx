@@ -196,7 +196,7 @@ export function BarcodeScanner({
         {cameraError === 'denied' && <div className="px-1 text-sm text-muted">Camera not available.</div>}
 
         <div className="grid gap-2">
-          <div className="px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Or enter the barcode</div>
+          <div className="px-1 label">Or enter the barcode</div>
           <input
             data-testid="barcode-input"
             type="text"

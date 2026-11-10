@@ -60,7 +60,7 @@ export function SetTable({
 
   return (
     <div className="flex flex-col gap-1" role="group" aria-label={`${exerciseName} sets`}>
-      <div aria-hidden="true" className="grid items-center gap-1.5 px-1 pb-0.5 text-[11px] font-bold uppercase tracking-[0.1em] text-dim" style={{ gridTemplateColumns: cols }}>
+      <div aria-hidden="true" className="label grid items-center gap-1.5 border-b border-line px-1 pb-1.5 !text-dim" style={{ gridTemplateColumns: cols }}>
         <span className="text-center">Set</span>
         <span>Previous</span>
         {kind === 'timed' ? (
@@ -104,7 +104,7 @@ export function SetTable({
 
 function RowBadge({ children, tone }: { children: ReactNode; tone: 'done' | 'record' | 'next' | 'dim' }) {
   const color = tone === 'record' ? 'text-record' : tone === 'done' ? 'text-ok' : tone === 'next' ? 'text-accent' : 'text-dim';
-  return <span className={`num w-7 text-center text-base font-extrabold ${color}`}>{children}</span>;
+  return <span className={`num w-7 text-center text-base ${color}`}>{children}</span>;
 }
 
 function LoggedRowView({
@@ -126,14 +126,12 @@ function LoggedRowView({
       type="button"
       onClick={onClick}
       data-testid="logged-row"
-      className={`grid min-h-[46px] items-center gap-1.5 rounded-xl px-1 text-left active:bg-surface-2 ${
-        isRecord ? 'bg-record/10' : 'bg-ok/10'
-      }`}
+      className="grid min-h-[46px] items-center gap-1.5 border-b border-line px-1 text-left active:bg-surface-2"
       style={{ gridTemplateColumns: cols }}
     >
       <RowBadge tone={tone}>{row.badge}</RowBadge>
       <span className="flex min-w-0 items-center gap-1.5" style={VALUE_SPAN}>
-        <span className="num truncate text-lg font-bold">{fmtSetsLine([row.set], kind)}</span>
+        <span className="num truncate text-xl font-light">{fmtSetsLine([row.set], kind)}</span>
         {isRecord && (
           <span data-testid="pr-chip" aria-label="Record" className="shrink-0 text-record">
             <RecordMedal />
@@ -150,10 +148,10 @@ function LoggedRowView({
 
 function LaterRowView({ row, kind, cols }: { row: PendingRow; kind: Exercise['kind']; cols: string }) {
   return (
-    <div className="grid min-h-[46px] items-center gap-1.5 px-1 opacity-45" style={{ gridTemplateColumns: cols }}>
+    <div className="grid min-h-[46px] items-center gap-1.5 border-b border-line px-1 opacity-45" style={{ gridTemplateColumns: cols }}>
       <RowBadge tone="dim">{row.position + 1}</RowBadge>
       <span className="truncate px-1 text-sm text-dim">{row.previousText || '—'}</span>
-      <span className="num truncate text-center text-lg font-semibold text-dim" style={VALUE_SPAN}>
+      <span className="num truncate text-center text-xl font-light text-dim" style={VALUE_SPAN}>
         {ghostLabel(kind, row.ghostWeight, row.ghostReps, row.ghostDistanceM, row.ghostSeconds)}
       </span>
       <span className="h-11 w-11 justify-self-end" />
@@ -189,11 +187,11 @@ function LiveRowView({
     <div className="flex flex-col gap-1">
       <div
         key={shake}
-        className={`grid items-center gap-1.5 rounded-xl px-1 py-0.5 ${shake > 0 ? 'row-shake' : ''}`}
+        className={`grid items-center gap-1.5 px-1 py-1.5 ${shake > 0 ? 'row-shake' : ''}`}
         style={{ gridTemplateColumns: cols }}
         data-testid={`set-row-${n}`}
       >
-        <span className="num flex h-11 w-7 items-center justify-center text-base font-extrabold text-accent">{n}</span>
+        <span className="num flex h-11 w-7 items-center justify-center text-base font-medium text-accent">{n}</span>
         <button
           type="button"
           onClick={onCopyPrevious}
@@ -251,7 +249,7 @@ function LiveRowView({
           disabled={busy}
           data-testid="set-done"
           aria-label={`Log set ${n}`}
-          className="flex h-11 w-11 shrink-0 items-center justify-center justify-self-end rounded-xl bg-ok text-ok-fg active:brightness-90 disabled:opacity-40"
+          className="flex h-11 w-11 shrink-0 items-center justify-center justify-self-end rounded-full bg-fg text-bg active:brightness-90 disabled:opacity-40"
         >
           <CheckIcon size={22} />
         </button>
@@ -261,7 +259,7 @@ function LiveRowView({
           type="button"
           data-testid="plate-line"
           onClick={plateLine.onOpen}
-          className="ml-9 self-start break-words px-1 text-left text-xs font-semibold text-muted underline decoration-dotted"
+          className="ml-9 self-start break-words px-1 text-left text-xs text-muted underline decoration-dotted underline-offset-2"
         >
           {plateLine.label}
         </button>
@@ -331,7 +329,7 @@ function LiveInput({
       onKeyDown={(e) => {
         if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
       }}
-      className="num h-[46px] w-full min-w-0 rounded-control border border-line bg-surface-2 px-1 text-center text-lg font-extrabold text-fg outline-none focus:border-accent placeholder:text-dim"
+      className="fig h-[46px] w-full min-w-0 rounded-none border-0 border-b border-fg/45 bg-transparent px-1 text-center text-[1.75rem] text-fg outline-none focus:border-accent placeholder:text-dim"
     />
   );
 }

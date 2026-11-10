@@ -28,7 +28,8 @@ export function CalendarHeatmap({ grid, today }: { grid: CalendarDay[][]; today:
               const isFuture = day.date > today;
               const isToday = day.date === today;
               const count = day.sessions.length;
-              const fill = isFuture ? 'text-dim' : count === 0 ? 'bg-surface-2 text-muted' : count === 1 ? 'bg-accent/55 text-fg' : 'bg-accent text-accent-fg';
+              // A trained day is ringed like a badge, two sessions fill it; today is the cream disc.
+              const fill = isFuture ? 'text-dim' : count === 0 ? 'text-muted' : count === 1 ? 'border-[1.5px] border-accent text-fg' : 'bg-accent text-accent-fg';
               const label = isFuture ? `${day.date}, not yet` : count > 0 ? `${day.date}, trained, ${count} session${count === 1 ? '' : 's'}` : `${day.date}, none`;
               const d = dateKeyToDate(day.date);
               return (
@@ -39,7 +40,7 @@ export function CalendarHeatmap({ grid, today }: { grid: CalendarDay[][]; today:
                   aria-label={label}
                   disabled={isFuture || count === 0}
                   onClick={() => count > 0 && nav(`/history/${day.sessions[0].id}`)}
-                  className={`num h-9 rounded-md text-[11px] font-semibold ${fill} ${isToday ? 'ring-2 ring-fg' : ''} disabled:pointer-events-none`}
+                  className={`num h-9 w-9 justify-self-center rounded-full text-xs ${isToday && count < 2 ? 'bg-fg font-medium text-bg' : ''} ${fill} disabled:pointer-events-none`}
                 >
                   {d.getDate() === 1 ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(d) : d.getDate()}
                 </button>

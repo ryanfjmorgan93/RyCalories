@@ -1,29 +1,25 @@
 import type { HTMLAttributes, ReactNode } from 'react';
 
 /**
- * Fake glass: a tint (one of three tiers), a 1px luminous border and an inset top highlight
- * (`.glass-card` in src/index.css), no `backdrop-filter` — a Card scrolls with the page, and a
- * blur that scrolls repaints every frame on an Android WebView. Real blur is reserved for layers
- * fixed to the viewport (TopBar, BottomNav, the session dock, Sheet, Toast).
+ * A block of content. By default it is open: no box, straight on the stage (`.plate` in
+ * src/index.css), headed by a SectionTitle's rule and parted from a neighbour by a hairline.
+ * `framed` is for an object you pick up or act on (the lift in play, a notice, something the coach
+ * drafted): a solid panel with a hairline edge.
  */
-export function Card({
-  className = '',
-  tier = 2,
-  children,
-  ...rest
-}: HTMLAttributes<HTMLDivElement> & { children: ReactNode; tier?: 1 | 2 | 3 }) {
-  const tint = tier === 1 ? 'bg-glass-1' : tier === 3 ? 'bg-glass-3' : 'bg-glass-2';
+export function Card({ className = '', framed = false, children, ...rest }: HTMLAttributes<HTMLDivElement> & { children: ReactNode; framed?: boolean }) {
   return (
-    <div {...rest} className={`glass-card rounded-card border border-glass-border ${tint} ${className}`}>
+    <div {...rest} className={`${framed ? 'rounded-card border border-line bg-surface' : 'plate'} ${className}`}>
       {children}
     </div>
   );
 }
 
+/** A section's head: its name in the accent, a hairline running out to the edge, and what sits at the end of it. */
 export function SectionTitle({ children, right, className = '' }: { children: ReactNode; right?: ReactNode; className?: string }) {
   return (
-    <div className={`flex items-end justify-between px-1 pb-2 pt-5 ${className}`}>
-      <h2 className="label">{children}</h2>
+    <div className={`flex min-h-6 items-center gap-3 pb-2 pt-8 ${className}`}>
+      <h2 className="label shrink-0 !text-accent">{children}</h2>
+      <span aria-hidden="true" className="h-px min-w-4 flex-1 bg-line" />
       {right}
     </div>
   );
@@ -81,7 +77,7 @@ export function Divider() {
 }
 
 export function EmptyState({ children }: { children: ReactNode }) {
-  return <div className="rounded-2xl border border-dashed border-line px-4 py-8 text-center text-sm text-muted">{children}</div>;
+  return <div className="py-5 text-sm text-muted">{children}</div>;
 }
 
 export function Stat({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: ReactNode; tone?: 'ok' | 'warn' | 'danger' | 'accent' }) {
@@ -89,8 +85,8 @@ export function Stat({ label, value, sub, tone }: { label: string; value: ReactN
   return (
     <div className="min-w-0">
       <div className="label">{label}</div>
-      <div className={`num text-2xl font-extrabold leading-tight ${color}`}>{value}</div>
-      {sub && <div className="text-xs text-muted">{sub}</div>}
+      <div className={`fig mt-1 text-[1.75rem] ${color}`}>{value}</div>
+      {sub && <div className="mt-1 text-xs text-muted">{sub}</div>}
     </div>
   );
 }

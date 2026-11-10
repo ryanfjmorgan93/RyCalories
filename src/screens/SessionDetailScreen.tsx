@@ -191,7 +191,7 @@ function GroupCard({ group, session }: { group: SessionGroup; session: Session }
       <Card className="mt-3 overflow-hidden" data-testid={`detail-card-${exercise.name}`}>
         <button type="button" className="block w-full min-h-14 px-4 py-3 text-left active:bg-surface-2" onClick={() => nav(`/exercises/${exercise.id}`)}>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="text-lg font-extrabold leading-tight">{exercise.name}</span>
+            <span className="text-xl font-normal leading-tight tracking-[-0.01em]">{exercise.name}</span>
             {isExtra && <Chip size="sm">extra</Chip>}
           </div>
           {rx && (
@@ -300,7 +300,7 @@ function SessionExtras({ session }: { session: Session }) {
     <>
       {niggles.length > 0 && (
         <Card className="mt-3 p-4">
-          <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Niggles</div>
+          <div className="label">Niggles</div>
           <div className="mt-2 flex flex-wrap gap-2">
             {niggles.map((n, i) => (
               <Chip key={`${n.tag}-${i}`} size="sm" tone="danger">
@@ -322,7 +322,7 @@ function SessionExtras({ session }: { session: Session }) {
 
       {notes && (
         <Card className="mt-3 p-4">
-          <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Notes</div>
+          <div className="label">Notes</div>
           <div className="mt-1 whitespace-pre-wrap text-sm">{notes}</div>
         </Card>
       )}

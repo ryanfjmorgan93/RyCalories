@@ -133,7 +133,7 @@ export function FoodScreen() {
             type="button"
             onClick={() => setDate(today)}
             disabled={isToday}
-            className="min-w-0 flex-1 break-words py-2 text-center text-base font-bold disabled:opacity-100"
+            className="min-w-0 flex-1 break-words py-2 text-center text-lg disabled:opacity-100"
             data-testid="day-label"
           >
             {fmtDayKey(date, today, yesterday)}
@@ -362,7 +362,7 @@ function DaySummary({ date, today }: { date: string; today: string }) {
   return (
     <>
       {view?.legDay && (
-        <div className="pb-2 text-center text-xs font-bold uppercase tracking-[0.12em] text-muted">
+        <div className="label pb-3 text-center">
           {view.legDayBasis === 'planned' ? 'Leg day (planned)' : 'Leg day'}
         </div>
       )}
@@ -392,33 +392,25 @@ function DaySummary({ date, today }: { date: string; today: string }) {
         </HexPanel>
       )}
 
-      <Card className="p-4">
-        {/* What is left leads, as the two numbers the day is steered by. Over says over: a zero here
-            would be the tidy lie the bars are written not to tell. */}
-        {(view?.calories || (view && view.proteinTarget !== null)) && (
-          <div className="mb-4 flex gap-5">
+      <Card className="px-4 pb-2 pt-1">
+        {/* What is left leads, as the two numbers the day is steered by, each over its own bar. Over
+            says over: a zero here would be the tidy lie the bars are written not to tell. */}
+        <div className="grid grid-cols-2 gap-x-5 gap-y-5">
+          <div className="min-w-0">
             {view?.calories && <Left label="Calories" left={view.calories.kcal - eaten.kcal} text={fmtKcal} testId="remaining" />}
-            {view && view.proteinTarget !== null && <Left label="Protein" left={view.proteinTarget - eaten.protein} text={fmtGrams} testId="protein-left" />}
+            <TargetBar compact label="Calories" value={eaten.kcal} target={view?.calories?.kcal ?? null} unit="kcal" testId="calories-bar" />
           </div>
-        )}
-        <TargetBar label="Calories" value={eaten.kcal} target={view?.calories?.kcal ?? null} unit="kcal" testId="calories-bar" />
-        <div className="h-4" />
-        <TargetBar label="Protein" value={eaten.protein} target={view?.proteinTarget ?? null} unit="g" tone="ok" testId="protein-bar" />
-        <div className="h-4" />
-        {settings?.carbTarget !== undefined && (
-          <>
-            <TargetBar label="Carbs" value={eaten.carbs} target={settings.carbTarget} unit="g" testId="carbs-bar" />
-            <div className="h-4" />
-          </>
-        )}
-        {settings?.fatTarget !== undefined && (
-          <>
-            <TargetBar label="Fat" value={eaten.fat} target={settings.fatTarget} unit="g" testId="fat-bar" />
-            <div className="h-4" />
-          </>
-        )}
-        <MacroSplit m={eaten} />
-        <MacroLine m={eaten} className="mt-2 block text-xs text-muted" />
+          <div className="min-w-0">
+            {view && view.proteinTarget !== null && <Left label="Protein" left={view.proteinTarget - eaten.protein} text={fmtGrams} testId="protein-left" />}
+            <TargetBar compact label="Protein" value={eaten.protein} target={view?.proteinTarget ?? null} unit="g" testId="protein-bar" />
+          </div>
+          {settings?.carbTarget !== undefined && <TargetBar label="Carbs" value={eaten.carbs} target={settings.carbTarget} unit="g" testId="carbs-bar" />}
+          {settings?.fatTarget !== undefined && <TargetBar label="Fat" value={eaten.fat} target={settings.fatTarget} unit="g" testId="fat-bar" />}
+        </div>
+        <div className="mt-5">
+          <MacroSplit m={eaten} />
+          <MacroLine m={eaten} className="mt-2 block text-xs text-muted" />
+        </div>
       </Card>
     </>
   );
@@ -430,10 +422,10 @@ function Left({ label, left, text, testId }: { label: string; left: number; text
   // "351 kcal" as a big figure and its small unit; the words stay one string for a screen reader.
   const [figure, ...unit] = text(Math.abs(left)).split(' ');
   return (
-    <div className="min-w-0 flex-1">
+    <div className="mb-3 min-w-0">
       <div className="label">{label}</div>
-      <div className={`num mt-0.5 whitespace-nowrap ${over ? 'text-warn' : ''}`} data-testid={testId}>
-        <span className="text-4xl font-light leading-none">{figure}</span> <span className="text-sm text-muted">{[...unit, over ? 'over' : 'left'].join(' ')}</span>
+      <div className={`num mt-1.5 whitespace-nowrap ${over ? 'text-warn' : ''}`} data-testid={testId}>
+        <span className="fig text-[2.75rem]">{figure}</span> <span className="text-sm text-muted">{[...unit, over ? 'over' : 'left'].join(' ')}</span>
       </div>
     </div>
   );
@@ -460,12 +452,12 @@ function DayMeals({ date, isToday, onMenu }: { date: string; isToday: boolean; o
               <Row
                 onClick={() => nav(`/food/${m.meal.id}`)}
                 testId="meal-row"
-                title={m.meal.name}
+                title={<span className="text-xl font-normal tracking-[-0.01em]">{m.meal.name}</span>}
                 subtitle={<MealSubtitle m={m} />}
                 right={
-                  <div className="flex items-center gap-1">
+                  <div className="-mr-2 flex items-center gap-1">
                     <div className="text-right">
-                      <div className="num font-extrabold tabular-nums">
+                      <div className="num text-lg tabular-nums">
                         {m.items.some(isEstimate) ? `${ESTIMATE_MARK} ` : ''}
                         {fmtKcal(m.macros.kcal)}
                       </div>
@@ -481,7 +473,7 @@ function DayMeals({ date, isToday, onMenu }: { date: string; isToday: boolean; o
               {m.items.map((item) => (
                 <button key={item.id} type="button" onClick={() => setEditing(item)} className="flex min-h-11 w-full items-center gap-3 px-4 py-1.5 text-left active:bg-surface-2" data-testid="meal-food">
                   <span className="min-w-0 flex-1 truncate text-sm text-fg/85">{item.name}</span>
-                  <span className="num max-w-[40%] shrink-0 truncate rounded-full border border-accent/45 px-3 py-1 text-xs">{item.portion}</span>
+                  <span className="num max-w-[40%] shrink-0 truncate rounded-full border border-fg/20 px-3 py-1 text-xs">{item.portion}</span>
                   <span className="num w-[4.5rem] shrink-0 text-right text-sm text-muted">
                     {isEstimate(item) ? `${ESTIMATE_MARK} ` : ''}
                     {fmtKcal(sumItems([item]).kcal)}
@@ -567,7 +559,7 @@ function RepeatSheet({ open, date, onClose }: { open: boolean; date: string; onC
                 subtitle={m.items.map((it) => it.name).join(', ')}
                 right={
                   <div className="text-right">
-                    <div className="num font-extrabold tabular-nums">{fmtKcal(m.macros.kcal)}</div>
+                    <div className="num text-lg tabular-nums">{fmtKcal(m.macros.kcal)}</div>
                     <MacroLine m={m.macros} className="text-[11px] text-muted" />
                   </div>
                 }

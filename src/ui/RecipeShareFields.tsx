@@ -75,8 +75,8 @@ export function RecipeShareFields({
       )}
 
       <div className="flex items-baseline justify-between rounded-xl bg-surface-2 px-3 py-3" data-testid="share-kcal">
-        <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Your share</span>
-        <span className="num font-extrabold tabular-nums">
+        <span className="label">Your share</span>
+        <span className="num text-lg tabular-nums">
           {fmtKcal(macros.kcal)} <span className="text-muted">· {fmtNum(macros.protein)} g protein</span>
         </span>
       </div>

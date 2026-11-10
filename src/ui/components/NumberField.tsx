@@ -75,7 +75,7 @@ export function NumberField({
   const txt = size === 'lg' ? 'text-2xl' : 'text-xl';
   return (
     <div className={`min-w-0 ${className}`}>
-      {label && <div className="mb-1 px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">{label}</div>}
+      {label && <div className="mb-1 px-1 label">{label}</div>}
       <div className={`flex ${h} items-stretch overflow-hidden rounded-control border border-line bg-surface-2 ${disabled ? 'opacity-50' : ''}`}>
         <button
           type="button"
@@ -115,7 +115,7 @@ export function NumberField({
             onKeyDown={(e) => {
               if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
             }}
-            className={`num w-full min-w-0 bg-transparent text-center font-extrabold outline-none placeholder:text-dim ${txt} ${unit ? 'pr-7' : ''}`}
+            className={`num w-full min-w-0 bg-transparent text-center font-medium outline-none placeholder:text-dim ${txt} ${unit ? 'pr-7' : ''}`}
           />
           {unit && <span className="pointer-events-none absolute right-2 text-xs font-bold text-muted">{unit}</span>}
         </div>

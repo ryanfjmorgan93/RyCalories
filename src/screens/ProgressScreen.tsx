@@ -126,7 +126,7 @@ export function ProgressScreen() {
               <IconButton label="Previous week" onClick={() => setWeeksBack((n) => n + 1)} data-testid="week-prev">
                 <BackIcon />
               </IconButton>
-              <div className="min-w-0 flex-1 break-words text-center text-base font-bold" data-testid="week-label">
+              <div className="min-w-0 flex-1 break-words text-center text-lg" data-testid="week-label">
                 {fmtWeekOf(shownWeek, thisWeek)}
               </div>
               <IconButton label="Next week" disabled={weeksBack === 0} onClick={() => setWeeksBack((n) => Math.max(0, n - 1))} data-testid="week-next">
@@ -191,10 +191,10 @@ function BodyweightCard({
         unit="kg"
       />
       <div className="mt-3 flex items-baseline justify-between">
-        <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Per week</span>
+        <span className="label">Per week</span>
         {delta ? (
           <span
-            className={`num font-extrabold tabular-nums ${status === 'in' ? 'text-ok' : 'text-warn'}`}
+            className={`fig text-2xl ${status === 'in' ? 'text-ok' : 'text-warn'}`}
             data-testid="weekly-delta"
           >
             {delta.deltaKg > 0 ? '+' : ''}
@@ -232,8 +232,8 @@ function EatingCard({ trend }: { trend: Trend }) {
       )}
       <div className="h-4" />
       <div className="flex items-baseline justify-between border-t border-line pt-3">
-        <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Days logged</span>
-        <span className={`num font-extrabold tabular-nums ${meaningful ? '' : 'text-warn'}`} data-testid="days-logged">
+        <span className="label">Days logged</span>
+        <span className={`num text-lg tabular-nums ${meaningful ? '' : 'text-warn'}`} data-testid="days-logged">
           {trend.loggedDays} of {trend.days.length}
         </span>
       </div>
@@ -258,7 +258,7 @@ function MaintenanceCard({ trend, bodyweight, today }: { trend: Trend; bodyweigh
     <Card className="p-4" data-testid="maintenance-card">
       {gate === null ? (
         <>
-          <div className="num text-2xl font-extrabold tabular-nums" data-testid="maintenance-kcal">
+          <div className="fig text-[1.75rem]" data-testid="maintenance-kcal">
             {maintenanceFigureText(m)}
           </div>
           <div className="mt-1 text-xs text-muted num tabular-nums" data-testid="maintenance-basis">
@@ -281,8 +281,8 @@ function TrainingCard({ trend }: { trend: Trend }) {
   return (
     <Card className="p-4">
       <div className="flex items-baseline justify-between">
-        <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Sessions</span>
-        <span className="num text-2xl font-extrabold tabular-nums" data-testid="sessions">
+        <span className="label">Sessions</span>
+        <span className="fig text-[1.75rem]" data-testid="sessions">
           {trend.sessions}
         </span>
       </div>
@@ -319,7 +319,7 @@ function WeeklySetsCard({ weekStart, thisWeek, settings }: { weekStart: string; 
           <Row
             title={muscleLabel(r.muscleGroup)}
             right={
-              <span className="num font-extrabold tabular-nums">{r.target !== null ? `${r.sets} of ${r.target}` : `${r.sets}`}</span>
+              <span className="num text-lg tabular-nums">{r.target !== null ? `${r.sets} of ${r.target}` : `${r.sets}`}</span>
             }
           />
         </div>
@@ -391,8 +391,8 @@ function AverageRow({
 }) {
   return (
     <div className="flex items-baseline justify-between">
-      <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">{label}</span>
-      <span className="num text-2xl font-extrabold tabular-nums" data-testid={testId}>
+      <span className="label">{label}</span>
+      <span className="fig text-[1.75rem]" data-testid={testId}>
         {avg.value === null ? '—' : format(Math.round(avg.value))}
       </span>
     </div>

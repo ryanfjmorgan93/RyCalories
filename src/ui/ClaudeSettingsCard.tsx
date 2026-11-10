@@ -119,8 +119,8 @@ export function ClaudeSettingsCard() {
       <div className="space-y-3 px-4 py-4" data-testid="claude-spend">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">This month</div>
-            <div className="num text-2xl font-extrabold leading-tight" data-testid="claude-spend-amount">
+            <div className="label">This month</div>
+            <div className="fig text-[1.75rem]" data-testid="claude-spend-amount">
               {usd(spend.usd)}
             </div>
           </div>
@@ -149,7 +149,7 @@ export function ClaudeSettingsCard() {
 
       <Divider />
       <div className="py-1" data-testid="claude-notes">
-        <div className="px-4 pb-1 pt-3 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Coach notes</div>
+        <div className="px-4 pb-1 pt-3 label">Coach notes</div>
         {notes !== undefined && notes.length === 0 && (
           <div className="px-4 pb-3">
             <EmptyState>Nothing remembered yet.</EmptyState>

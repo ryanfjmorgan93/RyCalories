@@ -252,7 +252,7 @@ export function Sheet({
           <button type="button" aria-label="Close" onClick={onClose} className="flex w-full justify-center pt-2 pb-1">
             <span className="h-1.5 w-12 rounded-full bg-line" />
           </button>
-          {title && <div className="px-5 pb-2 pt-1 text-lg font-bold">{title}</div>}
+          {title && <div className="disp px-5 pb-2 pt-1 text-2xl">{title}</div>}
         </div>
         <div className="overflow-y-auto overscroll-contain px-5 pb-4" data-testid="sheet-body">
           {children}

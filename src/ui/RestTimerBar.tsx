@@ -94,8 +94,8 @@ export function RestTimerBar() {
               />
             </svg>
             <div className="min-w-0 flex-1">
-              <div className="break-words text-[11px] font-medium uppercase tracking-[0.12em] opacity-75">{label || 'Rest'}</div>
-              <div className="num text-4xl font-bold leading-none">{fmtDuration(remaining)}</div>
+              <div className="break-words text-xs font-medium leading-tight opacity-80">{label || 'Rest'}</div>
+              <div className="fig mt-0.5 text-4xl !font-normal">{fmtDuration(remaining)}</div>
             </div>
             <button
               type="button"

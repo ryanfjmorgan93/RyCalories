@@ -109,7 +109,7 @@ function finiteOrNull(n: number): number | null {
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
-      <div className="mb-1 px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">{label}</div>
+      <div className="mb-1 px-1 label">{label}</div>
       {children}
     </div>
   );
@@ -648,7 +648,7 @@ export function RecipeBuilderScreen() {
                               amountLabel(ing)
                             )
                           }
-                          right={rowMacros ? <span className="num font-extrabold tabular-nums">{fmtKcal(rowMacros.kcal)}</span> : <span className="text-muted">—</span>}
+                          right={rowMacros ? <span className="num text-lg tabular-nums">{fmtKcal(rowMacros.kcal)}</span> : <span className="text-muted">—</span>}
                         />
                       </div>
                     );
@@ -665,7 +665,7 @@ export function RecipeBuilderScreen() {
               {complete ? (
                 <div className="flex items-baseline justify-between gap-3 rounded-xl bg-surface-2 px-3 py-3">
                   <div className="flex items-baseline gap-2">
-                    <span className="num font-extrabold tabular-nums" data-testid="review-total-kcal">
+                    <span className="num text-lg tabular-nums" data-testid="review-total-kcal">
                       {fmtKcal(recipeDisplayTotals(ingredients).kcal)}
                     </span>
                     {ingredients.some((i) => i.amountEstimated) && (

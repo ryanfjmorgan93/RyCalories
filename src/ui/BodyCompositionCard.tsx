@@ -196,7 +196,7 @@ export function BodyCompositionCard({ onPhoto }: BodyCompositionCardProps) {
       {hidden}
       <div className="p-4">
         <div className="flex items-baseline justify-between">
-          <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Latest scan</span>
+          <span className="label">Latest scan</span>
           <span className="num text-sm font-semibold" data-testid="body-latest-date">
             {longDate(latest.date)}
           </span>
@@ -228,7 +228,7 @@ export function BodyCompositionCard({ onPhoto }: BodyCompositionCardProps) {
         {limbs.length > 0 && (
           <div className="mt-3 border-t border-line pt-3" data-testid="body-segments">
             <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)] gap-x-2 gap-y-1.5 text-sm">
-              <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">By limb</span>
+              <span className="label">By limb</span>
               <span className="text-right text-xs font-semibold text-muted">Lean</span>
               <span className="text-right text-xs font-semibold text-muted">Fat</span>
               {limbs.map(({ limb, label }) => (
@@ -271,7 +271,7 @@ function MeasureLine({
       <span className="text-sm text-muted" data-testid={`body-row-${m.key}`}>
         {m.label}
       </span>
-      <span className="num text-right text-xl font-extrabold tabular-nums" data-testid={`body-latest-${m.key}`}>
+      <span className="num text-right text-xl font-light tabular-nums" data-testid={`body-latest-${m.key}`}>
         {fmtNum(m.value(latest)!)}{' '}
         <span className="text-xs font-bold text-muted">{m.unit}</span>
       </span>
@@ -293,7 +293,7 @@ function MeasureLine({
 function TrendChart({ title, unit, testId, points, tone }: { title: string; unit: string; testId: string; points: ChartPoint[]; tone: 'accent' | 'info' }) {
   return (
     <div className="mt-4" data-testid={testId}>
-      <div className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">
+      <div className="mb-1 label">
         {title} ({unit})
       </div>
       <LineChart points={points} unit={unit} height={130} tone={tone} />

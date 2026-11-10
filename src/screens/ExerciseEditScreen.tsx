@@ -91,7 +91,7 @@ function defaultRest(compound: boolean, kind: ExerciseKind): number {
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="py-3">
-      <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">{label}</div>
+      <div className="mb-2 label">{label}</div>
       {children}
     </div>
   );

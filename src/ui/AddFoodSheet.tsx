@@ -241,7 +241,7 @@ export function AddFoodSheet({
         <div className="grid gap-4" data-testid="add-food-sheet">
           <div className="grid gap-2">
             <div className="flex items-baseline justify-between px-1">
-              <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Log to</span>
+              <span className="label">Log to</span>
               <span className="text-xs text-muted" data-testid="add-food-day">
                 {fmtDayKey(date, today, addDays(today, -1))}
               </span>
@@ -279,7 +279,7 @@ export function AddFoodSheet({
                 {results.length > 0 ? (
                   <>
                     {!deferredQ.trim() && (
-                      <div className="mb-2 px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Recent</div>
+                      <div className="mb-2 px-1 label">Recent</div>
                     )}
                     <Card>
                       {results.map((c, i) => (
@@ -601,7 +601,7 @@ function Preview({ choice, grams, text }: { choice: FoodChoice; grams: number; t
   return (
     <div className="num flex items-baseline justify-between rounded-xl bg-surface-2 px-3 py-3 text-sm" data-testid="amount-preview">
       <span className="text-muted">{text ?? fmtGrams(grams)}</span>
-      <span className="font-extrabold tabular-nums">
+      <span className="num text-lg tabular-nums">
         {text ? `${fmtGrams(grams)} · ` : ''}
         {fmtKcal(kcalFor(choice, grams))}
       </span>
@@ -637,7 +637,7 @@ function ShareOfPack({ choice, unit, onLog }: { choice: FoodChoice; unit: UnitOp
   return (
     <div className="grid gap-3" data-testid="some-panel">
       <label className="grid gap-2">
-        <span className="px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">How much of the {unit.noun}</span>
+        <span className="px-1 label">How much of the {unit.noun}</span>
         <input
           type="range"
           min={5}
@@ -686,7 +686,7 @@ function GramsPanel({ choice, start, onLog }: { choice: FoodChoice; start: numbe
   return (
     <div className="grid gap-3" data-testid="grams-panel">
       <div>
-        <div className="mb-1 px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Weight (g)</div>
+        <div className="mb-1 px-1 label">Weight (g)</div>
         <NumberInput value={grams} onChange={setGrams} mode="numeric" min={0} placeholder="100" testId="amount-grams-field" />
       </div>
       <Preview choice={choice} grams={g} />

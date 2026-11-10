@@ -10,12 +10,13 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode;
 }
 
-// Primary is a solid cream pill; the quiet ones are clear with an accent rim (docs/DESIGN.md §3).
+// Primary is a solid cream pill; the quiet ones are clear with a cream hairline rim, so the accent
+// stays for the game and whatever is live (docs/DESIGN.md §4).
 const variants: Record<Variant, string> = {
   primary: 'bg-fg text-bg font-semibold border border-fg active:brightness-90',
   ok: 'bg-ok text-ok-fg font-semibold active:brightness-90',
-  secondary: 'bg-glass-2 text-fg font-semibold border border-accent/45 active:bg-accent/10',
-  outline: 'bg-transparent text-fg font-semibold border border-accent/45 active:bg-accent/10',
+  secondary: 'bg-transparent text-fg font-semibold border border-fg/25 active:bg-fg/10',
+  outline: 'bg-transparent text-fg font-semibold border border-fg/25 active:bg-fg/10',
   ghost: 'bg-transparent text-muted font-semibold active:bg-surface-2',
   danger: 'bg-transparent text-danger font-semibold border border-danger/40 active:bg-danger/10',
 };
@@ -33,7 +34,7 @@ export function Button({ variant = 'secondary', size = 'md', full, className = '
     <button
       type="button"
       {...rest}
-      className={`inline-flex items-center justify-center gap-2 select-none whitespace-nowrap transition-[filter] disabled:opacity-40 disabled:pointer-events-none ${variants[variant]} ${sizes[size]} ${full ? 'w-full' : ''} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 select-none whitespace-nowrap transition-[filter,background-color] duration-150 disabled:opacity-40 disabled:pointer-events-none ${variants[variant]} ${sizes[size]} ${full ? 'w-full' : ''} ${className}`}
     >
       {children}
     </button>

@@ -180,7 +180,7 @@ function AdvancedSection({ settings }: { settings: Settings }) {
         onClick={toggle}
         aria-expanded={open}
         data-testid="advanced-toggle"
-        className="mt-5 flex min-h-14 w-full items-center justify-between gap-3 rounded-card border border-glass-border bg-glass-2 px-4 py-3 text-left active:bg-surface-2"
+        className="mt-8 flex min-h-14 w-full items-center justify-between gap-3 border-y border-line py-3 text-left active:bg-surface-2"
       >
         <span className="min-w-0">
           <span className="block font-semibold leading-tight">Advanced</span>
@@ -373,7 +373,7 @@ function TargetsCard({ settings }: { settings: Settings }) {
 
   return (
     <Card className="p-4" data-testid="targets-card">
-      <div className="mb-2 px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Goal</div>
+      <div className="mb-2 px-1 label">Goal</div>
       <div className="flex flex-wrap gap-2">
         {GOALS.map((g) => (
           <Chip key={g.goal} active={settings.goal === g.goal} onClick={() => void pick(g.goal)} testId={`goal-${g.goal}`}>
@@ -441,7 +441,7 @@ function AboutYouCard({ settings }: { settings: Settings }) {
       <Field label="Year of birth">
         <NumberInput value={year} onChange={setYear} mode="numeric" placeholder="none" testId="birth-year" onBlur={saveYear} />
       </Field>
-      <div className="mt-3 mb-1 px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Compare lifts with</div>
+      <div className="mt-3 mb-1 px-1 label">Compare lifts with</div>
       <Segmented
         value={settings.sex ?? ''}
         onChange={(sex) => void saveSettings({ sex: sex as 'male' | 'female' })}
@@ -460,7 +460,7 @@ const ABOUT_YOU_OWNED_KEYS: (keyof Settings)[] = ['birthYear'];
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block min-w-0">
-      <div className="mb-1 px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">{label}</div>
+      <div className="mb-1 px-1 label">{label}</div>
       {children}
     </label>
   );
@@ -532,7 +532,7 @@ function RestCard({ settings }: { settings: Settings }) {
         </Field>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-3">
-        <Button variant="outline" onClick={() => setApplyOpen(true)}>
+        <Button variant="outline" className="px-3 text-sm" onClick={() => setApplyOpen(true)}>
           Apply to every exercise
         </Button>
         <Button variant="primary" onClick={() => void save()}>
@@ -706,7 +706,7 @@ function ProgressionCard({ settings }: { settings: Settings }) {
         </Field>
       </div>
       <Divider />
-      <div className="mt-3 mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Weekly set targets</div>
+      <div className="mt-3 mb-1 label">Weekly set targets</div>
       <div className="grid grid-cols-2 gap-x-3 gap-y-3">
         {MUSCLE_GROUPS.filter((g) => g !== 'full body' && g !== 'other').map((g) => (
           <Field key={g} label={muscleLabel(g)}>

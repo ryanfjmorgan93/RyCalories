@@ -438,7 +438,7 @@ export function FoodItemSheet({
           )}
 
           <div>
-            <div className="mb-2 px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Nutrition {per}</div>
+            <div className="mb-2 px-1 label">Nutrition {per}</div>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Calories">
                 <NumberInput value={d.kcal} onChange={(v) => setNutrition('kcal', v)} mode="numeric" min={0} placeholder="0" testId="food-kcal" />
@@ -468,8 +468,8 @@ export function FoodItemSheet({
           )}
 
           <div className="flex items-baseline justify-between rounded-xl bg-surface-2 px-3 py-3">
-            <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Eaten</span>
-            <span className="num font-extrabold tabular-nums" data-testid="food-eaten">
+            <span className="label">Eaten</span>
+            <span className="num text-lg tabular-nums" data-testid="food-eaten">
               {fmtKcal(eaten.kcal)}
               {d.basis === 'weighed' && d.grams ? <span className="text-muted"> · {fmtGrams(d.grams)}</span> : null}
             </span>
@@ -524,7 +524,7 @@ function UnitChips({
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
-      <div className="mb-1 px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">{label}</div>
+      <div className="mb-1 px-1 label">{label}</div>
       {children}
     </div>
   );

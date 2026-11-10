@@ -38,7 +38,7 @@ export const CompletionMoment = forwardRef<
         />
         <path className="check-draw" d="M29 45 l10 10 l20 -22" fill="none" stroke="var(--c-done)" strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
-      <div className="cond text-3xl font-extrabold leading-none">Done</div>
+      <div className="disp text-3xl">Done</div>
       {doneLine && <div className="num text-base text-muted">{doneLine}</div>}
       {verdictLine && (
         <div

@@ -269,7 +269,7 @@ export function SummaryScreen() {
       <TopBar title="Summary" subtitle={summary.session.title} back={`/session/${summary.session.id}`} />
       <div className="px-4">
         <div className="pt-1">
-          <h1 className="break-words text-4xl font-extrabold leading-[1.15] tracking-tight">{summary.session.title}</h1>
+          <h1 className="disp break-words text-[2.5rem]">{summary.session.title}</h1>
           <div className="mt-1.5 flex items-center gap-2">
             <span className="text-sm text-muted">{fmtDate(summary.session.startedAt, { weekday: 'short', day: 'numeric', month: 'short' })}</span>
             {summary.session.deload && (
@@ -283,30 +283,30 @@ export function SummaryScreen() {
         {/* data-settled marks the end of the count-up, so a screenshot or test can wait for the final figures;
             data-game says the badges have been worked out, so "no new badge" can be told from "not yet". */}
         <div
-          className="mt-5 grid grid-cols-3 border-y border-line"
+          className="mt-4 grid grid-cols-3 gap-3 border-t border-line"
           data-testid="summary-hero"
           data-settled={revealT >= 1 ? 'true' : 'false'}
           data-game={game === undefined ? 'loading' : 'ready'}
         >
           <HeroStat testId="summary-time" value={fmtDuration(summary.durationSec * revealT)} label="Time" />
-          <HeroStat testId="summary-sets" value={String(Math.round(summary.workingSetsDone * revealT))} label="Sets" bordered />
-          <HeroStat testId="summary-kg" value={fmtNum(Math.round(volumeKg * revealT))} label="kg lifted" bordered />
+          <HeroStat testId="summary-sets" value={String(Math.round(summary.workingSetsDone * revealT))} label="Sets" />
+          <HeroStat testId="summary-kg" value={fmtNum(Math.round(volumeKg * revealT))} label="kg lifted" />
         </div>
 
         {/* What the coach makes of the session: nothing at all unless it has something to say. */}
         {sessionFacts && <CoachLine moment="session" facts={sessionFacts} className="mt-4" />}
 
         {heroRecords.length > 0 && (
-          <div className="mt-5 flex flex-col gap-2">
-            <h2 className="px-1 text-lg font-bold">Records</h2>
+          <div className="flex flex-col gap-2">
+            <SectionTitle className="!pb-0">Records</SectionTitle>
             {heroRecords.map(({ key, name, records }) => (
-              <div key={key} data-testid="summary-record" className="flex items-start gap-3 rounded-xl border border-record/35 bg-record/10 px-3.5 py-3">
+              <div key={key} data-testid="summary-record" className="level-up flex items-start gap-3 border border-accent/60 px-3.5 py-3">
                 <RecordIcon />
                 <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-                  <span className="break-words font-semibold">{name}</span>
+                  <span className="break-words text-lg leading-tight">{name}</span>
                   <div className="flex flex-wrap gap-x-3 gap-y-1">
                     {records.map((r, i) => (
-                      <span key={i} className="num shrink-0 text-sm font-bold text-record">
+                      <span key={i} className="num shrink-0 text-sm text-record">
                         {recordChipLabel(r)}
                       </span>
                     ))}
@@ -318,15 +318,19 @@ export function SummaryScreen() {
         )}
 
         {levelUps.length > 0 && (
-          <div className="mt-5 flex flex-col gap-2">
-            <div className="flex items-baseline justify-between gap-3 px-1">
-              <h2 className="text-lg font-bold">Level ups</h2>
-              {game && game.total.to > game.total.from && (
-                <span className="num text-sm text-muted" data-testid="summary-total-level">
-                  Total level {game.total.from} → {game.total.to}
-                </span>
-              )}
-            </div>
+          <div className="flex flex-col gap-2">
+            <SectionTitle
+              className="!pb-0"
+              right={
+                game && game.total.to > game.total.from ? (
+                  <span className="num text-xs text-muted" data-testid="summary-total-level">
+                    Total level {game.total.from} → {game.total.to}
+                  </span>
+                ) : undefined
+              }
+            >
+              Level ups
+            </SectionTitle>
             {levelUps.map(([id, { name, up }]) => (
               <LevelUpPanel key={id} level={up.to} detail={`${name} · Level ${up.from} → Level ${up.to}`} testId="summary-level-up" />
             ))}
@@ -334,12 +338,12 @@ export function SummaryScreen() {
         )}
 
         {game && game.badges.length > 0 && (
-          <div className="mt-5 flex flex-col gap-2">
-            <h2 className="px-1 text-lg font-bold">New badges</h2>
+          <div className="flex flex-col gap-2">
+            <SectionTitle className="!pb-0">New badges</SectionTitle>
             {game.badges.map((badge) => (
-              <div key={badge} data-testid="summary-badge" className="flex items-center gap-3 rounded-xl border border-record/35 bg-record/10 px-3.5 py-3">
+              <div key={badge} data-testid="summary-badge" className="level-up flex items-center gap-3 border border-accent/60 px-3.5 py-3">
                 <RecordIcon />
-                <span className="min-w-0 break-words font-semibold">{badge}</span>
+                <span className="min-w-0 break-words text-lg leading-tight">{badge}</span>
               </div>
             ))}
           </div>
@@ -423,10 +427,10 @@ export function SummaryScreen() {
   );
 }
 
-function HeroStat({ value, label, bordered, testId }: { value: string; label: string; bordered?: boolean; testId?: string }) {
+function HeroStat({ value, label, testId }: { value: string; label: string; testId?: string }) {
   return (
-    <div className={`flex flex-col gap-0.5 py-4 ${bordered ? 'border-l border-line pl-3.5' : ''}`}>
-      <span className="num text-4xl font-extrabold leading-none" data-testid={testId}>
+    <div className="flex min-w-0 flex-col gap-1.5 py-4">
+      <span className="fig text-[2.5rem]" data-testid={testId}>
         {value}
       </span>
       <span className="text-sm text-muted">{label}</span>
@@ -473,7 +477,7 @@ function DecisionCard({
     <Card className="p-4" data-testid={`decision-${item.exercise.name}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="break-words text-lg font-extrabold">{item.exercise.name}</div>
+          <div className="break-words text-xl font-normal leading-tight tracking-[-0.01em]">{item.exercise.name}</div>
           <div className={`num mt-0.5 text-base font-semibold ${tone}`} data-testid="decision-line">
             {decisionLine(d, kind)}
           </div>

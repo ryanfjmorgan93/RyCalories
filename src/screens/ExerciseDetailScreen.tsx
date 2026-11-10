@@ -284,7 +284,7 @@ function RoutineCard({ usage, kind, onLockIn, onUnlock }: { usage: RoutineUsage;
   return (
     <Card className="mb-3 overflow-hidden">
       <div className="px-4 pt-4">
-        <div className="text-lg font-extrabold leading-tight">{routine.name}</div>
+        <div className="text-xl font-normal leading-tight tracking-[-0.01em]">{routine.name}</div>
         <div className="mt-0.5 text-sm text-muted">{targetLine(rx, kind)}</div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {calibrating && (

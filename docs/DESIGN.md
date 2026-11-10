@@ -6,18 +6,30 @@ level-up, then chose the typeface themselves. It replaced look A (a black stage,
 Sans) of October 2026. The accent is still **theirs to pick** on a colour wheel, brass by default.
 Dark only. One typeface: Space Grotesk.
 
+The first build of it recoloured the old boxed layout. The whole app was then recomposed to the
+mock-ups the owner had approved (November 2026, asked for as a redesign of the whole UI): the
+open ledger described in §1 and §4. The rules there are the system; a new screen follows them.
+
 Every value below lives in `src/index.css` as a custom property on `:root`, re-exported through
 `@theme inline` where a Tailwind utility is useful. Retune a value there and every screen follows.
 The file is the source of truth; the tables are a map of what exists and why.
 
 ## 1. The look in one paragraph
 
-A warm black stage and cream ink. Panels are quiet: a cream tint of 2–5.5 %, a 1px hairline, no
-shadows, no rings. One accent (brass `#C9A45C` unless the owner picks another, white included) for
-the game's marks, section rules, the rims of quiet buttons, the rest timer, the active tab's bar and
-anything "live". The primary pill is solid cream. Headlines are Space Grotesk
-light (300), sentence case, tight leading and tracking; numbers are
-tabular; small labels are 11px uppercase with open tracking. Exercise pictures are robot renders on black with the
+A warm black stage and cream ink, and the content sits straight on the stage: an **open ledger**,
+no boxes inside boxes. A section is headed by a small uppercase label in the accent with a hairline
+running out to the edge; rows are parted by hairlines; what belongs together is held by space.
+Only an **object** is framed, something you pick up or act on: the lift in play, the routine that
+leads Home, a card of today's hand, a field, a sheet, a plaque for a level or a record.
+
+One accent (brass `#C9A45C` unless the owner picks another, white included) for the game's marks,
+section labels, the rest timer, the dot over the current tab and anything live. It is not for
+decoration: quiet buttons have a cream hairline rim, a status line is cream or muted, and a record
+is the accent (one metal on screen). The primary pill is solid cream, and so is whatever is chosen
+(a chip, a segment, today on the calendar). Headlines and the figures that are the point of a
+screen are Space Grotesk light (300), tight and tabular; text is 400 or 500; 600 is the ceiling.
+Small labels are 11px uppercase with open tracking, for sections, columns and figures only.
+Nothing is written over a robot render: the picture is the picture, the name goes under it. Exercise pictures are robot renders on black with the
 accent glow rising from beneath (G2), or the glow alone where there is no render. Never a photo of
 a person outside the "How to" sheet.
 
@@ -35,36 +47,37 @@ a person outside the "How to" sheet.
 | `--c-muted` | `#a39d90` | Secondary text and labels |
 | `--c-dim` | `#8a8478` | Placeholders, inactive tabs |
 | `--c-accent` / `--c-accent-fg` | `#c9a45c` / `#000000` | The accent and the ink on it. Overridden at runtime by the colour wheel (§5) |
-| `--c-ok`, `--c-warn`, `--c-danger`, `--c-info`, `--c-record` | unchanged | State colours; `--c-done` = ok, `--c-rest` = info |
+| `--c-ok`, `--c-warn`, `--c-danger`, `--c-info` | unchanged | State colours; `--c-done` = ok, `--c-rest` = info |
+| `--c-record` / `--c-record-fg` | the accent and its ink | A record is the game's metal, so it follows the wheel |
 
 ### Glass
 
 | Token | Value | Used for |
 |---|---|---|
-| `--glass-1/2/3` | cream at 5.5 / 3.5 / 2 % | `Card` tiers: hero, default, nested |
-| `--glass-border` / `--glass-highlight` | cream at 10 % / 7 % | The hairline and the inset top edge |
-| `--glass-over` + `--blur-over` | cream at 3.5 %, 10px | `.glass-over`: a card that sits over a render, frosted so the robot shows through |
 | `--glass-fixed-bg` + `--blur-glass` | `rgba(10,9,7,.72)`, 14px | `.glass-fixed`: layers pinned to the viewport (TopBar, BottomNav, the session dock, Sheet, Toast) |
+| `--glass-1/2/3`, `--glass-over`, `--glass-sheen` | cream tints | Kept for the contrast test and the few old uses; nothing new should reach for them |
 
-Glass needs something behind it to read as glass. <Ambient/> keeps a faint accent glow from two
-corners (`--amb-glow`, mixed from the accent), every `.glass-card` adds a sheen across its top
-(`--glass-sheen`) and a lit top edge, and Home's Calories and Protein tiles sit as frosted
-`.glass-over` panels over the bottom of the cover routine's robot render.
-
-A `backdrop-filter` that scrolls repaints every frame on an Android WebView, so scrolling cards are
-tint only. The two exceptions are fixed layers (composited once) and `.glass-over`, used only where a
-card overlaps a render, a handful at most on screen.
+Glass is for one job only: a layer pinned to the viewport that content scrolls under, where the
+blur is what keeps the bar readable. Nothing that scrolls is glass. A `backdrop-filter` that
+scrolls repaints every frame on an Android WebView, and a tinted box on a page of tinted boxes is
+decoration. <Ambient/> still keeps a faint accent glow from two corners (`--amb-glow`).
 
 ### Shape and type
 
 | Token / class | Value | Used for |
 |---|---|---|
-| `--r-card` | 1rem | Cards, sheets |
+| `--r-card` | 0.875rem | Framed objects, sheets. A plaque (level up, record, badge) is square |
 | Buttons | `rounded-full` | Every `Button` is a pill, at least 44px tall |
 | `--font-sans` | `'Space Grotesk Variable'` | Everything. `@fontsource-variable/space-grotesk`, bundled: weights 300–700 in one file |
-| `.disp` | 300, sentence case, leading 1, tracking −.03em | Headlines: TopBar titles, the exercise and routine heroes |
-| `.num` | tabular, tracking −.02em | Every number that is the point |
-| `.label` | 11px, 500, uppercase, tracking .16em, `--c-muted` | Tile and section labels (`SectionTitle`, `Stat`) |
+| `.disp` | 300, sentence case, leading 1.15, tracking −.03em | Headlines: TopBar and sheet titles, the name of a lift or routine |
+| `.fig` | 300, leading 1, tracking −.035em, tabular | A figure that is the point of its screen: calories left, a bodyweight, a session's total, the weight being lifted. Size from a text utility |
+| `.num` | tabular, tracking −.02em | Every other number |
+| `.label` | 11px, 500, uppercase, tracking .14em, `--c-muted` | Column and figure labels; in the accent for a section (`SectionTitle`) |
+| Weights | 300 / 400 / 500 / 600 | `font-semibold` is mapped to 500 and `font-bold`, `font-extrabold` to 600 in `@theme`, so no screen can go heavier |
+| `.plate` | `margin-inline: -1rem`; a hairline between two in a row | The open `Card` (§4) |
+
+The parts the browser draws take the palette too: text selection and the caret are the accent,
+`:focus-visible` is a 2px accent outline, the scrollbar is thin and hairline-coloured.
 
 `src/boot/recovery.ts` keeps the system font stack and its own hard-coded colours on purpose: it
 must render when this stylesheet is what failed.
@@ -95,11 +108,27 @@ must render when this stylesheet is what failed.
 
 ## 4. Components
 
-- **`Card`**: glass tier (`tier` 1–3, default 2), border, inset highlight, no shadow.
+- **`Card`**: open by default (`.plate`): no fill, no border, no radius. It is pulled out by the
+  page's 1rem gutter, so the padding its content already carries (`p-4`, a `Row`'s own) lands on
+  the same left edge as the section label above it; two in a row are parted by a hairline. Every
+  page and sheet body therefore keeps a gutter of at least 1rem. `framed` is the object: a solid
+  `--c-surface` panel with a hairline edge and `--r-card` corners (the session's cards, where the
+  gutter is narrower, are all framed).
+- **`SectionTitle`**: the section's name as an accent `.label`, a hairline to the edge, and an
+  optional thing at the end of it (a count, Edit). More space above it than below.
+- **`EmptyState`**: one muted line where the content would be. No dashed box.
+- **`Stat`**: a `.label` over a `.fig`.
 - **`Button`**: pills. `primary` is solid cream (`--c-fg`) with stage-coloured ink; `secondary` and
-  `outline` are clear with an accent rim.
-- **`BottomNav`**: an edge-to-edge strip of fixed glass under a hairline; uppercase labels; a 3px
-  accent bar over the active tab. Still `--nav-h` tall, so every `pb-safe-nav*` utility holds.
+  `outline` are clear with a cream hairline rim; `ghost` is words only.
+- **`Chip`, `Segmented`**: pills; the chosen one is a cream fill.
+- **`TargetBar`, `MacroSplit`, Home's figures and Steps**: a 2px line on a hairline track, never a
+  fat rounded bar. Over the target the line turns to the warning colour and the number keeps
+  counting.
+- **`BottomNav`**: an edge-to-edge strip of fixed glass under a hairline; words only, the current
+  tab in cream with a dot of the accent over it. Still `--nav-h` tall, so every `pb-safe-nav*`
+  utility holds.
+- **The calendar** (`CalendarHeatmap`): plain numerals; a trained day is ringed in the accent like
+  a badge, two sessions fill it, today is the cream disc.
 - **`TopBar`**: fixed glass; the title in `.disp`.
 - **`RestTimerBar`**: the running timer is one solid accent block with ink-coloured text, ring and
   pill buttons (`bg-black/12`, which keeps ink on them at 4.5:1 for every wheel colour). "Rest over"
@@ -114,20 +143,26 @@ must render when this stylesheet is what failed.
 - **The exercise page** (`ExerciseDetailScreen`): with a robot render, the render leads, full
   width (3:2), and the line-drawing frames, steps and Video link wait behind "How to". Without one,
   the frames and steps show as before.
-- **The session** (`ExerciseCard`): the open card leads with an `ExerciseHero`, the exercise name
-  in `.disp` over the render, collapse and menu buttons on the image. Collapsed cards are plain glass
-  rows.
-- **Home** (`RoutineCard`): the first, most rested routine is the cover, an `ExerciseHero` of its
-  first exercise that has a render, with the rest label as a tag and Start as the accent pill. The
-  others are rows with a `RobotThumb`. Over the bottom of the cover sit frosted tiles
-  (`.glass-over`): Calories and Protein side by side, and under them the Steps strip, today's count
-  against the goal with an accent bar that stops at full while the number does not. The strip opens
+- **The session** (`ExerciseCard`): the lift in play is a framed object: its `ExerciseHero` with
+  only the collapse and menu buttons on it, then the name in `.disp`, what is prescribed, and the
+  level line. The cue is a line with a hairline of the accent down its left. The set table
+  (`SetTable`) is a ledger: logged and later rows on hairlines, the row being logged as two `.fig`
+  fields on underlines with a round cream tick. Collapsed and done cards are framed rows.
+- **Home** (`RoutineCard`): the first, most rested routine is the cover, a framed object: the
+  `ExerciseHero` of its first exercise that has a render with the rest label as a tag, then the
+  name, what it holds and Start as the cream pill. Under it, open on the stage, the day's two food
+  figures (eaten, large, against the target, each over its line) and Steps on a hairline, today's
+  count against the goal with a line that stops at full while the number does not. The strip opens
   a sheet with the week as bars against a dashed goal line (accent at or over the goal), the average
-  over recorded days, the total and the days the goal was hit, and the goal itself.
+  over recorded days, the total and the days the goal was hit, and the goal itself. The other
+  routines are ledger rows with a `RobotThumb`.
+- **Food**: the day leads with the two figures left, each over its own line and what was eaten
+  against the target; the meals are an open ledger, each with its foods beneath it.
+- **Summary**: three `.fig` figures on a hairline; records, level ups and new badges as plaques.
 - **Supplements** (`SupplementsCard`) and **Weigh-in** (`WeighInCard`) sit under the routines and
-  Short session, kept small: supplements are one row of pills that scrolls sideways, in time-of-day
-  order (a ticked pill fills with the accent and its ink; the dose sits after the name), and the
-  weigh-in is one row of last reading, field and Log.
+  Short session, kept small: supplements are a grid of tiles in time-of-day order (a ticked one
+  fills with the accent and its ink; the dose sits under the name), and the weigh-in is one row of
+  last reading, field and Log.
 - **Settings → Health Connect**: one switch, weight into the bodyweight log; a reading read in is
   marked "From Health Connect" on the bodyweight list and "Health Connect" under Home's latest.
 - **Settings → Problem reports**: how many are on the phone, the latest five, Share (Copy in a

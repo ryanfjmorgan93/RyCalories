@@ -94,7 +94,7 @@ function SessionDock({ session }: { session: { id: string; title: string; starte
       >
         <span aria-hidden="true" className="pulse-ring h-2.5 w-2.5 shrink-0 rounded-full bg-accent" />
         <span className="min-w-0 flex-1">
-          <span className="block text-[11px] font-bold uppercase tracking-[0.12em] text-muted" data-testid="live-banner-caption">
+          <span className="block label" data-testid="live-banner-caption">
             {stale ? startedHoursAgoLabel(session.startedAt, now) : 'Live'}
           </span>
           <span className="block truncate text-base font-extrabold leading-tight">{session.title}</span>

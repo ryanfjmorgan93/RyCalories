@@ -21,7 +21,7 @@ export function Chip({
   testId?: string;
 }) {
   const tones: Record<string, string> = {
-    neutral: active ? 'bg-fg text-bg border-fg' : 'bg-surface-2 text-muted border-line',
+    neutral: active ? 'bg-fg text-bg border-fg' : 'bg-transparent text-muted border-fg/20',
     accent: active ? 'bg-accent text-accent-fg border-accent' : 'bg-accent/10 text-accent border-accent/30',
     ok: active ? 'bg-ok text-ok-fg border-ok' : 'bg-ok/10 text-ok border-ok/30',
     warn: active ? 'bg-warn text-bg border-warn' : 'bg-warn/10 text-warn border-warn/30',
@@ -36,7 +36,7 @@ export function Chip({
       onClick={onClick}
       aria-pressed={onClick ? pressed : undefined}
       data-testid={testId}
-      className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border font-bold ${s} ${tones[tone]} ${className}`}
+      className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border font-medium ${s} ${tones[tone]} ${className}`}
     >
       {children}
     </Comp>
@@ -55,7 +55,7 @@ export function Segmented<T extends string>({
   className?: string;
 }) {
   return (
-    <div className={`grid h-12 w-full rounded-xl border border-line bg-surface-2 p-1 ${className}`} style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }} role="radiogroup">
+    <div className={`grid h-12 w-full rounded-full border border-fg/20 p-1 ${className}`} style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }} role="radiogroup">
       {options.map((o) => (
         <button
           key={o.value}
@@ -64,7 +64,7 @@ export function Segmented<T extends string>({
           aria-checked={o.value === value}
           data-testid={o.testId}
           onClick={() => onChange(o.value)}
-          className={`rounded-lg text-sm font-bold transition-colors ${o.value === value ? 'bg-fg text-bg' : 'text-muted'}`}
+          className={`rounded-full text-sm font-semibold transition-colors ${o.value === value ? 'bg-fg text-bg' : 'text-muted'}`}
         >
           {o.label}
         </button>

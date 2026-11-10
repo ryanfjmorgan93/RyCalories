@@ -69,7 +69,7 @@ function FoldRow({
       onClick={onClick}
       aria-current={isFocused ? 'true' : undefined}
       className={`flex min-h-11 items-center gap-2.5 rounded-control border px-3 py-2 text-left ${
-        isFocused ? 'border-accent bg-glass-2' : 'border-transparent'
+        isFocused ? 'border-accent bg-surface' : 'border-transparent'
       }`}
     >
       <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${dot}`} />

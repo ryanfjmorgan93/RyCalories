@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import type { HomeRoutine } from '@/db/homeQueries';
 import { planRow } from '@/domain/homeToday';
 import { plural } from '@/domain/format';
@@ -7,7 +7,7 @@ import { Button } from '@/ui/components/Button';
 import { Card } from '@/ui/components/Card';
 import { Chip } from '@/ui/components/Chip';
 import { ChevronIcon } from '@/ui/components/TopBar';
-import { heroDemo } from '@/ui/demoPicture';
+import { heroDemo, robotSrc } from '@/ui/demoPicture';
 import { ExerciseHero, RobotThumb } from '@/ui/ExerciseHero';
 import { useNextSessionPlan } from '@/ui/hooks';
 
@@ -27,7 +27,6 @@ export function RoutineCard({
   active,
   onStart,
   hero = false,
-  overlay,
 }: {
   item: HomeRoutine;
   settings: Settings | undefined;
@@ -35,8 +34,6 @@ export function RoutineCard({
   onStart: () => void;
   /** The first, most rested routine: drawn as a cover with its lead lift's render. */
   hero?: boolean;
-  /** Drawn over the bottom of the cover, as frosted glass (Home's food tiles). Cover only. */
-  overlay?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const { routine } = item;
@@ -48,7 +45,7 @@ export function RoutineCard({
   const startButton = (variant: 'primary' | 'outline') =>
     !active && (
       <Button
-        size="md"
+        size={variant === 'primary' ? 'md' : 'sm'}
         variant={variant}
         data-testid={`start-${routine.name}`}
         disabled={empty}
@@ -63,43 +60,30 @@ export function RoutineCard({
   const demo = heroDemo(item.demos);
 
   return (
-    <Card data-testid={`routine-card-${routine.name}`} className="overflow-hidden">
+    <Card framed={hero} data-testid={`routine-card-${routine.name}`} className={hero ? 'overflow-hidden border-accent/60' : ''}>
       {hero ? (
-        // The most rested routine leads Home as a cover: its lead lift's robot render (or the glow),
-        // the name in condensed capitals over it, and Start as the one accent pill.
-        <ExerciseHero demo={demo} className={`flex flex-col ${overlay ? 'min-h-80' : 'min-h-52'}`}>
-          <div className="flex flex-1 items-end">
-            <button
-              type="button"
-              aria-expanded={open}
-              onClick={() => setOpen((o) => !o)}
-              data-testid={`routine-toggle-${routine.name}`}
-              className="min-w-0 flex-1 self-stretch px-4 pb-4 pt-4 text-left"
-            >
-              <div className="flex h-full flex-col justify-between gap-10">
-                {item.label ? (
-                  <span className="self-start rounded-full bg-black/55 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.12em] text-fg" data-testid={`routine-rest-${routine.name}`}>
-                    {item.label}
-                  </span>
-                ) : (
-                  <span />
-                )}
-                <div className="min-w-0">
-                  <div className="disp break-words text-[2.5rem] [text-shadow:0_1px_12px_rgba(0,0,0,0.6)]">{routine.name}</div>
-                  {item.lastTop && (
-                    <div className="mt-1 break-words text-sm text-fg/85" data-testid={`routine-top-${routine.name}`}>
-                      Last: {item.lastTop}
-                    </div>
-                  )}
-                  <div className="mt-0.5 break-words text-xs text-fg/75">{detail}</div>
+        // The most rested routine leads Home as an object: its lead lift's robot render (or the glow)
+        // with nothing written over it, then the name, how rested it is, what it holds, and Start as the cream pill.
+        <>
+          <ExerciseHero demo={demo} className={robotSrc(demo) ? 'h-44' : 'h-16'} />
+          <div className="flex items-end gap-3 px-4 pb-4 pt-3">
+            <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} data-testid={`routine-toggle-${routine.name}`} className="min-w-0 flex-1 text-left">
+              <div className="disp break-words text-[2rem]">{routine.name}</div>
+              {item.label && (
+                <div className="mt-1 text-sm text-fg/85" data-testid={`routine-rest-${routine.name}`}>
+                  {item.label}
                 </div>
-              </div>
+              )}
+              {item.lastTop && (
+                <div className="mt-0.5 break-words text-sm text-muted" data-testid={`routine-top-${routine.name}`}>
+                  Last: {item.lastTop}
+                </div>
+              )}
+              <div className="mt-0.5 break-words text-xs text-muted">{detail}</div>
             </button>
-            {!active && <div className="flex items-end pb-4 pl-1 pr-4">{startButton('primary')}</div>}
+            {!active && startButton('primary')}
           </div>
-          {/* Glass over the render: the day's numbers, frosted, with the robot showing through. */}
-          {overlay && <div className="px-3 pb-3">{overlay}</div>}
-        </ExerciseHero>
+        </>
       ) : (
         <div className="flex items-stretch">
           <button
@@ -107,13 +91,13 @@ export function RoutineCard({
             aria-expanded={open}
             onClick={() => setOpen((o) => !o)}
             data-testid={`routine-toggle-${routine.name}`}
-            className="flex min-w-0 flex-1 items-center gap-3 rounded-card py-3 pl-3 pr-2 text-left active:bg-surface-2"
+            className="flex min-w-0 flex-1 items-center gap-3 py-3.5 pl-4 pr-2 text-left active:bg-surface-2"
           >
             <RobotThumb demo={demo} />
             <div className="min-w-0 flex-1">
-              <div className="break-words text-lg font-semibold leading-tight">{routine.name}</div>
+              <div className="break-words text-xl leading-tight tracking-[-0.01em]">{routine.name}</div>
               {item.label && (
-                <div className="mt-1 text-sm font-medium text-accent" data-testid={`routine-rest-${routine.name}`}>
+                <div className="mt-1 text-sm text-fg/80" data-testid={`routine-rest-${routine.name}`}>
                   {item.label}
                 </div>
               )}

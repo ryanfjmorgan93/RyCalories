@@ -12,6 +12,7 @@ export function TargetBar({
   target,
   unit,
   tone = 'accent',
+  compact,
   testId,
 }: {
   label: string;
@@ -19,6 +20,8 @@ export function TargetBar({
   target: number | null;
   unit: 'kcal' | 'g';
   tone?: 'accent' | 'ok';
+  /** Under a figure that already names it: the label is kept for a screen reader only. */
+  compact?: boolean;
   testId?: string;
 }) {
   const pct = target && target > 0 ? Math.min(100, (value / target) * 100) : 0;
@@ -27,15 +30,15 @@ export function TargetBar({
   const bar = tone === 'ok' ? 'bg-ok' : 'bg-accent';
   return (
     <div data-testid={testId}>
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">{label}</span>
-        <span className="num text-sm font-bold tabular-nums">
+      <div className="h-0.5 bg-line">
+        <div className={`h-full ${over ? 'bg-warn' : bar}`} style={{ width: `${pct}%` }} />
+      </div>
+      <div className="mt-2 flex items-baseline justify-between gap-2">
+        <span className={compact ? 'sr-only' : 'label'}>{label}</span>
+        <span className="num text-xs tabular-nums">
           {fmt(value)}
           {target !== null && <span className="text-muted"> / {fmt(target)}</span>}
         </span>
-      </div>
-      <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-surface-2">
-        <div className={`h-full rounded-full ${over ? 'bg-warn' : bar}`} style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
@@ -56,10 +59,10 @@ export function MacroSplit({ m }: { m: Macros }) {
   const c = m.carbs * 4;
   const f = m.fat * 9;
   const total = p + c + f;
-  if (total <= 0) return <div className="h-1.5 rounded-full bg-surface-2" />;
+  if (total <= 0) return <div className="h-0.5 bg-line" />;
   const w = (n: number) => `${(n / total) * 100}%`;
   return (
-    <div className="flex h-1.5 overflow-hidden rounded-full bg-surface-2">
+    <div className="flex h-0.5 gap-0.5">
       <div className="bg-ok" style={{ width: w(p) }} title="Protein" />
       <div className="bg-accent" style={{ width: w(c) }} title="Carbohydrate" />
       <div className="bg-warn" style={{ width: w(f) }} title="Fat" />

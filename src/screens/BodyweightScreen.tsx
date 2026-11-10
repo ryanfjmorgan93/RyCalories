@@ -117,7 +117,7 @@ export function BodyweightScreen() {
                 subtitle={`${w.count} ${w.count === 1 ? 'reading' : 'readings'}`}
                 right={
                   <div className="text-right">
-                    <div className="num text-xl font-extrabold leading-tight">{fmtNum(w.avg)} kg</div>
+                    <div className="fig text-2xl">{fmtNum(w.avg)} kg</div>
                     <div className={`num text-xs font-semibold ${w.delta === null ? 'text-dim' : w.delta > 0 ? 'text-ok' : w.delta < 0 ? 'text-accent' : 'text-muted'}`}>
                       {w.delta === null ? '—' : signed(w.delta, 1)}
                     </div>
@@ -141,7 +141,7 @@ export function BodyweightScreen() {
               <Row
                 onClick={() => setEditing(e)}
                 left={
-                  <div className="num w-20 shrink-0 text-xl font-extrabold leading-tight">
+                  <div className="fig w-20 shrink-0 text-2xl">
                     {fmtNum(e.kg)}
                     <span className="text-xs font-bold text-muted"> kg</span>
                   </div>
@@ -316,7 +316,7 @@ function EditSheetBody({ entry, onClose }: { entry: Bodyweight; onClose: () => v
       >
         <NumberField value={kg} onChange={setKg} step={0.1} min={1} max={500} label="Weight" unit="kg" testId="bw-edit-kg" />
         <div className="mt-3">
-          <div className="mb-1 px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Note</div>
+          <div className="mb-1 px-1 label">Note</div>
           <TextInput value={note} onChange={setNote} placeholder="Optional" />
         </div>
       </Sheet>

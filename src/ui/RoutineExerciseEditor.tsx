@@ -244,7 +244,7 @@ export function RoutineExerciseEditor({
 }
 
 function Label({ children }: { children: string }) {
-  return <div className="mb-1 px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">{children}</div>;
+  return <div className="mb-1 px-1 label">{children}</div>;
 }
 
 function clampInt(n: number, min: number, max: number): number {

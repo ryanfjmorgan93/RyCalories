@@ -5,7 +5,7 @@ import { addSupplement, removeSupplement, toggleSupplementTaken } from '@/db/sup
 import { SUPPLEMENT_DOSE_MAX, SUPPLEMENT_NAME_MAX, SUPPLEMENT_TIME_LABEL, SUPPLEMENT_TIMES, supplementDay } from '@/domain/supplements';
 import type { SupplementTime } from '@/domain/types';
 import { Button, IconButton } from './components/Button';
-import { Card } from './components/Card';
+import { Card, SectionTitle } from './components/Card';
 import { Segmented } from './components/Chip';
 import { Sheet } from './components/Sheet';
 import { toast } from './components/Toast';
@@ -24,21 +24,23 @@ export function SupplementsCard({ today }: { today: string }) {
 
   return (
     <>
-      <Card className="mt-3 overflow-hidden" data-testid="supplements-card">
-        <div className="flex items-center justify-between px-4 pt-2">
-          <span className="label">
-            Supplements{day.total > 0 && <span data-testid="supplements-count"> · {day.taken} of {day.total}</span>}
-          </span>
-          <Button size="sm" variant="ghost" className="-mr-2 text-accent" onClick={() => setEditing(true)} data-testid="supplements-edit">
-            {day.total > 0 ? 'Edit' : 'Add'}
-          </Button>
-        </div>
+      <Card className="overflow-hidden" data-testid="supplements-card">
+        <SectionTitle
+          className="px-4"
+          right={
+            <Button size="sm" variant="ghost" className="-my-2 -mr-3" onClick={() => setEditing(true)} data-testid="supplements-edit">
+              {day.total > 0 ? 'Edit' : 'Add'}
+            </Button>
+          }
+        >
+          Supplements{day.total > 0 && <span data-testid="supplements-count"> · {day.taken} of {day.total}</span>}
+        </SectionTitle>
         {day.total === 0 ? (
           <div className="px-4 pb-3 text-sm text-muted">Nothing on the list.</div>
         ) : (
           // Every one in view at once, three to a row, in time-of-day order: the name with the dose
           // under it, filled when taken. The time of day is on the list itself (Edit) and in each name for a reader.
-          <ul className="grid grid-cols-3 gap-1.5 px-3 pt-1 pb-3" data-testid="supplements-row">
+          <ul className="grid grid-cols-3 gap-1.5 px-4 pt-1 pb-3" data-testid="supplements-row">
             {day.items.map(({ supplement, taken }) => (
               <li key={supplement.id} className="min-w-0">
                 <button
@@ -49,7 +51,7 @@ export function SupplementsCard({ today }: { today: string }) {
                   onClick={() => void toggleSupplementTaken(supplement.id, today)}
                   data-testid={`supplement-${supplement.name}`}
                   className={`flex min-h-11 w-full flex-col justify-center rounded-xl border px-2.5 py-1.5 text-left text-sm transition-colors ${
-                    taken ? 'border-accent bg-accent text-accent-fg' : 'border-glass-border bg-white/[.04] active:bg-white/[.08]'
+                    taken ? 'border-accent bg-accent text-accent-fg' : 'border-fg/20 active:bg-fg/10'
                   }`}
                 >
                   <span className="flex min-w-0 items-center gap-1 font-medium">

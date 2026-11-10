@@ -106,7 +106,7 @@ export function BodyScanImportSheet({
 
         {skipped.length > 0 && (
           <div className="mt-4" data-testid="inbody-skipped">
-            <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Skipped · {skipped.length}</div>
+            <div className="label">Skipped · {skipped.length}</div>
             <ul className="mt-1 grid gap-1 text-sm">
               {skipped.slice(0, 50).map((s, i) => (
                 <li key={`${s.row}-${i}`} className="flex gap-2">
@@ -128,7 +128,7 @@ function ScanTable({ scans }: { scans: ParsedScan[] }) {
   const rows = [...scans].reverse();
   return (
     <div className="mt-3 overflow-hidden rounded-card border border-line">
-      <div className="grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-x-2 bg-surface-2 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">
+      <div className="grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-x-2 bg-surface-2 px-3 py-2 label">
         <span>Date</span>
         <span className="text-right">Weight</span>
         <span className="text-right">Muscle</span>

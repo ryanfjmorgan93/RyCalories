@@ -4,7 +4,7 @@
 @import '@fontsource-variable/space-grotesk/index.css';
 
 /* Palette as runtime variables. Dark only: the trophy-room look (docs/DESIGN.md), a warm black
-   stage, quiet panels on hairlines, cream ink and one accent, brass by default. */
+   stage that content sits on directly, hairline rules, cream ink and one accent, brass by default. */
 :root {
   --c-bg: #0a0907;
   --c-surface: #14120e;
@@ -50,7 +50,7 @@
   --blur-over: 10px;
 
   /* Radii */
-  --r-card: 1rem;
+  --r-card: 0.875rem;
   --r-control: 0.875rem;
   --r-pill: 1.25rem;
 
@@ -66,8 +66,9 @@
 
   /* State colours used outside the ok/warn/danger/info vocabulary. */
   --c-done: var(--c-ok);
-  --c-record: #f5c542;
-  --c-record-fg: #140a02;
+  /* A record is the game's metal, so it is the accent: one metal on screen, whatever the wheel says. */
+  --c-record: var(--c-accent);
+  --c-record-fg: var(--c-accent-fg);
   --c-rest: var(--c-info);
 
   /* One width, everywhere a screen centres itself on a phone. */
@@ -129,6 +130,11 @@
   --radius-card: var(--r-card);
   --radius-control: var(--r-control);
   --radius-pill: var(--r-pill);
+  /* Three weights carry the app: 300 for headlines and figures, 400/500 for text, 600 for the few
+     things that must shout. Tailwind's heavier names are mapped down so no screen can drift. */
+  --font-weight-semibold: 500;
+  --font-weight-bold: 600;
+  --font-weight-extrabold: 600;
 }
 
 @layer base {
@@ -138,6 +144,26 @@
     -webkit-text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior-y: none;
+    /* The parts the browser draws take the palette too: the caret, a thin scrollbar. */
+    caret-color: var(--c-accent);
+    scrollbar-width: thin;
+    scrollbar-color: var(--c-line) transparent;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--c-accent) 38%, transparent);
+    color: var(--c-fg);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--c-accent);
+    outline-offset: 2px;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
   }
 
   body {
@@ -242,13 +268,32 @@
     letter-spacing: -0.03em;
   }
 
-  /* The small uppercase label with open tracking that heads a tile, a column or a section. */
+  /* A figure that is the point of its screen (calories left, a bodyweight, a session's total):
+     light, tight and tabular, like a number engraved on a plaque. Size comes from a text utility. */
+  .fig {
+    font-weight: 300;
+    line-height: 1;
+    letter-spacing: -0.035em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The small uppercase label with open tracking that heads a column, a figure or a section. */
   .label {
     font-size: 11px;
     font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.16em;
+    letter-spacing: 0.14em;
     color: var(--c-muted);
+  }
+
+  /* An open block of content (Card): no box. It sits straight on the stage, pulled out by the
+     page's own 1rem gutter so the padding its content already carries lines up with the section
+     rule above it. Two in a row are parted by a hairline. */
+  .plate {
+    margin-inline: -1rem;
+  }
+  .plate + .plate {
+    border-top: 1px solid var(--c-line);
   }
 
   /* G2: the accent glow rising from under an exercise render and fading into black. Mixed from

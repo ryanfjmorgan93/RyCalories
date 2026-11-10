@@ -68,7 +68,7 @@ export function DoneCard({
 }) {
   return (
     <div
-      className={`overflow-hidden rounded-card border ${isCurrent ? 'border-accent' : 'border-glass-border'} ${dimmed ? 'opacity-60' : ''} glass-card bg-glass-2`}
+      className={`overflow-hidden rounded-card border bg-surface ${isCurrent ? 'border-accent' : 'border-line'} ${dimmed ? 'opacity-60' : ''}`}
       data-testid={testId}
       data-current={isCurrent ? 'true' : undefined}
     >
@@ -85,7 +85,7 @@ export function DoneCard({
             </svg>
           </span>
           <div className="min-w-0 flex-1">
-            <h2 className="break-words text-base font-bold leading-tight">{exerciseName}</h2>
+            <h2 className="break-words text-lg font-normal leading-tight tracking-[-0.01em]">{exerciseName}</h2>
             <div className="num mt-0.5 break-words text-sm text-muted">{doneLine}</div>
           </div>
           <span className="shrink-0 text-dim">

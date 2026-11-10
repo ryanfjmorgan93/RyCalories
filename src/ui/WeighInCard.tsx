@@ -37,7 +37,7 @@ export function WeighInCard({ today, last }: { today: string; last: Reading | nu
 
   // One compact row: Home lists it below the routines, and it is a reminder, not the headline.
   return (
-    <Card className="mt-3 px-4 py-3" data-testid="weigh-in-card">
+    <Card className="px-4 py-3" data-testid="weigh-in-card">
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <h2 className="label">Weigh-in</h2>

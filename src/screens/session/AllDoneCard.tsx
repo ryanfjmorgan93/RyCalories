@@ -10,8 +10,8 @@ import { Card } from '@/ui/components/Card';
 export function AllDoneCard({ doneSets, skippedCount, onFinish }: { doneSets: number; skippedCount: number; onFinish: () => void }) {
   const text = skippedCount > 0 ? `${doneSets} sets done · ${skippedCount} skipped` : `All ${doneSets} sets done`;
   return (
-    <Card className="flex flex-col gap-4 border-ok/40 bg-ok/10 p-5" data-testid="all-done">
-      <span className="text-3xl font-extrabold leading-none">{text}</span>
+    <Card framed className="flex flex-col gap-4 border-ok/40 p-5" data-testid="all-done">
+      <span className="disp text-3xl">{text}</span>
       <Button size="lg" variant="primary" onClick={onFinish} className="self-start" data-testid="all-done-finish">
         Finish workout
       </Button>

@@ -259,7 +259,7 @@ export function LiveSessionScreen() {
       />
       {isStaleSession(session.startedAt, now) && (
         <div className="px-3 pt-3">
-          <Card className="flex items-center gap-3 px-4 py-3" data-testid="stale-session">
+          <Card framed className="flex items-center gap-3 px-4 py-3" data-testid="stale-session">
             <div className="min-w-0 flex-1 text-base font-bold text-warn" data-testid="stale-session-age">
               {startedHoursAgoLabel(session.startedAt, now)}
             </div>
