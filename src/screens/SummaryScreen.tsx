@@ -162,6 +162,11 @@ export function SummaryScreen() {
     () => (summary?.items ?? []).filter((item) => item.records.length > 0).map((item) => ({ key: item.exercise.id, name: item.exercise.name, records: item.records })),
     [summary],
   );
+  // One row an exercise, even when the routine holds it twice.
+  const levelUps = useMemo(
+    () => [...new Map((summary?.items ?? []).flatMap((item) => (item.levelUp ? [[item.exercise.id, { name: item.exercise.name, up: item.levelUp }] as const] : []))).entries()],
+    [summary],
+  );
   const reducedMotion = usePrefersReducedMotion();
   const revealT = useCountProgress(!!summary);
   const confettiPieces = useMemo(() => buildConfetti(), []);
@@ -296,6 +301,20 @@ export function SummaryScreen() {
                     ))}
                   </div>
                 </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {levelUps.length > 0 && (
+          <div className="mt-5 flex flex-col gap-2">
+            <h2 className="px-1 text-lg font-bold">Level ups</h2>
+            {levelUps.map(([id, { name, up }]) => (
+              <div key={id} data-testid="summary-level-up" className="flex items-center justify-between gap-3 rounded-xl border border-accent/35 bg-accent/10 px-3.5 py-3">
+                <span className="min-w-0 break-words font-semibold">{name}</span>
+                <span className="num shrink-0 text-sm font-bold text-accent">
+                  Level {up.from} → Level {up.to}
+                </span>
               </div>
             ))}
           </div>

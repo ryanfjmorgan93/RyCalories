@@ -22,6 +22,7 @@ import {
 import { normaliseName } from '@/domain/exerciseMatch';
 import { uuid } from '@/domain/ids';
 import { applyOverride, isEmptyOverride, judgedRx, mergeOverride, pruneOverride } from '@/domain/planOverride';
+import { levelUp } from '@/domain/level';
 import { sessionRecords, type PersonalRecord } from '@/domain/records';
 import { countsForProgression, countsForRecords, countsForVolume, byIndex } from '@/domain/sets';
 import {
@@ -39,7 +40,7 @@ import {
   type SetType,
   type Settings,
 } from '@/domain/types';
-import { recordsForNewSets } from './recordsQueries';
+import { levelChange, recordsForNewSets } from './recordsQueries';
 
 // ---------------------------------------------------------------------------
 // Seeding
@@ -877,6 +878,8 @@ export interface SummaryItem {
   lockIn: { suggested: number } | null;
   /** Personal records set by this item's sets this session (computed for extras too). */
   records: PersonalRecord[];
+  /** The Levels (domain/level.ts) this session's sets took the exercise through, or null. */
+  levelUp: { from: number; to: number } | null;
 }
 
 export interface SessionSummary {
@@ -901,12 +904,16 @@ export async function buildSummary(sessionId: string, now = nowIso()): Promise<S
   const items: SummaryItem[] = [];
   const skipped = new Set(session.skippedRoutineExerciseIds ?? []);
   const allSets = (await db.setLogs.where('sessionId').equals(sessionId).toArray()).sort(byIndex);
+  const levelUpOf = async (exerciseId: string) => {
+    const c = await levelChange(exerciseId, sessionId);
+    return levelUp(c.from, c.to);
+  };
 
   if (routine) {
     for (const { rx, exercise } of await routineItems(routine.id)) {
       const sets = allSets.filter((s) => s.routineExerciseId === rx.id);
       if (sets.length === 0) {
-        items.push({ rx, exercise, sets, status: skipped.has(rx.id) ? 'skipped' : 'not_done', decision: null, suggestions: [], lockIn: null, records: [] });
+        items.push({ rx, exercise, sets, status: skipped.has(rx.id) ? 'skipped' : 'not_done', decision: null, suggestions: [], lockIn: null, records: [], levelUp: null });
         continue;
       }
       // Judged against today's plan: a lift cut to two sets today is not a miss for doing two.
@@ -914,7 +921,7 @@ export async function buildSummary(sessionId: string, now = nowIso()): Promise<S
       if (session.quick) {
         const decision = rx.mode === 'calibrating' ? decide(engineRx, sets) : null;
         const records = sessionRecords(await recordsForNewSets(exercise.id, sessionId, sets, { calibrating: rx.mode === 'calibrating' }));
-        items.push({ rx, exercise, sets, status: 'done', decision, suggestions: [], lockIn: null, records });
+        items.push({ rx, exercise, sets, status: 'done', decision, suggestions: [], lockIn: null, records, levelUp: await levelUpOf(exercise.id) });
         continue;
       }
       const decision = decide(engineRx, sets, { deload: !!session.deload });
@@ -932,7 +939,7 @@ export async function buildSummary(sessionId: string, now = nowIso()): Promise<S
           ? { suggested: suggestedLockInWeight(sets) as number }
           : null;
       const records = sessionRecords(await recordsForNewSets(exercise.id, sessionId, sets, { calibrating: rx.mode === 'calibrating' }));
-      items.push({ rx, exercise, sets, status: 'done', decision, suggestions, lockIn, records });
+      items.push({ rx, exercise, sets, status: 'done', decision, suggestions, lockIn, records, levelUp: await levelUpOf(exercise.id) });
     }
   }
 
@@ -942,7 +949,7 @@ export async function buildSummary(sessionId: string, now = nowIso()): Promise<S
     if (!exercise) continue;
     const sets = allSets.filter((s) => s.routineExerciseId === null && s.exerciseId === exerciseId);
     const records = sets.length > 0 ? sessionRecords(await recordsForNewSets(exerciseId, sessionId, sets)) : [];
-    items.push({ rx: null, exercise, sets, status: 'extra', decision: null, suggestions: [], lockIn: null, records });
+    items.push({ rx: null, exercise, sets, status: 'extra', decision: null, suggestions: [], lockIn: null, records, levelUp: sets.length > 0 ? await levelUpOf(exerciseId) : null });
   }
 
   const durationSec = session.durationSec ?? Math.max(0, Math.round((Date.parse(now) - Date.parse(session.startedAt)) / 1000));

@@ -145,6 +145,13 @@ The owner does not check on device. Correctness has to come from the code and th
   Junior et al. 2021 (1RM as % of bodyweight, per sex), then, above highly advanced, the average
   (median) and top 1% raw competition powerlifter of the owner's sex, age group and class (`liftStandards.ts`; Settings →
   About you: year of birth and sex). Body fat plays no part: meets record bodyweight only.
+- `src/domain/level.ts` is the Level under every exercise in a session (`ui/LevelLine.tsx`; asked
+  for in November 2026, "I wanna feel like this app is a game"): the owner's best set against the
+  best of their first three sessions, 5% a level, a set sized as weight × (1 + reps ÷ 30) so it
+  holds past 12 reps. Derived from the sets, never stored; a level-up is said at the set and on the
+  summary. It compares the owner only with themselves: no open table ranks a row, a raise or a
+  machine (one gym's stack is not another's), and Strength Level's numbers may not be used in an
+  app without a licence, so no rank against other people is shown beyond squat, bench and deadlift.
 - The app icon is `assets/app-icon/plate.svg` (an ember plate, the owner's pick, November 2026),
   rendered by hand with `scripts/app-icon.mjs` into the Android mipmaps and `public/icons/`, and
   committed. The foreground layer is also the splash screen's icon; the tile behind it is

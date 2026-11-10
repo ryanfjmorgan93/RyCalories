@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from './db';
-import { bestsForExercise, e1rmSeries, recentRecords, recordsForNewSets } from './recordsQueries';
-import { logBodyweight, logSet, resetToSeed, startSession } from './repo';
+import { bestsForExercise, e1rmSeries, levelChange, recentRecords, recordsForNewSets } from './recordsQueries';
+import { buildSummary, logBodyweight, logSet, resetToSeed, startSession } from './repo';
 import { SEED_EXERCISE_IDS, SEED_ROUTINE_IDS } from './seed';
 import { e1rm } from '@/domain/strength';
 import type { RoutineExercise } from '@/domain/types';
@@ -260,5 +260,113 @@ describe('e1rmSeries', () => {
     expect(series).toHaveLength(2);
     expect(series[0].t).toBeLessThan(series[1].t);
     expect(series[1].y).toBe(e1rm(105, 5));
+  });
+});
+
+describe('levelChange: an exercise\'s Level around a session', () => {
+  /** A session of RDL working sets ([kg, reps]) begun on a September day; ended unless `open`. */
+  async function rdlSession(day: number, sets: [number, number][], opts: { open?: boolean; quick?: 'light' | 'normal' } = {}) {
+    const s = await startSession(HINGE);
+    const rx = await rxFor(HINGE, RDL);
+    const at = `2026-09-${String(day).padStart(2, '0')}`;
+    await db.sessions.update(s.id, { startedAt: `${at}T18:00:00.000Z`, ...(opts.open ? {} : { endedAt: `${at}T19:00:00.000Z` }), ...(opts.quick ? { quick: opts.quick } : {}) });
+    const logs = [];
+    for (const [weight, reps] of sets) logs.push(await logSet({ sessionId: s.id, routineExerciseId: rx.id, exerciseId: RDL, type: 'working', weight, reps }));
+    return { id: s.id, logs };
+  }
+  const start = async () => {
+    for (const day of [1, 3, 5]) await rdlSession(day, [[100, 8]]);
+  };
+
+  it('reads the open session\'s sets, and judges a new set against the ones before it', async () => {
+    await start();
+    const live = await rdlSession(7, [[104, 8], [105, 8]], { open: true });
+    // 104 is 4% over the start of 100 × 8, 105 is 5%: Level 2.
+    const whole = await levelChange(RDL, live.id);
+    expect(whole.from).toMatchObject({ level: 1, gainPct: 0, startIn: 0 });
+    expect(whole.to).toMatchObject({ level: 2, gainPct: 5, best: { weight: 105, reps: 8 }, start: { weight: 100, reps: 8 } });
+    const first = await levelChange(RDL, live.id, [live.logs[0]!.id, live.logs[1]!.id]);
+    expect(first.from!.level).toBe(1);
+    const second = await levelChange(RDL, live.id, [live.logs[1]!.id]);
+    expect(second.from).toMatchObject({ level: 1, gainPct: 4 });
+    expect(second.to!.level).toBe(2);
+  });
+
+  it('reads a past session as it stood: a later, heavier one is not its history', async () => {
+    await start();
+    const fourth = await rdlSession(7, [[105, 8]]);
+    await rdlSession(9, [[130, 8]]);
+    const then = await levelChange(RDL, fourth.id);
+    expect(then.from!.level).toBe(1);
+    expect(then.to).toMatchObject({ level: 2, gainPct: 5 });
+  });
+
+  it('counts nothing from a light quick session, its own or an earlier one', async () => {
+    await start();
+    const light = await rdlSession(7, [[130, 8]], { quick: 'light' });
+    expect(await levelChange(RDL, light.id)).toMatchObject({ from: { level: 1 }, to: { level: 1, gainPct: 0 } });
+    const next = await rdlSession(9, [[100, 8]], { open: true });
+    expect((await levelChange(RDL, next.id)).to).toMatchObject({ level: 1, gainPct: 0 });
+  });
+
+  it('is still setting the start in the third session', async () => {
+    await rdlSession(1, [[100, 8]]);
+    await rdlSession(3, [[100, 8]]);
+    const third = await rdlSession(5, [[120, 8]], { open: true });
+    expect((await levelChange(RDL, third.id)).from).toMatchObject({ level: 1, startIn: 1 });
+    // The third session is part of the start, so its heavy set is the start, not a gain.
+    expect((await levelChange(RDL, third.id)).to).toMatchObject({ level: 1, gainPct: 0, startIn: 0, start: { weight: 120, reps: 8 } });
+  });
+
+  it('sizes a bodyweight lift with the weigh-in on or before the session\'s day, for both sides', async () => {
+    const rx = (await db.routineExercises.where('exerciseId').equals(BACK_EXTENSION).first())!;
+    const ids: string[] = [];
+    for (const [day, added] of [[1, 10], [3, 10], [5, 10], [7, 20], [9, 10]] as const) {
+      const s = await startSession(rx.routineId);
+      await db.sessions.update(s.id, { startedAt: `2026-09-0${day}T18:00:00.000Z`, endedAt: `2026-09-0${day}T19:00:00.000Z` });
+      await logSet({ sessionId: s.id, routineExerciseId: rx.id, exerciseId: BACK_EXTENSION, type: 'working', weight: added, reps: 10 });
+      ids.push(s.id);
+    }
+    // No weigh-in: a bodyweight lift has no size, so no level.
+    expect(await levelChange(BACK_EXTENSION, ids[3]!)).toEqual({ from: null, to: null });
+    await logBodyweight('2026-08-30', 80);
+    await logBodyweight('2026-09-08', 90);
+    // The fourth session, at 80 kg: 100 against 90 is 11.1% over. The 90 kg of the day after is not its weigh-in.
+    const fourth = await levelChange(BACK_EXTENSION, ids[3]!);
+    expect(fourth.from).toMatchObject({ level: 1, gainPct: 0 });
+    expect(fourth.to).toMatchObject({ level: 3, gainPct: 11 });
+    // The fifth, at 90 kg, reads the same sets as 110 against 100: 10% over, with nothing crossed by the change of weight.
+    const fifth = await levelChange(BACK_EXTENSION, ids[4]!);
+    expect(fifth.from).toMatchObject({ level: 3, gainPct: 10 });
+    expect(fifth.to).toMatchObject({ level: 3, gainPct: 10 });
+  });
+
+  it('holds at the best ever: a lighter session lowers nothing', async () => {
+    await start();
+    await rdlSession(7, [[105, 8]]);
+    const lighter = await rdlSession(9, [[90, 8]], { open: true });
+    expect(await levelChange(RDL, lighter.id)).toMatchObject({ from: { level: 2, gainPct: 5 }, to: { level: 2, gainPct: 5, best: { weight: 105, reps: 8 } } });
+  });
+
+  it('is on the summary for an exercise added to the session, too', async () => {
+    await start();
+    const s = await startSession(SEED_ROUTINE_IDS['Upper (Push)']);
+    await db.sessions.update(s.id, { startedAt: '2026-09-07T18:00:00.000Z', endedAt: '2026-09-07T19:00:00.000Z', extraExerciseIds: [RDL] });
+    await logSet({ sessionId: s.id, routineExerciseId: null, exerciseId: RDL, type: 'working', weight: 105, reps: 8 });
+    const extra = (await buildSummary(s.id)).items.find((i) => i.status === 'extra')!;
+    expect(extra.exercise.id).toBe(RDL);
+    expect(extra.levelUp).toEqual({ from: 1, to: 2 });
+  });
+
+  it('is on the summary of the session that crossed it, and on no other exercise', async () => {
+    await start();
+    const fourth = await rdlSession(7, [[111, 8]]);
+    const summary = await buildSummary(fourth.id);
+    const rdl = summary.items.find((i) => i.exercise.id === RDL)!;
+    expect(rdl.levelUp).toEqual({ from: 1, to: 3 });
+    expect(summary.items.filter((i) => i.exercise.id !== RDL).every((i) => i.levelUp === null)).toBe(true);
+    // The session before it crossed nothing.
+    const third = (await db.sessions.toArray()).find((x) => x.startedAt.startsWith('2026-09-05'))!;
+    expect((await buildSummary(third.id)).items.find((i) => i.exercise.id === RDL)!.levelUp).toBeNull();
   });
 });

@@ -4,6 +4,7 @@
  */
 import { db } from './db';
 import { isoToDateKey } from '@/domain/dates';
+import { levelFor, type Level } from '@/domain/level';
 import { bestsFor, newRecords, type Bests, type PersonalRecord, type RecordSession, type RecordSet } from '@/domain/records';
 import { sessionCountsForRecords, byIndex } from '@/domain/sets';
 import { bestE1rm } from '@/domain/strength';
@@ -95,6 +96,28 @@ export async function recordsForNewSets(
     soFar.push(toRecordSet(s));
   });
   return records;
+}
+
+/**
+ * An exercise's Level (domain/level.ts) around a session: `to` with the session's counted sets,
+ * `from` without `newSetIds` (without any of them when none are named). Only completed sessions
+ * that began before it are history, so a past session reads as it stood. One weigh-in serves both
+ * sides, so a change of bodyweight alone is never a level-up.
+ */
+export async function levelChange(
+  exerciseId: string,
+  sessionId: string,
+  newSetIds?: readonly string[],
+): Promise<{ from: Level | null; to: Level | null }> {
+  const [exercise, session] = await Promise.all([db.exercises.get(exerciseId), db.sessions.get(sessionId)]);
+  if (!exercise || !session) return { from: null, to: null };
+  const prior = await priorRecordSessions(exerciseId, sessionId, session.startedAt);
+  const own = sessionCountsForRecords(session) ? await db.setLogs.where('[sessionId+exerciseId]').equals([sessionId, exerciseId]).toArray() : [];
+  const bodyweightKg = exercise.kind === 'bodyweight_plus' ? await bodyweightKgFor(session) : undefined;
+  const withOwn = (sets: SetLog[]) =>
+    levelFor(exercise.kind, [...prior, { sessionId, startedAt: session.startedAt, sets: sets.map(toRecordSet) }], { bodyweightKg });
+  const skip = new Set(newSetIds ?? own.map((s) => s.id));
+  return { from: withOwn(own.filter((s) => !skip.has(s.id))), to: withOwn(own) };
 }
 
 /** Best figures for an exercise over every completed session (Hevy imports included). */

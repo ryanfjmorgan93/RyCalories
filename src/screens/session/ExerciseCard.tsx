@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
 import type { MomentFacts } from '@/ai/moments';
 import { db } from '@/db/db';
-import { recordsForNewSets } from '@/db/recordsQueries';
+import { levelChange, recordsForNewSets } from '@/db/recordsQueries';
 import {
   deleteSet,
   logSet,
@@ -22,6 +22,7 @@ import {
   type PreviousSets,
 } from '@/db/repo';
 import { decisionLine, effortReason, fmtSetsLine, targetLine } from '@/domain/format';
+import { levelUp } from '@/domain/level';
 import { lockInBlocked, suggestedLockInWeight } from '@/domain/engine';
 import { DEFAULT_PLATES, plateLabel, platesPerSide } from '@/domain/plates';
 import { describeOverride, judgedRx, overrideFor } from '@/domain/planOverride';
@@ -48,6 +49,7 @@ import { MoreIcon } from '@/ui/components/TopBar';
 import { EditSetSheet } from '@/ui/EditSetSheet';
 import { ExerciseDemo } from '@/ui/ExerciseDemo';
 import { ExerciseHero } from '@/ui/ExerciseHero';
+import { LevelLine } from '@/ui/LevelLine';
 import { PlateSheet } from '@/ui/PlateSheet';
 import { StrengthLine } from '@/ui/StrengthLine';
 import { SwapExerciseSheet } from '@/ui/SwapExerciseSheet';
@@ -424,8 +426,11 @@ export function ExerciseCard({
     }
 
     const newRecords = await recordsForNewSets(exercise.id, session.id, [newSet], { calibrating: rx?.mode === 'calibrating' });
-    if (newRecords.length > 0) {
-      toast(`Record · ${fmtSetsLine([newSet], kind)}`, 'ok');
+    const change = await levelChange(exercise.id, session.id, [newSet.id]);
+    const up = levelUp(change.from, change.to);
+    if (newRecords.length > 0 || up) {
+      const set = fmtSetsLine([newSet], kind);
+      toast(newRecords.length === 0 ? `Level ${up!.to} · ${set}` : up ? `Record · ${set} · Level ${up.to}` : `Record · ${set}`, 'ok');
       flashAmbient('record');
     }
 
@@ -658,6 +663,7 @@ export function ExerciseCard({
               {chips}
             </div>
             <div className="mt-1 text-sm text-fg/85">{subtitle}</div>
+            <LevelLine exercise={exercise} sessionId={session.id} />
             <StrengthLine exercise={exercise} settings={settings} />
           </button>
         </ExerciseHero>

@@ -28,6 +28,11 @@ How a finished exercise felt, one of Easy, Good or Hard, which decides next sess
 when every set reached the top of the range.
 _Avoid_: RPE, RIR (the stored form), feel score
 
+**Level**:
+How far the owner's best set on an exercise is over where they started on it (the best set of
+their first three sessions), 5% a level; theirs alone, never a comparison with other people.
+_Avoid_: Rank (the squat, bench and deadlift standing against other lifters), XP, score
+
 **Region**:
 A coarse muscle grouping used for rest and reminders: legs, back, chest, shoulders, arms, core.
 _Avoid_: Body part, muscle group (a finer grouping)
