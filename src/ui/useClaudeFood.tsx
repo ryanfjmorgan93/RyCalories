@@ -5,10 +5,10 @@ import { undoLoggedItems } from '@/db/foodRepo';
 import { addDays } from '@/domain/dates';
 import { fmtDayKey } from '@/domain/format';
 import type { LabelNutrition } from '@/domain/products';
-import { blockedLine, logMealPhoto, logMealText, readFailureLine, readLabel, type Cancelled, type FoodReadKind, type ReadLogged } from '@/state/claudeFood';
+import { blockedLine, logMealPhoto, logMealText, readFailureLine, readLabel, readLink, type Cancelled, type FoodReadKind, type ReadLogged } from '@/state/claudeFood';
 import { clearMealMoment, noteMealLogged } from '@/state/mealMoment';
 import type { AddFoodContext } from './AddFoodSheet';
-import { DescribeSheet, LoggedBar, ReadingSheet } from './ClaudeFoodSheets';
+import { DescribeSheet, LinkSheet, LoggedBar, ReadingSheet } from './ClaudeFoodSheets';
 import { toast } from './components/Toast';
 import { useToday } from './hooks';
 
@@ -24,6 +24,8 @@ export interface ClaudeFood {
   onPhoto: (ctx: AddFoodContext) => void | false;
   onDescribe: (ctx: AddFoodContext) => void | false;
   onSnapLabel: (ctx: AddFoodContext & { barcode?: string }) => void | false;
+  /** A product page's link, pasted in, read as its label. */
+  onLink: (ctx: AddFoodContext) => void | false;
   /** Everything the handlers render: the camera inputs, the reading and describe sheets, the Undo bar. Mount once. */
   host: ReactNode;
 }
@@ -38,6 +40,7 @@ const READING: Record<FoodReadKind, string> = {
   photo: 'Reading your photo…',
   describe: 'Reading what you ate…',
   label: 'Reading the label…',
+  link: 'Reading the page…',
 };
 
 /**
@@ -60,6 +63,7 @@ export function useClaudeFood({ reopen, onLabel }: UseClaudeFoodOptions): Claude
   const job = useRef<Job | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [describing, setDescribing] = useState<{ ctx: AddFoodContext; text: string } | null>(null);
+  const [linking, setLinking] = useState<{ ctx: AddFoodContext; text: string } | null>(null);
   const [bar, setBar] = useState<ReadLogged | null>(null);
 
   // Leaving the screen mid-read is a cancel: nothing is logged behind the owner's back.
@@ -160,6 +164,18 @@ export function useClaudeFood({ reopen, onLabel }: UseClaudeFoodOptions): Claude
     labelInput.current?.click();
   };
 
+  const onLink = (ctx: AddFoodContext): void | false => {
+    if (explained('link')) return false;
+    setLinking({ ctx, text: '' });
+  };
+
+  const submitLink = () => {
+    const l = linking;
+    if (!l || !l.text.trim()) return;
+    setLinking(null);
+    void run('link', () => setLinking(l), (cancelled) => readLink(l.text, cancelled), (label) => onLabel(l.ctx, label));
+  };
+
   const photoPicked = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = ''; // the same photo taken again must still fire change
@@ -213,9 +229,17 @@ export function useClaudeFood({ reopen, onLabel }: UseClaudeFoodOptions): Claude
           onClose={() => setDescribing(null)}
         />
       )}
+      {linking && (
+        <LinkSheet
+          text={linking.text}
+          onText={(text) => setLinking((l) => (l ? { ...l, text } : l))}
+          onSubmit={submitLink}
+          onClose={() => setLinking(null)}
+        />
+      )}
       {bar && <LoggedBar log={bar} onUndo={undo} onAdjust={adjust} onDone={() => setBar(null)} />}
     </>
   );
 
-  return { onPhoto, onDescribe, onSnapLabel, host };
+  return { onPhoto, onDescribe, onSnapLabel, onLink, host };
 }

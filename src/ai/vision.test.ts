@@ -6,7 +6,7 @@ import { fakeClaude, lastUserText, text } from '@/test/fakeClaude';
 import { clearApiKey, setApiKey } from './key';
 import { spendThisMonth } from './spend';
 import { resetMemory } from './store';
-import { cleanMealItems, readInbodySheet, readLabelPhoto, readMealPhoto, readMealText, stripDataUrl } from './vision';
+import { cleanMealItems, readInbodySheet, readLabelPage, readLabelPhoto, readMealPhoto, readMealText, stripDataUrl } from './vision';
 
 beforeEach(() => {
   localStorage.clear();
@@ -142,6 +142,31 @@ describe('readLabelPhoto', () => {
   it('refuses numbers that cannot be per 100 g, with a line the owner can act on', async () => {
     const fake = fakeClaude({ content: [json({ name: 'Mystery', per100: { kcal: 3500, protein: 11, carbs: 60, fat: 8 } })] });
     await expect(readLabelPhoto(JPEG, { fetch: fake.fetch })).rejects.toMatchObject({ kind: 'other', message: expect.stringContaining('clearer photo') });
+  });
+});
+
+describe('readLabelPage', () => {
+  const PAGE = 'Tesco Chicken Breast Fillets 300g\nNutrition\nTypical values per 100g\nEnergy 445kJ / 106kcal\nProtein 24.0g';
+  const URL = 'https://www.tesco.com/groceries/en-GB/products/1';
+
+  it("sends the page's text and address as text, with no image, and returns the label as printed", async () => {
+    const fake = fakeClaude({ content: [json({ name: 'Chicken Breast Fillets', brand: 'Tesco', per100: { kcal: 106, protein: 24, carbs: 0, fat: 1.1 }, pack_grams: 300 })] });
+    const label = await readLabelPage(PAGE, URL, { fetch: fake.fetch });
+    expect(label).toEqual({ name: 'Chicken Breast Fillets', brand: 'Tesco', per100: { kcal: 106, protein: 24, carbs: 0, fat: 1.1 }, packGrams: 300 });
+    const sent = lastUserText(fake.requests[0]!.body);
+    expect(sent).toContain(PAGE);
+    expect(sent).toContain(URL);
+    expect(JSON.stringify(fake.requests[0]!.body.messages)).not.toContain('"image"');
+  });
+
+  it('says so when the page has no nutrition on it', async () => {
+    const fake = fakeClaude({ content: [json({ name: 'Basket', per100: { kcal: 0, protein: 0, carbs: 0, fat: 0 } })] });
+    await expect(readLabelPage('Your basket is empty', URL, { fetch: fake.fetch })).rejects.toMatchObject({ kind: 'other', message: 'No nutrition on that page. Try a photo of the label instead.' });
+  });
+
+  it('refuses numbers that cannot be per 100 g', async () => {
+    const fake = fakeClaude({ content: [json({ name: 'Mystery', per100: { kcal: 2000, protein: 1, carbs: 1, fat: 1 } })] });
+    await expect(readLabelPage(PAGE, URL, { fetch: fake.fetch })).rejects.toMatchObject({ kind: 'other', message: expect.stringContaining('that page') });
   });
 });
 

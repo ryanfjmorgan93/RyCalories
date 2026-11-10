@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { amountPlan, choiceFromLabel, choiceFromMemory, itemFromAmount, kcalFor, recentChoices, searchChoices, usualAmount } from './foodChoice';
+import { amountPlan, choiceFromLabel, choiceFromMemory, itemFromAmount, kcalFor, recentChoices, searchChoices, slotChoices, usualAmount } from './foodChoice';
 import { macrosOf } from './food';
 import { loadUkFoodTable, type UkFoodTable } from '@/data/ukFoodTable';
 import type { LabelNutrition } from './products';
@@ -89,6 +89,33 @@ describe('the list before anything is typed', () => {
     const list = recentChoices([oats, eggs], table);
     expect(list.map((c) => c.name)).toEqual(['Eggs, chicken, whole, raw', 'Oats']);
     expect(amountPlan(list[0]!).unit.key).toBe('egg');
+  });
+});
+
+describe('foods by meal', () => {
+  const oats = memory({ id: 'a', key: 'n:oats', name: 'Oats', timesUsed: 2 });
+  const chicken = memory({ id: 'b', key: 'n:chicken thigh', name: 'Chicken thigh', timesUsed: 12 });
+  const rice = memory({ id: 'c', key: 'n:rice', name: 'Rice', timesUsed: 9 });
+  const banana = memory({ id: 'd', key: 'n:banana', name: 'Banana', timesUsed: 1 });
+
+  it("leads with the meal's own foods, most often logged in it first, then the rest", () => {
+    const { usual, other } = slotChoices([oats, chicken, rice, banana], table, new Map([['n:rice', 5], ['n:chicken thigh', 7]]));
+    expect(usual.map((c) => c.name)).toEqual(['Chicken thigh', 'Rice']);
+    expect(other.map((c) => c.name)).toEqual(['Oats', 'Banana']);
+  });
+
+  it('with nothing logged in the meal yet, everything is in the rest', () => {
+    const { usual, other } = slotChoices([banana, oats], table, new Map());
+    expect(usual).toEqual([]);
+    expect(other.map((c) => c.name)).toEqual(['Oats', 'Banana']);
+  });
+
+  it('keeps each list to the limit', () => {
+    const many = Array.from({ length: 12 }, (_, i) => memory({ id: `m${i}`, key: `n:f${i}`, name: `Food ${i}`, timesUsed: 20 - i }));
+    const { usual, other } = slotChoices(many, table, new Map(many.slice(0, 10).map((m) => [m.key, 1])), 3);
+    expect(usual).toHaveLength(3);
+    expect(other).toHaveLength(3);
+    expect(other.some((c) => usual.some((u) => u.key === c.key))).toBe(false);
   });
 });
 

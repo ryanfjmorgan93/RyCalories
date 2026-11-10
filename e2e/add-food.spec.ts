@@ -299,22 +299,64 @@ test.describe('add food', () => {
     expect(items[0]).toMatchObject({ name: 'Nairn Oat Bar', source: 'user' });
   });
 
-  test('the Food screen puts Camera and Describe beside Barcode, each a full-size tap target', async ({ page }) => {
+  test('the Food screen puts Barcode, Camera, Describe and Link two by two, each a full-size tap target', async ({ page }) => {
     await page.goto('/food');
     await page.getByTestId('add-food-button').click();
-    for (const id of ['add-food-scan', 'add-food-photo', 'add-food-describe']) {
+    const ids = ['add-food-scan', 'add-food-photo', 'add-food-describe', 'add-food-link'];
+    for (const id of ids) {
       await expect(page.getByTestId(id)).toBeVisible();
       expect((await page.getByTestId(id).boundingBox())!.height).toBeGreaterThanOrEqual(44);
     }
-    // Beside one another, in a row. All three are read in one frame: the sheet is still sliding up
-    // when they first show, and three reads a few milliseconds apart differ by how far it moved
-    // between them (2.7 px on a slow runner, which failed build 0814f4b for no fault of the row).
-    const tops = await page.evaluate(
-      (ids) => ids.map((id) => document.querySelector(`[data-testid="${id}"]`)!.getBoundingClientRect().top),
-      ['add-food-scan', 'add-food-photo', 'add-food-describe'],
+    // Two rows of two. All four are read in one frame: the sheet is still sliding up when they first
+    // show, and reads a few milliseconds apart differ by how far it moved between them (2.7 px on a
+    // slow runner, which failed build 0814f4b for no fault of the row).
+    const boxes = await page.evaluate(
+      (list) => list.map((id) => document.querySelector(`[data-testid="${id}"]`)!.getBoundingClientRect()).map((r) => ({ top: r.top, left: r.left })),
+      ids,
     );
-    expect(Math.abs(tops[0]! - tops[1]!)).toBeLessThan(2);
-    expect(Math.abs(tops[1]! - tops[2]!)).toBeLessThan(2);
+    expect(Math.abs(boxes[0]!.top - boxes[1]!.top)).toBeLessThan(2);
+    expect(Math.abs(boxes[2]!.top - boxes[3]!.top)).toBeLessThan(2);
+    expect(boxes[2]!.top).toBeGreaterThan(boxes[0]!.top + 40);
+    expect(Math.abs(boxes[0]!.left - boxes[2]!.left)).toBeLessThan(2);
+  });
+
+  test("the list follows the meal chosen: that meal's own foods first, the rest under them", async ({ page }) => {
+    await routeOff(page);
+    await page.goto('/food');
+    // Eggs at breakfast, a pack of chicken at a snack.
+    await page.getByTestId('add-food-button').click();
+    await page.getByTestId('slot-breakfast').click();
+    await page.getByTestId('add-food-search').fill('egg');
+    await page.getByTestId('result-Eggs, chicken, whole, raw').click();
+    await page.getByTestId('amount-egg-2').click();
+    await expect(page.getByTestId('add-food-sheet')).toHaveCount(0);
+    await page.getByTestId('add-food-button').click();
+    await page.getByTestId('slot-snack').click();
+    await scanCode(page, CHICKEN_CODE);
+    await page.getByTestId('amount-pack-1').click();
+    await expect(page.getByTestId('add-food-sheet')).toHaveCount(0);
+    await expect.poll(async () => (await rawItems(page)).length).toBe(2);
+
+    await page.getByTestId('add-food-button').click();
+    await page.getByTestId('slot-breakfast').click();
+    const mealFoods = page.getByTestId('add-food-meal-foods');
+    await expect(mealFoods.getByText('Breakfast foods')).toBeVisible();
+    await expect(mealFoods.getByTestId(/^result-/)).toHaveCount(1);
+    await expect(mealFoods.getByTestId('result-Eggs, chicken, whole, raw')).toBeVisible();
+    await expect(page.getByTestId('add-food-other-foods').getByText('Other foods')).toBeVisible();
+    await expect(page.getByTestId('add-food-other-foods').getByTestId('result-Tesco Chicken Breast Fillets')).toBeVisible();
+
+    // Another meal, another order: the snack leads with the chicken.
+    await page.getByTestId('slot-snack').click();
+    await expect(page.getByTestId('add-food-meal-foods').getByText('Snack foods')).toBeVisible();
+    await expect(page.getByTestId('add-food-meal-foods').getByTestId('result-Tesco Chicken Breast Fillets')).toBeVisible();
+    await expect(page.getByTestId('add-food-meal-foods').getByTestId('result-Eggs, chicken, whole, raw')).toHaveCount(0);
+    await expect(page.getByTestId('add-food-other-foods').getByTestId('result-Eggs, chicken, whole, raw')).toBeVisible();
+
+    // A meal with nothing logged yet shows everything as Recent.
+    await page.getByTestId('slot-lunch').click();
+    await expect(page.getByTestId('add-food-meal-foods')).toHaveCount(0);
+    await expect(page.getByTestId('add-food-other-foods').getByText('Recent')).toBeVisible();
   });
 
   test('"Some" of an item is a count to step to: four eggs', async ({ page }) => {

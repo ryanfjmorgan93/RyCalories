@@ -515,6 +515,24 @@ export async function usualsOn(date: string, slot: MealSlot): Promise<OfferedUsu
   return usualsFor(slot, settings.usualMeals ?? [], past, onDay);
 }
 
+/**
+ * How many of a meal slot's recent logs (the last 300 meals of any slot, as the usual meals read)
+ * held each food, by memory key: what Add food leads with for that meal. Each meal counts a food once.
+ */
+export async function slotFoodCounts(slot: MealSlot): Promise<Map<string, number>> {
+  const meals = (await db.meals.orderBy('loggedAt').reverse().limit(300).toArray()).filter((m) => m.slot === slot);
+  const rows = await db.mealItems.where('mealId').anyOf(meals.map((m) => m.id)).toArray();
+  const seen = new Set<string>();
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const key = memoryKey(row);
+    if (seen.has(`${row.mealId} ${key}`)) continue;
+    seen.add(`${row.mealId} ${key}`);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
+
 /** Log a usual meal on a day, in the slot it was offered for. The id is the new meal's, for the toast's Undo. */
 export function logUsual(date: string, slot: MealSlot, usual: OfferedUsual): Promise<string> {
   return addMeal({ name: usual.name, date, slot }, usual.items.map((i) => ({ ...i })));

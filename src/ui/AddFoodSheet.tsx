@@ -10,7 +10,7 @@ import {
   choiceFromMemory,
   itemFromAmount,
   kcalFor,
-  recentChoices,
+  slotChoices,
   searchChoices,
   usualAmount,
   type FoodChoice,
@@ -19,19 +19,20 @@ import { amountChips, chipGrams, portionText, type AmountChip, type UnitOption }
 import { defaultSlot } from '@/domain/mealSlot';
 import { barcodeDigits, displayName, type LabelNutrition } from '@/domain/products';
 import { MEAL_SLOTS, type FoodMemory, type MealSlot } from '@/domain/types';
-import { allFoods, logItemToSlot, undoLoggedItems, type LoggedItems, type NewMealItem } from '@/db/foodRepo';
+import { allFoods, logItemToSlot, slotFoodCounts, undoLoggedItems, type LoggedItems, type NewMealItem } from '@/db/foodRepo';
 import { lookupBarcode, lookupName } from '@/db/productRepo';
 import { loadUkFoodTable, type UkFoodTable } from '@/data/ukFoodTable';
 import { BarcodeScanner } from './BarcodeScanner';
 import { FoodItemSheet } from './FoodItemSheet';
 import { Button, IconButton } from './components/Button';
-import { Card, Divider, EmptyState, Row } from './components/Card';
+import { Card, Divider, EmptyState, Row, SectionTitle } from './components/Card';
 import { Chip, Segmented } from './components/Chip';
 import { NumberField, NumberInput, TextInput } from './components/NumberField';
 import { Sheet } from './components/Sheet';
 import { toast } from './components/Toast';
 import { BackIcon, ChevronIcon } from './components/TopBar';
 import { useSettings, useToday } from './hooks';
+import { UsualMeals } from './UsualMeals';
 
 /** What a hook (photo, describe, snap the label) is told about where the food is going. */
 export interface AddFoodContext {
@@ -63,6 +64,7 @@ export function AddFoodSheet({
   onPhoto,
   onDescribe,
   onSnapLabel,
+  onLink,
   onLogged,
 }: {
   date: string;
@@ -74,6 +76,8 @@ export function AddFoodSheet({
   onPhoto?: (ctx: AddFoodContext) => void | false;
   onDescribe?: (ctx: AddFoodContext) => void | false;
   onSnapLabel?: (ctx: AddFoodContext & { barcode?: string }) => void | false;
+  /** A product page's link, pasted in and read as its label (the pack thrown away). */
+  onLink?: (ctx: AddFoodContext) => void | false;
   /** After an item is logged, before the sheet closes. */
   onLogged?: (logged: LoggedItems, item: NewMealItem) => void;
 }) {
@@ -111,10 +115,14 @@ export function AddFoodSheet({
     };
   }, []);
 
-  const results = useMemo(() => {
+  // With nothing typed, the list follows the meal chosen: its own foods first, then the rest.
+  const counts = useLiveQuery(() => slotFoodCounts(slot), [slot]);
+  const { results, mealFoods } = useMemo(() => {
     const sources = { foods: table?.foods ?? [], aliases: table?.aliases ?? [] };
-    return deferredQ.trim() ? searchChoices(deferredQ, { ...sources, memories }, 12) : recentChoices(memories, sources, 8);
-  }, [deferredQ, memories, table]);
+    if (deferredQ.trim()) return { results: searchChoices(deferredQ, { ...sources, memories }, 12), mealFoods: [] };
+    const split = slotChoices(memories, sources, counts ?? NO_COUNTS, 8);
+    return { results: split.other, mealFoods: split.usual };
+  }, [deferredQ, memories, table, counts]);
 
   const ctx: AddFoodContext = { date, slot };
 
@@ -233,7 +241,24 @@ export function AddFoodSheet({
     if (handler(ctx) !== false) onClose();
   };
 
-  const hooks = [onPhoto, onDescribe].filter(Boolean).length;
+  const hooks = [onPhoto, onDescribe, onLink].filter(Boolean).length;
+
+  const list = (choices: FoodChoice[]) => (
+    <Card>
+      {choices.map((c, i) => (
+        <div key={c.key}>
+          {i > 0 && <Divider />}
+          <Row
+            onClick={() => setStep({ kind: 'amount', choice: c })}
+            testId={`result-${c.name}`}
+            title={c.name}
+            subtitle={<ResultLine choice={c} />}
+            right={<QuickAdd choice={c} on={added.has(c.key)} onTap={() => void quickAdd(c)} />}
+          />
+        </div>
+      ))}
+    </Card>
+  );
 
   return (
     <>
@@ -273,31 +298,29 @@ export function AddFoodSheet({
                     Describe
                   </Button>
                 )}
+                {onLink && (
+                  <Button size="md" variant="outline" full onClick={() => handOff(onLink)} data-testid="add-food-link">
+                    Link
+                  </Button>
+                )}
               </div>
 
+              {!deferredQ.trim() && <UsualMeals date={date} slot={slot} onLogged={onClose} />}
+
               <div data-testid="add-food-results">
+                {mealFoods.length > 0 && (
+                  <section data-testid="add-food-meal-foods">
+                    <SectionTitle className="!pt-2">{`${slot[0]!.toUpperCase()}${slot.slice(1)} foods`}</SectionTitle>
+                    {list(mealFoods)}
+                  </section>
+                )}
                 {results.length > 0 ? (
-                  <>
-                    {!deferredQ.trim() && (
-                      <div className="mb-2 px-1 label">Recent</div>
-                    )}
-                    <Card>
-                      {results.map((c, i) => (
-                        <div key={c.key}>
-                          {i > 0 && <Divider />}
-                          <Row
-                            onClick={() => setStep({ kind: 'amount', choice: c })}
-                            testId={`result-${c.name}`}
-                            title={c.name}
-                            subtitle={<ResultLine choice={c} />}
-                            right={<QuickAdd choice={c} on={added.has(c.key)} onTap={() => void quickAdd(c)} />}
-                          />
-                        </div>
-                      ))}
-                    </Card>
-                  </>
+                  <section data-testid="add-food-other-foods">
+                    {!deferredQ.trim() && <SectionTitle className={mealFoods.length > 0 ? '' : '!pt-2'}>{mealFoods.length > 0 ? 'Other foods' : 'Recent'}</SectionTitle>}
+                    {list(results)}
+                  </section>
                 ) : (
-                  <EmptyState>{deferredQ.trim() ? 'Nothing found.' : lookupEnabled ? 'Type a food or scan a barcode.' : 'Type a food.'}</EmptyState>
+                  mealFoods.length === 0 && <EmptyState>{deferredQ.trim() ? 'Nothing found.' : lookupEnabled ? 'Type a food or scan a barcode.' : 'Type a food.'}</EmptyState>
                 )}
               </div>
 
@@ -379,6 +402,7 @@ export function AddFoodSheet({
 }
 
 const NO_FOODS: FoodMemory[] = [];
+const NO_COUNTS: ReadonlyMap<string, number> = new Map();
 
 type MissReason = 'notfound' | 'nofigures' | 'offline' | 'unavailable' | 'invalid';
 
@@ -423,7 +447,8 @@ function QuickAdd({ choice, on, onTap }: { choice: FoodChoice; on: boolean; onTa
 }
 
 function gridCols(n: number): string {
-  return n >= 3 ? 'grid-cols-3' : n === 2 ? 'grid-cols-2' : 'grid-cols-1';
+  // Four go two by two: four across leaves no room for "Describe" on a phone.
+  return n === 3 ? 'grid-cols-3' : n >= 2 ? 'grid-cols-2' : 'grid-cols-1';
 }
 
 /** Whether the device thinks it has a connection, kept current. */

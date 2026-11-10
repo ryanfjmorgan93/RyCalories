@@ -4,6 +4,7 @@ import type { ReadLogged } from '@/state/claudeFood';
 import { Button } from './components/Button';
 import { Sheet } from './components/Sheet';
 import { TextInput } from './components/NumberField';
+import { toast } from './components/Toast';
 import { useSpeech } from './useSpeech';
 
 /**
@@ -38,6 +39,45 @@ function MicIcon({ active }: { active: boolean }) {
  * "Describe it": what was eaten, in the owner's own words, typed or spoken (the microphone shows
  * where the phone has one). One button reads it and logs it.
  */
+/** Paste a product page's link (the shop's page, when the pack has gone): Claude reads its nutrition like a label. */
+export function LinkSheet({ text, onText, onSubmit, onClose }: { text: string; onText: (text: string) => void; onSubmit: () => void; onClose: () => void }) {
+  const canPaste = typeof navigator !== 'undefined' && typeof navigator.clipboard?.readText === 'function';
+  const paste = async () => {
+    try {
+      const copied = (await navigator.clipboard.readText()).trim();
+      if (copied) onText(copied);
+    } catch {
+      toast('Long-press the box to paste');
+    }
+  };
+  return (
+    <Sheet
+      open
+      onClose={onClose}
+      title="Paste a link"
+      footer={
+        <Button size="lg" variant="primary" full disabled={!text.trim()} onClick={onSubmit} data-testid="link-read">
+          Read the page
+        </Button>
+      }
+    >
+      <div className="grid gap-3" data-testid="link-sheet">
+        <div className="px-1 text-sm text-muted">The product&rsquo;s page on the shop&rsquo;s site.</div>
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <TextInput value={text} onChange={onText} placeholder="https://" testId="link-input" autoFocus />
+          </div>
+          {canPaste && (
+            <Button size="md" variant="outline" onClick={() => void paste()} data-testid="link-paste">
+              Paste
+            </Button>
+          )}
+        </div>
+      </div>
+    </Sheet>
+  );
+}
+
 export function DescribeSheet({
   where,
   text,

@@ -14,7 +14,7 @@ import { wipeAll } from '@/db/repo';
 import { toDateKey } from '@/domain/dates';
 import { macrosOf } from '@/domain/food';
 import { fakeClaude, lastUserText, text } from '@/test/fakeClaude';
-import { blockedLine, foodErrorLine, keepMealPhoto, logMealText, logReadings, readFailureLine, sweepKeptPhotos, type ReadKind } from './claudeFood';
+import { blockedLine, foodErrorLine, keepMealPhoto, logMealText, logReadings, readFailureLine, readLink, sweepKeptPhotos, type ReadKind } from './claudeFood';
 
 const KEY = 'sk-ant-api03-FOODKEYFOODKEYFOODKEYFOODkeyz';
 const TODAY = toDateKey();
@@ -262,3 +262,47 @@ describe('kept meal photos', () => {
     expect(left.files.map((f) => `meals/${f.name}`)).toEqual([path]);
   });
 });
+
+describe('a product page read from its link', () => {
+  const PAGE = '<html><body><h1>Chicken Breast Fillets</h1><table><tr><td>Energy</td><td>106kcal</td></tr><tr><td>Protein</td><td>24.0g</td></tr></table></body></html>';
+  const page = (body: string, status = 200) => vi.fn(async () => new Response(body, { status, headers: { 'content-type': 'text/html' } }));
+
+  it("opens the page, sends its text to Claude, and hands back the label as printed with no barcode", async () => {
+    const shop = page(PAGE);
+    const fake = fakeClaude({ content: [json({ name: 'Chicken Breast Fillets', brand: 'Tesco', per100: { kcal: 106, protein: 24, carbs: 0, fat: 1.1 }, pack_grams: 300 })] });
+    const label = await readLink(' tesco.com/groceries/p/1 ', () => false, { fetch: shop, claude: { fetch: fake.fetch } });
+    expect(shop).toHaveBeenCalledWith('https://tesco.com/groceries/p/1', expect.anything());
+    expect(label).toEqual({ code: '', brand: 'Tesco', name: 'Chicken Breast Fillets', per100: { kcal: 106, protein: 24, carbs: 0, fat: 1.1 }, packGrams: 300 });
+    expect(lastUserText(fake.requests[0]!.body)).toContain('106kcal');
+    expect(lastUserText(fake.requests[0]!.body)).not.toContain('<td>');
+  });
+
+  it('refuses what is not a web address before opening anything', async () => {
+    const shop = page(PAGE);
+    await expect(readLink('chicken breast', () => false, { fetch: shop })).rejects.toMatchObject({ message: expect.stringContaining('not a web address') });
+    expect(shop).not.toHaveBeenCalled();
+  });
+
+  it('says the page would not open when the shop refuses it or it cannot be reached', async () => {
+    await expect(readLink('https://shop.example/p', () => false, { fetch: page('Forbidden', 403) })).rejects.toMatchObject({ message: "That page wouldn't open here. Try a photo of the label instead." });
+    const down = vi.fn(async () => {
+      throw new TypeError('Failed to fetch');
+    });
+    await expect(readLink('https://shop.example/p', () => false, { fetch: down })).rejects.toMatchObject({ message: "That page wouldn't open here. Try a photo of the label instead." });
+  });
+
+  it('does not pay to ask Claude about a page with no word of nutrition on it', async () => {
+    const fake = fakeClaude({ content: [json({})] });
+    await expect(readLink('https://shop.example/p', () => false, { fetch: page('<div id="app"></div><script>render()</script>'), claude: { fetch: fake.fetch } })).rejects.toMatchObject({
+      message: 'No nutrition on that page. Try a photo of the label instead.',
+    });
+    expect(fake.requests).toHaveLength(0);
+  });
+
+  it('hands back nothing once the owner has cancelled', async () => {
+    const fake = fakeClaude({ content: [json({ name: 'x', per100: { kcal: 1, protein: 1, carbs: 1, fat: 1 } })] });
+    expect(await readLink('https://shop.example/p', () => true, { fetch: page(PAGE), claude: { fetch: fake.fetch } })).toBeNull();
+    expect(fake.requests).toHaveLength(0);
+  });
+});
+

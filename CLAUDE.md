@@ -75,16 +75,19 @@ The owner does not check on device. Correctness has to come from the code and th
   third-party dataset content shown only behind a "How to" tap; leave it alone. Phone
   notifications are deterministic and limited to the food reminder, the training nudge, the
   Monday weigh-in and the daily supplement checklist (`src/domain/reminders.ts`).
-- Tracking must work fully offline. Four things leave the device, all listed in Settings → About:
+- Tracking must work fully offline. Five things leave the device, all listed in Settings → About:
   Android's Google backup of the database (about once a day, when Google backup is on in the
   phone's settings; `android/app/src/main/res/xml/data_extraction_rules.xml` includes the WebView's
   `app_webview/` and excludes its Local Storage, where the Claude key lives, guarded by
   `src/db/manifest.test.ts`; it restores only into an APK signed with the committed keystore),
   Claude API calls (only with the owner's key: what they send the coach, a summary of their
-  training, food, supplements and steps, and photos they choose; the chat's web search runs on
+  training, food, supplements and steps, photos they choose, and the text of a product page they
+  paste a link to; the chat's web search runs on
   Anthropic's side, and a cited source opens in the browser only on a tap), the Open Food Facts label lookup
-  (switchable off; the barcode scan is the same lookup), and the Video link on an exercise (a user
-  tap that opens the browser). Nothing else. Steps, and bodyweight when the owner turns it on, are
+  (switchable off; the barcode scan is the same lookup), the Video link on an exercise (a user
+  tap that opens the browser), and the one product page whose link the owner pastes into Add food
+  → Link (the phone opens it natively, `readLink` in `state/claudeFood.ts`, and Claude copies its
+  nutrition as a label, November 2026). Nothing else. Steps, and bodyweight when the owner turns it on, are
   read on the phone from Health Connect (read only, write nothing; every other health permission
   the plugin declares is removed in the manifest). Steps are never stored; a weight read in is
   stored as a bodyweight entry marked `source: 'health-connect'`, only for a day with no reading of
@@ -117,7 +120,12 @@ The owner does not check on device. Correctness has to come from the code and th
   the ones the owner saved (kept in the Settings row) and the ones their own history shows, logged
   in one tap; the Food day leads with calories and protein left and lists each meal's foods. A food
   eaten before is one tap from the Add food list at its usual amount (`usualAmount` in
-  `foodChoice.ts`), the sheet staying open for the next. A meal Claude read from a photo or a sentence is listed
+  `foodChoice.ts`), the sheet staying open for the next. The list follows the meal chosen (the
+  owner's pick of November 2026, over food types or folders): that meal's usual meals, then the
+  foods logged in it most often (`slotChoices`, counted by `slotFoodCounts` in `db/foodRepo.ts`),
+  then the rest; nothing is tagged by hand. Add food → Link reads a product page's nutrition from a
+  pasted address (`pageText.ts` keeps the page's words, `readLabelPage` in `ai/vision.ts` copies the
+  figures as a label). A meal Claude read from a photo or a sentence is listed
   food by food and stays until Keep, Undo or Adjust is tapped (it is on the day already).
   `recipe.ts`, `mealText.ts`, `ingredientMatch.ts`, `foodUnits.ts` and `foodChoice.ts` are food:
   natural units, matching to remembered foods and the UK table, and the one item shape every way of

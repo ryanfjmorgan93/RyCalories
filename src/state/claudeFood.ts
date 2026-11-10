@@ -15,7 +15,7 @@
  */
 import { Directory, Filesystem } from '@capacitor/filesystem';
 import { blockedReason, CLAUDE_ERROR_MESSAGES, ClaudeError, noRetry, toClaudeError, type CallDeps, type ClaudeErrorKind } from '@/ai/client';
-import { readLabelPhoto, readMealPhoto, readMealText, type MealReadingItem } from '@/ai/vision';
+import { readLabelPage, readLabelPhoto, readMealPhoto, readMealText, type MealReadingItem } from '@/ai/vision';
 import { loadUkFoodTable } from '@/data/ukFoodTable';
 import { db } from '@/db/db';
 import { allFoods, logItemsToSlot, type LoggedItems, type NewMealItem } from '@/db/foodRepo';
@@ -24,12 +24,13 @@ import { displayMacros } from '@/domain/food';
 import { itemsFromReadings, readingConfidence, readingSummary } from '@/domain/claudeFood';
 import { uuid } from '@/domain/ids';
 import type { MatchSources } from '@/domain/ingredientMatch';
+import { pageText, pageUrl } from '@/domain/pageText';
 import { barcodeDigits, type LabelNutrition } from '@/domain/products';
 import type { MealSlot } from '@/domain/types';
 import { deleteMealPhoto, preparePhoto, blobToBase64 } from './mealPhoto';
 
 /** The three ways Claude does the typing for food. */
-export type FoodReadKind = 'photo' | 'describe' | 'label';
+export type FoodReadKind = 'photo' | 'describe' | 'label' | 'link';
 
 /** What is being read, which decides what the way forward is when it cannot be. 'sheet' is a printed InBody result. */
 export type ReadKind = FoodReadKind | 'sheet';
@@ -38,6 +39,7 @@ const NO_KEY: Record<ReadKind, string> = {
   photo: 'Add your Claude key in Settings to log from a photo.',
   describe: 'Add your Claude key in Settings to log by describing it.',
   label: 'Add your Claude key in Settings to read a label.',
+  link: 'Add your Claude key in Settings to read a product page.',
   sheet: 'Add your Claude key in Settings to read a photo of the sheet.',
 };
 
@@ -45,6 +47,7 @@ const NO_SIGNAL: Record<ReadKind, string> = {
   photo: 'Photos need signal. Search or scan instead.',
   describe: 'Describing a meal needs signal. Search or scan instead.',
   label: 'Reading a label needs signal. Type it in instead.',
+  link: 'Reading a product page needs signal. Type it in instead.',
   sheet: 'Reading a photo needs signal. Import the file instead.',
 };
 
@@ -52,6 +55,7 @@ const WAY_ON: Record<ReadKind, string> = {
   photo: 'Search or scan instead.',
   describe: 'Search or scan instead.',
   label: 'Type it in instead.',
+  link: 'Type it in instead.',
   sheet: 'Import the file instead.',
 };
 
@@ -257,3 +261,46 @@ export async function readLabel(file: File, barcode: string | undefined, cancell
     await discardImage(image);
   }
 }
+
+// ---------------------------------------------------------------------------
+// A product page
+
+const PAGE_FAILED = "That page wouldn't open here. Try a photo of the label instead.";
+const NO_NUTRITION = 'No nutrition on that page. Try a photo of the label instead.';
+
+/**
+ * A product's web page, pasted in, read as its label: the phone opens the page (natively in the
+ * APK, so a shop's missing CORS headers do not matter, capacitor.config.ts), keeps its text, and
+ * Claude copies the nutrition the page prints. Nothing is remembered against a barcode, since a
+ * page gives none. Null when the owner cancelled.
+ */
+export async function readLink(pasted: string, cancelled: Cancelled = () => false, deps: { fetch?: typeof fetch; claude?: CallDeps } = {}): Promise<LabelNutrition | null> {
+  const url = pageUrl(pasted);
+  if (!url) throw new ClaudeError('other', 'That is not a web address. Copy the link from the shop page and paste it here.');
+  let html: string;
+  try {
+    const res = await Promise.race([
+      (deps.fetch ?? fetch)(url.href, { headers: { Accept: 'text/html' } }),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 20_000)),
+    ]);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    html = await res.text();
+  } catch (e) {
+    throw new ClaudeError('other', PAGE_FAILED, e);
+  }
+  if (cancelled()) return null;
+  const text = pageText(html);
+  // A page with no word of energy anywhere (a shop that draws its page in script) is not worth sending.
+  if (!/kcal|kj\b|energy|calorie|nutrition/i.test(text)) throw new ClaudeError('other', NO_NUTRITION);
+  const reading = await readLabelPage(text, url.href, deps.claude ?? noRetry());
+  if (cancelled()) return null;
+  return {
+    code: '',
+    brand: reading.brand ?? '',
+    name: reading.name || reading.brand || 'Packaged food',
+    per100: reading.per100,
+    ...(reading.servingGrams !== undefined ? { servingGrams: reading.servingGrams } : {}),
+    ...(reading.packGrams !== undefined ? { packGrams: reading.packGrams } : {}),
+  };
+}
+

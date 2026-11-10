@@ -202,9 +202,33 @@ export async function readLabelPhoto(jpegBase64: string, deps: CallDeps = {}): P
     },
     deps,
   );
+  return labelReading(read, "I couldn't read the numbers on that label. Try a clearer photo.");
+}
+
+/**
+ * The text of a product's web page (src/domain/pageText.ts) read the same way as a label: the
+ * figures the shop prints, copied, for when the pack has gone in the bin.
+ */
+export async function readLabelPage(text: string, address: string, deps: CallDeps = {}): Promise<LabelReading> {
+  const read = await readStructured(
+    {
+      schema: LabelShape,
+      json: LABEL_SCHEMA,
+      prompt: `This is the text of a food product's web page (${address}). Read the product name, the brand if shown, and the nutrition per 100 g (or 100 ml) from its nutrition table, with energy in kilocalories. If the page only gives per-serving values, convert them to per 100 g using the serving size. Give the serving size and the pack weight in grams only if the page states them. If the page has no nutrition figures, give 0 for every one.\n\n<page>\n${text}\n</page>`,
+      effort: 'low',
+    },
+    deps,
+  );
+  if ([read.per100.kcal, read.per100.protein, read.per100.carbs, read.per100.fat].every((n) => n === 0)) {
+    throw new ClaudeError('other', 'No nutrition on that page. Try a photo of the label instead.');
+  }
+  return labelReading(read, "I couldn't read the nutrition on that page. Try a photo of the label instead.");
+}
+
+function labelReading(read: z.infer<typeof LabelShape>, unreadable: string): LabelReading {
   const per = read.per100;
   if (![per.kcal, per.protein, per.carbs, per.fat].every((n) => Number.isFinite(n) && n >= 0) || per.kcal > 950) {
-    throw new ClaudeError('other', "I couldn't read the numbers on that label. Try a clearer photo.");
+    throw new ClaudeError('other', unreadable);
   }
   // Copied exactly as printed: a label is the source, so nothing here is reconciled or "corrected".
   const macros = { kcal: per.kcal, protein: per.protein, carbs: per.carbs, fat: per.fat };

@@ -311,6 +311,57 @@ test.describe('Claude logs food', () => {
     await context.setOffline(false);
   });
 
+  // The shop's page is answered here with an allow-origin header, because a browser obeys CORS and
+  // most shops send none. On the phone the request goes through Capacitor's native HTTP
+  // (capacitor.config.ts), which CORS does not touch; no browser test can reach that path, so this
+  // proves the flow (paste, read, amount step, label kept as printed), not that a given shop opens.
+  const SHOP = 'https://shop.example/groceries/chicken-breast-fillets';
+  const SHOP_PAGE = '<html><body><h1>Tesco Chicken Breast Fillets 400g</h1><table><tr><td>Energy</td><td>165kcal</td></tr><tr><td>Protein</td><td>31g</td></tr></table></body></html>';
+  const routeShop = (page: Page, status = 200) =>
+    page.route(SHOP, (route) => route.fulfill({ status, headers: { 'access-control-allow-origin': '*', 'content-type': 'text/html' }, body: status === 200 ? SHOP_PAGE : 'Forbidden' }));
+
+  test("a pasted product link is read as the pack's label, on to the amount step", async ({ page }) => {
+    await useKey(page);
+    await routeShop(page);
+    const claude = await mockClaude(page, { label: LABEL });
+    await page.goto('/food');
+    await page.getByTestId('add-food-button').click();
+    await page.getByTestId('slot-dinner').click();
+    await page.getByTestId('add-food-link').click();
+    await expect(page.getByTestId('link-read')).toBeDisabled();
+    await page.getByTestId('link-input').fill(SHOP);
+    await page.getByTestId('link-read').click();
+
+    await expect(page.getByTestId('amount-name')).toHaveText('Tesco Chicken Breast Fillets');
+    await expect(page.getByTestId('amount-pack-1')).toContainText('Whole pack (400 g)');
+    const asked = claude.of('label');
+    expect(asked).toHaveLength(1);
+    const sent = JSON.stringify(asked[0]!.body.messages);
+    expect(sent).toContain('165kcal');
+    expect(sent).toContain(SHOP);
+    expect(sent).not.toContain('<td>');
+
+    await page.getByTestId('amount-pack-1').click();
+    await expect(page.getByTestId('calories-bar')).toContainText('660 kcal');
+    const items = await rawAll<RawItem>(page, 'mealItems');
+    expect(items[0]).toMatchObject({ name: 'Tesco Chicken Breast Fillets', portion: '1 pack (400 g)', source: 'label' });
+  });
+
+  test("a page that will not open says so, sends Claude nothing, and keeps the link to try again", async ({ page }) => {
+    await useKey(page);
+    await routeShop(page, 403);
+    const claude = await mockClaude(page, { label: LABEL });
+    await page.goto('/food');
+    await page.getByTestId('add-food-button').click();
+    await page.getByTestId('add-food-link').click();
+    await page.getByTestId('link-input').fill(SHOP);
+    await page.getByTestId('link-read').click();
+
+    await expect(page.getByTestId('toast')).toContainText("That page wouldn't open here. Try a photo of the label instead.");
+    await expect(page.getByTestId('link-input')).toHaveValue(SHOP);
+    expect(claude.of('label')).toHaveLength(0);
+  });
+
   test('a label that cannot be read says so and comes back to the sheet', async ({ page }) => {
     await useKey(page);
     await page.route(OFF_ROUTE, (route) =>

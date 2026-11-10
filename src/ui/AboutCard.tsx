@@ -37,13 +37,13 @@ export function AboutCard() {
       ))}
       <Divider />
       <div className="space-y-2 py-3 text-sm text-muted" data-testid="about-leaves-device">
-        <p>Leaves the device: Open Food Facts lookups (switchable above) and the Video link (opens the browser).</p>
+        <p>Leaves the device: Open Food Facts lookups (switchable above), the Video link (opens the browser), and a product page you paste a link to in Add food (the phone opens that one page).</p>
         <p data-testid="about-google-line">
           With Google backup on in the phone&apos;s settings, Android copies the database (never the Claude key) to your Google account about once a day.
         </p>
         <p>Steps, and weight when it is on, are read from Health Connect on this phone. Problem reports stay on this phone until you share them.</p>
         <p data-testid="about-claude-line">
-          With a Claude key set, what you send to the coach, a summary of your training, food, supplements and steps, and any photos you choose go to Anthropic&apos;s API. When the coach looks something up, Anthropic runs the web search; a source under its reply opens in the browser when you tap it.
+          With a Claude key set, what you send to the coach, a summary of your training, food, supplements and steps, any photos you choose, and the text of a product page you paste a link to go to Anthropic&apos;s API. When the coach looks something up, Anthropic runs the web search; a source under its reply opens in the browser when you tap it.
         </p>
       </div>
     </Card>

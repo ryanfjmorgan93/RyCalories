@@ -3,6 +3,7 @@ import { db } from './db';
 import {
   addItem,
   addMeal,
+  slotFoodCounts,
   copyDay,
   dayTotals,
   deleteItem,
@@ -27,6 +28,7 @@ import {
   type NewMealItem,
 } from './foodRepo';
 import { wipeAll } from './repo';
+import { memoryKey } from '@/domain/foodMemory';
 import { displayMacros, fromPer100, fromPortion, gramsOf, macrosOf, withGrams } from '@/domain/food';
 import { toDateKey } from '@/domain/dates';
 
@@ -622,5 +624,20 @@ describe('usual meals', () => {
 
     await removeUsual(offered[0]!.savedId!);
     expect(await usualsOn(TODAY, 'snack')).toEqual([]);
+  });
+});
+
+describe('foods by meal', () => {
+  it("counts the meals of a slot each food was in, once a meal, and none from another slot", async () => {
+    await addMeal({ name: 'Breakfast', slot: 'breakfast', date: '2026-03-01' }, [oats(), shake()]);
+    await addMeal({ name: 'Breakfast', slot: 'breakfast', date: '2026-03-02' }, [oats(), oats(30)]);
+    await addMeal({ name: 'Dinner', slot: 'dinner', date: '2026-03-02' }, [shake()]);
+    const breakfast = await slotFoodCounts('breakfast');
+    const oatsKey = memoryKey(oats());
+    const shakeKey = memoryKey(shake());
+    expect(breakfast.get(oatsKey)).toBe(2);
+    expect(breakfast.get(shakeKey)).toBe(1);
+    expect((await slotFoodCounts('dinner')).get(oatsKey)).toBeUndefined();
+    expect((await slotFoodCounts('lunch')).size).toBe(0);
   });
 });

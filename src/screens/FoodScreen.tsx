@@ -4,9 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import { addDays, isoToDateKey } from '@/domain/dates';
 import { fmtDayKey, fmtGrams, fmtKcal, fmtNum, fmtTime, plural } from '@/domain/format';
 import { ESTIMATE_MARK, isEstimate } from '@/domain/claudeFood';
-import { ZERO, addMacros, displayMacros } from '@/domain/food';
+import { ZERO } from '@/domain/food';
 import { defaultSlot } from '@/domain/mealSlot';
-import { mealSignature, type OfferedUsual } from '@/domain/usualMeals';
+import { mealSignature } from '@/domain/usualMeals';
 import type { LabelNutrition } from '@/domain/products';
 import type { MealItem, MealSlot } from '@/domain/types';
 import { sweepKeptPhotos } from '@/state/claudeFood';
@@ -18,7 +18,6 @@ import {
   copyDay,
   deleteItem,
   deleteMeal,
-  logUsual,
   mealCountOnDay,
   removeUsual,
   repeatMeal,
@@ -27,17 +26,17 @@ import {
   saveUsual,
   sumItems,
   updateItem,
-  usualsOn,
   type MealWithItems,
   type NewMealItem,
 } from '@/db/foodRepo';
 import { Button, IconButton } from '@/ui/components/Button';
-import { Card, Divider, EmptyState, Row, SectionTitle } from '@/ui/components/Card';
+import { Card, Divider, EmptyState, Row } from '@/ui/components/Card';
 import { MacroLine, MacroSplit, TargetBar } from '@/ui/components/MacroBar';
 import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { BackIcon, ChevronIcon, MoreIcon, TopBar } from '@/ui/components/TopBar';
 import { AddFoodSheet } from '@/ui/AddFoodSheet';
+import { UsualMeals } from '@/ui/UsualMeals';
 import { FoodCoachLines } from '@/ui/FoodCoachLines';
 import { FoodItemSheet } from '@/ui/FoodItemSheet';
 import { HexPanel, Segments } from '@/ui/GameMarks';
@@ -152,7 +151,7 @@ export function FoodScreen() {
             stays in reach however long the day's list grows; the week sits under them. */}
         <DaySummary key={`summary-${date}`} date={date} today={today} />
         <FoodCoachLines date={date} today={today} />
-        {isToday && <Usuals date={date} />}
+        {isToday && <UsualMeals date={date} slot={defaultSlot()} />}
         <div className="h-4" />
 
         {copyable > 0 && (
@@ -198,6 +197,7 @@ export function FoodScreen() {
           onClose={() => setAddFood(null)}
           onPhoto={claude.onPhoto}
           onDescribe={claude.onDescribe}
+          onLink={claude.onLink}
           onSnapLabel={claude.onSnapLabel}
           onLogged={(logged) => noteMealLogged({ mealId: logged.mealId, itemIds: logged.itemIds })}
         />
@@ -288,63 +288,6 @@ export function FoodScreen() {
 
 function capitalise(s: string): string {
   return s[0]!.toUpperCase() + s.slice(1);
-}
-
-const SLOT_PLURAL: Record<MealSlot, string> = { breakfast: 'breakfasts', lunch: 'lunches', dinner: 'dinners', snack: 'snacks' };
-
-/**
- * Today's usual meals for the time of day (domain/usualMeals.ts): the ones saved, then the ones the
- * owner's own history shows. One tap logs one, with an Undo; nothing already on the day is offered.
- */
-function Usuals({ date }: { date: string }) {
-  const slot = defaultSlot();
-  const offered = useLiveQuery(() => usualsOn(date, slot), [date, slot]);
-  const [busy, setBusy] = useState(false);
-  if (!offered || offered.length === 0) return null;
-  const log = async (usual: OfferedUsual) => {
-    // Latched: logUsual makes a new meal on every call, so a second tap would log it twice.
-    if (busy) return;
-    setBusy(true);
-    try {
-      const id = await logUsual(date, slot, usual);
-      noteMealLogged({ mealId: id });
-      toast(`Logged to ${capitalise(slot)}`, 'ok', { label: 'Undo', onClick: () => void deleteMeal(id) });
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <section data-testid="usual-meals">
-      <SectionTitle right={<span className="pb-px text-xs text-muted">one tap logs it</span>}>Your usual {SLOT_PLURAL[slot]}</SectionTitle>
-      <div className="grid grid-cols-2 gap-2">
-        {offered.map((usual) => {
-          const m = usual.items.reduce((acc, i) => addMacros(acc, displayMacros(i.nutrition)), ZERO);
-          // A meal that only carries its slot's name says more by its foods.
-          const title = usual.name.toLowerCase() === slot ? usual.items.map((i) => i.name).join(', ') : usual.name;
-          return (
-            <button
-              key={usual.key}
-              type="button"
-              disabled={busy}
-              onClick={() => void log(usual)}
-              className="flex min-h-14 items-center gap-2 rounded-[14px] border border-accent/45 bg-surface px-3 py-2.5 text-left active:bg-accent/10 disabled:opacity-60"
-              data-testid="usual-meal"
-            >
-              <span className="min-w-0 flex-1">
-                <span className="line-clamp-2 block text-sm font-medium leading-tight">{title}</span>
-                <span className="num mt-0.5 block text-xs text-muted">
-                  {fmtKcal(m.kcal)} · P {fmtNum(Math.round(m.protein))}
-                </span>
-              </span>
-              <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-fg text-lg font-medium leading-none text-bg">
-                +
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </section>
-  );
 }
 
 /**

@@ -146,6 +146,28 @@ export function recentChoices(
   return rankMemories('', memories, limit).map(({ memory }) => choiceFromMemory(memory, tableUnits.get(normalise(memory.name))));
 }
 
+/**
+ * The foods eaten before, split by a meal: the ones logged in it (`counts`, by memory key: how many
+ * of that meal's past logs held the food), most often first, then the rest by how often they are
+ * eaten at all. A food never logged in the meal is still in the second list, so nothing is hidden.
+ */
+export function slotChoices(
+  memories: FoodMemory[],
+  table: { foods: TableFood[]; aliases: FoodAlias[] },
+  counts: ReadonlyMap<string, number>,
+  limit = 8,
+): { usual: FoodChoice[]; other: FoodChoice[] } {
+  const tableUnits = tableUnitIndex(table.foods, table.aliases);
+  const choice = (m: FoodMemory) => choiceFromMemory(m, tableUnits.get(normalise(m.name)));
+  const ranked = rankMemories('', memories, memories.length).map(({ memory }) => memory);
+  const usual = ranked
+    .filter((m) => (counts.get(m.key) ?? 0) > 0)
+    .sort((a, b) => counts.get(b.key)! - counts.get(a.key)!)
+    .slice(0, limit);
+  const shown = new Set(usual.map((m) => m.key));
+  return { usual: usual.map(choice), other: ranked.filter((m) => !shown.has(m.key)).slice(0, limit).map(choice) };
+}
+
 function candidateChoice(c: IngredientCandidate, memoriesByKey: Map<string, FoodMemory>, tableUnits: Map<string, TableUnit>): FoodChoice {
   if (c.key.startsWith('memory:')) {
     const m = memoriesByKey.get(c.key.slice('memory:'.length));
