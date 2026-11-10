@@ -80,8 +80,10 @@ test.describe('WP4 overlays', () => {
 
     const card = page.getByTestId('exercise-card-Romanian Deadlift (Barbell)');
     await expect(card).toContainText('deload');
-    const weightValue = Number(await card.getByTestId('weight-input').inputValue());
-    expect(weightValue).toBeLessThan(110);
+    // The label can land a render before the input does, so the weight is polled, not sampled once.
+    const weightInput = card.getByTestId('weight-input');
+    await expect.poll(async () => Number(await weightInput.inputValue())).toBeLessThan(110);
+    const weightValue = Number(await weightInput.inputValue());
 
     await logSets(page, 'Romanian Deadlift (Barbell)', weightValue, [8, 8, 8, 8]);
     await finishToSummary(page);

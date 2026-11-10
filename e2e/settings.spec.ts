@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { fresh, openAdvanced } from './fresh';
+import { fresh, openAdvanced, readRawIron } from './fresh';
 
 /**
  * Settings mixes drafted cards (their own Save button — Targets, Rest timer, Progression) with
@@ -29,7 +29,9 @@ test.describe('settings — draft survives an unrelated instant-save', () => {
 
     // Save it for real, then reload to confirm it actually persisted (not just surviving in memory).
     await page.getByTestId('progression-card').getByRole('button', { name: 'Save' }).click();
-    await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+    // Wait on the stored row, not the toast: the toggle above says "Saved" too, and a reload on
+    // that earlier toast cut this save off before it landed (2 runs in 6).
+    await expect.poll(async () => (await readRawIron(page)).tables.settings[0]?.deloadPercent).toBe(0.75);
 
     await page.reload();
     await openAdvanced(page);
