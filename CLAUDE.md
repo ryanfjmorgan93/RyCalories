@@ -59,7 +59,8 @@ The owner does not check on device. Correctness has to come from the code and th
 ## Product rules that are part of correctness
 
 - Kilograms only, British English, dark only (the light theme was removed at the owner's request,
-  October 2026), phone-first with big tap targets.
+  October 2026), phone-first with big tap targets. The look is the owner's pick of November 2026
+  (docs/DESIGN.md): warm black, cream, brass by default, Space Grotesk.
 - **The coach may speak first; nothing else lectures.** Since October 2026 (docs/adr/0002) the
   coach (Claude) speaks at defined moments (CONTEXT.md: Moment) like a good personal trainer:
   to the point, encouraging, the odd motivational line, now and then asking how the owner is
@@ -163,10 +164,11 @@ The owner does not check on device. Correctness has to come from the code and th
   machine (one gym's stack is not another's), and Strength Level's numbers may not be used in an
   app without a licence, so no rank against other people is shown beyond squat, bench and deadlift.
   The line under a lift names the set that reaches the next level at today's working weight
-  ("Level 3 at 75 kg × 7"), counted by the same sum as the level. Home's Levels card
-  (`ui/LevelsCard.tsx`, read by `db/gameQueries.ts` in one pass over the tables) adds every level
-  above 1 into a total level, lists the three lifts of the current routines nearest their next
-  level, and opens the badges. `src/domain/badges.ts` is the badge ladders (asked for in November
+  ("Level 3 at 75 kg × 7"), counted by the same sum as the level. On Home
+  (`ui/LevelsCard.tsx`, read by `db/gameQueries.ts` in one pass over the tables) every level above 1
+  is added into a total level in a hexagon, today's hand is the three lifts of the current routines
+  nearest their next level as cards, and the cabinet opens the badges; a Level up panel stands on
+  the session card and the summary (`ui/GameMarks.tsx`, docs/DESIGN.md §6). `src/domain/badges.ts` is the badge ladders (asked for in November
   2026): sessions finished, tonnes lifted, the total level, and for a barbell lift its heaviest
   counted set in 20 kg steps from 60 kg. A badge is read off the data, never stored, so it follows
   an edit or a delete; what is left to the next is rounded up. The summary lists the badges a

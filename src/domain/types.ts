@@ -418,7 +418,7 @@ export interface Settings {
   barKg?: number;
   /**
    * The accent hue picked on the colour wheel (Settings → Look), 0–359, or WHITE_HUE (-1) for white.
-   * Absent means the signed-off ember. The colour itself is derived (src/domain/accent.ts) so it always reads on the dark surfaces.
+   * Absent means the default brass. The colour itself is derived (src/domain/accent.ts) so it always reads on the dark surfaces.
    */
   accentHue?: number;
   /** Daily step goal for the Steps strip on Home. Absent means DEFAULT_STEP_GOAL (src/domain/steps.ts). */

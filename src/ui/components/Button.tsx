@@ -10,12 +10,12 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode;
 }
 
-// Glass, like the cards (`.glass-card`): the accent's is tinted amber with an amber rim.
+// Primary is a solid cream pill; the quiet ones are clear with an accent rim (docs/DESIGN.md §3).
 const variants: Record<Variant, string> = {
-  primary: 'glass-card bg-accent/25 text-fg font-semibold border border-accent/70 active:bg-accent/40',
+  primary: 'bg-fg text-bg font-semibold border border-fg active:brightness-90',
   ok: 'bg-ok text-ok-fg font-semibold active:brightness-90',
-  secondary: 'glass-card bg-glass-1 text-fg font-semibold border border-glass-border active:bg-white/10',
-  outline: 'glass-card bg-glass-2 text-fg font-semibold border border-glass-border active:bg-white/10',
+  secondary: 'bg-glass-2 text-fg font-semibold border border-accent/45 active:bg-accent/10',
+  outline: 'bg-transparent text-fg font-semibold border border-accent/45 active:bg-accent/10',
   ghost: 'bg-transparent text-muted font-semibold active:bg-surface-2',
   danger: 'bg-transparent text-danger font-semibold border border-danger/40 active:bg-danger/10',
 };

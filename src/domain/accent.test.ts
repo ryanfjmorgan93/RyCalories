@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ACCENT_TEXT_BACKGROUNDS, EMBER, EMBER_HUE, MIN_CONTRAST, WHITE, WHITE_HUE, accentForSetting, accentFromHue, hslToHex, inkOn, normaliseHue } from './accent';
+import { ACCENT_TEXT_BACKGROUNDS, BRASS, BRASS_HUE, MIN_CONTRAST, WHITE, WHITE_HUE, accentForSetting, accentFromHue, hslToHex, inkOn, normaliseHue } from './accent';
 import { contrastRatio } from './plateDiagram';
 
 describe('hslToHex', () => {
@@ -17,7 +17,7 @@ describe('normaliseHue', () => {
     expect(normaliseHue(-10)).toBe(350);
     expect(normaliseHue(360)).toBe(0);
     expect(normaliseHue(725.4)).toBe(5);
-    expect(normaliseHue(Number.NaN)).toBe(EMBER_HUE);
+    expect(normaliseHue(Number.NaN)).toBe(BRASS_HUE);
   });
 });
 
@@ -35,19 +35,19 @@ describe('accentFromHue', () => {
     expect(contrastRatio(plain, '#262626')).toBeLessThan(MIN_CONTRAST);
     const lifted = accentFromHue(240).accent;
     expect(lifted).not.toBe(plain);
-    expect(contrastRatio(lifted, '#262626')).toBeGreaterThanOrEqual(MIN_CONTRAST);
+    expect(contrastRatio(lifted, ACCENT_TEXT_BACKGROUNDS[2])).toBeGreaterThanOrEqual(MIN_CONTRAST);
   });
 
-  it('keeps an orange near the signed-off ember', () => {
-    expect(accentFromHue(EMBER_HUE).accent).toBe(hslToHex(EMBER_HUE, 100, 56));
+  it('leaves an amber that already reads where it is', () => {
+    expect(accentFromHue(BRASS_HUE).accent).toBe(hslToHex(BRASS_HUE, 100, 56));
   });
 });
 
 describe('accentForSetting', () => {
-  it('is the signed-off ember when nothing is stored', () => {
-    expect(accentForSetting(undefined)).toEqual({ hue: EMBER_HUE, ...EMBER });
-    expect(contrastRatio(EMBER.accentFg, EMBER.accent)).toBeGreaterThanOrEqual(MIN_CONTRAST);
-    for (const bg of ACCENT_TEXT_BACKGROUNDS) expect(contrastRatio(EMBER.accent, bg)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+  it('is the default brass when nothing is stored', () => {
+    expect(accentForSetting(undefined)).toEqual({ hue: BRASS_HUE, ...BRASS });
+    expect(contrastRatio(BRASS.accentFg, BRASS.accent)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+    for (const bg of ACCENT_TEXT_BACKGROUNDS) expect(contrastRatio(BRASS.accent, bg)).toBeGreaterThanOrEqual(MIN_CONTRAST);
   });
 
   it('uses the wheel when a hue is stored', () => {

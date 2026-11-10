@@ -1,15 +1,15 @@
 import { useEffect } from 'react';
-import { accentForSetting, EMBER_HUE } from '@/domain/accent';
+import { accentForSetting, BRASS_HUE } from '@/domain/accent';
 import { useSettings } from './hooks';
 
 /**
  * Applies the accent the owner picked on the colour wheel (Settings → Look) as the two CSS
  * variables everything accent-coloured reads (`--c-accent`, `--c-accent-fg`). No stored hue means
- * the stylesheet's own ember, so the inline values are removed rather than written.
+ * the stylesheet's own brass, so the inline values are removed rather than written.
  *
  * The Settings row is the record. A copy of the hue in localStorage only lets the first paint use
  * it before the database has opened; it is a per-device convenience, read and written in try/catch,
- * and the app looks right (ember, then the stored hue a moment later) without it.
+ * and the app looks right (brass, then the stored hue a moment later) without it.
  */
 const CACHE_KEY = 'iron.accentHue';
 
@@ -23,7 +23,7 @@ export function applyAccent(accentHue: number | undefined): void {
     style.setProperty('--c-accent', accent);
     style.setProperty('--c-accent-fg', accentFg);
   }
-  document.documentElement.dataset.accentHue = String(accentHue ?? EMBER_HUE);
+  document.documentElement.dataset.accentHue = String(accentHue ?? BRASS_HUE);
 }
 
 function cacheAccent(accentHue: number | undefined): void {
@@ -31,7 +31,7 @@ function cacheAccent(accentHue: number | undefined): void {
     if (accentHue === undefined) localStorage.removeItem(CACHE_KEY);
     else localStorage.setItem(CACHE_KEY, String(accentHue));
   } catch {
-    // Not cached: the first paint is ember until Settings loads.
+    // Not cached: the first paint is brass until Settings loads.
   }
 }
 
@@ -42,7 +42,7 @@ export function applyCachedAccent(): void {
     const hue = raw === null ? Number.NaN : Number(raw);
     if (Number.isFinite(hue)) applyAccent(hue);
   } catch {
-    // Storage unavailable: ember until Settings loads.
+    // Storage unavailable: brass until Settings loads.
   }
 }
 

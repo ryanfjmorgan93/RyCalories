@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { accentFromHue, EMBER, WHITE, WHITE_HUE } from '../src/domain/accent';
+import { accentFromHue, BRASS, WHITE, WHITE_HUE } from '../src/domain/accent';
 import { quoteOfTheDay, welcomeLine } from '../src/domain/dailyQuote';
 import { fresh } from './fresh';
 
@@ -46,14 +46,14 @@ test('the most rested routine leads Home with its lead lift as a robot render', 
   await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth)).toBeGreaterThan(0);
 });
 
-test('the colour wheel recolours the app, survives a reload, offers white, and resets to ember', async ({ page }) => {
+test('the colour wheel recolours the app, survives a reload, offers white, and resets to brass', async ({ page }) => {
   await fresh(page);
   await page.goto('/settings');
-  await expect(page.getByTestId('accent-value')).toHaveText('Ember');
-  await expect(activeBar(page)).toHaveCSS('background-color', rgb(EMBER.accent));
+  await expect(page.getByTestId('accent-value')).toHaveText('Brass');
+  await expect(activeBar(page)).toHaveCSS('background-color', rgb(BRASS.accent));
 
   const blue = accentFromHue(200).accent;
-  expect(blue).not.toBe(EMBER.accent);
+  expect(blue).not.toBe(BRASS.accent);
   await page.getByTestId('accent-hue').fill('200');
   await expect(page.getByTestId('accent-value')).toHaveText(blue.toUpperCase());
   await expect(activeBar(page)).toHaveCSS('background-color', rgb(blue));
@@ -74,8 +74,8 @@ test('the colour wheel recolours the app, survives a reload, offers white, and r
   await expect(activeBar(page)).toHaveCSS('background-color', rgb(WHITE.accent));
 
   await page.getByTestId('accent-reset').click();
-  await expect(page.getByTestId('accent-value')).toHaveText('Ember');
-  await expect(activeBar(page)).toHaveCSS('background-color', rgb(EMBER.accent));
+  await expect(page.getByTestId('accent-value')).toHaveText('Brass');
+  await expect(activeBar(page)).toHaveCSS('background-color', rgb(BRASS.accent));
   await expect.poll(() => storedHue(page)).toBeNull();
 });
 

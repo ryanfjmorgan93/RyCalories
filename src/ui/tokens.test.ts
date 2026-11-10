@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { EMBER } from '@/domain/accent';
+import { BRASS } from '@/domain/accent';
 import { contrastRatio } from '@/domain/plateDiagram';
 
 /**
@@ -151,10 +151,10 @@ describe('dark theme tokens', () => {
 });
 
 describe('accent default', () => {
-  // The colour wheel's reset (src/domain/accent.ts) and the stylesheet must name the same ember.
-  it('index.css carries the same ember as the colour wheel', () => {
-    expect(opaqueHex(tokens, 'c-accent')).toBe(EMBER.accent);
-    expect(opaqueHex(tokens, 'c-accent-fg')).toBe(EMBER.accentFg);
+  // The colour wheel's reset (src/domain/accent.ts) and the stylesheet must name the same brass.
+  it('index.css carries the same brass as the colour wheel', () => {
+    expect(opaqueHex(tokens, 'c-accent')).toBe(BRASS.accent);
+    expect(opaqueHex(tokens, 'c-accent-fg')).toBe(BRASS.accentFg);
   });
 });
 

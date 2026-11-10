@@ -3,16 +3,17 @@
  * only; saturation is fixed and lightness is the lowest that keeps every pairing readable:
  * the accent as text on the darkest and the lightest dark surface, and the ink printed on an
  * accent fill. A dark blue or violet is therefore lifted until it reads, rather than shipped at
- * 3:1. Absent (`undefined`) means the signed-off ember, which src/index.css carries as its default.
+ * 3:1. Absent (`undefined`) means brass, the default src/index.css carries (it replaced ember with
+ * the trophy-room look, November 2026; ember is still hue 17 on the wheel).
  * White is the one accent off the wheel (the owner asked for it, November 2026).
  *
  * Pure: no IO, no DOM. src/ui/accentTheme.ts applies the result as CSS variables.
  */
 import { contrastRatio } from './plateDiagram';
 
-/** Hue of the signed-off ember #FF5A1F, for the wheel's starting position and its reset. */
-export const EMBER_HUE = 17;
-export const EMBER = { accent: '#ff5a1f', accentFg: '#000000' } as const;
+/** Hue of the default brass #C9A45C, for the wheel's starting position and its reset. */
+export const BRASS_HUE = 40;
+export const BRASS = { accent: '#c9a45c', accentFg: '#000000' } as const;
 /** White has no hue, so it is stored as this value in `Settings.accentHue`, beside the wheel's 0–359. */
 export const WHITE_HUE = -1;
 export const WHITE = { accent: '#ffffff', accentFg: '#000000' } as const;
@@ -21,10 +22,10 @@ export const WHITE = { accent: '#ffffff', accentFg: '#000000' } as const;
 export const MIN_CONTRAST = 4.5;
 
 /**
- * Every dark surface the accent appears on as text: the black stage, the plain panel, and the top
- * of a shaded panel (its lightest point). The lightest one is the binding one.
+ * Every dark surface the accent appears on as text: the warm black stage, the plain panel, and the
+ * lightest panel. The lightest one is the binding one.
  */
-export const ACCENT_TEXT_BACKGROUNDS = ['#000000', '#1a1a1a', '#262626'] as const;
+export const ACCENT_TEXT_BACKGROUNDS = ['#0a0907', '#14120e', '#262320'] as const;
 
 const SATURATION = 100;
 const START_LIGHTNESS = 56;
@@ -39,7 +40,7 @@ export interface AccentColours {
 
 /** A whole-degree hue in 0–359, whatever was passed (negative, past 360, fractional). */
 export function normaliseHue(hue: number): number {
-  if (!Number.isFinite(hue)) return EMBER_HUE;
+  if (!Number.isFinite(hue)) return BRASS_HUE;
   return ((Math.round(hue) % 360) + 360) % 360;
 }
 
@@ -79,9 +80,9 @@ export function accentFromHue(hue: number): AccentColours {
   return { hue: h, accent, accentFg: inkOn(accent) };
 }
 
-/** The colours for a stored setting: the signed-off ember when none is stored, white for WHITE_HUE. */
+/** The colours for a stored setting: the default brass when none is stored, white for WHITE_HUE. */
 export function accentForSetting(accentHue: number | undefined): AccentColours {
-  if (accentHue === undefined) return { hue: EMBER_HUE, ...EMBER };
+  if (accentHue === undefined) return { hue: BRASS_HUE, ...BRASS };
   if (accentHue === WHITE_HUE) return { hue: WHITE_HUE, ...WHITE };
   return accentFromHue(accentHue);
 }

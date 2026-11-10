@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
-import { accentForSetting, accentFromHue, EMBER_HUE, normaliseHue, WHITE_HUE } from '@/domain/accent';
+import { accentForSetting, accentFromHue, BRASS_HUE, normaliseHue, WHITE_HUE } from '@/domain/accent';
 import { saveSettings } from '@/db/repo';
 import type { Settings } from '@/domain/types';
 import { Button } from './components/Button';
@@ -17,14 +17,14 @@ function hueAt(e: PointerEvent<HTMLDivElement>): number {
   return normaliseHue((Math.atan2(dx, -dy) * 180) / Math.PI);
 }
 
-/** Where the wheel's knob and slider sit for a stored setting: ember and white are not on the wheel. */
-const wheelHue = (stored: number | undefined) => (stored === undefined || stored === WHITE_HUE ? EMBER_HUE : stored);
+/** Where the wheel's knob and slider sit for a stored setting: the default brass and white are not on the wheel. */
+const wheelHue = (stored: number | undefined) => (stored === undefined || stored === WHITE_HUE ? BRASS_HUE : stored);
 
 /**
  * Settings → Look: a colour wheel for the accent. Dragging previews live across the whole app;
  * letting go saves. A slider under it does the same for keyboard and screen reader. The wheel picks
  * a hue; the colour is lifted where needed so text on it and in it still reads (src/domain/accent.ts).
- * White is a button beside Ember, since no hue gives it.
+ * White is a button beside Brass, since no hue gives it.
  */
 export function AccentWheel({ settings }: { settings: Settings }) {
   const stored = settings.accentHue;
@@ -38,8 +38,8 @@ export function AccentWheel({ settings }: { settings: Settings }) {
     setHue(wheelHue(stored));
     setWhite(stored === WHITE_HUE);
   }, [stored]);
-  const isEmber = stored === undefined && hue === EMBER_HUE && !dragging;
-  const colours = accentForSetting(white ? WHITE_HUE : isEmber ? undefined : hue);
+  const isDefault = stored === undefined && hue === BRASS_HUE && !dragging;
+  const colours = accentForSetting(white ? WHITE_HUE : isDefault ? undefined : hue);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const preview = (h: number) => {
@@ -97,16 +97,16 @@ export function AccentWheel({ settings }: { settings: Settings }) {
         <div className="min-w-0 flex-1">
           <div className="label">Accent</div>
           <div className="num mt-1 text-2xl font-bold" data-testid="accent-value">
-            {white ? 'White' : isEmber ? 'Ember' : colours.accent.toUpperCase()}
+            {white ? 'White' : isDefault ? 'Brass' : colours.accent.toUpperCase()}
           </div>
           <div className="mt-3 flex gap-2">
             <Button size="sm" variant="outline" disabled={stored === undefined} onClick={() => {
               setWhite(false);
-              setHue(EMBER_HUE);
+              setHue(BRASS_HUE);
               applyAccent(undefined);
               commit(undefined);
             }} data-testid="accent-reset">
-              Ember
+              Brass
             </Button>
             <Button size="sm" variant="outline" disabled={white} onClick={() => {
               setWhite(true);
