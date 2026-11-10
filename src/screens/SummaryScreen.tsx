@@ -13,6 +13,7 @@ import { sessionVolume } from '@/domain/volume';
 import { useSessionDraft } from '@/state/sessionDraft';
 import { useTimer } from '@/state/timer';
 import { Button } from '@/ui/components/Button';
+import { LevelUpPanel } from '@/ui/LevelLine';
 import { Card, SectionTitle } from '@/ui/components/Card';
 import { Chip } from '@/ui/components/Chip';
 import { NumberField, TextInput } from '@/ui/components/NumberField';
@@ -327,12 +328,7 @@ export function SummaryScreen() {
               )}
             </div>
             {levelUps.map(([id, { name, up }]) => (
-              <div key={id} data-testid="summary-level-up" className="flex items-center justify-between gap-3 rounded-xl border border-accent/35 bg-accent/10 px-3.5 py-3">
-                <span className="min-w-0 break-words font-semibold">{name}</span>
-                <span className="num shrink-0 text-sm font-bold text-accent">
-                  Level {up.from} → Level {up.to}
-                </span>
-              </div>
+              <LevelUpPanel key={id} level={up.to} detail={`${name} · Level ${up.from} → Level ${up.to}`} testId="summary-level-up" />
             ))}
           </div>
         )}

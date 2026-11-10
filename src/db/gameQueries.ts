@@ -29,6 +29,9 @@ export interface Game {
   /** Up to three exercises of the current routines nearest their next level, nearest first. */
   closest: GameLevel[];
   ladders: Ladder[];
+  /** Sessions finished with a counted set, and every kilo lifted in them. */
+  sessions: number;
+  liftedKg: number;
 }
 
 interface Tables {
@@ -95,14 +98,17 @@ function gameFrom(t: Tables, keep: (s: Session) => boolean, day?: string): Game 
 
   const total = totalLevel(levels.map((l) => l.level));
   const sessionsDone = new Set(sets.filter((s) => countsForVolume(s.type)).map((s) => s.sessionId)).size;
+  const liftedKg = sessionVolume(sets);
   return {
+    sessions: sessionsDone,
+    liftedKg,
     levels,
     total,
     closest: levels
       .filter((l) => l.routine !== null && l.level.startIn === 0)
       .sort((a, b) => b.level.fill - a.level.fill || a.exercise.name.localeCompare(b.exercise.name))
       .slice(0, 3),
-    ladders: ladders({ sessions: sessionsDone, liftedKg: sessionVolume(sets), totalLevel: total, lifts }),
+    ladders: ladders({ sessions: sessionsDone, liftedKg, totalLevel: total, lifts }),
   };
 }
 

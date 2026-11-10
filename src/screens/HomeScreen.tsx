@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { Fragment, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { GOALS } from '@/domain/goalTargets';
 import { useNavigate } from 'react-router-dom';
@@ -20,7 +20,8 @@ import { lastWeekReading, weighInDue } from '@/domain/weighIn';
 import type { Routine } from '@/domain/types';
 import { Button } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row, SectionTitle, Stat } from '@/ui/components/Card';
-import { LevelsCard } from '@/ui/LevelsCard';
+import { Cabinet, LevelHeader, TodaysHand } from '@/ui/LevelsCard';
+import { loadGame } from '@/db/gameQueries';
 import { StreakDots } from '@/ui/components/CalendarHeatmap';
 import { Chip } from '@/ui/components/Chip';
 import { NumberInput } from '@/ui/components/NumberField';
@@ -66,6 +67,7 @@ export function HomeScreen() {
 
   // Every routine, most rested first. The order is the whole suggestion: sessions are picked by feel.
   const routines = useLiveQuery(() => loadHomeRoutines(todayKey), [todayKey]);
+  const game = useLiveQuery(() => loadGame(), []);
 
   const starting = useRef(false);
   const start = async (r: Routine) => {
@@ -179,10 +181,16 @@ export function HomeScreen() {
 
         {calendar && <StreakDots thisWeek={calendar.thisWeek} target={calendar.weeklyTarget} streak={calendar.streak} className="mt-3 px-1" />}
 
+        {game && <LevelHeader game={game} />}
+
         <SectionTitle right={<Button size="sm" variant="ghost" className="-mb-2 text-accent" onClick={() => nav('/routines')}>Edit</Button>}>Routines</SectionTitle>
         <div className="space-y-3" data-testid="routines-list">
           {(routines ?? []).map((item, i) => (
-            <RoutineCard key={item.routine.id} hero={i === 0} overlay={i === 0 ? todayOverlay : undefined} item={item} settings={settings} active={!!active} onStart={() => void start(item.routine)} />
+            <Fragment key={item.routine.id}>
+              <RoutineCard hero={i === 0} overlay={i === 0 ? todayOverlay : undefined} item={item} settings={settings} active={!!active} onStart={() => void start(item.routine)} />
+              {/* Today's hand sits under the routine that leads, so Start stays in reach above it. */}
+              {i === 0 && game && <TodaysHand game={game} />}
+            </Fragment>
           ))}
           {routines && routines.length === 0 && <EmptyState>No routines. Add one from the Routines tab.</EmptyState>}
         </div>
@@ -197,7 +205,7 @@ export function HomeScreen() {
         {/* With no routine to lay them over, the day's numbers stand on their own. */}
         {todayOverlay && (!routines || routines.length === 0) && <div className="mt-3">{todayOverlay}</div>}
 
-        <LevelsCard />
+        {game && <Cabinet game={game} />}
 
         {/* The daily reminders sit under the training, small: not the first thing on opening the app. */}
         <SupplementsCard today={todayKey} />

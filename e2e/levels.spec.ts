@@ -56,7 +56,7 @@ test('a Level under the exercise: three sessions set the start, the fourth level
   let card = await startLower(page);
   await expect(card.getByTestId('level-line')).toHaveText('Level 1 · your first 3 sessions set the start (2 done)');
   await logOneSet(page, card, 100, 5);
-  await expect(card.getByTestId('level-line')).toHaveText('Level 1 · start 100 kg × 5Level 2 at 100 kg × 7');
+  await expect(card.getByTestId('level-line')).toHaveText('Level 1 · start 100 kg × 5LV 1LV 2Level 2 at 100 kg × 7');
   await expect(card.getByTestId('level-bar')).toHaveAttribute('aria-valuenow', '0');
   await toSummary(page);
   await expect(page.getByTestId('summary-level-up')).toHaveCount(0);
@@ -64,9 +64,9 @@ test('a Level under the exercise: three sessions set the start, the fourth level
 
   // The fourth: 103 × 5 is 3% over (the bar is 60% of the way to 5%), then 106 × 5 is 6%: Level 2.
   card = await startLower(page);
-  await expect(card.getByTestId('level-line')).toHaveText('Level 1 · start 100 kg × 5Level 2 at 100 kg × 7');
+  await expect(card.getByTestId('level-line')).toHaveText('Level 1 · start 100 kg × 5LV 1LV 2Level 2 at 100 kg × 7');
   await logOneSet(page, card, 103, 5);
-  await expect(card.getByTestId('level-line')).toHaveText('Level 1 · best 103 kg × 5, 3% over your start of 100 kg × 5Level 2 at 103 kg × 6');
+  await expect(card.getByTestId('level-line')).toHaveText('Level 1 · best 103 kg × 5, 3% over your start of 100 kg × 5LV 1LV 2Level 2 at 103 kg × 6');
   await expect(card.getByTestId('level-bar')).toHaveAttribute('aria-valuenow', '60');
   // The set that crosses says so. Its words are its own (the 103's said "Record · 103 × 5"), and it is read
   // before anything else is waited for, while it is still on the screen.
@@ -76,13 +76,15 @@ test('a Level under the exercise: three sessions set the start, the fourth level
   await expect(page.getByText('Record · 106 × 5 · Level 2', { exact: true })).toBeVisible();
   await expect(card.getByTestId('logged-row')).toHaveCount(2);
   await clickIfPresent(page.getByTestId('rest-timer').getByRole('button', { name: 'Skip' }), 300);
-  await expect(card.getByTestId('level-line')).toHaveText('Level 2 · best 106 kg × 5, 6% over your start of 100 kg × 5Level 3 at 106 kg × 7');
+  await expect(card.getByTestId('level-line')).toHaveText('Level 2 · best 106 kg × 5, 6% over your start of 100 kg × 5LV 2LV 3Level 3 at 106 kg × 7');
   await expect(card.getByTestId('level-bar')).toHaveAttribute('aria-valuenow', '20');
+  // The panel stands on the card for the rest of the session that earned the level.
+  await expect(card.getByTestId('level-up-panel')).toHaveText('LV2Level upLevel 1 → 2 · 106 kg × 5');
 
   await toSummary(page);
   const up = page.getByTestId('summary-level-up');
   await expect(up).toHaveCount(1);
-  await expect(up).toHaveText('Barbell Back SquatLevel 1 → Level 2');
+  await expect(up).toHaveText('LV2Level upBarbell Back Squat · Level 1 → Level 2');
   await expect(page.getByTestId('summary-total-level')).toHaveText('Total level 0 → 1');
   await expect(page.getByTestId('summary-badge')).toHaveCount(0);
   await save(page);
@@ -90,9 +92,10 @@ test('a Level under the exercise: three sessions set the start, the fourth level
   // Home: the total, the lift to chase with the set that does it and its routine, and the badges.
   // (After the third session these read 0 and Level 1, so they cannot be met by what was there before.)
   await expect(page.getByTestId('total-level')).toHaveText('1');
-  await expect(page.getByTestId('closest-level')).toHaveText(['Barbell Back SquatLevel 2Level 3 at 106 kg × 7 · Lower (Squat)']);
-  // Three barbell marks held; four sessions of ten is further along than 106 kg of the way from 100 to 120.
-  await expect(page.getByTestId('badges-row')).toHaveText('Badges 310 sessions · 6 to go');
+  await expect(page.getByTestId('closest-level')).toHaveText(['2Barbell Back SquatLower (Squat)Level 3 at 106 kg × 7']);
+  // The cabinet: the squat's highest mark, then the next badge nearest (four sessions of ten is
+  // further along than 106 kg of the way from 100 to 120), as its mark "10" and "6 to go".
+  await expect(page.getByTestId('badges-row')).toHaveText('100 kgBarbell Back Squat106 to go');
   await page.getByTestId('badges-row').click();
   await expect(page.getByTestId('badge-ladder')).toHaveText([
     'Sessions1010 sessions · 6 to go',
@@ -113,5 +116,5 @@ test('a Level under the exercise: three sessions set the start, the fourth level
   await expect(page.getByTestId('summary-level-up')).toHaveCount(0);
   await save(page);
   card = await startLower(page);
-  await expect(card.getByTestId('level-line')).toHaveText('Level 2 · best 106 kg × 5, 6% over your start of 100 kg × 5Level 3 at 106 kg × 7');
+  await expect(card.getByTestId('level-line')).toHaveText('Level 2 · best 106 kg × 5, 6% over your start of 100 kg × 5LV 2LV 3Level 3 at 106 kg × 7');
 });
