@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'Iron',
   webDir: 'dist',
   android: {
-    backgroundColor: '#0b0b0d',
+    backgroundColor: '#0a0907',
     allowMixedContent: false,
   },
   plugins: {
@@ -20,7 +20,7 @@ const config: CapacitorConfig = {
     },
     LocalNotifications: {
       smallIcon: 'ic_stat_iron',
-      iconColor: '#ff8a2a',
+      iconColor: '#c9a45c',
     },
   },
 };

@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The launcher tile behind the plate (assets/app-icon/plate.svg): near-black, a little lighter
+<!-- The launcher tile behind the hexagon (assets/app-icon/level.svg): warm black, a little lighter
      behind it. The layer is 108 dp of which 72 show, so the centre and radius are the master's
-     (0.5, 0.42; 0.85 of the tile) restated for the whole layer. -->
+     (0.5, 0.4; 0.85 of the tile) restated for the whole layer. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
     <gradient
         android:type="radial"
         android:centerX="0.5"
-        android:centerY="0.447"
+        android:centerY="0.433"
         android:gradientRadius="57%"
-        android:startColor="#202024"
-        android:endColor="#040405" />
+        android:startColor="#1c1813"
+        android:endColor="#050403" />
 </shape>

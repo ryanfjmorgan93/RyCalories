@@ -72,7 +72,7 @@ describe('Health Connect', () => {
 });
 
 /**
- * The launcher icon (assets/app-icon/plate.svg, rendered by scripts/app-icon.mjs). What can be
+ * The launcher icon (assets/app-icon/level.svg, rendered by scripts/app-icon.mjs). What can be
  * checked here is the wiring and the file sizes Android expects per density: a foreground of the
  * wrong size is drawn too big or too small, and nothing else would say so. How it looks on a real
  * launcher cannot be tested without a phone.
@@ -85,13 +85,13 @@ describe('the launcher icon', () => {
     return [png.readUInt32BE(16), png.readUInt32BE(20)];
   };
 
-  it('is an adaptive icon: the plate over the tile, round or not', () => {
+  it('is an adaptive icon: the hexagon over the tile, round or not', () => {
     for (const name of ['ic_launcher', 'ic_launcher_round']) {
       const xml = read(`android/app/src/main/res/mipmap-anydpi-v26/${name}.xml`);
       expect(xml).toContain('<background android:drawable="@drawable/ic_launcher_background"/>');
       expect(xml).toContain('<foreground android:drawable="@mipmap/ic_launcher_foreground"/>');
     }
-    // The tile is the gradient, not the template's teal grid; the splash screen shows the same plate.
+    // The tile is the gradient, not the template's teal grid; the splash screen shows the same icon.
     const tile = read('android/app/src/main/res/drawable/ic_launcher_background.xml');
     expect(tile).toContain('android:type="radial"');
     expect(tile).not.toContain('#26A69A');

@@ -192,7 +192,8 @@ The owner does not check on device. Correctness has to come from the code and th
   Food has two ladders once a day is logged: days logged and days the protein target was hit
   (`foodDays` in `db/gameQueries.ts`), counted as days, never a streak; the Food day shows a
   Protein hit panel on a day that reached it.
-- The app icon is `assets/app-icon/plate.svg` (an ember plate, the owner's pick, November 2026),
+- The app icon is `assets/app-icon/level.svg` (a level's brass hexagon round a cream dumbbell, the
+  owner's pick for the game look, November 2026, replacing the ember plate),
   rendered by hand with `scripts/app-icon.mjs` into the Android mipmaps and `public/icons/`, and
   committed. The foreground layer is also the splash screen's icon; the tile behind it is
   `res/drawable/ic_launcher_background.xml`. `src/db/manifest.test.ts` checks the wiring and sizes.

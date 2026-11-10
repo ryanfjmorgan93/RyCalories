@@ -1,0 +1,23 @@
+<!--
+  Iron's app icon: a level's brass hexagon round a cream dumbbell, the game's own mark (chosen by the
+  owner, November 2026, over a seal and a brass plate). The master every icon file is rendered from
+  by scripts/app-icon.mjs. #tile is the warm black tile behind it; the Android foreground layer
+  leaves it out. public/icons/icon.svg is the same drawing for the browser tab.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <radialGradient id="bg" cx="0.5" cy="0.4" r="0.85"><stop offset="0" stop-color="#1c1813"/><stop offset="1" stop-color="#050403"/></radialGradient>
+    <linearGradient id="brass" x1="0.2" y1="0" x2="0.8" y2="1"><stop offset="0" stop-color="#f1d79c"/><stop offset="0.35" stop-color="#c9a45c"/><stop offset="0.7" stop-color="#8a6a2e"/><stop offset="1" stop-color="#d9b874"/></linearGradient>
+    <linearGradient id="cream" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbf8f0"/><stop offset="1" stop-color="#d9d2c2"/></linearGradient>
+    <filter id="sh" x="-30%" y="-30%" width="160%" height="175%"><feDropShadow dx="0" dy="22" stdDeviation="26" flood-color="#000" flood-opacity="0.75"/></filter>
+  </defs>
+  <rect id="tile" width="1024" height="1024" fill="url(#bg)"/>
+  <polygon points="512.0,212.0 771.8,362.0 771.8,662.0 512.0,812.0 252.2,662.0 252.2,362.0" fill="none" stroke="url(#brass)" stroke-width="34" stroke-linejoin="round" filter="url(#sh)"/>
+  <g fill="url(#cream)">
+    <rect x="322" y="440" width="44" height="144" rx="10"/>
+    <rect x="376" y="406" width="58" height="212" rx="12"/>
+    <rect x="590" y="406" width="58" height="212" rx="12"/>
+    <rect x="658" y="440" width="44" height="144" rx="10"/>
+    <rect x="434" y="492" width="156" height="40" rx="8"/>
+  </g>
+</svg>

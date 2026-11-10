@@ -1,8 +1,8 @@
-// Renders every app icon file from assets/app-icon/plate.svg. Run by hand after changing the
+// Renders every app icon file from assets/app-icon/level.svg. Run by hand after changing the
 // master (`node scripts/app-icon.mjs`), and commit what it writes; never run in CI.
 //
 // Android: the adaptive icon's foreground layer is 108 dp of which the launcher shows the middle
-// 72, so the plate is drawn at two thirds, centred, on nothing (the tile is the background layer,
+// 72, so the icon is drawn at two thirds, centred, on nothing (the tile is the background layer,
 // res/drawable/ic_launcher_background.xml). The same file is the splash screen's icon. The plain
 // ic_launcher / ic_launcher_round files are the whole tile, for anything that still asks for them.
 // Web: the rounded tile at 192 and 512, and the square one for a maskable icon.
@@ -12,7 +12,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const svg = readFileSync(join(root, 'assets/app-icon/plate.svg'), 'utf8').replace(/<!--[\s\S]*?-->/, '');
+const svg = readFileSync(join(root, 'assets/app-icon/level.svg'), 'utf8').replace(/<!--[\s\S]*?-->/, '');
 const res = (path) => join(root, 'android/app/src/main/res', path);
 const DENSITIES = { mdpi: 1, hdpi: 1.5, xhdpi: 2, xxhdpi: 3, xxxhdpi: 4 };
 
