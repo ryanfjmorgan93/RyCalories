@@ -24,7 +24,7 @@ export function SupplementsCard({ today }: { today: string }) {
 
   return (
     <>
-      <Card className="overflow-hidden" data-testid="supplements-card">
+      <Card className="mt-1 overflow-hidden" data-testid="supplements-card">
         <SectionTitle
           className="px-4"
           right={
