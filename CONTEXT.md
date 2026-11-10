@@ -52,8 +52,18 @@ _Avoid_: Body part, muscle group (a finer grouping)
 A group of food items logged under one slot (breakfast, lunch, dinner, snack) on one day.
 
 **Usual meal**:
-A meal the owner saved to log again in one tap; Food offers the ones for the time of day.
-_Avoid_: Favourite, template, preset
+A meal the owner eats as it is and saved to log again in one tap; Food offers the ones for the
+time of day.
+_Avoid_: Favourite, template, preset, Recipe
+
+**Recipe**:
+A batch the owner cooks from ingredients and splits into portions; a portion is logged as one
+food item, and can sit inside a Usual meal.
+_Avoid_: Usual meal, dish
+
+**Logged day**:
+A day with any food logged. Averages count logged days only, and so do the food badges.
+_Avoid_: Tracked day, complete day
 
 **Natural unit**:
 The way a food is counted in life (a pack, a serving, a slice, an egg), carrying its weight in
