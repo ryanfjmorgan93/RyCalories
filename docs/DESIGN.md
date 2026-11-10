@@ -189,6 +189,8 @@ with a soft shadow; that pairing is checked by eye in the screenshots, not by th
 - **`Segments`**: ten blocks, some lit, from one mark to the next (a lift's level, the next
   total-level badge). It is a `progressbar`; the percentage is what a screen reader hears.
 - **`Medallion`**: a ringed disc for a badge's mark or a lift's level; dashed for one not yet held.
+- **`HexPanel`**: a moment the game marks, as a solid hexagon, a title and what did it: Level up
+  (above), and Protein hit on the Food day, with the blocks to the next protein badge.
 - **Home** (`src/ui/LevelsCard.tsx`): `LevelHeader` (the hexagon, badges held, sessions, tonnes
   lifted, blocks to the next total-level badge) above the routines; `TodaysHand` under the routine
   that leads, so Start stays in reach: the three lifts nearest their next level as cards, fanned

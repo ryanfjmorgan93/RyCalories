@@ -113,7 +113,9 @@ The owner does not check on device. Correctness has to come from the code and th
   review before a drafted routine is saved).
   `usualMeals.ts` is the usual meals Food offers for the time of day (asked for in November 2026):
   the ones the owner saved (kept in the Settings row) and the ones their own history shows, logged
-  in one tap; the Food day leads with calories and protein left and lists each meal's foods.
+  in one tap; the Food day leads with calories and protein left and lists each meal's foods. A food
+  eaten before is one tap from the Add food list at its usual amount (`usualAmount` in
+  `foodChoice.ts`), the sheet staying open for the next.
   `recipe.ts`, `mealText.ts`, `ingredientMatch.ts`, `foodUnits.ts` and `foodChoice.ts` are food:
   natural units, matching to remembered foods and the UK table, and the one item shape every way of
   logging produces.
@@ -176,6 +178,9 @@ The owner does not check on device. Correctness has to come from the code and th
   counted set in 20 kg steps from 60 kg. A badge is read off the data, never stored, so it follows
   an edit or a delete; what is left to the next is rounded up. The summary lists the badges a
   session added and what it did to the total level, read as the data stood around that session.
+  Food has two ladders once a day is logged: days logged and days the protein target was hit
+  (`foodDays` in `db/gameQueries.ts`), counted as days, never a streak; the Food day shows a
+  Protein hit panel on a day that reached it.
 - The app icon is `assets/app-icon/plate.svg` (an ember plate, the owner's pick, November 2026),
   rendered by hand with `scripts/app-icon.mjs` into the Android mipmaps and `public/icons/`, and
   committed. The foreground layer is also the splash screen's icon; the tile behind it is

@@ -12,6 +12,8 @@ import type { MealItem, MealSlot } from '@/domain/types';
 import { sweepKeptPhotos } from '@/state/claudeFood';
 import { noteMealLogged } from '@/state/mealMoment';
 import { dayView } from '@/db/todayQueries';
+import { foodDays } from '@/db/gameQueries';
+import { foodLadders } from '@/domain/badges';
 import {
   copyDay,
   deleteItem,
@@ -38,6 +40,7 @@ import { BackIcon, ChevronIcon, MoreIcon, TopBar } from '@/ui/components/TopBar'
 import { AddFoodSheet } from '@/ui/AddFoodSheet';
 import { FoodCoachLines } from '@/ui/FoodCoachLines';
 import { FoodItemSheet } from '@/ui/FoodItemSheet';
+import { HexPanel, Segments } from '@/ui/GameMarks';
 import { FoodWeekStrip } from '@/ui/FoodWeekStrip';
 import { useDayMeals, useRecentMeals, useSettings, useToday } from '@/ui/hooks';
 import { useClaudeFood } from '@/ui/useClaudeFood';
@@ -352,6 +355,9 @@ function DaySummary({ date, today }: { date: string; today: string }) {
   const settings = useSettings();
   const view = useLiveQuery(async () => (settings ? dayView(date, settings, today) : undefined), [date, settings, today]);
   const eaten = view?.eaten ?? ZERO;
+  const hit = view !== undefined && view.proteinTarget > 0 && eaten.protein >= view.proteinTarget;
+  // The ladder the day counts towards, read only once the day has hit (it sweeps every day of food).
+  const ladder = useLiveQuery(async () => (hit && settings ? foodLadders(await foodDays(settings)).find((l) => l.id === 'protein-days') : undefined), [hit, settings, eaten.protein]);
 
   return (
     <>
@@ -359,6 +365,31 @@ function DaySummary({ date, today }: { date: string; today: string }) {
         <div className="pb-2 text-center text-xs font-bold uppercase tracking-[0.12em] text-muted">
           {view.legDayBasis === 'planned' ? 'Leg day (planned)' : 'Leg day'}
         </div>
+      )}
+
+      {hit && view && (
+        <HexPanel
+          mark={
+            <>
+              <span className="num text-lg font-medium leading-none">{fmtNum(view.proteinTarget)}</span>
+              <span className="mt-0.5 text-[9px] font-semibold tracking-[0.1em]">G</span>
+            </>
+          }
+          title="Protein hit"
+          detail={`${fmtGrams(eaten.protein)} of ${fmtGrams(view.proteinTarget)}`}
+          className="mb-3"
+          testId="protein-hit"
+        >
+          {ladder?.next && (
+            <>
+              <Segments percent={Math.min(99, Math.floor(ladder.next.done * 100 + 1e-6))} label={`To ${ladder.next.name}`} className="mt-3 h-2" />
+              <div className="num mt-1.5 flex justify-between text-xs text-muted">
+                <span>{ladder.next.name}</span>
+                <span className="text-accent">{ladder.next.toGo}</span>
+              </div>
+            </>
+          )}
+        </HexPanel>
       )}
 
       <Card className="p-4">

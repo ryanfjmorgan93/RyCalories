@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { badgeCount, ladders, nearestBadge, newBadges, type BadgeFacts } from './badges';
+import { badgeCount, foodLadders, ladders, nearestBadge, newBadges, type BadgeFacts } from './badges';
 
 const facts = (over: Partial<BadgeFacts> = {}): BadgeFacts => ({ sessions: 0, liftedKg: 0, totalLevel: 0, lifts: [], ...over });
 const byId = (f: BadgeFacts, id: string) => ladders(f).find((l) => l.id === id)!;
@@ -91,5 +91,25 @@ describe('the badges a session added', () => {
     const after = ladders(facts({ lifts: [{ id: 'sq', name: 'Squat', kg: 60 }] }));
     expect(newBadges(ladders(facts()), after)).toEqual(['60 kg Squat']);
     expect(newBadges(ladders(facts()), ladders(facts({ lifts: [{ id: 'sq', name: 'Squat', kg: 59.5 }] })))).toEqual([]);
+  });
+});
+
+describe('food ladders', () => {
+  it('has none until a day has been logged', () => {
+    expect(foodLadders(undefined)).toEqual([]);
+    expect(foodLadders({ logged: 0, proteinHit: 0 })).toEqual([]);
+  });
+
+  it('counts days logged and days protein was hit, each to its next mark', () => {
+    const [logged, protein] = foodLadders({ logged: 31, proteinHit: 9 });
+    expect(logged).toMatchObject({ id: 'food-days', earned: ['7 days logged', '30 days logged'], chips: ['7', '30'] });
+    expect(logged!.next).toMatchObject({ name: '100 days logged', chip: '100', toGo: '69 to go' });
+    expect(protein).toMatchObject({ id: 'protein-days', earned: [], chips: [] });
+    expect(protein!.next).toMatchObject({ name: '10 days of protein hit', toGo: '1 to go', done: 0.9 });
+  });
+
+  it('sits after the total level and before the lifts', () => {
+    const all = ladders({ sessions: 0, liftedKg: 0, totalLevel: 0, lifts: [{ id: 'x', name: 'Bench', kg: 60 }], food: { logged: 7, proteinHit: 0 } });
+    expect(all.map((l) => l.id)).toEqual(['sessions', 'tonnes', 'level', 'food-days', 'protein-days', 'lift:x']);
   });
 });

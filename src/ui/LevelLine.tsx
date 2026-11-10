@@ -2,7 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { levelChange } from '@/db/recordsQueries';
 import { levelSetText, levelText, levelUp, type Level } from '@/domain/level';
 import type { Exercise } from '@/domain/types';
-import { Hex, Segments } from './GameMarks';
+import { HexPanel, Segments } from './GameMarks';
 
 /** The bar from a level's line to the next one's. Never full: the next level is a new bar. */
 export function LevelBar({ level, className = '' }: { level: Level; className?: string }) {
@@ -14,16 +14,18 @@ export function LevelBar({ level, className = '' }: { level: Level; className?: 
 /** The moment a lift goes up a level: its new level in a solid hexagon, and what did it. */
 export function LevelUpPanel({ level, detail, className = '', testId }: { level: number; detail: string; className?: string; testId?: string }) {
   return (
-    <div className={`flex items-center gap-3.5 level-up border border-accent px-3.5 py-3 ${className}`} data-testid={testId}>
-      <Hex size="md" solid>
-        <span className="text-[9px] font-semibold tracking-[0.1em]">LV</span>
-        <span className="num text-2xl font-medium leading-none">{level}</span>
-      </Hex>
-      <div className="min-w-0">
-        <div className="text-2xl font-light leading-tight text-accent">Level up</div>
-        <div className="num mt-0.5 break-words text-sm text-fg/85">{detail}</div>
-      </div>
-    </div>
+    <HexPanel
+      mark={
+        <>
+          <span className="text-[9px] font-semibold tracking-[0.1em]">LV</span>
+          <span className="num text-2xl font-medium leading-none">{level}</span>
+        </>
+      }
+      title="Level up"
+      detail={detail}
+      className={className}
+      testId={testId}
+    />
   );
 }
 

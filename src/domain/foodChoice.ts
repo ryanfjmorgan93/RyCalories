@@ -172,6 +172,23 @@ export function amountPlan(choice: FoodChoice): { options: UnitOption[]; unit: U
   return { options, unit, chips: amountChips(unit) };
 }
 
+/**
+ * The amount the owner usually has of a food they have eaten before, for adding it in one tap from
+ * the list: so many of the unit it opens on when the usual weight is a whole or half number of
+ * them (2 eggs), else the weight itself. Null for a food with no history; that one is asked.
+ */
+export function usualAmount(choice: FoodChoice): { unit: UnitOption; qty: number; options: UnitOption[] } | null {
+  const typical = choice.units.memory?.typicalGrams;
+  if (typical === undefined || !(typical > 0)) return null;
+  const { options, unit } = amountPlan(choice);
+  if (unit.kind !== 'grams' && unit.grams > 0) {
+    const qty = Math.round((typical / unit.grams) * 2) / 2;
+    if (qty > 0 && Math.abs(qty * unit.grams - typical) <= 0.5) return { unit, qty, options };
+  }
+  // The grams unit is built around the usual weight, so one of it is that weight.
+  return { unit: options.find((o) => o.kind === 'grams')!, qty: 1, options };
+}
+
 export function kcalFor(choice: Pick<FoodChoice, 'per100'>, grams: number): number {
   return macrosOf(fromPer100(choice.per100, grams)).kcal;
 }

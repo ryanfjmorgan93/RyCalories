@@ -637,6 +637,26 @@ test.describe('nutrition', () => {
     await expect(usual).toHaveCount(1);
   });
 
+  test('reaching the protein target says so on the day, with the way to the first protein badge', async ({ page }) => {
+    await page.goto('/food');
+    await expect(page.getByTestId('protein-hit')).toHaveCount(0);
+    await page.getByTestId('add-meal-button').click();
+    await page.getByTestId('meal-name').fill('Dinner');
+    await page.getByTestId('empty-add-food').click();
+    await addFood(page, { name: 'Steak', portion: '1', kcal: 1200, protein: 250, carbs: 0, fat: 20 });
+    await page.getByTestId('save-meal').click();
+    await page.waitForURL(/\/food\/[0-9a-f-]+$/);
+    await page.goto('/food');
+
+    await expect(page.getByTestId('meal-food')).toHaveCount(1);
+    await expect(page.getByTestId('protein-bar')).toContainText('250 g');
+    const target = Number((await page.getByTestId('protein-bar').innerText()).match(/\/\s*([\d,]+) g/)![1]);
+    // One day hit of the ten the first badge takes.
+    await expect(page.getByTestId('protein-hit')).toHaveText(`${target}GProtein hit250 g of ${target} g10 days of protein hit9 to go`);
+    // Over says over, by how much.
+    await expect(page.getByTestId('protein-left')).toHaveText(`${250 - target} g over`);
+  });
+
   test('there is nothing to copy before anything has been eaten', async ({ page }) => {
     await page.goto('/food');
     await page.getByTestId('repeat-meal').click();

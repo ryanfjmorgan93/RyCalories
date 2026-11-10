@@ -39,7 +39,8 @@ _Avoid_: Player level, score, level-ups earned (it is read off the data and can 
 
 **Badge**:
 A mark passed on one of the ladders (sessions finished, tonnes lifted, total level, a barbell
-lift's heaviest set), read off what was trained and never stored.
+lift's heaviest set, days of food logged, days the protein target was hit), read off what was
+trained and eaten and never stored.
 _Avoid_: Achievement, trophy, medal (the record icon), milestone
 
 **Region**:

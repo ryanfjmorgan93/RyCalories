@@ -34,3 +34,21 @@ export function Medallion({ children, next, className = '' }: { children: ReactN
     <span className={`num flex shrink-0 items-center justify-center rounded-full font-medium ${next ? 'border-[1.5px] border-dashed border-dim text-muted' : 'medallion'} ${className}`}>{children}</span>
   );
 }
+
+/** A moment the game marks (a level gained, a target hit): a solid hexagon, what happened, and what did it. */
+export function HexPanel({ mark, title, detail, children, className = '', testId }: { mark: ReactNode; title: string; detail: string; children?: ReactNode; className?: string; testId?: string }) {
+  return (
+    <div className={`level-up border border-accent px-3.5 py-3 ${className}`} data-testid={testId}>
+      <div className="flex items-center gap-3.5">
+        <Hex size="md" solid>
+          {mark}
+        </Hex>
+        <div className="min-w-0">
+          <div className="text-2xl font-light leading-tight text-accent">{title}</div>
+          <div className="num mt-0.5 break-words text-sm text-fg/85">{detail}</div>
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}

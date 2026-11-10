@@ -191,6 +191,42 @@ test.describe('add food', () => {
     expect(await rawItems(page)).toHaveLength(0);
   });
 
+  test('a food eaten before is one tap from the list: the sheet stays open, the tick takes it off, Done closes', async ({ page }) => {
+    await page.goto('/food');
+    // Teach it eggs: two, from the table.
+    await page.getByTestId('add-food-button').click();
+    await page.getByTestId('slot-lunch').click();
+    await page.getByTestId('add-food-search').fill('egg');
+    await page.getByTestId('result-Eggs, chicken, whole, raw').click();
+    await page.getByTestId('amount-egg-2').click();
+    await expect(page.getByTestId('calories-bar')).toContainText('131 kcal');
+
+    // Next time it leads Recent with what was had last time, and one tap adds that much again.
+    await page.getByTestId('add-food-button').click();
+    await page.getByTestId('slot-lunch').click();
+    const quick = page.getByTestId('quick-Eggs, chicken, whole, raw');
+    await expect(quick).toContainText('2 eggs (100 g)');
+    await expect(page.getByTestId('add-food-tray')).toHaveCount(0);
+    await quick.click();
+    await expect(page.getByTestId('add-food-tray')).toHaveText('1 food · 131 kcal added');
+    await expect(quick).toHaveAttribute('aria-pressed', 'true');
+    await expect.poll(async () => (await rawItems(page)).length).toBe(2);
+    await expect(page.getByTestId('add-food-sheet')).toBeVisible();
+
+    // The tick takes it off again.
+    await quick.click();
+    await expect(page.getByTestId('add-food-tray')).toHaveCount(0);
+    await expect.poll(async () => (await rawItems(page)).length).toBe(1);
+
+    // On again, and Done closes the sheet on a day that has both.
+    await quick.click();
+    await expect(page.getByTestId('add-food-tray')).toHaveText('1 food · 131 kcal added');
+    await page.getByTestId('add-food-done').click();
+    await expect(page.getByTestId('add-food-sheet')).toHaveCount(0);
+    await expect(page.getByTestId('meal-food')).toHaveText(['Eggs, chicken, whole, raw2 eggs (100 g)131 kcal', 'Eggs, chicken, whole, raw2 eggs (100 g)131 kcal']);
+    await expect(page.getByTestId('calories-bar')).toContainText('262 kcal');
+  });
+
   test('a pack that was logged once still offers its pack with no connection', async ({ page, context }) => {
     await routeOff(page);
     await page.goto('/food');

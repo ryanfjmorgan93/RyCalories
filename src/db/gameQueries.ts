@@ -7,12 +7,15 @@
  * Nothing is stored: all of it follows the sets, sessions and weigh-ins as they are.
  */
 import { db } from './db';
-import { ladders, newBadges, type Ladder } from '@/domain/badges';
+import { ladders, newBadges, type FoodDays, type Ladder } from '@/domain/badges';
 import { isoToDateKey } from '@/domain/dates';
 import { levelFor, totalLevel, type Level } from '@/domain/level';
 import { countsForRecords, countsForVolume, sessionCountsForRecords } from '@/domain/sets';
 import { sessionVolume } from '@/domain/volume';
-import type { Bodyweight, Exercise, Routine, RoutineExercise, Session, SetLog } from '@/domain/types';
+import type { Bodyweight, Exercise, Routine, RoutineExercise, Session, SetLog, Settings } from '@/domain/types';
+import { displayMacros } from '@/domain/food';
+import { proteinTarget } from '@/domain/nutrition';
+import { getSettings } from './repo';
 
 export interface GameLevel {
   exercise: Exercise;
@@ -56,7 +59,7 @@ const readTables = async (): Promise<Tables> => {
 };
 
 /** The game over the sessions `keep` lets in, with the last weigh-in on or before `day` (the last of all without one). */
-function gameFrom(t: Tables, keep: (s: Session) => boolean, day?: string): Game {
+function gameFrom(t: Tables, keep: (s: Session) => boolean, day?: string, food?: FoodDays): Game {
   const kept = new Map(t.sessions.filter(keep).map((s) => [s.id, s]));
   const sets = t.sets.filter((s) => kept.has(s.sessionId));
   const bodyweightKg = t.weighIns.filter((w) => day === undefined || w.date <= day).at(-1)?.kg;
@@ -108,13 +111,36 @@ function gameFrom(t: Tables, keep: (s: Session) => boolean, day?: string): Game 
       .filter((l) => l.routine !== null && l.level.startIn === 0)
       .sort((a, b) => b.level.fill - a.level.fill || a.exercise.name.localeCompare(b.exercise.name))
       .slice(0, 3),
-    ladders: ladders({ sessions: sessionsDone, liftedKg, totalLevel: total, lifts }),
+    ladders: ladders({ sessions: sessionsDone, liftedKg, totalLevel: total, lifts, ...(food ? { food } : {}) }),
   };
 }
 
-/** The game as it stands: every finished session, the latest weigh-in. */
+/**
+ * The days food was logged on, and how many of them reached that day's protein target, for the two
+ * food ladders. One sweep rather than trendQueries' day-by-day read (this covers every day there
+ * is, on Home), by the same rules: a day is logged when it has a meal, its protein is the sum the
+ * day screen shows, and its target is the leg-day one when a lower-body routine was trained on it.
+ * `gameQueries.test.ts` holds the two in step. Past days are judged by today's targets, as Progress
+ * judges them: the targets a day had are not kept.
+ */
+export async function foodDays(settings: Settings): Promise<FoodDays> {
+  const [meals, items, sessions, routines] = await Promise.all([db.meals.toArray(), db.mealItems.toArray(), db.sessions.toArray(), db.routines.toArray()]);
+  const dateOf = new Map(meals.map((m) => [m.id, m.date]));
+  const protein = new Map<string, number>(meals.map((m) => [m.date, 0]));
+  for (const item of items) {
+    const date = dateOf.get(item.mealId);
+    if (date !== undefined) protein.set(date, protein.get(date)! + displayMacros(item.nutrition).protein);
+  }
+  const lower = new Set(routines.filter((r) => r.isLowerBody).map((r) => r.id));
+  const legDays = new Set(sessions.filter((s) => s.routineId && lower.has(s.routineId)).map((s) => isoToDateKey(s.startedAt)));
+  let proteinHit = 0;
+  for (const [date, eaten] of protein) if (eaten >= proteinTarget(settings, legDays.has(date))) proteinHit++;
+  return { logged: protein.size, proteinHit };
+}
+
+/** The game as it stands: every finished session, the latest weigh-in, every day of food. */
 export async function loadGame(): Promise<Game> {
-  return gameFrom(await readTables(), (s) => !!s.endedAt);
+  return gameFrom(await readTables(), (s) => !!s.endedAt, undefined, await foodDays(await getSettings()));
 }
 
 /**

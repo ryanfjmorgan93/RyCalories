@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from './db';
-import { loadGame, sessionGame } from './gameQueries';
+import { foodDays, loadGame, sessionGame } from './gameQueries';
+import { addMeal } from './foodRepo';
+import { trendWindow } from './trendQueries';
+import { fromPortion } from '@/domain/food';
 import { levelChange } from './recordsQueries';
-import { logBodyweight, logSet, resetToSeed, startSession } from './repo';
+import { getSettings, logBodyweight, logSet, resetToSeed, startSession } from './repo';
 import { SEED_EXERCISE_IDS, SEED_ROUTINE_IDS } from './seed';
 import type { Session } from '@/domain/types';
 
@@ -129,5 +132,35 @@ describe('sessionGame: what one session did', () => {
     // At 80 kg, 100 against 90 is 11% over: Level 3. At the later 40 kg it is 60 against 50, 20%: Level 5.
     expect((await sessionGame(fourth))!.total).toEqual({ from: 0, to: 2 });
     expect((await loadGame()).total).toBe(4);
+  });
+});
+
+describe('foodDays: the days behind the two food ladders', () => {
+  const ate = (day: number, protein: number) =>
+    addMeal({ name: 'Dinner', date: `2026-09-${String(day).padStart(2, '0')}` }, [{ name: 'Food', portion: '1', nutrition: fromPortion({ kcal: 2000, protein, carbs: 0, fat: 0 }) }]);
+
+  it('counts logged days and protein days as Progress does, a leg day held to its higher target', async () => {
+    const settings = await getSettings();
+    expect([settings.proteinTarget, settings.proteinTargetLegDay]).toEqual([170, 200]);
+    await ate(1, 180); // over an ordinary day's 170
+    await ate(3, 180); // under a leg day's 200
+    await trained(RDL, 3, [[100, 8]]);
+    await ate(5, 100);
+    await ate(7, 205); // over a leg day's 200
+    await trained(RDL, 7, [[100, 8]]);
+
+    const days = await foodDays(settings);
+    expect(days).toEqual({ logged: 4, proteinHit: 2 });
+    // The same answer the day-by-day trend gives over the same days.
+    const { trend } = await trendWindow('2026-09-07', 7, settings);
+    expect(days).toEqual({ logged: trend.loggedDays, proteinHit: trend.proteinHit.days });
+  });
+
+  it('gives Home the food ladders once a day is logged, and none before', async () => {
+    expect((await loadGame()).ladders.map((l) => l.id)).not.toContain('food-days');
+    await ate(1, 180);
+    const game = await loadGame();
+    expect(ladder(game, 'food-days')).toMatchObject({ chips: [] });
+    expect(game.ladders.find((l) => l.id === 'protein-days')!.next).toMatchObject({ name: '10 days of protein hit', toGo: '9 to go' });
   });
 });

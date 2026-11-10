@@ -6,9 +6,11 @@
  * corrected or a session deleted takes back what only it had reached. What is left "to go" is
  * rounded up, never down.
  *
- * Four kinds of ladder: sessions finished, tonnes lifted (the sum of every summary's "kg lifted"),
- * the total level (level.ts), and, for a barbell lift, the heaviest counted set in 20 kg steps
- * from a plate a side. A barbell is the same 20 kg bar everywhere; a machine's stack is not.
+ * Four kinds of ladder for training: sessions finished, tonnes lifted (the sum of every summary's
+ * "kg lifted"), the total level (level.ts), and, for a barbell lift, the heaviest counted set in
+ * 20 kg steps from a plate a side. A barbell is the same 20 kg bar everywhere; a machine's stack is
+ * not. Two for food, once a day has been logged: days logged and days the protein target was hit.
+ * Both count days, never a streak, so a missed day takes nothing back.
  */
 import { fmtKg, fmtNum } from './format';
 
@@ -20,6 +22,13 @@ export interface BadgeFacts {
   totalLevel: number;
   /** Barbell lifts, each with its heaviest counted set. */
   lifts: { id: string; name: string; kg: number }[];
+  /** Days with any food logged, and how many of them reached that day's protein target. Absent: no food ladders. */
+  food?: FoodDays;
+}
+
+export interface FoodDays {
+  logged: number;
+  proteinHit: number;
 }
 
 export interface Ladder {
@@ -36,6 +45,8 @@ export interface Ladder {
 const SESSIONS = [10, 25, 50, 100, 250, 500];
 const TONNES = [10, 50, 100, 250, 500, 1000];
 const LEVELS = [5, 10, 15, 25, 35, 50, 75, 100];
+const FOOD_DAYS = [7, 30, 100, 200, 365];
+const PROTEIN_DAYS = [10, 25, 50, 100, 200, 365];
 /** One plate a side on a 20 kg bar, then every 20 kg. */
 const PLATES = [60, 80, 100, 120, 140, 160, 180, 200, 220];
 
@@ -59,9 +70,19 @@ function ladder(
   };
 }
 
-/** Every ladder, in a fixed order: sessions, tonnes, total level, then the barbell lifts by name. */
+const count = (n: number) => `${fmtNum(n)} to go`;
+
+/** The two food ladders; none until a day has been logged. */
+export function foodLadders(food: FoodDays | undefined): Ladder[] {
+  if (!food || food.logged === 0) return [];
+  return [
+    ladder('food-days', 'Days logged', FOOD_DAYS, food.logged, { name: (m) => `${fmtNum(m)} days logged`, chip: fmtNum, toGo: count }),
+    ladder('protein-days', 'Protein hit', PROTEIN_DAYS, food.proteinHit, { name: (m) => `${fmtNum(m)} days of protein hit`, chip: fmtNum, toGo: count }),
+  ];
+}
+
+/** Every ladder, in a fixed order: sessions, tonnes, total level, the two for food, then the barbell lifts by name. */
 export function ladders(f: BadgeFacts): Ladder[] {
-  const count = (n: number) => `${fmtNum(n)} to go`;
   return [
     ladder('sessions', 'Sessions', SESSIONS, f.sessions, { name: (m) => `${fmtNum(m)} sessions`, chip: fmtNum, toGo: count }),
     ladder('tonnes', 'Tonnes lifted', TONNES, f.liftedKg / 1000, {
@@ -71,6 +92,7 @@ export function ladders(f: BadgeFacts): Ladder[] {
       toGo: (left) => `${fmtNum(Math.ceil(left * 10 - 1e-9) / 10)} t to go`,
     }),
     ladder('level', 'Total level', LEVELS, f.totalLevel, { name: (m) => `Total level ${m}`, chip: fmtNum, toGo: count }),
+    ...foodLadders(f.food),
     ...[...f.lifts]
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((lift) => ladder(`lift:${lift.id}`, lift.name, PLATES, lift.kg, { name: (m) => `${fmtKg(m)} ${lift.name}`, chip: fmtKg, toGo: (left) => `${fmtKg(left)} to go` })),

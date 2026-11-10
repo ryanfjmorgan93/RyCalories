@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { amountPlan, choiceFromLabel, choiceFromMemory, itemFromAmount, kcalFor, recentChoices, searchChoices } from './foodChoice';
+import { amountPlan, choiceFromLabel, choiceFromMemory, itemFromAmount, kcalFor, recentChoices, searchChoices, usualAmount } from './foodChoice';
 import { macrosOf } from './food';
 import { loadUkFoodTable, type UkFoodTable } from '@/data/ukFoodTable';
 import type { LabelNutrition } from './products';
@@ -156,5 +156,29 @@ describe('a remembered food as the food', () => {
 
   it('prices an amount from its per-100 g figures', () => {
     expect(kcalFor({ per100: { kcal: 165, protein: 31, carbs: 0, fat: 3.6 } }, 200)).toBeCloseTo(330, 5);
+  });
+});
+
+describe('the usual amount, for adding a food in one tap', () => {
+  const item = (m: FoodMemory) => {
+    const choice = choiceFromMemory(m);
+    const usual = usualAmount(choice)!;
+    return itemFromAmount(choice, usual.unit, usual.qty, usual.options);
+  };
+
+  it('is the usual weight for a food counted in grams', () => {
+    expect(item(memory({ typicalGrams: 250 }))).toMatchObject({ portion: '250 g', nutrition: { basis: 'weighed', grams: 250 } });
+  });
+
+  it('is so many of its unit when the usual weight is a whole or half number of them', () => {
+    const eggs = memory({ name: 'Eggs', typicalGrams: 100, unitGrams: 50, unitLabel: 'egg', unitPlural: 'eggs', lastUnit: 'item:egg' });
+    expect(item(eggs)).toMatchObject({ portion: '2 eggs (100 g)', unit: { count: 2 } });
+    // 120 g is not a number of 50 g eggs anyone would say, so it stays a weight.
+    expect(item({ ...eggs, typicalGrams: 120 })).toMatchObject({ portion: '120 g' });
+  });
+
+  it('is nothing for a food never eaten', () => {
+    expect(usualAmount(choiceFromMemory(memory()))).toBeNull();
+    expect(usualAmount(choiceFromLabel(CHICKEN))).toBeNull();
   });
 });

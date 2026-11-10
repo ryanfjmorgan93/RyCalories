@@ -12,6 +12,7 @@ import {
   kcalFor,
   recentChoices,
   searchChoices,
+  usualAmount,
   type FoodChoice,
 } from '@/domain/foodChoice';
 import { amountChips, chipGrams, portionText, type AmountChip, type UnitOption } from '@/domain/foodUnits';
@@ -93,6 +94,9 @@ export function AddFoodSheet({
   const requestRef = useRef(0);
   // Latched before the write: logging mints new ids on every call, so a second tap would log twice.
   const loggingRef = useRef(false);
+  // Foods added from the list in this visit, by choice: the sheet stays open for them, so several go on in one go.
+  const [added, setAdded] = useState<ReadonlyMap<string, { logged: LoggedItems; kcal: number }>>(new Map());
+  const quickRef = useRef(false);
 
   const memories = useLiveQuery(() => allFoods(), []) ?? NO_FOODS;
   const [table, setTable] = useState<UkFoodTable | null>(null);
@@ -134,6 +138,33 @@ export function AddFoodSheet({
     } catch {
       loggingRef.current = false;
       toast('Could not log that', 'danger');
+    }
+  };
+
+  /**
+   * One tap on a food eaten before: its usual amount goes on the day and the sheet stays open, the
+   * row ticked. A second tap on the tick takes it off again.
+   */
+  const quickAdd = async (choice: FoodChoice) => {
+    if (quickRef.current) return;
+    quickRef.current = true;
+    try {
+      const had = added.get(choice.key);
+      if (had) {
+        await undoLoggedItems(had.logged);
+        setAdded((prev) => new Map([...prev].filter(([key]) => key !== choice.key)));
+        return;
+      }
+      const usual = usualAmount(choice);
+      if (!usual) return;
+      const item = itemFromAmount(choice, usual.unit, usual.qty, usual.options);
+      const logged = await logItemToSlot(date, slot, item);
+      onLogged?.(logged, item);
+      setAdded((prev) => new Map(prev).set(choice.key, { logged, kcal: Math.round(macrosOf(item.nutrition).kcal) }));
+    } catch {
+      toast('Could not log that', 'danger');
+    } finally {
+      quickRef.current = false;
     }
   };
 
@@ -259,7 +290,7 @@ export function AddFoodSheet({
                             testId={`result-${c.name}`}
                             title={c.name}
                             subtitle={<ResultLine choice={c} />}
-                            right={<ChevronIcon className="mr-1 text-muted" />}
+                            right={<QuickAdd choice={c} on={added.has(c.key)} onTap={() => void quickAdd(c)} />}
                           />
                         </div>
                       ))}
@@ -285,6 +316,17 @@ export function AddFoodSheet({
                       Lookup unavailable.
                     </div>
                   )}
+                </div>
+              )}
+
+              {added.size > 0 && (
+                <div className="flex items-center justify-between gap-3 rounded-[14px] border border-accent/45 bg-surface px-4 py-3">
+                  <span className="num min-w-0 text-sm" data-testid="add-food-tray">
+                    {added.size} {added.size === 1 ? 'food' : 'foods'} · {[...added.values()].reduce((n, a) => n + a.kcal, 0)} kcal added
+                  </span>
+                  <Button size="md" variant="primary" onClick={onClose} data-testid="add-food-done">
+                    Done
+                  </Button>
                 </div>
               )}
 
@@ -352,6 +394,32 @@ interface Typing {
   brand?: string;
   product?: string;
   barcode?: string;
+}
+
+/**
+ * The end of a result row. A food eaten before carries its usual amount and a button that adds
+ * that much without leaving the list (ticked once added; a tap on the tick takes it off). Any other
+ * food shows the way on to the amount step, which the row itself opens either way.
+ */
+function QuickAdd({ choice, on, onTap }: { choice: FoodChoice; on: boolean; onTap: () => void }) {
+  const usual = useMemo(() => usualAmount(choice), [choice]);
+  if (!usual) return <ChevronIcon className="mr-1 text-muted" />;
+  const amount = portionText(usual.unit, usual.qty);
+  return (
+    <button
+      type="button"
+      onClick={onTap}
+      aria-label={on ? `Take off ${amount} of ${choice.name}` : `Add ${amount} of ${choice.name}`}
+      aria-pressed={on}
+      className="-mr-2 flex min-h-11 shrink-0 items-center gap-2 pl-2"
+      data-testid={`quick-${choice.name}`}
+    >
+      <span className="num text-xs text-muted">{amount}</span>
+      <span aria-hidden="true" className={`flex h-8 w-8 items-center justify-center rounded-full text-lg font-medium leading-none ${on ? 'bg-accent text-accent-fg' : 'bg-fg text-bg'}`}>
+        {on ? <span className="mb-0.5 block h-3 w-1.5 rotate-45 border-b-2 border-r-2 border-current" /> : '+'}
+      </span>
+    </button>
+  );
 }
 
 function gridCols(n: number): string {
