@@ -23,6 +23,16 @@ forward"). Load the `ponytail` skill before writing code: the smallest change th
 reuse what the repo has, no abstraction or option nobody asked for. The tests and product rules
 above still apply in full.
 
+The other folders under `.claude/skills/` are Matt Pocock's skills 1.3.2 (mattpocock/skills at
+4ae2317, MIT, licence in `.claude/skills/MATTPOCOCK-SKILLS-LICENSE`), copied by hand at the
+owner's request in November 2026 for thinking a feature through before it is built: `/grill-me`
+and `/grill-with-docs` (the interview), `/prototype`, `/research`, `/to-spec`, `/to-tickets`,
+`/tdd` and the rest. `code-review` was left out because the harness has its own `/code-review`.
+Where they differ from this file, this file wins: what they call `GLOSSARY.md` is `CONTEXT.md`
+here, building is still the Ponytail way, and any subagent they start runs on Sonnet.
+`/setup-matt-pocock-skills` has not been run, so the ticket skills (`/to-spec`, `/to-tickets`,
+`/triage`) have no issue tracker yet.
+
 ## Verification
 
 The owner does not check on device. Correctness has to come from the code and the tests.
