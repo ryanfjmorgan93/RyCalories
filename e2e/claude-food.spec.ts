@@ -167,6 +167,8 @@ test.describe('Claude logs food', () => {
     await expect(page.getByText('Reading your photo…')).toBeVisible();
     await expect(page.getByTestId('logged-bar-text')).toHaveText('Logged 2 items to Dinner · 341 kcal ≈');
     await expect(page.getByTestId('reading-sheet')).toHaveCount(0);
+    // What was read, food by food, for a check before moving on.
+    await expect(page.getByTestId('logged-item')).toHaveText(['Eggs, chicken, whole, raw≈ 2 eggs (100 g)', 'Sourdough toast≈ 2 slices (80 g)']);
 
     // The eggs are the UK table's (131 kcal per 100 g, two at 50 g); the toast is Claude's 210.
     await expect(page.getByTestId('calories-bar')).toContainText('341 kcal');
@@ -255,6 +257,10 @@ test.describe('Claude logs food', () => {
     await expect(page.getByTestId('logged-bar-text')).toHaveText('Logged 2 items to Breakfast · 341 kcal ≈');
     const meals = await rawAll<RawMeal>(page, 'meals');
     expect(meals[0]).toMatchObject({ slot: 'breakfast', enteredText: 'two eggs on sourdough toast' });
+    // Keep puts the list away and leaves the meal where it is.
+    await page.getByTestId('logged-keep').click();
+    await expect(page.getByTestId('logged-bar')).toHaveCount(0);
+    await expect(page.getByTestId('meal-food')).toHaveCount(2);
     expect(meals[0]!.photoPath).toBeUndefined();
     expect(claude.of('meal')[0]!.body.messages[0].content).toContain('two eggs on sourdough toast');
     expect(claude.of('meal')[0]!.body.messages[0].content).not.toContain('image');

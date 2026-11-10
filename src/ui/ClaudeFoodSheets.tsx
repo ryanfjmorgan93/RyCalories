@@ -124,37 +124,41 @@ export function DescribeSheet({
   );
 }
 
-/** How long the bar waits for a tap before going: long enough to read and to reach. */
-const BAR_MS = 8000;
-
 /**
- * What a read meal did, and the two things the owner can do about it: take it back, or open the
- * meal and correct the amounts. Like the toasts it sits above the bottom bar; unlike them it has two
- * buttons, so it is its own element. The Food screen mounts it, so leaving the screen dismisses it
- * (the meal stays, and the Food screen's meal row is one tap from Adjust).
+ * What a read meal put on the day, food by food, and the three things the owner can do about it:
+ * keep it, take it back, or open the meal and correct the amounts. It stays until one is tapped
+ * (it used to go after eight seconds, before the list could be read: the owner asked for a check
+ * on what Claude read, November 2026). The food is already on the day, so closing the app keeps it.
+ * Like the toasts it sits above the bottom bar. The Food screen mounts it, so leaving the screen
+ * dismisses it (the meal stays, and each of its foods is one tap from being changed on the day).
  */
 export function LoggedBar({ log, onUndo, onAdjust, onDone }: { log: ReadLogged; onUndo: () => void; onAdjust: () => void; onDone: () => void }) {
-  const done = useRef(onDone);
-  useEffect(() => {
-    done.current = onDone;
-  });
-  useEffect(() => {
-    const id = window.setTimeout(() => done.current(), BAR_MS);
-    return () => window.clearTimeout(id);
-  }, [log]);
-
+  const action = 'inline-flex h-11 min-w-11 shrink-0 items-center justify-center rounded-pill px-3 text-accent active:bg-surface-2';
   return (
     <div className="toast-in bottom-toast pointer-events-none fixed inset-x-0 z-[60] flex justify-center px-4" data-testid="logged-bar">
-      <div className="glass-fixed pointer-events-auto flex max-w-full items-center gap-1 rounded-control border py-0.5 pl-4 pr-1 text-sm font-bold text-fg">
-        <span className="min-w-0 py-2" data-testid="logged-bar-text">
+      <div className="glass-fixed pointer-events-auto w-full max-w-md rounded-control border px-4 pb-1 pt-3 text-sm text-fg">
+        <div className="font-bold" data-testid="logged-bar-text">
           {loggedLine(log.count, log.slot, log.kcal)}
-        </span>
-        <button type="button" data-testid="logged-undo" onClick={onUndo} className="ml-1 inline-flex h-11 min-w-11 shrink-0 items-center justify-center rounded-pill px-3 text-accent active:bg-surface-2">
-          Undo
-        </button>
-        <button type="button" data-testid="logged-adjust" onClick={onAdjust} className="inline-flex h-11 min-w-11 shrink-0 items-center justify-center rounded-pill px-3 text-accent active:bg-surface-2">
-          Adjust
-        </button>
+        </div>
+        <ul className="mt-1.5 max-h-32 overflow-y-auto text-muted">
+          {log.items.map((item, i) => (
+            <li key={i} className="flex justify-between gap-3 py-0.5" data-testid="logged-item">
+              <span className="min-w-0 truncate text-fg/85">{item.name}</span>
+              <span className="num shrink-0">{item.portion}</span>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-1 flex items-center justify-end gap-1 font-bold">
+          <button type="button" data-testid="logged-undo" onClick={onUndo} className={action}>
+            Undo
+          </button>
+          <button type="button" data-testid="logged-adjust" onClick={onAdjust} className={action}>
+            Adjust
+          </button>
+          <button type="button" data-testid="logged-keep" onClick={onDone} className="ml-1 inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-fg px-5 text-bg active:brightness-90">
+            Keep
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -115,7 +115,8 @@ The owner does not check on device. Correctness has to come from the code and th
   the ones the owner saved (kept in the Settings row) and the ones their own history shows, logged
   in one tap; the Food day leads with calories and protein left and lists each meal's foods. A food
   eaten before is one tap from the Add food list at its usual amount (`usualAmount` in
-  `foodChoice.ts`), the sheet staying open for the next.
+  `foodChoice.ts`), the sheet staying open for the next. A meal Claude read from a photo or a sentence is listed
+  food by food and stays until Keep, Undo or Adjust is tapped (it is on the day already).
   `recipe.ts`, `mealText.ts`, `ingredientMatch.ts`, `foodUnits.ts` and `foodChoice.ts` are food:
   natural units, matching to remembered foods and the UK table, and the one item shape every way of
   logging produces.
