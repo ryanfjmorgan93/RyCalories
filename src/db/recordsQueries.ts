@@ -102,12 +102,14 @@ export async function recordsForNewSets(
  * An exercise's Level (domain/level.ts) around a session: `to` with the session's counted sets,
  * `from` without `newSetIds` (without any of them when none are named). Only completed sessions
  * that began before it are history, so a past session reads as it stood. One weigh-in serves both
- * sides, so a change of bodyweight alone is never a level-up.
+ * sides, so a change of bodyweight alone is never a level-up. `workingWeight` is the weight the
+ * slot is at today, for the set the next level is named at.
  */
 export async function levelChange(
   exerciseId: string,
   sessionId: string,
   newSetIds?: readonly string[],
+  workingWeight?: number,
 ): Promise<{ from: Level | null; to: Level | null }> {
   const [exercise, session] = await Promise.all([db.exercises.get(exerciseId), db.sessions.get(sessionId)]);
   if (!exercise || !session) return { from: null, to: null };
@@ -115,7 +117,7 @@ export async function levelChange(
   const own = sessionCountsForRecords(session) ? await db.setLogs.where('[sessionId+exerciseId]').equals([sessionId, exerciseId]).toArray() : [];
   const bodyweightKg = exercise.kind === 'bodyweight_plus' ? await bodyweightKgFor(session) : undefined;
   const withOwn = (sets: SetLog[]) =>
-    levelFor(exercise.kind, [...prior, { sessionId, startedAt: session.startedAt, sets: sets.map(toRecordSet) }], { bodyweightKg });
+    levelFor(exercise.kind, [...prior, { sessionId, startedAt: session.startedAt, sets: sets.map(toRecordSet) }], { bodyweightKg, workingWeight });
   const skip = new Set(newSetIds ?? own.map((s) => s.id));
   return { from: withOwn(own.filter((s) => !skip.has(s.id))), to: withOwn(own) };
 }

@@ -663,7 +663,7 @@ export function ExerciseCard({
               {chips}
             </div>
             <div className="mt-1 text-sm text-fg/85">{subtitle}</div>
-            <LevelLine exercise={exercise} sessionId={session.id} />
+            <LevelLine exercise={exercise} sessionId={session.id} workingWeight={workingWeight} />
             <StrengthLine exercise={exercise} settings={settings} />
           </button>
         </ExerciseHero>

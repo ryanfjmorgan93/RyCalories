@@ -20,6 +20,7 @@ import { lastWeekReading, weighInDue } from '@/domain/weighIn';
 import type { Routine } from '@/domain/types';
 import { Button } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row, SectionTitle, Stat } from '@/ui/components/Card';
+import { LevelsCard } from '@/ui/LevelsCard';
 import { StreakDots } from '@/ui/components/CalendarHeatmap';
 import { Chip } from '@/ui/components/Chip';
 import { NumberInput } from '@/ui/components/NumberField';
@@ -195,6 +196,8 @@ export function HomeScreen() {
 
         {/* With no routine to lay them over, the day's numbers stand on their own. */}
         {todayOverlay && (!routines || routines.length === 0) && <div className="mt-3">{todayOverlay}</div>}
+
+        <LevelsCard />
 
         {/* The daily reminders sit under the training, small: not the first thing on opening the app. */}
         <SupplementsCard today={todayKey} />

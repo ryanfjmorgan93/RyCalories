@@ -152,6 +152,15 @@ The owner does not check on device. Correctness has to come from the code and th
   summary. It compares the owner only with themselves: no open table ranks a row, a raise or a
   machine (one gym's stack is not another's), and Strength Level's numbers may not be used in an
   app without a licence, so no rank against other people is shown beyond squat, bench and deadlift.
+  The line under a lift names the set that reaches the next level at today's working weight
+  ("Level 3 at 75 kg × 7"), counted by the same sum as the level. Home's Levels card
+  (`ui/LevelsCard.tsx`, read by `db/gameQueries.ts` in one pass over the tables) adds every level
+  above 1 into a total level, lists the three lifts of the current routines nearest their next
+  level, and opens the badges. `src/domain/badges.ts` is the badge ladders (asked for in November
+  2026): sessions finished, tonnes lifted, the total level, and for a barbell lift its heaviest
+  counted set in 20 kg steps from 60 kg. A badge is read off the data, never stored, so it follows
+  an edit or a delete; what is left to the next is rounded up. The summary lists the badges a
+  session added and what it did to the total level, read as the data stood around that session.
 - The app icon is `assets/app-icon/plate.svg` (an ember plate, the owner's pick, November 2026),
   rendered by hand with `scripts/app-icon.mjs` into the Android mipmaps and `public/icons/`, and
   committed. The foreground layer is also the splash screen's icon; the tile behind it is

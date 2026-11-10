@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { prefersReducedMotion } from './session/useCompletionHold';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useLiveQuery } from 'dexie-react-hooks';
 import type { MomentFacts } from '@/ai/moments';
+import { sessionGame } from '@/db/gameQueries';
 import { backupAfterSessionFinish } from '@/db/historySafety';
 import { buildSummary, discardSession, finishSession, type SessionSummary, type SummaryItem } from '@/db/repo';
 import { decisionLine, effortReason, fmtDate, fmtDuration, fmtKg, fmtNum, fmtWeight, plural } from '@/domain/format';
@@ -167,6 +169,8 @@ export function SummaryScreen() {
     () => [...new Map((summary?.items ?? []).flatMap((item) => (item.levelUp ? [[item.exercise.id, { name: item.exercise.name, up: item.levelUp }] as const] : []))).entries()],
     [summary],
   );
+  // The badges this session added and what it did to the total level (db/gameQueries.ts).
+  const game = useLiveQuery(() => (id ? sessionGame(id) : undefined), [id]);
   const reducedMotion = usePrefersReducedMotion();
   const revealT = useCountProgress(!!summary);
   const confettiPieces = useMemo(() => buildConfetti(), []);
@@ -275,8 +279,14 @@ export function SummaryScreen() {
           </div>
         </div>
 
-        {/* data-settled marks the end of the count-up, so a screenshot or test can wait for the final figures. */}
-        <div className="mt-5 grid grid-cols-3 border-y border-line" data-testid="summary-hero" data-settled={revealT >= 1 ? 'true' : 'false'}>
+        {/* data-settled marks the end of the count-up, so a screenshot or test can wait for the final figures;
+            data-game says the badges have been worked out, so "no new badge" can be told from "not yet". */}
+        <div
+          className="mt-5 grid grid-cols-3 border-y border-line"
+          data-testid="summary-hero"
+          data-settled={revealT >= 1 ? 'true' : 'false'}
+          data-game={game === undefined ? 'loading' : 'ready'}
+        >
           <HeroStat testId="summary-time" value={fmtDuration(summary.durationSec * revealT)} label="Time" />
           <HeroStat testId="summary-sets" value={String(Math.round(summary.workingSetsDone * revealT))} label="Sets" bordered />
           <HeroStat testId="summary-kg" value={fmtNum(Math.round(volumeKg * revealT))} label="kg lifted" bordered />
@@ -308,13 +318,32 @@ export function SummaryScreen() {
 
         {levelUps.length > 0 && (
           <div className="mt-5 flex flex-col gap-2">
-            <h2 className="px-1 text-lg font-bold">Level ups</h2>
+            <div className="flex items-baseline justify-between gap-3 px-1">
+              <h2 className="text-lg font-bold">Level ups</h2>
+              {game && game.total.to > game.total.from && (
+                <span className="num text-sm text-muted" data-testid="summary-total-level">
+                  Total level {game.total.from} → {game.total.to}
+                </span>
+              )}
+            </div>
             {levelUps.map(([id, { name, up }]) => (
               <div key={id} data-testid="summary-level-up" className="flex items-center justify-between gap-3 rounded-xl border border-accent/35 bg-accent/10 px-3.5 py-3">
                 <span className="min-w-0 break-words font-semibold">{name}</span>
                 <span className="num shrink-0 text-sm font-bold text-accent">
                   Level {up.from} → Level {up.to}
                 </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {game && game.badges.length > 0 && (
+          <div className="mt-5 flex flex-col gap-2">
+            <h2 className="px-1 text-lg font-bold">New badges</h2>
+            {game.badges.map((badge) => (
+              <div key={badge} data-testid="summary-badge" className="flex items-center gap-3 rounded-xl border border-record/35 bg-record/10 px-3.5 py-3">
+                <RecordIcon />
+                <span className="min-w-0 break-words font-semibold">{badge}</span>
               </div>
             ))}
           </div>

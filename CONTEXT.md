@@ -33,6 +33,15 @@ How far the owner's best set on an exercise is over where they started on it (th
 their first three sessions), 5% a level; theirs alone, never a comparison with other people.
 _Avoid_: Rank (the squat, bench and deadlift standing against other lifters), XP, score
 
+**Total level**:
+Every Level above 1, added across all the owner's exercises; a new exercise adds nothing to it.
+_Avoid_: Player level, score, level-ups earned (it is read off the data and can fall with an edit)
+
+**Badge**:
+A mark passed on one of the ladders (sessions finished, tonnes lifted, total level, a barbell
+lift's heaviest set), read off what was trained and never stored.
+_Avoid_: Achievement, trophy, medal (the record icon), milestone
+
 **Region**:
 A coarse muscle grouping used for rest and reminders: legs, back, chest, shoulders, arms, core.
 _Avoid_: Body part, muscle group (a finer grouping)

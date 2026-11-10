@@ -35,13 +35,13 @@ describe('a Level: the best set against the start', () => {
     // 10 × 13 against 10 × 12: (1 + 13/30) ÷ (1 + 12/30) is 2.38% over, not the 115% a 5 kg start would give.
     expect(l).toMatchObject({ level: 1, gainPct: 2, startIn: 0, start: { weight: 10, reps: 12 }, best: { weight: 10, reps: 13 } });
     expect(l.fill).toBeCloseTo(2.381 / 5, 3);
-    expect(levelText(l, 'reps')).toEqual({ head: 'Level 1', detail: 'best 10 kg × 13, 2% over your start of 10 kg × 12', next: 'Level 2 at 5%' });
+    expect(levelText(l, 'reps')).toEqual({ head: 'Level 1', detail: 'best 10 kg × 13, 2% over your start of 10 kg × 12', next: 'Level 2 at 10 kg × 15' });
   });
 
   it('says only the start while nothing has beaten it', () => {
     const l = levelFor('reps', [session([10, 12]), session([10, 12]), session([9, 12]), session([10, 12])])!;
     expect(l).toMatchObject({ level: 1, gainPct: 0, fill: 0 });
-    expect(levelText(l, 'reps')).toEqual({ head: 'Level 1', detail: 'start 10 kg × 12', next: 'Level 2 at 5%' });
+    expect(levelText(l, 'reps')).toEqual({ head: 'Level 1', detail: 'start 10 kg × 12', next: 'Level 2 at 10 kg × 15' });
   });
 
   it('does not take a later set of the same size for a new best', () => {
@@ -59,7 +59,8 @@ describe('a Level: the best set against the start', () => {
     expect(under.fill).toBeLessThan(1);
     const on = levelFor('reps', [...start, session([105, 6])])!;
     expect(on).toMatchObject({ level: 2, gainPct: 5, fill: 0 });
-    expect(levelText(on, 'reps').next).toBe('Level 3 at 10%');
+    // Level 3 is at 10%, a size of 132: 105 × 8 is 133, 105 × 7 is 129.5.
+    expect(levelText(on, 'reps').next).toBe('Level 3 at 105 kg × 8');
     // Several at once: 100 × 6 to 120 × 6 is 20% over.
     expect(levelFor('reps', [...start, session([120, 6])])!).toMatchObject({ level: 5, gainPct: 20 });
   });
@@ -103,5 +104,39 @@ describe('the words for a bodyweight lift', () => {
   it('names the added weight, or bodyweight', () => {
     const l = levelFor('bodyweight_plus', [session([0, 10]), session([0, 10]), session([0, 10]), session([10, 10])], { bodyweightKg: 80 })!;
     expect(levelText(l, 'bodyweight_plus').detail).toBe('best +10 kg × 10, 12% over your start of bodyweight × 10');
+  });
+});
+
+describe('the set that reaches the next level', () => {
+  it('is the fewest reps at the best set\'s weight, and none while the start is being set', () => {
+    expect(levelFor('reps', [session([10, 12]), session([10, 13])])!.next).toBeNull();
+    // Start 65 × 8 (82.33), best 75 × 6 (90, 9.3% over): Level 3 is at 10%, 90.57. 75 × 7 is 92.5.
+    const bench = levelFor('reps', [session([65, 8]), session([65, 8]), session([65, 8]), session([75, 6])])!;
+    expect(bench).toMatchObject({ level: 2, gainPct: 9, next: { weight: 75, reps: 7 } });
+    // Start 7.5 × 15 (11.25), best 10 × 12 (14, 24.4% over): Level 6 is at 25%, 14.06. 10 × 13 is 14.33.
+    const raise = levelFor('reps', [session([7.5, 15]), session([7.5, 15]), session([7.5, 15]), session([10, 12])])!;
+    expect(raise).toMatchObject({ level: 5, gainPct: 24, next: { weight: 10, reps: 13 } });
+  });
+
+  it('is more than one rep when one is not enough', () => {
+    // Start and best 100 × 6 (120): Level 2 is at 126. 100 × 7 is 123.3, 100 × 8 is 126.67.
+    const l = levelFor('reps', [session([100, 6]), session([100, 6]), session([100, 6])])!;
+    expect(l.next).toEqual({ weight: 100, reps: 8 });
+    // And lifting exactly that set is the level.
+    expect(levelFor('reps', [session([100, 6]), session([100, 6]), session([100, 6]), session([100, 8])])!.level).toBe(2);
+  });
+
+  it('lands on the line when the line is a whole rep, and not a rep early', () => {
+    // Start 90 × 10 (120); best 90 × 10. Level 2 at 126: 90 × 12 is exactly 126.
+    const l = levelFor('reps', [session([90, 10]), session([90, 10]), session([90, 10])])!;
+    expect(l.next).toEqual({ weight: 90, reps: 12 });
+    expect(levelFor('reps', [session([90, 10]), session([90, 10]), session([90, 10]), session([90, 12])])!).toMatchObject({ level: 2, gainPct: 5 });
+    expect(levelFor('reps', [session([90, 10]), session([90, 10]), session([90, 10]), session([90, 11])])!.level).toBe(1);
+  });
+
+  it('counts bodyweight in', () => {
+    // 80 kg, start and best bodyweight × 10 (106.67): Level 2 at 112. 80 × (1 + 12/30) is exactly 112.
+    const l = levelFor('bodyweight_plus', [session([0, 10]), session([0, 10]), session([0, 10])], { bodyweightKg: 80 })!;
+    expect(l.next).toEqual({ weight: 0, reps: 12 });
   });
 });
