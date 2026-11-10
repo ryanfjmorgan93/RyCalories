@@ -1,3 +1,4 @@
+import { CoachMark } from './CoachFab';
 import { useEffect } from 'react';
 import type { BuiltRoutine } from '@/domain/routineBuilder';
 import { Button } from './components/Button';
@@ -44,7 +45,10 @@ export function CoachSheet({
       onClose={onClose}
       title={
         <div className="flex items-center justify-between gap-2">
-          <span>Coach</span>
+          <span className="flex items-center gap-2.5">
+            <CoachMark size={24} />
+            Coach
+          </span>
           {onFullScreen && (
             <Button size="sm" variant="ghost" className="-mr-3" onClick={onFullScreen} data-testid="coach-fullscreen">
               Full screen

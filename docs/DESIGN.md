@@ -124,8 +124,9 @@ must render when this stylesheet is what failed.
 - **`TargetBar`, `MacroSplit`, Home's figures and Steps**: a 2px line on a hairline track, never a
   fat rounded bar. Over the target the line turns to the warning colour and the number keeps
   counting.
-- **`BottomNav`**: an edge-to-edge strip of fixed glass under a hairline; words only, the current
-  tab in cream with a dot of the accent over it. Still `--nav-h` tall, so every `pb-safe-nav*`
+- **`BottomNav`**: an edge-to-edge strip of fixed glass under a hairline; each tab a line icon over
+  its name (one family drawn for the bar: 24-unit grid, 1.5 strokes, round ends), the current tab's
+  icon in the accent and its name in cream. Still `--nav-h` tall, so every `pb-safe-nav*`
   utility holds.
 - **The calendar** (`CalendarHeatmap`): plain numerals; a trained day is ringed in the accent like
   a badge, two sessions fill it, today is the cream disc.
@@ -133,9 +134,13 @@ must render when this stylesheet is what failed.
 - **`RestTimerBar`**: the running timer is one solid accent block with ink-coloured text, ring and
   pill buttons (`bg-black/12`, which keeps ink on them at 4.5:1 for every wheel colour). "Rest over"
   switches back to fixed glass with the done tint.
-- **`CoachFab`** (`src/ui/CoachFab.tsx`): the way to the coach from every screen, a floating
-  glass button bottom-right holding `CoachMark`: the satin robot's shoulders with the Iron icon as
-  its head, drawn in SVG so the dumbbell glows in the accent. It stacks above the tab bar, the
+- **`CoachFab`** (`src/ui/CoachFab.tsx`): the way to the coach from every screen, a quiet dark
+  disc bottom-right holding `CoachMark`, which is the owner's pick in Settings → Look
+  (`Settings.coachMark`, November 2026): the seal (a hexagon, the game's shape, with an engraved I;
+  the default) or the robot drawn flat in fine lines with the dumbbell for its face. Both are line
+  drawings in the accent and the text colour. The same mark heads every coach line (`CoachLine`: the
+  mark, COACH in the accent, the words on a fine accent rule, no box) and every coach reply in the
+  thread; the owner's own messages are quiet bubbles on the right. It stacks above the tab bar, the
   session dock and a running rest timer from the same height variables, and opens the coach sheet.
   In the live session it replaces the header's Coach button (`data-testid="session-coach"`).
 - **`CoachComposer`**: inside the coach sheet, one pill: the text field ("Talk to me…"), the mic

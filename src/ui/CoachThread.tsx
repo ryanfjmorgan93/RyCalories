@@ -1,3 +1,4 @@
+import { CoachMark } from './CoachFab';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { emptyReasonLines, nothingFact } from '@/domain/coachBuild';
 import { addDays, isoToDateKey, toDateKey } from '@/domain/dates';
@@ -80,7 +81,7 @@ export function CoachThread({ c, onReview }: { c: CoachConversation; onReview?: 
       {rows.map((row, i) => {
         if (row.kind === 'day') {
           return (
-            <div key={row.key} className="py-1 text-center text-[11px] font-bold uppercase tracking-[0.12em] text-dim">
+            <div key={row.key} className="label py-1 text-center !text-dim">
               {row.label}
             </div>
           );
@@ -108,7 +109,10 @@ export function CoachThread({ c, onReview }: { c: CoachConversation; onReview?: 
 
       {claudeBusy && (
         <div className="flex items-start" data-testid="coach-busy">
-          <div className="animate-pulse rounded-2xl border border-line bg-surface-2 px-4 py-2.5 text-base text-muted">Thinking…</div>
+          <div className="flex animate-pulse items-center gap-2 text-base text-muted">
+            <CoachMark size={16} />
+            Thinking…
+          </div>
         </div>
       )}
 
@@ -151,12 +155,12 @@ export function CoachThread({ c, onReview }: { c: CoachConversation; onReview?: 
 }
 
 function UserBubble({ children }: { children: ReactNode }) {
-  return <div className="max-w-[85%] self-end whitespace-pre-wrap rounded-2xl bg-accent px-3 py-2 text-sm text-accent-fg">{children}</div>;
+  return <div className="max-w-[85%] self-end whitespace-pre-wrap rounded-2xl rounded-br-md border border-line bg-surface-2 px-4 py-2.5 text-base text-fg">{children}</div>;
 }
 
 function Bubble({ children, testId }: { children: ReactNode; testId?: string }) {
   return (
-    <div className="max-w-[92%] self-start whitespace-pre-wrap rounded-2xl bg-surface-2 px-3 py-2 text-sm text-fg" data-testid={testId}>
+    <div className="max-w-full self-start whitespace-pre-wrap border-l border-accent/50 pl-3.5 text-base leading-relaxed text-fg" data-testid={testId}>
       {children}
     </div>
   );
@@ -172,8 +176,15 @@ function ClaudeBubble({ message }: { message: CoachMessage }) {
   const mine = message.role === 'user';
   return (
     <div className={`flex flex-col ${mine ? 'items-end' : 'items-start'}`} data-testid={mine ? 'coach-user-bubble' : 'coach-bubble'}>
-      {!mine && message.moment && <div className="mb-1 px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-dim">{MOMENT_LABEL[message.moment]}</div>}
-      <div className={`max-w-[88%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-base leading-snug ${mine ? 'bg-accent text-accent-fg' : 'border border-line bg-surface-2 text-fg'}`}>{mine ? message.text : withBold(message.text)}</div>
+      {!mine && (
+        <div className="mb-1.5 flex items-center gap-2" aria-hidden="true">
+          <CoachMark size={16} />
+          <span className="label !text-accent">{message.moment ? MOMENT_LABEL[message.moment] : 'Coach'}</span>
+        </div>
+      )}
+      <div
+        className={`whitespace-pre-wrap text-base ${mine ? 'max-w-[85%] rounded-2xl rounded-br-md border border-line bg-surface-2 px-4 py-2.5 leading-snug text-fg' : 'max-w-full border-l border-accent/50 pl-3.5 leading-relaxed text-fg'}`}
+      >{mine ? message.text : withBold(message.text)}</div>
       {!mine && message.actions && message.actions.length > 0 && (
         <ul className="mt-1.5 max-w-[88%] space-y-0.5 px-1" data-testid="coach-actions">
           {message.actions.map((line, i) => (

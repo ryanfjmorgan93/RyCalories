@@ -12,6 +12,7 @@ import { calorieTargetOn } from '@/domain/nutrition';
 import { MUSCLE_GROUPS, type MuscleGroup, type Settings } from '@/domain/types';
 import { cancelRestNotification } from '@/state/native';
 import { AccentWheel } from '@/ui/AccentWheel';
+import { CoachMark } from '@/ui/CoachFab';
 import { AboutCard } from '@/ui/AboutCard';
 import { BackupsCard } from '@/ui/BackupsCard';
 import { ClaudeSettingsCard } from '@/ui/ClaudeSettingsCard';
@@ -119,6 +120,17 @@ export function SettingsScreen() {
 
             <SectionTitle>Look</SectionTitle>
             <AccentWheel settings={settings} />
+            <Card className="px-4 pb-4" data-testid="coach-mark-card">
+              <div className="label pb-2">Coach mark</div>
+              <Segmented<'seal' | 'robot'>
+                value={settings.coachMark ?? 'seal'}
+                onChange={(coachMark) => void saveSettings({ coachMark })}
+                options={[
+                  { value: 'seal', label: <span className="inline-flex items-center gap-2"><CoachMark kind="seal" size={18} />Seal</span>, testId: 'coach-mark-seal' },
+                  { value: 'robot', label: <span className="inline-flex items-center gap-2"><CoachMark kind="robot" size={18} />Robot</span>, testId: 'coach-mark-robot' },
+                ]}
+              />
+            </Card>
 
             <SectionTitle>Problem reports</SectionTitle>
             <ProblemReportsCard />

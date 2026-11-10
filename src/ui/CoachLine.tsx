@@ -1,3 +1,4 @@
+import { CoachMark } from './CoachFab';
 import { useEffect, useState } from 'react';
 import { claudeReady } from '@/ai/client';
 import { hashFacts, momentLine, type Moment, type MomentFacts } from '@/ai/moments';
@@ -77,9 +78,15 @@ export function CoachLine({
 
   if (!line || line.key !== key) return null;
   return (
-    <button type="button" data-testid={testId} onClick={() => openCoach()} className={`flex w-full items-start gap-3 rounded-control border border-line bg-surface-2 px-4 py-3 text-left ${className}`}>
-      <span aria-hidden="true" className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent" />
-      <span className="min-w-0 flex-1 text-[15px] leading-snug text-fg">{line.text}</span>
+    // A note from the coach, open on the page: its mark and name, then the words on a fine rule. A tap opens the coach.
+    <button type="button" onClick={() => openCoach()} className={`block w-full py-1 text-left ${className}`}>
+      <span className="flex items-center gap-2" aria-hidden="true">
+        <CoachMark size={16} />
+        <span className="label !text-accent">Coach</span>
+      </span>
+      <span data-testid={testId} className="mt-2 block border-l border-accent/50 pl-3.5 text-base leading-relaxed text-fg/90">
+        {line.text}
+      </span>
     </button>
   );
 }

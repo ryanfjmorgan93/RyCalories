@@ -15,8 +15,8 @@ function rgb(hex: string): string {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-/** The colour actually painted on the active tab's bar, a plain `bg-accent` element. */
-const activeBar = (page: Page) => page.getByRole('navigation', { name: 'Main' }).locator('a[aria-current="page"] span.bg-accent');
+/** The active tab's icon, drawn in the accent (`text-accent`, its strokes in currentColor). */
+const activeBar = (page: Page) => page.getByRole('navigation', { name: 'Main' }).locator('a[aria-current="page"] span.text-accent');
 
 async function storedHue(page: Page): Promise<number | null> {
   return page.evaluate(
@@ -50,32 +50,32 @@ test('the colour wheel recolours the app, survives a reload, offers white, and r
   await fresh(page);
   await page.goto('/settings');
   await expect(page.getByTestId('accent-value')).toHaveText('Brass');
-  await expect(activeBar(page)).toHaveCSS('background-color', rgb(BRASS.accent));
+  await expect(activeBar(page)).toHaveCSS('color', rgb(BRASS.accent));
 
   const blue = accentFromHue(200).accent;
   expect(blue).not.toBe(BRASS.accent);
   await page.getByTestId('accent-hue').fill('200');
   await expect(page.getByTestId('accent-value')).toHaveText(blue.toUpperCase());
-  await expect(activeBar(page)).toHaveCSS('background-color', rgb(blue));
+  await expect(activeBar(page)).toHaveCSS('color', rgb(blue));
 
   // Saved once the slider is still; wait on the stored row itself, then reload.
   await expect.poll(() => storedHue(page)).toBe(200);
   await page.reload();
   await expect(page.getByTestId('accent-value')).toHaveText(blue.toUpperCase());
-  await expect(activeBar(page)).toHaveCSS('background-color', rgb(blue));
+  await expect(activeBar(page)).toHaveCSS('color', rgb(blue));
 
   // White is not on the wheel: its own button, stored and restored like a hue.
   await page.getByTestId('accent-white').click();
   await expect(page.getByTestId('accent-value')).toHaveText('White');
-  await expect(activeBar(page)).toHaveCSS('background-color', rgb(WHITE.accent));
+  await expect(activeBar(page)).toHaveCSS('color', rgb(WHITE.accent));
   await expect.poll(() => storedHue(page)).toBe(WHITE_HUE);
   await page.reload();
   await expect(page.getByTestId('accent-value')).toHaveText('White');
-  await expect(activeBar(page)).toHaveCSS('background-color', rgb(WHITE.accent));
+  await expect(activeBar(page)).toHaveCSS('color', rgb(WHITE.accent));
 
   await page.getByTestId('accent-reset').click();
   await expect(page.getByTestId('accent-value')).toHaveText('Brass');
-  await expect(activeBar(page)).toHaveCSS('background-color', rgb(BRASS.accent));
+  await expect(activeBar(page)).toHaveCSS('color', rgb(BRASS.accent));
   await expect.poll(() => storedHue(page)).toBeNull();
 });
 
@@ -103,3 +103,20 @@ test('the muscle map draws the satin robot, front and back, from the build', asy
     expect(res.headers()['content-type']).toContain('image/webp');
   }
 });
+
+test('every tab has its icon, and the coach mark is the seal until the robot is picked, across a reload', async ({ page }) => {
+  await fresh(page);
+  await page.goto('/settings');
+  await expect(page.getByRole('navigation', { name: 'Main' }).locator('a svg')).toHaveCount(5);
+
+  const fab = page.getByTestId('coach-fab');
+  await expect(fab.locator('svg')).toHaveAttribute('data-mark', 'seal');
+  await page.getByTestId('coach-mark-robot').click();
+  await expect(fab.locator('svg')).toHaveAttribute('data-mark', 'robot');
+  await expect(page.getByTestId('coach-mark-robot')).toHaveAttribute('aria-checked', 'true');
+  await page.reload();
+  await expect(page.getByTestId('coach-fab').locator('svg')).toHaveAttribute('data-mark', 'robot');
+  await page.getByTestId('coach-mark-seal').click();
+  await expect(page.getByTestId('coach-fab').locator('svg')).toHaveAttribute('data-mark', 'seal');
+});
+
