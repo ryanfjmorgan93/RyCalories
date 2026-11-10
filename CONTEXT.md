@@ -51,6 +51,10 @@ _Avoid_: Body part, muscle group (a finer grouping)
 **Meal**:
 A group of food items logged under one slot (breakfast, lunch, dinner, snack) on one day.
 
+**Usual meal**:
+A meal the owner saved to log again in one tap; Food offers the ones for the time of day.
+_Avoid_: Favourite, template, preset
+
 **Natural unit**:
 The way a food is counted in life (a pack, a serving, a slice, an egg), carrying its weight in
 grams.
