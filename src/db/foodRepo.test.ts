@@ -7,6 +7,12 @@ import {
   dayTotals,
   deleteItem,
   deleteMeal,
+  restoreItem,
+  restoreMeal,
+  logUsual,
+  removeUsual,
+  saveUsual,
+  usualsOn,
   forgetFood,
   getMeal,
   itemsForMeal,
@@ -213,6 +219,23 @@ describe('editing a meal', () => {
     await deleteMeal(id);
     expect(await db.meals.count()).toBe(0);
     expect(await db.mealItems.count()).toBe(0);
+  });
+
+  it('puts a deleted meal back exactly as it was', async () => {
+    const id = await addMeal({ name: 'Dinner' }, [oats(), shake()]);
+    const before = (await getMeal(id))!;
+    await deleteMeal(id);
+    await restoreMeal(before);
+    expect(await getMeal(id)).toEqual(before);
+  });
+
+  it('puts a deleted food back where it was in its meal', async () => {
+    const id = await addMeal({ name: 'Dinner' }, [oats(), shake(), oats(50)]);
+    const before = await itemsForMeal(id);
+    await deleteItem(before[1]!.id);
+    expect((await itemsForMeal(id)).map((i) => i.index)).toEqual([0, 1]);
+    await restoreItem(before[1]!);
+    expect(await itemsForMeal(id)).toEqual(before);
   });
 });
 
@@ -567,5 +590,37 @@ describe('copying a day', () => {
     await addMeal({ name: 'C', date: TO }, []);
     expect(await mealCountOnDay(FROM)).toBe(2);
     expect(await mealCountOnDay('2026-03-09')).toBe(0);
+  });
+});
+
+describe('usual meals', () => {
+  it('offers a meal eaten in the slot on two earlier days, logs it in one call, and then stops offering it that day', async () => {
+    await addMeal({ name: 'Lunch', slot: 'lunch', date: '2026-03-01' }, [oats(), shake()]);
+    await addMeal({ name: 'Lunch', slot: 'lunch', date: '2026-03-02' }, [oats(), shake()]);
+    await addMeal({ name: 'Dinner', slot: 'dinner', date: '2026-03-02' }, [oats(200)]);
+
+    expect(await usualsOn(TODAY, 'dinner')).toEqual([]);
+    const [lunch] = await usualsOn(TODAY, 'lunch');
+    expect(lunch!.items.map((i) => i.name)).toEqual((await itemsForMeal((await mealsOnDay('2026-03-01'))[0]!.meal.id)).map((i) => i.name));
+
+    const id = await logUsual(TODAY, 'lunch', lunch!);
+    const logged = (await getMeal(id))!;
+    expect(logged.meal).toMatchObject({ name: 'Lunch', slot: 'lunch', date: TODAY });
+    expect(logged.macros).toEqual((await mealsOnDay('2026-03-01'))[0]!.macros);
+    expect(await usualsOn(TODAY, 'lunch')).toEqual([]);
+  });
+
+  it('saves a meal as a usual once, offers it from the first day, and forgets it when removed', async () => {
+    const id = await addMeal({ name: 'Shake', slot: 'snack', date: '2026-03-01' }, [shake()]);
+    const meal = (await getMeal(id))!;
+    await saveUsual(meal);
+    await saveUsual(meal);
+    const offered = await usualsOn(TODAY, 'snack');
+    expect(offered.map((o) => o.name)).toEqual(['Shake']);
+    expect(offered[0]!.savedId).toBeDefined();
+    expect(await usualsOn(TODAY, 'lunch')).toEqual([]);
+
+    await removeUsual(offered[0]!.savedId!);
+    expect(await usualsOn(TODAY, 'snack')).toEqual([]);
   });
 });

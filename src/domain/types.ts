@@ -421,6 +421,8 @@ export interface Settings {
    * Absent means the default brass. The colour itself is derived (src/domain/accent.ts) so it always reads on the dark surfaces.
    */
   accentHue?: number;
+  /** Meals the owner saved to log again in one tap (domain/usualMeals.ts). Absent means none. */
+  usualMeals?: import('./usualMeals').UsualMeal[];
   /** Daily step goal for the Steps strip on Home. Absent means DEFAULT_STEP_GOAL (src/domain/steps.ts). */
   stepGoal?: number;
   /**

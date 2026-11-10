@@ -217,7 +217,8 @@ test.describe('nutrition', () => {
     }
 
     // Ordered by the slot, not by the order they were typed.
-    const names = page.getByRole('button', { name: /^(Breakfast|Lunch|Dinner)/ });
+    // The meal rows, not the foods listed under them (each food here is named after its meal).
+    const names = page.getByTestId('meal-row');
     await expect(names).toHaveCount(3);
     const order = await names.allInnerTexts();
     expect(order.map((t) => t.split('\n')[0])).toEqual(['Breakfast', 'Lunch', 'Dinner']);
@@ -566,10 +567,80 @@ test.describe('nutrition', () => {
     await expect(page.getByTestId('calories-bar')).toContainText('423 kcal');
   });
 
-  test('there is nothing to repeat before anything has been eaten', async ({ page }) => {
+  test('the day lists each meal\'s foods, says what is left, changes a food in place and undoes a removal', async ({ page }) => {
+    await page.goto('/food');
+    await page.getByTestId('add-meal-button').click();
+    await page.getByTestId('meal-name').fill('Breakfast');
+    await page.getByTestId('empty-add-food').click();
+    await addFood(page, { name: 'Oats', grams: 100, kcal: 379, protein: 11, carbs: 60, fat: 8 });
+    await page.getByTestId('add-food').click();
+    await addFood(page, { name: 'Whey', portion: '1 scoop', kcal: 120, protein: 24, carbs: 3, fat: 1.5 });
+    await page.getByTestId('save-meal').click();
+    await page.waitForURL(/\/food\/[0-9a-f-]+$/);
+    await page.goto('/food');
+
+    // Each food under its meal, with its amount and its calories; protein left beside calories.
+    const foods = page.getByTestId('meal-food');
+    await expect(foods).toHaveText(['Oats100 g379 kcal', 'Whey1 scoop120 kcal']);
+    // The day's protein target is the seed's (a leg day's or not); read it off the bar the foods have reached.
+    await expect(page.getByTestId('protein-bar')).toContainText('35 g');
+    const target = Number((await page.getByTestId('protein-bar').innerText()).match(/\/\s*([\d,]+) g/)![1]);
+    await expect(page.getByTestId('protein-left')).toHaveText(`${target - 35} g left`);
+
+    // A tap on a food opens it here, on the day: halve the oats and the day follows.
+    await foods.nth(0).click();
+    await page.getByTestId('food-grams').fill('50');
+    await page.getByTestId('save-food').click();
+    await expect(foods).toHaveText(['Oats50 g190 kcal', 'Whey1 scoop120 kcal']);
+    // 5.5 g from the oats is shown as 6, as on the bar, so the two never disagree: 6 + 24.
+    await expect(page.getByTestId('protein-left')).toHaveText(`${target - 30} g left`);
+
+    // Removing one says so with an Undo, which puts it back where it was.
+    await foods.nth(0).click();
+    await page.getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(foods).toHaveText(['Whey1 scoop120 kcal']);
+    await page.getByTestId('toast').getByRole('button', { name: 'Undo' }).click();
+    await expect(foods).toHaveText(['Oats50 g190 kcal', 'Whey1 scoop120 kcal']);
+  });
+
+  test('a meal saved as a usual is offered when it is not on the day, logs in one tap, and comes off with Undo', async ({ page }) => {
+    await page.goto('/food');
+    await expect(page.getByTestId('usual-meals')).toHaveCount(0);
+    await page.getByTestId('add-meal-button').click();
+    await page.getByTestId('meal-name').fill('Shake');
+    await page.getByTestId('empty-add-food').click();
+    await addFood(page, { name: 'Whey', portion: '1 scoop', kcal: 120, protein: 24, carbs: 3, fat: 1.5 });
+    await page.getByTestId('save-meal').click();
+    await page.waitForURL(/\/food\/[0-9a-f-]+$/);
+    await page.goto('/food');
+
+    await page.getByTestId('meal-more-Shake').click();
+    await expect(page.getByTestId('usual-toggle')).toHaveText('Save as usual');
+    await page.getByTestId('usual-toggle').click();
+    await expect(page.getByText('Saved as a usual', { exact: true })).toBeVisible();
+    // It is on the day already, so it is not offered; the menu now offers to remove it.
+    await page.getByTestId('meal-more-Shake').click();
+    await expect(page.getByTestId('usual-toggle')).toHaveText('Remove from usuals');
+    await expect(page.getByTestId('usual-meals')).toHaveCount(0);
+
+    // Off the day, it is offered: one tap puts it back on, and Undo takes it off again.
+    await page.getByRole('button', { name: 'Delete', exact: true }).click();
+    await page.getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(page.getByText('Nothing logged today')).toBeVisible();
+    const usual = page.getByTestId('usual-meal');
+    await expect(usual).toHaveText(['Shake120 kcal · P 24+']);
+    await usual.click();
+    await expect(page.getByTestId('meal-food')).toHaveText(['Whey1 scoop120 kcal']);
+    await expect(page.getByTestId('usual-meals')).toHaveCount(0);
+    await page.getByTestId('toast').getByRole('button', { name: 'Undo' }).click();
+    await expect(page.getByText('Nothing logged today')).toBeVisible();
+    await expect(usual).toHaveCount(1);
+  });
+
+  test('there is nothing to copy before anything has been eaten', async ({ page }) => {
     await page.goto('/food');
     await page.getByTestId('repeat-meal').click();
-    await expect(page.getByText('Nothing to repeat yet.')).toBeVisible();
+    await expect(page.getByText('Nothing to copy yet.')).toBeVisible();
   });
 });
 

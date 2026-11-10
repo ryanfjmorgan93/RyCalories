@@ -111,6 +111,9 @@ The owner does not check on device. Correctness has to come from the code and th
   `claudeSummary.ts` builds the text summary of the owner's training and food that the coach's
   context reuses. `routineText.ts` and `exerciseMatch.ts` read a routine written as text (the
   review before a drafted routine is saved).
+  `usualMeals.ts` is the usual meals Food offers for the time of day (asked for in November 2026):
+  the ones the owner saved (kept in the Settings row) and the ones their own history shows, logged
+  in one tap; the Food day leads with calories and protein left and lists each meal's foods.
   `recipe.ts`, `mealText.ts`, `ingredientMatch.ts`, `foodUnits.ts` and `foodChoice.ts` are food:
   natural units, matching to remembered foods and the UK table, and the one item shape every way of
   logging produces.

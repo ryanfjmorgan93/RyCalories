@@ -417,7 +417,7 @@ function fallbackName(slot?: MealSlot): string {
  * have written. `undefined` clears a field the draft no longer has, which is why brand and product
  * are always present rather than spread in conditionally.
  */
-function itemPatch(item: NewMealItem): Partial<Omit<MealItem, 'id' | 'mealId' | 'index'>> {
+export function itemPatch(item: NewMealItem): Partial<Omit<MealItem, 'id' | 'mealId' | 'index'>> {
   return {
     name: item.name,
     portion: item.portion,

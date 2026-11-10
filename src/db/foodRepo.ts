@@ -8,9 +8,11 @@
 import { db } from './db';
 import { nowIso, toDateKey } from '@/domain/dates';
 import { uuid } from '@/domain/ids';
-import { ZERO, addMacros, displayMacros, gramsOf, type FoodSource, type Macros, type Nutrition } from '@/domain/food';
+import { ZERO, addMacros, displayMacros, type FoodSource, type Macros, type Nutrition } from '@/domain/food';
 import { memoryFrom, memoryKey, mergeMemory, rankMemories } from '@/domain/foodMemory';
 import { MEAL_SLOTS, type FoodMemory, type ItemUnits, type Meal, type MealItem, type MealSlot } from '@/domain/types';
+import { mealSignature, usualsFor, type OfferedUsual, type UsualItem, type UsualMeal } from '@/domain/usualMeals';
+import { getSettings, saveSettings } from './repo';
 
 /** What a meal is made of, as the UI wants it: the meal plus its items in order. */
 export interface MealWithItems {
@@ -419,6 +421,23 @@ export async function deleteMeal(id: string): Promise<void> {
   });
 }
 
+/** Put back a meal just deleted, its foods included, exactly as it was (the Undo on the delete toast). */
+export async function restoreMeal(m: MealWithItems): Promise<void> {
+  await db.transaction('rw', [db.meals, db.mealItems], async () => {
+    await db.meals.put(m.meal);
+    await db.mealItems.bulkPut(m.items);
+  });
+}
+
+/** Put back one food just deleted, at the place it had in its meal. */
+export async function restoreItem(row: MealItem): Promise<void> {
+  await db.transaction('rw', db.mealItems, async () => {
+    const rest = (await db.mealItems.where('mealId').equals(row.mealId).toArray()).sort((a, b) => a.index - b.index);
+    rest.splice(Math.min(row.index, rest.length), 0, row);
+    await db.mealItems.bulkPut(rest.map((x, index) => ({ ...x, index })));
+  });
+}
+
 /**
  * Distinct meals eaten recently, newest first, excluding anything already on `date`.
  *
@@ -446,7 +465,7 @@ export async function recentMeals(date: string, limit = 8): Promise<MealWithItem
   for (const meal of recent) {
     const mealItems = (byMeal.get(meal.id) ?? []).sort((a, b) => a.index - b.index);
     if (!mealItems.length) continue;
-    const signature = [meal.name.trim().toLowerCase(), ...mealItems.map((i) => `${i.name.trim().toLowerCase()}:${gramsOf(i.nutrition) ?? i.portion}`)].join('|');
+    const signature = mealSignature(meal.name, mealItems);
     if (seen.has(signature)) continue;
     seen.add(signature);
     out.push({ meal, items: mealItems, macros: sumItems(mealItems) });
@@ -470,6 +489,49 @@ export async function repeatMeal(id: string, date: string): Promise<string | und
       product: i.product,
     })),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Usual meals (domain/usualMeals.ts)
+
+const asUsualItem = (i: MealItem): UsualItem => ({ name: i.name, portion: i.portion, nutrition: i.nutrition, source: i.source, brand: i.brand, product: i.product });
+
+/**
+ * The usual meals to offer for a slot on a day: the saved ones, then what the last few hundred
+ * meals show was eaten in that slot more than once. Nothing already on the day is offered again.
+ */
+export async function usualsOn(date: string, slot: MealSlot): Promise<OfferedUsual[]> {
+  const [settings, recent] = await Promise.all([getSettings(), db.meals.orderBy('loggedAt').reverse().limit(300).toArray()]);
+  const rows = await db.mealItems.where('mealId').anyOf(recent.map((m) => m.id)).toArray();
+  const byMeal = new Map<string, MealItem[]>();
+  for (const row of rows) byMeal.set(row.mealId, [...(byMeal.get(row.mealId) ?? []), row]);
+  const past = recent.map((m) => ({
+    date: m.date,
+    name: m.name,
+    ...(m.slot ? { slot: m.slot } : {}),
+    items: (byMeal.get(m.id) ?? []).sort((a, b) => a.index - b.index).map(asUsualItem),
+  }));
+  const onDay = new Set(past.filter((p) => p.date === date).map((p) => mealSignature(p.name, p.items)));
+  return usualsFor(slot, settings.usualMeals ?? [], past, onDay);
+}
+
+/** Log a usual meal on a day, in the slot it was offered for. The id is the new meal's, for the toast's Undo. */
+export function logUsual(date: string, slot: MealSlot, usual: OfferedUsual): Promise<string> {
+  return addMeal({ name: usual.name, date, slot }, usual.items.map((i) => ({ ...i })));
+}
+
+/** Save a logged meal as a usual. Saving the same meal twice keeps one. */
+export async function saveUsual(m: MealWithItems): Promise<void> {
+  const saved = (await getSettings()).usualMeals ?? [];
+  const usual: UsualMeal = { id: uuid(), name: m.meal.name, ...(m.meal.slot ? { slot: m.meal.slot } : {}), items: m.items.map(asUsualItem) };
+  const key = mealSignature(usual.name, usual.items);
+  if (saved.some((u) => mealSignature(u.name, u.items) === key)) return;
+  await saveSettings({ usualMeals: [...saved, usual] });
+}
+
+export async function removeUsual(id: string): Promise<void> {
+  const saved = (await getSettings()).usualMeals ?? [];
+  await saveSettings({ usualMeals: saved.filter((u) => u.id !== id) });
 }
 
 /** How many meals a day holds. The Food screen reads this to decide whether "Copy yesterday" shows. */
