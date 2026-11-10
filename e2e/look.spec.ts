@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { accentFromHue, EMBER } from '../src/domain/accent';
+import { accentFromHue, EMBER, WHITE, WHITE_HUE } from '../src/domain/accent';
 import { quoteOfTheDay, welcomeLine } from '../src/domain/dailyQuote';
 import { fresh } from './fresh';
 
@@ -46,7 +46,7 @@ test('the most rested routine leads Home with its lead lift as a robot render', 
   await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth)).toBeGreaterThan(0);
 });
 
-test('the colour wheel recolours the app, survives a reload, and resets to ember', async ({ page }) => {
+test('the colour wheel recolours the app, survives a reload, offers white, and resets to ember', async ({ page }) => {
   await fresh(page);
   await page.goto('/settings');
   await expect(page.getByTestId('accent-value')).toHaveText('Ember');
@@ -63,6 +63,15 @@ test('the colour wheel recolours the app, survives a reload, and resets to ember
   await page.reload();
   await expect(page.getByTestId('accent-value')).toHaveText(blue.toUpperCase());
   await expect(activeBar(page)).toHaveCSS('background-color', rgb(blue));
+
+  // White is not on the wheel: its own button, stored and restored like a hue.
+  await page.getByTestId('accent-white').click();
+  await expect(page.getByTestId('accent-value')).toHaveText('White');
+  await expect(activeBar(page)).toHaveCSS('background-color', rgb(WHITE.accent));
+  await expect.poll(() => storedHue(page)).toBe(WHITE_HUE);
+  await page.reload();
+  await expect(page.getByTestId('accent-value')).toHaveText('White');
+  await expect(activeBar(page)).toHaveCSS('background-color', rgb(WHITE.accent));
 
   await page.getByTestId('accent-reset').click();
   await expect(page.getByTestId('accent-value')).toHaveText('Ember');

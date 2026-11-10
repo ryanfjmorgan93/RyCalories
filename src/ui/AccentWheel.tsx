@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
-import { accentForSetting, accentFromHue, EMBER_HUE, normaliseHue } from '@/domain/accent';
+import { accentForSetting, accentFromHue, EMBER_HUE, normaliseHue, WHITE_HUE } from '@/domain/accent';
 import { saveSettings } from '@/db/repo';
 import type { Settings } from '@/domain/types';
 import { Button } from './components/Button';
@@ -17,26 +17,33 @@ function hueAt(e: PointerEvent<HTMLDivElement>): number {
   return normaliseHue((Math.atan2(dx, -dy) * 180) / Math.PI);
 }
 
+/** Where the wheel's knob and slider sit for a stored setting: ember and white are not on the wheel. */
+const wheelHue = (stored: number | undefined) => (stored === undefined || stored === WHITE_HUE ? EMBER_HUE : stored);
+
 /**
  * Settings → Look: a colour wheel for the accent. Dragging previews live across the whole app;
  * letting go saves. A slider under it does the same for keyboard and screen reader. The wheel picks
  * a hue; the colour is lifted where needed so text on it and in it still reads (src/domain/accent.ts).
+ * White is a button beside Ember, since no hue gives it.
  */
 export function AccentWheel({ settings }: { settings: Settings }) {
   const stored = settings.accentHue;
-  const [hue, setHue] = useState<number>(stored ?? EMBER_HUE);
+  const [hue, setHue] = useState<number>(wheelHue(stored));
+  const [white, setWhite] = useState(stored === WHITE_HUE);
   const [dragging, setDragging] = useState(false);
   const last = useRef<number | undefined>(stored);
   // A restore or a reset can change the stored hue under the wheel; follow it.
   useEffect(() => {
     last.current = stored;
-    setHue(stored ?? EMBER_HUE);
+    setHue(wheelHue(stored));
+    setWhite(stored === WHITE_HUE);
   }, [stored]);
   const isEmber = stored === undefined && hue === EMBER_HUE && !dragging;
-  const colours = accentForSetting(isEmber ? undefined : hue);
+  const colours = accentForSetting(white ? WHITE_HUE : isEmber ? undefined : hue);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const preview = (h: number) => {
+    setWhite(false);
     setHue(h);
     applyAccent(h);
   };
@@ -72,30 +79,43 @@ export function AccentWheel({ settings }: { settings: Settings }) {
           onPointerCancel={() => {
             setDragging(false);
             applyAccent(last.current);
-            setHue(last.current ?? EMBER_HUE);
+            setHue(wheelHue(last.current));
+            setWhite(last.current === WHITE_HUE);
           }}
         >
           <div className="absolute inset-[22%] flex items-center justify-center rounded-full bg-bg">
             <span className="h-10 w-10 rounded-full border border-line" style={{ background: colours.accent }} data-testid="accent-swatch" />
           </div>
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute left-1/2 top-1/2 h-5 w-5 rounded-full border-2 border-fg"
-            style={{ transform: `translate(-50%, -50%) rotate(${hue}deg) translateY(-3.95rem)` }}
-          />
+          {!white && (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute left-1/2 top-1/2 h-5 w-5 rounded-full border-2 border-fg"
+              style={{ transform: `translate(-50%, -50%) rotate(${hue}deg) translateY(-3.95rem)` }}
+            />
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <div className="label">Accent</div>
           <div className="num mt-1 text-2xl font-bold" data-testid="accent-value">
-            {isEmber ? 'Ember' : colours.accent.toUpperCase()}
+            {white ? 'White' : isEmber ? 'Ember' : colours.accent.toUpperCase()}
           </div>
-          <Button size="sm" variant="outline" className="mt-3" disabled={stored === undefined} onClick={() => {
-            setHue(EMBER_HUE);
-            applyAccent(undefined);
-            commit(undefined);
-          }} data-testid="accent-reset">
-            Ember
-          </Button>
+          <div className="mt-3 flex gap-2">
+            <Button size="sm" variant="outline" disabled={stored === undefined} onClick={() => {
+              setWhite(false);
+              setHue(EMBER_HUE);
+              applyAccent(undefined);
+              commit(undefined);
+            }} data-testid="accent-reset">
+              Ember
+            </Button>
+            <Button size="sm" variant="outline" disabled={white} onClick={() => {
+              setWhite(true);
+              applyAccent(WHITE_HUE);
+              commit(WHITE_HUE);
+            }} data-testid="accent-white">
+              White
+            </Button>
+          </div>
         </div>
       </div>
       <label className="mt-4 block">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ACCENT_TEXT_BACKGROUNDS, EMBER, EMBER_HUE, MIN_CONTRAST, accentForSetting, accentFromHue, hslToHex, inkOn, normaliseHue } from './accent';
+import { ACCENT_TEXT_BACKGROUNDS, EMBER, EMBER_HUE, MIN_CONTRAST, WHITE, WHITE_HUE, accentForSetting, accentFromHue, hslToHex, inkOn, normaliseHue } from './accent';
 import { contrastRatio } from './plateDiagram';
 
 describe('hslToHex', () => {
@@ -52,6 +52,14 @@ describe('accentForSetting', () => {
 
   it('uses the wheel when a hue is stored', () => {
     expect(accentForSetting(200)).toEqual(accentFromHue(200));
+  });
+
+  it('is white with black ink for the white setting, readable on every dark surface', () => {
+    expect(accentForSetting(WHITE_HUE)).toEqual({ hue: WHITE_HUE, accent: '#ffffff', accentFg: '#000000' });
+    expect(contrastRatio(WHITE.accentFg, WHITE.accent)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+    for (const bg of ACCENT_TEXT_BACKGROUNDS) expect(contrastRatio(WHITE.accent, bg)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+    // Not a hue on the wheel: 359 must stay a red, not turn white.
+    expect(accentForSetting(359)).toEqual(accentFromHue(359));
   });
 });
 

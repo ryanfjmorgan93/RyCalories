@@ -137,7 +137,8 @@ must render when this stylesheet is what failed.
 ## 5. The colour wheel (Settings → Look)
 
 `src/ui/AccentWheel.tsx`. A conic ring painted with the colours the wheel actually produces, a
-swatch, the hex, an "Ember" reset, and a range slider that does the same for keys and screen
+swatch, the hex, an "Ember" reset, a "White" button (white has no hue, so it is not on the ring;
+the owner asked for it in November 2026), and a range slider that does the same for keys and screen
 readers. Dragging previews live; letting go (or the slider resting for 400 ms) saves.
 
 - **The maths** is `src/domain/accent.ts`, pure and tested: the wheel picks a **hue**; saturation is
@@ -145,7 +146,7 @@ readers. Dragging previews live; letting go (or the slider resting for 400 ms) s
   black stage, the plain panel and the lightest panel (`#262626`). Ink on the accent is whichever of
   black and white measures better. `accent.test.ts` checks all 360 hues. So a navy is lifted to a
   readable blue rather than shipped at 3:1.
-- **Storage**: `Settings.accentHue` (0–359). Absent means ember, which `src/index.css` carries as
+- **Storage**: `Settings.accentHue` (0–359, or -1 for white). Absent means ember, which `src/index.css` carries as
   its default (`tokens.test.ts` checks the two agree). It is in the Settings row, so it is in
   backups.
 - **Applying**: `src/ui/accentTheme.ts` writes `--c-accent` and `--c-accent-fg` on `<html>`
