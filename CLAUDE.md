@@ -185,8 +185,11 @@ The owner does not check on device. Correctness has to come from the code and th
   The line under a lift names the set that reaches the next level at today's working weight
   ("Level 3 at 75 kg × 7"), counted by the same sum as the level. On Home
   (`ui/LevelsCard.tsx`, read by `db/gameQueries.ts` in one pass over the tables) every level above 1
-  is added into a total level in a hexagon, today's hand is the three lifts of the current routines
-  nearest their next level as cards, and the cabinet opens the badges; a Level up panel stands on
+  is added into a total level in a hexagon, the cabinet opens the badges, and under the routine that
+  leads the strength figure (`ui/StrengthBody.tsx`, `domain/strengthBody.ts`; asked for in November
+  2026 in place of today's hand) lights legs, chest and back in the accent by how the squat, bench
+  and deadlift rank against lifters of the owner's sex, weight and age (the standards below; no open
+  data has height), and every other muscle in cream by the owner's own best Level on it; a Level up panel stands on
   the session card and the summary (`ui/GameMarks.tsx`, docs/DESIGN.md §6). `src/domain/badges.ts` is the badge ladders (asked for in November
   2026): sessions finished, tonnes lifted, the total level, and for a barbell lift its heaviest
   counted set in 20 kg steps from 60 kg. A badge is read off the data, never stored, so it follows

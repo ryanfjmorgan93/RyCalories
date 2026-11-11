@@ -1,20 +1,16 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import type { Game, GameLevel } from '@/db/gameQueries';
+import type { Game } from '@/db/gameQueries';
 import { badgeCount, nearestBadge } from '@/domain/badges';
 import { fmtNum } from '@/domain/format';
-import { levelText } from '@/domain/level';
 import { SectionTitle } from './components/Card';
 import { Sheet } from './components/Sheet';
-import { ExerciseHero } from './ExerciseHero';
 import { Hex, Medallion, Segments } from './GameMarks';
-import { LevelBar } from './LevelLine';
 
 /**
- * Home's game, in three parts, all read off what was trained (db/gameQueries.ts): the total level
- * in its hexagon with the way to the next total-level badge, today's hand (the lifts of the current
- * routines nearest their next level, as cards), and the cabinet of badges, whose ladders open in a
- * sheet. Each part shows nothing until there is something true to show.
+ * Home's game, read off what was trained (db/gameQueries.ts): the total level in its hexagon with
+ * the way to the next total-level badge, and the cabinet of badges, whose ladders open in a sheet.
+ * (The strength figure between them is ui/StrengthBody.tsx.) Each shows nothing until there is
+ * something true to show.
  */
 
 const started = (game: Game) => badgeCount(game.ladders) > 0 || game.levels.some((l) => l.level.startIn === 0);
@@ -52,63 +48,6 @@ export function LevelHeader({ game }: { game: Game }) {
             <span className="text-accent">{next.toGo}</span>
           </div>
         </>
-      )}
-    </section>
-  );
-}
-
-function HandCard({ g, place }: { g: GameLevel; place: 'lead' | 'left' | 'right' | 'row' }) {
-  const nav = useNavigate();
-  const t = levelText(g.level, g.exercise.kind);
-  // A side card sits half under the lead one, so its words keep to the half that shows.
-  const spot =
-    place === 'lead'
-      ? 'absolute left-1/2 top-0 z-10 w-[164px] -translate-x-1/2 border-accent shadow-[0_18px_36px_rgba(0,0,0,0.75)]'
-      : place === 'left'
-        ? 'absolute left-0 top-7 w-[156px] -rotate-[7deg] border-accent/50 pr-14'
-        : place === 'right'
-          ? 'absolute right-0 top-7 w-[156px] rotate-[7deg] border-accent/50 pl-14 text-right'
-          : 'min-w-0 flex-1 border-accent/60';
-  return (
-    <button
-      type="button"
-      onClick={() => nav(`/exercises/${g.exercise.id}`)}
-      className={`block overflow-hidden rounded-[14px] border-[1.5px] bg-surface pb-3 text-left ${spot}`}
-      data-testid="closest-level"
-    >
-      <ExerciseHero demo={g.exercise.demo} className={`h-28 ${place === 'left' ? '-mr-14' : place === 'right' ? '-ml-14' : ''}`}>
-        <Medallion className={`absolute top-2 h-9 w-9 text-base ${place === 'right' ? 'right-2' : 'left-2'}`}>{g.level.level}</Medallion>
-      </ExerciseHero>
-      <div className="px-3 pt-2">
-        <div className={`font-medium leading-tight ${place === 'lead' ? 'truncate text-lg' : 'line-clamp-2 min-h-[2.4em] text-[15px]'}`}>{g.exercise.name}</div>
-        <div className="mt-0.5 truncate text-[10px] uppercase tracking-[0.1em] text-muted">{g.routine}</div>
-        <div className={`num mt-2 font-medium text-accent ${place === 'lead' ? 'text-[15px]' : 'text-[13px]'}`}>{t.next}</div>
-        <LevelBar level={g.level} className="mt-2" />
-      </div>
-    </button>
-  );
-}
-
-/** Today's hand: up to three lifts nearest their next level, the nearest in front. */
-export function TodaysHand({ game }: { game: Game }) {
-  const hand = game.closest;
-  if (hand.length === 0) return null;
-  const count = `${hand.length} closest level-${hand.length === 1 ? 'up' : 'ups'}`;
-  return (
-    <section>
-      <SectionTitle right={<span className="pb-px text-xs text-muted">{count}</span>}>Today&rsquo;s hand</SectionTitle>
-      {hand.length === 3 ? (
-        <div className="relative mx-auto h-[272px] max-w-[390px]">
-          <HandCard g={hand[1]!} place="left" />
-          <HandCard g={hand[2]!} place="right" />
-          <HandCard g={hand[0]!} place="lead" />
-        </div>
-      ) : (
-        <div className="flex gap-3">
-          {hand.map((g) => (
-            <HandCard key={g.exercise.id} g={g} place="row" />
-          ))}
-        </div>
       )}
     </section>
   );

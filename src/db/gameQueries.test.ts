@@ -32,11 +32,11 @@ beforeEach(async () => {
 describe('loadGame: the game as it stands', () => {
   it('is empty before anything is trained', async () => {
     const game = await loadGame();
-    expect(game).toMatchObject({ levels: [], total: 0, closest: [] });
+    expect(game).toMatchObject({ levels: [], total: 0 });
     expect(game.ladders.map((l) => [l.id, l.chips])).toEqual([['sessions', []], ['tonnes', []], ['level', []]]);
   });
 
-  it('adds up the levels, names the lift nearest its next one, and holds the barbell marks', async () => {
+  it('adds up the levels, names the set to the next one, and holds the barbell marks', async () => {
     for (const day of [1, 3, 5]) await trained(RDL, day, [[100, 8]]);
     const fourth = await trained(RDL, 7, [[111, 8]]);
     // The routine has moved on to 112.5 kg, so the set to hit is named at that weight.
@@ -48,7 +48,7 @@ describe('loadGame: the game as it stands', () => {
     expect(game.levels.map((l) => [l.exercise.id, l.level.level, l.routine])).toEqual([[RDL, 3, 'Lower (Hinge)']]);
     expect(game.total).toBe(2);
     // Level 4 is at 15%, a size of 145.67: 112.5 × 9 is 146.25, 112.5 × 8 is 142.5.
-    expect(game.closest.map((l) => [l.exercise.id, l.level.next])).toEqual([[RDL, { weight: 112.5, reps: 9 }]]);
+    expect(game.levels[0]!.level.next).toEqual({ weight: 112.5, reps: 9 });
     expect(ladder(game, `lift:${RDL}`)).toMatchObject({ title: 'Romanian Deadlift (Barbell)', chips: ['60 kg', '80 kg', '100 kg'], next: { toGo: '9 kg to go' } });
     expect(ladder(game, 'sessions')).toMatchObject({ chips: [], next: { toGo: '6 to go' } });
     // Home and the session's own card say the same level.
@@ -71,17 +71,16 @@ describe('loadGame: the game as it stands', () => {
     expect(await loadGame()).toEqual(after);
   });
 
-  it('keeps a lift that left the routines in the total, but not among the closest', async () => {
+  it('keeps a lift that left the routines in the total', async () => {
     for (const day of [1, 3, 5]) await trained(RDL, day, [[100, 8]]);
     await trained(RDL, 7, [[111, 8]]);
     await db.routines.update(HINGE, { archived: true });
     const game = await loadGame();
     expect(game.total).toBe(2);
-    expect(game.closest).toEqual([]);
     expect(game.levels[0]!.routine).toBeNull();
   });
 
-  it('puts the nearest first, three at most, and none whose start is still being set', async () => {
+  it('gives no level to a lift whose start is still being set', async () => {
     const lifts = ['Bench Press (Barbell)', 'Barbell Back Squat', 'Romanian Deadlift (Barbell)', 'Lateral Raise'] as const;
     // Each has a start of 100 × 8; the fourth session leaves them 1, 2, 3 and 4% over. A fifth lift has two sessions.
     for (const [i, name] of lifts.entries()) {
@@ -90,7 +89,6 @@ describe('loadGame: the game as it stands', () => {
     }
     for (const day of [1, 3]) await trained(SEED_EXERCISE_IDS['DB Curl'], day, [[10, 12]]);
     const game = await loadGame();
-    expect(game.closest.map((l) => l.exercise.name)).toEqual(['Lateral Raise', 'Romanian Deadlift (Barbell)', 'Barbell Back Squat']);
     expect(game.levels.find((l) => l.exercise.name === 'DB Curl')!.level.startIn).toBe(1);
     expect(game.total).toBe(0);
   });

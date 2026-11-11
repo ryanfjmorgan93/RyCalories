@@ -20,7 +20,7 @@ A warm black stage and cream ink, and the content sits straight on the stage: an
 no boxes inside boxes. A section is headed by a small uppercase label in the accent with a hairline
 running out to the edge; rows are parted by hairlines; what belongs together is held by space.
 Only an **object** is framed, something you pick up or act on: the lift in play, the routine that
-leads Home, a card of today's hand, a field, a sheet, a plaque for a level or a record.
+leads Home, a field, a sheet, a plaque for a level or a record.
 
 One accent (brass `#C9A45C` unless the owner picks another, white included) for the game's marks,
 section labels, the rest timer, the dot over the current tab and anything live. It is not for
@@ -233,7 +233,9 @@ with a soft shadow; that pairing is checked by eye in the screenshots, not by th
 - **`HexPanel`**: a moment the game marks, as a solid hexagon, a title and what did it: Level up
   (above), and Protein hit on the Food day, with the blocks to the next protein badge.
 - **Home** (`src/ui/LevelsCard.tsx`): `LevelHeader` (the hexagon, badges held, sessions, tonnes
-  lifted, blocks to the next total-level badge) above the routines; `TodaysHand` under the routine
-  that leads, so Start stays in reach: the three lifts nearest their next level as cards, fanned
-  with the nearest in front; `Cabinet`, each ladder's highest badge and the nearest next one, which
+  lifted, blocks to the next total-level badge) above the routines; the strength figure
+  (`src/ui/StrengthBody.tsx`, November 2026, in place of today's hand) under the routine that leads,
+  so Start stays in reach: the robot with legs, chest and back lit in the accent by rank against
+  lifters like the owner and every other muscle lit in cream (screen) by their own Level, a tap
+  naming which and why, then one row per ranked lift; `Cabinet`, each ladder's highest badge and the nearest next one, which
   opens every ladder in a sheet.

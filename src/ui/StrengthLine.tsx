@@ -8,6 +8,12 @@ import type { Exercise, Settings } from '@/domain/types';
 
 let tablePromise: Promise<LiftTable> | null = null;
 
+/** The meet table (100 KB), loaded once on first use and shared by the session's line and Home's figure. */
+export function liftTable(): Promise<LiftTable> {
+  tablePromise ??= import('@/data/liftStandards.json').then((m) => m.default as LiftTable);
+  return tablePromise;
+}
+
 /**
  * The lift's level (domain/standards.ts) under its name in the session: the best finished e1RM
  * against the latest weigh-in, for the sex in Settings → About you. Nothing without a standard, a
@@ -18,8 +24,7 @@ export function StrengthLine({ exercise, settings }: { exercise: Exercise; setti
   const [table, setTable] = useState<LiftTable | null>(null);
   useEffect(() => {
     if (!standard) return;
-    tablePromise ??= import('@/data/liftStandards.json').then((m) => m.default as LiftTable);
-    void tablePromise.then(setTable);
+    void liftTable().then(setTable);
   }, [standard]);
   const data = useLiveQuery(async () => {
     if (!standard || !settings.sex) return null;

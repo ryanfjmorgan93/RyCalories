@@ -20,7 +20,8 @@ import { lastWeekReading, weighInDue } from '@/domain/weighIn';
 import type { Routine } from '@/domain/types';
 import { Button } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row, SectionTitle, Stat } from '@/ui/components/Card';
-import { Cabinet, LevelHeader, TodaysHand } from '@/ui/LevelsCard';
+import { Cabinet, LevelHeader } from '@/ui/LevelsCard';
+import { StrengthBody } from '@/ui/StrengthBody';
 import { loadGame } from '@/db/gameQueries';
 import { StreakDots } from '@/ui/components/CalendarHeatmap';
 import { Chip } from '@/ui/components/Chip';
@@ -183,9 +184,9 @@ export function HomeScreen() {
           {(routines ?? []).map((item, i) => (
             <Fragment key={item.routine.id}>
               <RoutineCard hero={i === 0} item={item} settings={settings} active={!!active} onStart={() => void start(item.routine)} />
-              {/* The day's numbers and today's hand sit under the routine that leads, so Start stays in reach above them. */}
+              {/* The day's numbers and the strength figure sit under the routine that leads, so Start stays in reach above them. */}
               {i === 0 && todayOverlay}
-              {i === 0 && game && <TodaysHand game={game} />}
+              {i === 0 && game && settings && <StrengthBody game={game} settings={settings} />}
             </Fragment>
           ))}
           {routines && routines.length === 0 && <EmptyState>No routines. Add one from the Routines tab.</EmptyState>}

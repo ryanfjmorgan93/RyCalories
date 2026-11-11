@@ -1,8 +1,7 @@
 /**
- * The game's reading of everything trained: each exercise's Level (domain/level.ts), the total, the
- * lifts nearest their next level, and the badge ladders (domain/badges.ts). One read of the tables,
- * then pure sums, so the same arrays can be read as they stood around one session. Read-only; call
- * from useLiveQuery.
+ * The game's reading of everything trained: each exercise's Level (domain/level.ts), the total and
+ * the badge ladders (domain/badges.ts). One read of the tables, then pure sums, so the same arrays
+ * can be read as they stood around one session. Read-only; call from useLiveQuery.
  *
  * Nothing is stored: all of it follows the sets, sessions and weigh-ins as they are.
  */
@@ -29,8 +28,6 @@ export interface Game {
   levels: GameLevel[];
   /** Every level above 1, all lifts added up. */
   total: number;
-  /** Up to three exercises of the current routines nearest their next level, nearest first. */
-  closest: GameLevel[];
   ladders: Ladder[];
   /** Sessions finished with a counted set, and every kilo lifted in them. */
   sessions: number;
@@ -107,10 +104,6 @@ function gameFrom(t: Tables, keep: (s: Session) => boolean, day?: string, food?:
     liftedKg,
     levels,
     total,
-    closest: levels
-      .filter((l) => l.routine !== null && l.level.startIn === 0)
-      .sort((a, b) => b.level.fill - a.level.fill || a.exercise.name.localeCompare(b.exercise.name))
-      .slice(0, 3),
     ladders: ladders({ sessions: sessionsDone, liftedKg, totalLevel: total, lifts, ...(food ? { food } : {}) }),
   };
 }

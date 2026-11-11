@@ -131,8 +131,9 @@ const BACK_REGIONS: Region[] = [
   { group: 'lats', d: `${capsule(BX - 50, 106, BX - 35, 176, 17)} ${capsule(BX + 50, 106, BX + 35, 176, 17)}` },
   { group: 'triceps', d: `${capsule(BX - 58, 86, BX - 74, 168, 12)} ${capsule(BX + 58, 86, BX + 74, 168, 12)}` },
   { group: 'lower back', d: roundRect(BX - 19, 172, 38, 30, 10) },
-  { group: 'glutes', d: `${ellipse(BX - 23, 202, 20, 18)} ${ellipse(BX + 23, 202, 20, 18)}` },
   { group: 'hamstrings', d: `${capsule(BX - 27, 206, BX - 30, 296, 16)} ${capsule(BX + 27, 206, BX + 30, 296, 16)}` },
+  // After the hamstrings, whose rounded tops would otherwise take nearly every tap on the glutes.
+  { group: 'glutes', d: `${ellipse(BX - 23, 202, 20, 18)} ${ellipse(BX + 23, 202, 20, 18)}` },
   { group: 'calves', d: `${capsule(BX - 30, 300, BX - 27, 383, 11)} ${capsule(BX + 30, 300, BX + 27, 383, 11)}` },
 ];
 
@@ -171,28 +172,6 @@ export function BodyMap({
       daysAgo: recency[group],
     });
 
-  const region = (prefix: string) => (r: Region) => (
-    <path
-      key={`${prefix}-${r.group}`}
-      data-muscle={r.group}
-      d={r.d}
-      fill="var(--c-accent)"
-      fillOpacity={intensityOf(r.group) * 0.85}
-      stroke="rgba(255,255,255,0.14)"
-      strokeWidth={0.8}
-      style={{ mixBlendMode: 'color' }}
-      filter="url(#bodymap-soft)"
-      className="cursor-pointer"
-      role="button"
-      aria-label={r.group}
-      tabIndex={0}
-      onClick={() => setSelected(r.group)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') setSelected(r.group);
-      }}
-    />
-  );
-
   return (
     <div>
       <Segmented
@@ -203,27 +182,70 @@ export function BodyMap({
           { value: 'recency', label: 'Last trained' },
         ]}
       />
-      <svg viewBox="0 0 400 420" className="mt-3 block w-full rounded-card bg-black [isolation:isolate]" role="img" aria-label="Muscle map, front and back">
-        {/* The satin robot, front and back, drawn in the same pose as the regions below
-            (public/body/, bundled; docs/DESIGN.md §3). Each region tints the metal under it in
-            the accent (mix-blend-mode: color keeps the robot's shading). If an image is missing,
-            the plain silhouette underneath still shows where every region is. */}
-        <defs>
-          <filter id="bodymap-soft" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation="1.4" />
-          </filter>
-        </defs>
-        <path d={BASE_FRONT_D} fill="var(--c-surface-2)" />
-        <path d={BASE_BACK_D} fill="var(--c-surface-2)" />
-        <image href="/body/front.webp" x={0} y={0} width={200} height={420} preserveAspectRatio="xMidYMid meet" aria-hidden="true" />
-        <image href="/body/back.webp" x={200} y={0} width={200} height={420} preserveAspectRatio="xMidYMid meet" aria-hidden="true" />
-
-        {FRONT_REGIONS.map(region('front'))}
-        {BACK_REGIONS.map(region('back'))}
-      </svg>
+      <BodyFigure className="mt-3" fillOf={(group) => ({ colour: 'var(--c-accent)', opacity: intensityOf(group) * 0.85 })} onPick={setSelected} />
       <div className="mt-2 text-center text-sm text-muted" data-testid="body-map-readout">
         {selected ? readout(mode, selected, setsByGroup[selected] ?? 0, recency[selected]) : 'Tap a muscle'}
       </div>
     </div>
   );
 }
+
+/** How one muscle is drawn on the figure: a colour and how strongly it tints the metal under it. */
+export interface MuscleFill {
+  colour: string;
+  opacity: number;
+  /** How the colour meets the robot's metal. `color` (the default) recolours it and keeps its shading. */
+  blend?: 'color' | 'screen';
+}
+
+/**
+ * The satin robot, front and back, with every muscle a tappable region tinted as `fillOf` says.
+ * Shared by Progress's muscle map and Home's strength figure.
+ */
+export function BodyFigure({ fillOf, onPick, className = '', label = 'Muscle map, front and back' }: { fillOf: (group: MuscleGroup) => MuscleFill; onPick: (group: MuscleGroup) => void; className?: string; label?: string }) {
+  const region = (prefix: string) => (r: Region) => {
+    const fill = fillOf(r.group);
+    return (
+      <path
+        key={`${prefix}-${r.group}`}
+        data-muscle={r.group}
+        d={r.d}
+        fill={fill.colour}
+        fillOpacity={fill.opacity}
+        stroke="rgba(255,255,255,0.14)"
+        strokeWidth={0.8}
+        style={{ mixBlendMode: fill.blend ?? 'color' }}
+        filter="url(#bodymap-soft)"
+        className="cursor-pointer"
+        role="button"
+        aria-label={r.group}
+        tabIndex={0}
+        onClick={() => onPick(r.group)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') onPick(r.group);
+        }}
+      />
+    );
+  };
+  return (
+    <svg viewBox="0 0 400 420" className={`block w-full rounded-card bg-black [isolation:isolate] ${className}`} role="img" aria-label={label}>
+      {/* The satin robot, front and back, drawn in the same pose as the regions below
+          (public/body/, bundled; docs/DESIGN.md §3). Each region tints the metal under it
+          (mix-blend-mode keeps the robot's shading). If an image is missing, the plain silhouette
+          underneath still shows where every region is. */}
+      <defs>
+        <filter id="bodymap-soft" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="1.4" />
+        </filter>
+      </defs>
+      <path d={BASE_FRONT_D} fill="var(--c-surface-2)" />
+      <path d={BASE_BACK_D} fill="var(--c-surface-2)" />
+      <image href="/body/front.webp" x={0} y={0} width={200} height={420} preserveAspectRatio="xMidYMid meet" aria-hidden="true" />
+      <image href="/body/back.webp" x={200} y={0} width={200} height={420} preserveAspectRatio="xMidYMid meet" aria-hidden="true" />
+
+      {FRONT_REGIONS.map(region('front'))}
+      {BACK_REGIONS.map(region('back'))}
+    </svg>
+  );
+}
+
