@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { accentFromHue, BRASS, WHITE, WHITE_HUE } from '../src/domain/accent';
+import { accentFromHue, BRASS, PRESETS, WHITE, WHITE_HUE } from '../src/domain/accent';
 import { quoteOfTheDay, welcomeLine } from '../src/domain/dailyQuote';
 import { fresh } from './fresh';
 
@@ -46,7 +46,7 @@ test('the most rested routine leads Home with its lead lift as a robot render', 
   await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth)).toBeGreaterThan(0);
 });
 
-test('the colour wheel recolours the app, survives a reload, offers white, and resets to brass', async ({ page }) => {
+test('the colour wheel recolours the app, survives a reload, offers white and the metals, and resets to brass', async ({ page }) => {
   await fresh(page);
   await page.goto('/settings');
   await expect(page.getByTestId('accent-value')).toHaveText('Brass');
@@ -72,6 +72,18 @@ test('the colour wheel recolours the app, survives a reload, offers white, and r
   await page.reload();
   await expect(page.getByTestId('accent-value')).toHaveText('White');
   await expect(activeBar(page)).toHaveCSS('color', rgb(WHITE.accent));
+
+  // The metals beside it work the same way: Copper, stored as its own value, kept across a reload.
+  const copper = PRESETS.find((p) => p.name === 'Copper')!;
+  await page.getByTestId('accent-copper').click();
+  await expect(page.getByTestId('accent-value')).toHaveText('Copper');
+  await expect(page.getByTestId('accent-copper')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('accent-white')).toHaveAttribute('aria-pressed', 'false');
+  await expect(activeBar(page)).toHaveCSS('color', rgb(copper.accent));
+  await expect.poll(() => storedHue(page)).toBe(copper.hue);
+  await page.reload();
+  await expect(page.getByTestId('accent-value')).toHaveText('Copper');
+  await expect(activeBar(page)).toHaveCSS('color', rgb(copper.accent));
 
   await page.getByTestId('accent-reset').click();
   await expect(page.getByTestId('accent-value')).toHaveText('Brass');

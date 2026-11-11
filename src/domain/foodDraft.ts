@@ -44,6 +44,8 @@ export interface Draft {
   /** The pack and serving weights the food is known by, so the unit chips can offer them. */
   packGrams?: number;
   servingGrams?: number;
+  /** A count unit read with the label (an egg, a kiev, a portion): offered as chips, taught to memory on save. */
+  unit?: { label: string; plural?: string; grams: number };
   /** The unit chip last tapped, by key. Taught to food memory on save. */
   unitKey?: string;
   /** The amount was changed on this sheet: the saved portion text is rewritten to match. */
@@ -148,6 +150,7 @@ export function applyLabel(d: Draft, l: LabelNutrition, opts?: { fromScan?: bool
     // the weight is only pre-filled from a pack that could plausibly be one sitting.
     packGrams: l.packGrams,
     servingGrams: l.servingGrams,
+    unit: l.unit,
     unitKey: undefined,
     amountTouched: false,
   };
@@ -183,15 +186,19 @@ export function applyMemory(m: FoodMemory): Draft {
 export function draftToItem(d: Draft, opts: { options: UnitOption[]; barcode?: string }): SavedDraft {
   const weighed = d.basis === 'weighed';
   const grams = d.grams ?? 0;
+  const chosen = d.unitKey ? opts.options.find((o) => o.key === d.unitKey) : undefined;
+  // Worded in the unit the amount was chosen in first: two 133 g fillets are "2 fillets", not "⅔ pack".
   const portion = weighed
     ? d.amountTouched || !d.portion.trim()
-      ? describeAmount(grams, opts.options)
+      ? describeAmount(grams, chosen ? [chosen, ...opts.options] : opts.options)
       : d.portion.trim()
     : d.portion.trim() || '1 serving';
-  const chosen = d.unitKey ? opts.options.find((o) => o.key === d.unitKey) : undefined;
+  // The label's own count unit is remembered too, unless it is the one the amount was chosen in (that goes in `unit`).
+  const extra = d.unit && !(chosen?.kind === 'item' && chosen.noun === d.unit.label) ? [{ label: d.unit.label, ...(d.unit.plural ? { plural: d.unit.plural } : {}), grams: d.unit.grams }] : [];
   const teach: ItemUnits = {
     ...(d.packGrams ? { packGrams: d.packGrams } : {}),
     ...(d.servingGrams ? { servingGrams: d.servingGrams } : {}),
+    ...(extra.length > 0 ? { extra } : {}),
     ...(chosen ? { lastUnit: chosen.key } : {}),
   };
   return {

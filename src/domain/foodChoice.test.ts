@@ -127,6 +127,15 @@ describe('a product label as the food', () => {
     expect(plan.chips.map((c) => c.label)).toEqual(['Whole pack (400 g)', 'Half']);
   });
 
+  it('offers the count unit a page or photo was read with, beside the pack', () => {
+    const choice = choiceFromLabel({ ...CHICKEN, unit: { label: 'fillet', plural: 'fillets', grams: 130 } });
+    const { options } = amountPlan(choice);
+    expect(options.map((o) => o.key)).toEqual(['pack', 'fillet', 'g']);
+    const fillets = amountPlan({ ...choice, units: { ...choice.units, memory: { lastUnit: 'fillet' } as never } });
+    expect(fillets.unit).toMatchObject({ key: 'fillet', grams: 130 });
+    expect(fillets.chips.map((c) => c.label)).toEqual(['1 fillet', '½ fillet', '2 fillets']);
+  });
+
   it('logs the whole pack in one go, with the label’s standing and its pack remembered', () => {
     const choice = choiceFromLabel(CHICKEN);
     const { options, unit, chips } = amountPlan(choice);

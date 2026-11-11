@@ -159,6 +159,23 @@ describe('readLabelPage', () => {
     expect(JSON.stringify(fake.requests[0]!.body.messages)).not.toContain('"image"');
   });
 
+  it('hands back the unit the food is eaten in, and asks for it on a label photo too', async () => {
+    const kievs = { name: 'Cheese & Ham Hock Chicken Kyiv', brand: "Sainsbury's", per100: { kcal: 197, protein: 15, carbs: 12, fat: 10 }, pack_grams: 385, unit_name: ' Kyiv ', unit_plural: 'Kyivs', unit_grams: 192.53 };
+    const fake = fakeClaude({ content: [json(kievs)] });
+    expect((await readLabelPage(PAGE, URL, { fetch: fake.fetch })).unit).toEqual({ label: 'kyiv', plural: 'kyivs', grams: 192.5 });
+    expect(lastUserText(fake.requests[0]!.body)).toContain('unit_name');
+    const photo = fakeClaude({ content: [json(kievs)] });
+    expect((await readLabelPhoto(JPEG, { fetch: photo.fetch })).unit).toEqual({ label: 'kyiv', plural: 'kyivs', grams: 192.5 });
+    expect(lastUserText(photo.requests[0]!.body)).toContain('unit_name');
+  });
+
+  it('drops a unit that is only grams again, or that weighs nothing', async () => {
+    for (const odd of [{ unit_name: 'g', unit_grams: 100 }, { unit_name: 'portion', unit_grams: 0 }, { unit_name: '', unit_grams: 50 }]) {
+      const fake = fakeClaude({ content: [json({ name: 'Rice', per100: { kcal: 130, protein: 3, carbs: 28, fat: 0.3 }, ...odd })] });
+      expect((await readLabelPage(PAGE, URL, { fetch: fake.fetch })).unit).toBeUndefined();
+    }
+  });
+
   it('says so when the page has no nutrition on it', async () => {
     const fake = fakeClaude({ content: [json({ name: 'Basket', per100: { kcal: 0, protein: 0, carbs: 0, fat: 0 } })] });
     await expect(readLabelPage('Your basket is empty', URL, { fetch: fake.fetch })).rejects.toMatchObject({ kind: 'other', message: 'No nutrition on that page. Try a photo of the label instead.' });

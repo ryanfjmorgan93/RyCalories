@@ -48,7 +48,14 @@ const LabelShape = z.object({
     .describe('Nutrition per 100 g (or 100 ml); convert from per-serving values if that is all the label gives'),
   serving_grams: z.number().optional().describe('The serving size in grams, if printed'),
   pack_grams: z.number().optional().describe('The weight of the whole pack in grams, if printed'),
+  unit_name: z.string().optional().describe('How one helping is counted, singular: "egg", "kiev", "slice", "bar", "bite", or "portion" for food eaten loose'),
+  unit_plural: z.string().optional().describe('The plural of unit_name: "eggs", "kievs", "portions"'),
+  unit_grams: z.number().optional().describe('The weight of one unit_name in grams'),
 });
+
+/** What every label read asks for beyond the figures: the way the food is counted when eaten. */
+const UNIT_GUIDE =
+  'Also give the natural unit this food is eaten in and what one weighs, as unit_name, unit_plural and unit_grams: one egg, one kiev, one slice, one bar, one bite. Work it out from what is printed where you can (a 385 g pack of 2 kievs makes one 192.5 g; a box of 12 eggs at 680 g makes one 57 g); otherwise give a typical weight for one. For food eaten loose (rice, noodles, yoghurt, cereal, a ready meal) use "portion" and a sensible single portion in grams, the pack itself when it is one meal.';
 
 const InbodyShape = z.object({
   date: z.string().optional().describe('The test date as YYYY-MM-DD, if printed'),
@@ -87,6 +94,8 @@ export interface LabelReading {
   per100: { kcal: number; protein: number; carbs: number; fat: number };
   servingGrams?: number;
   packGrams?: number;
+  /** How the food is counted when eaten, and what one weighs: an estimate unless printed. */
+  unit?: { label: string; plural?: string; grams: number };
 }
 
 /** The measures of an InBody sheet, named as `BodyScan` names them. Only what was printed and plausible. */
@@ -197,7 +206,8 @@ export async function readLabelPhoto(jpegBase64: string, deps: CallDeps = {}): P
       json: LABEL_SCHEMA,
       image: jpegBase64,
       prompt:
-        'This is a photo of a food label or pack. Read the product name, the brand if shown, and the nutrition per 100 g (or 100 ml), with energy in kilocalories. If the label only gives per-serving values, convert them to per 100 g using the serving size. Give the serving size and the pack weight in grams only if they are printed.',
+        'This is a photo of a food label or pack. Read the product name, the brand if shown, and the nutrition per 100 g (or 100 ml), with energy in kilocalories. If the label only gives per-serving values, convert them to per 100 g using the serving size. Give the serving size and the pack weight in grams only if they are printed. ' +
+        UNIT_GUIDE,
       effort: 'medium',
     },
     deps,
@@ -214,7 +224,7 @@ export async function readLabelPage(text: string, address: string, deps: CallDep
     {
       schema: LabelShape,
       json: LABEL_SCHEMA,
-      prompt: `This is the text of a food product's web page (${address}). Read the product name, the brand if shown, and the nutrition per 100 g (or 100 ml) from its nutrition table, with energy in kilocalories. If the page only gives per-serving values, convert them to per 100 g using the serving size. Give the serving size and the pack weight in grams only if the page states them. If the page has no nutrition figures, give 0 for every one.\n\n<page>\n${text}\n</page>`,
+      prompt: `This is the text of a food product's web page (${address}). Read the product name, the brand if shown, and the nutrition per 100 g (or 100 ml) from its nutrition table, with energy in kilocalories. If the page only gives per-serving values, convert them to per 100 g using the serving size. Give the serving size and the pack weight in grams only if the page states them. If the page has no nutrition figures, give 0 for every one. ${UNIT_GUIDE}\n\n<page>\n${text}\n</page>`,
       effort: 'low',
     },
     deps,
@@ -235,12 +245,17 @@ function labelReading(read: z.infer<typeof LabelShape>, unreadable: string): Lab
   const brand = read.brand?.trim();
   const servingGrams = positive(read.serving_grams);
   const packGrams = positive(read.pack_grams);
+  const unitName = read.unit_name?.trim().toLowerCase();
+  const unitGrams = positive(read.unit_grams);
+  // A unit is a count of something eaten, never grams itself, and one of it is never a sack.
+  const unit = unitName && !/^(g|grams?|100 ?g|ml)$/.test(unitName) && unitGrams && unitGrams <= 2000 ? { label: unitName, ...(read.unit_plural?.trim() ? { plural: read.unit_plural.trim().toLowerCase() } : {}), grams: Math.round(unitGrams * 10) / 10 } : undefined;
   return {
     name: read.name.trim(),
     ...(brand ? { brand } : {}),
     per100: macros,
     ...(servingGrams ? { servingGrams } : {}),
     ...(packGrams ? { packGrams } : {}),
+    ...(unit ? { unit } : {}),
   };
 }
 

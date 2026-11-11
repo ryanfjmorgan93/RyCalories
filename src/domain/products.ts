@@ -34,6 +34,12 @@ export interface LabelNutrition {
   servingGrams?: number;
   /** Whole-pack weight in grams, when the database knows one. */
   packGrams?: number;
+  /**
+   * How the food is counted when eaten (an egg, a kiev, a slice, or a typical portion) and the
+   * weight of one, from Claude's reading of a label or a product page. An estimate unless the page
+   * says it, so it stands with the UK table's item weights: offered as a chip, shown with ≈.
+   */
+  unit?: { label: string; plural?: string; grams: number };
 }
 
 /**

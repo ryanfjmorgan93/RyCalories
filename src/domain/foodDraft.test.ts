@@ -107,6 +107,26 @@ describe('what the sheet teaches food memory', () => {
     expect(draftToItem(d, { options }).unit).toEqual({ count: 2, unitGrams: 50, label: 'egg', plural: 'eggs' });
   });
 
+  it("remembers the count unit read with a label, whether or not the amount was chosen in it", () => {
+    const kievs = scanned({ ...CHICKEN, name: 'Cheese & Ham Hock Chicken Kyiv', packGrams: 385, unit: { label: 'kyiv', plural: 'kyivs', grams: 192.5 } });
+    const options = unitOptions({ packGrams: 385, tableUnit: kievs.unit! });
+    expect(options.map((o) => o.key)).toEqual(['pack', 'kyiv', 'g']);
+    // By the pack: the kyiv is taught alongside it.
+    expect(draftToItem(editAmount(kievs, { grams: 385, unitKey: 'pack' }), { options }).units).toEqual({
+      packGrams: 385,
+      extra: [{ label: 'kyiv', plural: 'kyivs', grams: 192.5 }],
+      lastUnit: 'pack',
+    });
+    // By the kyiv: it is the amount's own unit, so it is not repeated as an extra.
+    // Worded in the unit chosen, even where the pack would also name the weight.
+    const fillets = scanned({ ...CHICKEN, unit: { label: 'fillet', plural: 'fillets', grams: 133.3 } });
+    const filletOptions = unitOptions({ packGrams: 400, tableUnit: fillets.unit! });
+    expect(draftToItem(editAmount(fillets, { grams: 266.6, unitKey: 'fillet' }), { options: filletOptions }).portion).toBe('2 fillets (266.6 g)');
+    const one = draftToItem(editAmount(kievs, { grams: 192.5, unitKey: 'kyiv' }), { options });
+    expect(one.unit).toEqual({ count: 1, unitGrams: 192.5, label: 'kyiv', plural: 'kyivs' });
+    expect(one.units?.extra).toBeUndefined();
+  });
+
   it('carries the barcode of a pack the user typed in', () => {
     const d = blankDraft();
     expect(draftToItem({ ...d, name: 'Mystery bar' }, { options: unitOptions({}), barcode: '5012345678900' }).barcode).toBe('5012345678900');

@@ -254,6 +254,7 @@ export async function readLabel(file: File, barcode: string | undefined, cancell
       per100: reading.per100,
       ...(reading.servingGrams !== undefined ? { servingGrams: reading.servingGrams } : {}),
       ...(reading.packGrams !== undefined ? { packGrams: reading.packGrams } : {}),
+    ...(reading.unit ? { unit: reading.unit } : {}),
     };
     if (code) await rememberBarcodeLabel(code, label);
     return label;
@@ -301,6 +302,7 @@ export async function readLink(pasted: string, cancelled: Cancelled = () => fals
     per100: reading.per100,
     ...(reading.servingGrams !== undefined ? { servingGrams: reading.servingGrams } : {}),
     ...(reading.packGrams !== undefined ? { packGrams: reading.packGrams } : {}),
+    ...(reading.unit ? { unit: reading.unit } : {}),
   };
 }
 

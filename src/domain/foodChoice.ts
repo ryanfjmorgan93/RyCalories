@@ -82,6 +82,7 @@ export function choiceFromLabel(l: LabelNutrition, known?: FoodMemory): FoodChoi
     units: {
       ...(l.packGrams !== undefined ? { packGrams: l.packGrams } : {}),
       ...(l.servingGrams !== undefined ? { servingGrams: l.servingGrams } : {}),
+      ...(l.unit ? { tableUnit: l.unit } : {}),
     },
   };
   if (!known) return base;

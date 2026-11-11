@@ -320,10 +320,13 @@ test.describe('Claude logs food', () => {
   const routeShop = (page: Page, status = 200) =>
     page.route(SHOP, (route) => route.fulfill({ status, headers: { 'access-control-allow-origin': '*', 'content-type': 'text/html' }, body: status === 200 ? SHOP_PAGE : 'Forbidden' }));
 
-  test("a pasted product link is read as the pack's label, on to the amount step", async ({ page }) => {
+  /** The page as Claude reads it: the pack, and how the chicken is eaten (a fillet, its weight worked out). */
+  const PAGE_LABEL = { ...LABEL, unit_name: 'fillet', unit_plural: 'fillets', unit_grams: 133.3 };
+
+  test("a pasted product link is read as the pack's label, on to the amount step, with the unit it is eaten in", async ({ page }) => {
     await useKey(page);
     await routeShop(page);
-    const claude = await mockClaude(page, { label: LABEL });
+    const claude = await mockClaude(page, { label: PAGE_LABEL });
     await page.goto('/food');
     await page.getByTestId('add-food-button').click();
     await page.getByTestId('slot-dinner').click();
@@ -334,6 +337,10 @@ test.describe('Claude logs food', () => {
 
     await expect(page.getByTestId('amount-name')).toHaveText('Tesco Chicken Breast Fillets');
     await expect(page.getByTestId('amount-pack-1')).toContainText('Whole pack (400 g)');
+    // A fillet to count by too, its weight marked as an estimate.
+    await page.getByTestId('unit-fillet').click();
+    await expect(page.getByTestId('amount-fillet-1')).toContainText('≈ 133.3 g');
+    await page.getByTestId('unit-pack').click();
     const asked = claude.of('label');
     expect(asked).toHaveLength(1);
     const sent = JSON.stringify(asked[0]!.body.messages);
@@ -345,6 +352,37 @@ test.describe('Claude logs food', () => {
     await expect(page.getByTestId('calories-bar')).toContainText('660 kcal');
     const items = await rawAll<RawItem>(page, 'mealItems');
     expect(items[0]).toMatchObject({ name: 'Tesco Chicken Breast Fillets', portion: '1 pack (400 g)', source: 'label' });
+  });
+
+  test("the meal screen's Add food reads a link too: the sheet fills with the label and its units", async ({ page }) => {
+    await useKey(page);
+    await routeShop(page);
+    await mockClaude(page, { label: PAGE_LABEL });
+    await page.goto('/food/new');
+    await page.getByTestId('meal-name').fill('Dinner');
+    await page.getByTestId('empty-add-food').click();
+    await page.getByTestId('food-link').click();
+    await page.getByTestId('link-input').fill(SHOP);
+    await page.getByTestId('link-read').click();
+
+    await expect(page.getByTestId('food-name')).toHaveValue('Tesco Chicken Breast Fillets');
+    await expect(page.getByTestId('food-kcal')).toHaveValue('165');
+    await expect(page.getByTestId('unit-fillet')).toBeVisible();
+    await page.getByTestId('unit-fillet').click();
+    await page.getByTestId('amount-fillet-2').click();
+    await expect(page.getByTestId('food-grams')).toHaveValue('266.6');
+    await page.getByTestId('save-food').click();
+    await page.getByTestId('save-meal').click();
+    await expect(page).toHaveURL(/\/food\/[0-9a-f-]+$/);
+    const items = await rawAll<RawItem>(page, 'mealItems');
+    expect(items[0]).toMatchObject({ name: 'Tesco Chicken Breast Fillets', portion: '2 fillets (266.6 g)', source: 'label' });
+
+    // Next time the remembered food is listed by its own name, with no brand in front of it again.
+    await page.goto('/food/new');
+    await page.getByTestId('empty-add-food').click();
+    await page.getByTestId('food-name').fill('chick');
+    await expect(page.getByTestId('food-suggestions')).toContainText('Tesco Chicken Breast Fillets');
+    await expect(page.getByTestId('food-suggestions')).not.toContainText('Tesco Tesco');
   });
 
   test("a page that will not open says so, sends Claude nothing, and keeps the link to try again", async ({ page }) => {

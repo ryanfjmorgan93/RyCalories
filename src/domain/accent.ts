@@ -5,7 +5,8 @@
  * accent fill. A dark blue or violet is therefore lifted until it reads, rather than shipped at
  * 3:1. Absent (`undefined`) means brass, the default src/index.css carries (it replaced ember with
  * the trophy-room look, November 2026; ember is still hue 17 on the wheel).
- * White is the one accent off the wheel (the owner asked for it, November 2026).
+ * White, Silver, Copper and Rose gold are named accents off the wheel (white asked for in November
+ * 2026, the three metals beside it soon after: "more stylish presets like white and brass").
  *
  * Pure: no IO, no DOM. src/ui/accentTheme.ts applies the result as CSS variables.
  */
@@ -17,6 +18,18 @@ export const BRASS = { accent: '#c9a45c', accentFg: '#000000' } as const;
 /** White has no hue, so it is stored as this value in `Settings.accentHue`, beside the wheel's 0–359. */
 export const WHITE_HUE = -1;
 export const WHITE = { accent: '#ffffff', accentFg: '#000000' } as const;
+
+/**
+ * The named accents beside brass, each stored as its own negative value in `Settings.accentHue`
+ * (beside the wheel's 0–359, as white was first). Metals, to sit with the brass trophy room; each
+ * reads on every dark surface at 4.5:1 (accent.test.ts).
+ */
+export const PRESETS = [
+  { hue: WHITE_HUE, name: 'White', accent: WHITE.accent },
+  { hue: -2, name: 'Silver', accent: '#b9c1ca' },
+  { hue: -3, name: 'Copper', accent: '#d9895a' },
+  { hue: -4, name: 'Rose gold', accent: '#e4a99b' },
+] as const;
 
 /** Text-on-surface floor (WCAG AA for body text), the same one src/ui/tokens.test.ts holds the tokens to. */
 export const MIN_CONTRAST = 4.5;
@@ -80,9 +93,12 @@ export function accentFromHue(hue: number): AccentColours {
   return { hue: h, accent, accentFg: inkOn(accent) };
 }
 
-/** The colours for a stored setting: the default brass when none is stored, white for WHITE_HUE. */
+/** The colours for a stored setting: the default brass when none is stored, a preset for its value, else the wheel's. */
 export function accentForSetting(accentHue: number | undefined): AccentColours {
   if (accentHue === undefined) return { hue: BRASS_HUE, ...BRASS };
-  if (accentHue === WHITE_HUE) return { hue: WHITE_HUE, ...WHITE };
+  const preset = PRESETS.find((p) => p.hue === accentHue);
+  if (preset) return { hue: preset.hue, accent: preset.accent, accentFg: inkOn(preset.accent) };
+  // An unknown negative (a preset from a later build, restored here) falls back to brass, not to a wheel colour nobody chose.
+  if (accentHue < 0) return { hue: BRASS_HUE, ...BRASS };
   return accentFromHue(accentHue);
 }

@@ -24,7 +24,10 @@ import {
 import { amountChips, defaultUnit, unitOptions, type UnitOption } from '@/domain/foodUnits';
 import type { FoodMemory } from '@/domain/types';
 import type { NewMealItem } from '@/db/foodRepo';
+import { blockedLine, readFailureLine, readLink } from '@/state/claudeFood';
 import { BarcodeScanner } from './BarcodeScanner';
+import { LinkSheet } from './ClaudeFoodSheets';
+import { toast } from './components/Toast';
 import { Button, IconButton } from './components/Button';
 import { Chip, Segmented } from './components/Chip';
 import { NumberInput, TextInput } from './components/NumberField';
@@ -84,9 +87,11 @@ export function FoodItemSheet({
   // button — hidden until three letters are typed and again once a label is applied, which is
   // exactly the state a second scan starts from — so a scan in flight showed nothing at all.
   const [lookup, setLookup] = useState<
-    'idle' | 'searching' | 'scanning' | 'none' | 'offline' | 'unavailable' | 'notfound' | 'nofigures' | 'invalid'
+    'idle' | 'searching' | 'scanning' | 'reading' | 'none' | 'offline' | 'unavailable' | 'notfound' | 'nofigures' | 'invalid'
   >('idle');
-  const busy = lookup === 'searching' || lookup === 'scanning';
+  const busy = lookup === 'searching' || lookup === 'scanning' || lookup === 'reading';
+  // The link being pasted, while its sheet is open (null when shut). Kept on a failure, to try again.
+  const [link, setLink] = useState<string | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
   // The barcode of the last scan the database could not fill. Kept until Save, or until a later
   // scan replaces it, and handed to the save so the food is remembered against that pack: the next
@@ -155,6 +160,7 @@ export function FoodItemSheet({
   const unitSource = {
     ...(d.packGrams ? { packGrams: d.packGrams } : {}),
     ...(d.servingGrams ? { servingGrams: d.servingGrams } : {}),
+    ...(d.unit ? { tableUnit: d.unit } : {}),
     ...(memory ? { memory } : {}),
   };
   const options = unitOptions(unitSource);
@@ -265,6 +271,31 @@ export function FoodItemSheet({
     }
   };
 
+  /** Add food → Link, here too: Claude reads the pasted product page as its label, and the sheet fills from it. */
+  const openLink = () => {
+    const blocked = blockedLine('link');
+    if (blocked) toast(blocked);
+    else setLink('');
+  };
+  const readPastedLink = async () => {
+    const pasted = link?.trim();
+    if (!pasted || busy) return;
+    setLink(null);
+    const ticket = (requestRef.current += 1);
+    setLookup('reading');
+    try {
+      const label = await readLink(pasted, () => ticket !== requestRef.current);
+      if (!label || ticket !== requestRef.current) return;
+      setScannedCode(undefined);
+      applyLabel(label, { fromScan: true });
+    } catch (e) {
+      if (ticket !== requestRef.current) return;
+      setLookup('idle');
+      toast(readFailureLine(e, 'link'), 'danger');
+      setLink(pasted);
+    }
+  };
+
   const usePrevious = (m: FoodMemory) => {
     setD(applyMemory(m));
   };
@@ -320,25 +351,27 @@ export function FoodItemSheet({
             )}
           </Field>
 
-          {lookupEnabled && (
-            <div className="-mt-2 grid gap-2">
-              <div className={canLookUp ? 'grid grid-cols-2 gap-2' : ''}>
-                <Button
-                  size="md"
-                  variant="outline"
-                  full
-                  disabled={busy}
-                  onClick={() => setScannerOpen(true)}
-                  data-testid="scan-barcode"
-                >
+          <div className="-mt-2 grid gap-2">
+            <div className={lookupEnabled ? 'grid grid-cols-2 gap-2' : ''}>
+              {lookupEnabled && (
+                <Button size="md" variant="outline" full disabled={busy} onClick={() => setScannerOpen(true)} data-testid="scan-barcode">
                   {lookup === 'scanning' ? 'Looking up…' : 'Scan barcode'}
                 </Button>
-                {canLookUp && (
-                  <Button size="md" variant="outline" full disabled={busy} onClick={() => void runLookup()} data-testid="lookup-food">
-                    {lookup === 'searching' ? 'Looking up…' : 'Look up the label'}
-                  </Button>
-                )}
-              </div>
+              )}
+              {/* Not gated by the label lookup switch: a link is read by Claude, not Open Food Facts. */}
+              <Button size="md" variant="outline" full disabled={busy} onClick={openLink} data-testid="food-link">
+                {lookup === 'reading' ? 'Reading the page…' : 'Paste a link'}
+              </Button>
+              {lookupEnabled && canLookUp && (
+                <Button size="md" variant="outline" full disabled={busy} onClick={() => void runLookup()} className="col-span-2" data-testid="lookup-food">
+                  {lookup === 'searching' ? 'Looking up…' : 'Look up the label'}
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {lookupEnabled && (
+            <div className="-mt-2 grid gap-2 empty:hidden">
               {canLookUp && (
                 <TextInput
                   value={d.brand ?? ''}
@@ -391,7 +424,8 @@ export function FoodItemSheet({
                     className="flex min-h-14 min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left active:bg-surface-2"
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="break-words font-semibold leading-tight">{[m.brand, m.name].filter(Boolean).join(' ')}</div>
+                      {/* The remembered name already leads with its brand (displayName): adding it again read "Sainsbury's Sainsbury's". */}
+                      <div className="break-words font-semibold leading-tight">{m.name}</div>
                       <div className="num mt-0.5 break-words text-xs text-muted">
                         {fmtKcal(m.per100.kcal)} / 100 g{m.typicalGrams ? ` · usually ${fmtGrams(m.typicalGrams)}` : ''}
                       </div>
@@ -477,6 +511,7 @@ export function FoodItemSheet({
         </div>
       </Sheet>
       <BarcodeScanner open={scannerOpen} onClose={() => setScannerOpen(false)} onCode={(code) => void onScanCode(code)} />
+      {link !== null && <LinkSheet text={link} onText={setLink} onSubmit={() => void readPastedLink()} onClose={() => setLink(null)} />}
     </>
   );
 }

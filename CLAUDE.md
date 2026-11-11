@@ -125,7 +125,10 @@ The owner does not check on device. Correctness has to come from the code and th
   foods logged in it most often (`slotChoices`, counted by `slotFoodCounts` in `db/foodRepo.ts`),
   then the rest; nothing is tagged by hand. Add food → Link reads a product page's nutrition from a
   pasted address (`pageText.ts` keeps the page's words, `readLabelPage` in `ai/vision.ts` copies the
-  figures as a label). A meal Claude read from a photo or a sentence is listed
+  figures as a label), in the Add food sheet and in a meal's own Add food alike. A label read by
+  Claude (page or photo) also brings the unit the food is eaten in (an egg, a kiev, a portion) with
+  the weight of one, worked out from the page where it can: an estimate, offered as chips beside
+  the pack like the UK table's item weights (`LabelNutrition.unit`). A meal Claude read from a photo or a sentence is listed
   food by food and stays until Keep, Undo or Adjust is tapped (it is on the day already).
   `recipe.ts`, `mealText.ts`, `ingredientMatch.ts`, `foodUnits.ts` and `foodChoice.ts` are food:
   natural units, matching to remembered foods and the UK table, and the one item shape every way of
