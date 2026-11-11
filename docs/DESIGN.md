@@ -183,9 +183,9 @@ must render when this stylesheet is what failed.
 Brass is the default and the reset; ember (the old default) is still hue 17 on the ring.
 
 `src/ui/AccentWheel.tsx`. A conic ring painted with the colours the wheel actually produces, a
-swatch, the hex, and under it the named metals as swatch pills: Brass (the reset), White, Silver,
-Copper and Rose gold (`PRESETS` in `src/domain/accent.ts`, none of them on the ring; the owner
-asked for white, then "more stylish presets like white and brass", November 2026), and a range slider that does the same for keys and screen
+swatch, the hex, and under it the named presets as swatch pills: Brass (the reset), White, Jade,
+Cobalt and Coral (`PRESETS` in `src/domain/accent.ts`, none of them on the ring; the owner asked
+for white, then for nice colours with names, each plainly unlike the others, November 2026), and a range slider that does the same for keys and screen
 readers. Dragging previews live; letting go (or the slider resting for 400 ms) saves.
 
 - **The maths** is `src/domain/accent.ts`, pure and tested: the wheel picks a **hue**; saturation is
@@ -193,7 +193,7 @@ readers. Dragging previews live; letting go (or the slider resting for 400 ms) s
   black stage, the plain panel and the lightest panel (`#262626`). Ink on the accent is whichever of
   black and white measures better. `accent.test.ts` checks all 360 hues. So a navy is lifted to a
   readable blue rather than shipped at 3:1.
-- **Storage**: `Settings.accentHue` (0–359, or a preset's negative value: -1 white, -2 silver, -3 copper, -4 rose gold). Absent means brass, which `src/index.css` carries as
+- **Storage**: `Settings.accentHue` (0–359, or a preset's negative value: -1 white, -2 jade, -3 cobalt, -4 coral). Absent means brass, which `src/index.css` carries as
   its default (`tokens.test.ts` checks the two agree). It is in the Settings row, so it is in
   backups.
 - **Applying**: `src/ui/accentTheme.ts` writes `--c-accent` and `--c-accent-fg` on `<html>`

@@ -5,8 +5,9 @@
  * accent fill. A dark blue or violet is therefore lifted until it reads, rather than shipped at
  * 3:1. Absent (`undefined`) means brass, the default src/index.css carries (it replaced ember with
  * the trophy-room look, November 2026; ember is still hue 17 on the wheel).
- * White, Silver, Copper and Rose gold are named accents off the wheel (white asked for in November
- * 2026, the three metals beside it soon after: "more stylish presets like white and brass").
+ * White, Jade, Cobalt and Coral are named accents off the wheel (white asked for in November 2026,
+ * the three colours beside it soon after: "generally nice colour selections" with a name, each
+ * plainly unlike the others).
  *
  * Pure: no IO, no DOM. src/ui/accentTheme.ts applies the result as CSS variables.
  */
@@ -21,14 +22,14 @@ export const WHITE = { accent: '#ffffff', accentFg: '#000000' } as const;
 
 /**
  * The named accents beside brass, each stored as its own negative value in `Settings.accentHue`
- * (beside the wheel's 0–359, as white was first). Metals, to sit with the brass trophy room; each
- * reads on every dark surface at 4.5:1 (accent.test.ts).
+ * (beside the wheel's 0–359, as white was first). Each reads on every dark surface at 4.5:1
+ * (accent.test.ts).
  */
 export const PRESETS = [
   { hue: WHITE_HUE, name: 'White', accent: WHITE.accent },
-  { hue: -2, name: 'Silver', accent: '#b9c1ca' },
-  { hue: -3, name: 'Copper', accent: '#d9895a' },
-  { hue: -4, name: 'Rose gold', accent: '#e4a99b' },
+  { hue: -2, name: 'Jade', accent: '#5ccf9e' },
+  { hue: -3, name: 'Cobalt', accent: '#6fa8ff' },
+  { hue: -4, name: 'Coral', accent: '#ff7a6b' },
 ] as const;
 
 /** Text-on-surface floor (WCAG AA for body text), the same one src/ui/tokens.test.ts holds the tokens to. */

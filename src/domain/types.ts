@@ -418,7 +418,7 @@ export interface Settings {
   barKg?: number;
   /**
    * The accent hue picked on the colour wheel (Settings → Look), 0–359, or a named preset's negative
-   * value (PRESETS in src/domain/accent.ts: -1 white, -2 silver, -3 copper, -4 rose gold).
+   * value (PRESETS in src/domain/accent.ts: -1 white, -2 jade, -3 cobalt, -4 coral).
    * Absent means the default brass. The colour itself is derived (src/domain/accent.ts) so it always reads on the dark surfaces.
    */
   accentHue?: number;

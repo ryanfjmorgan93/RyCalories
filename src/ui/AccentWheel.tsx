@@ -25,7 +25,7 @@ const presetOf = (stored: number | undefined) => (stored !== undefined && stored
  * Settings → Look: a colour wheel for the accent. Dragging previews live across the whole app;
  * letting go saves. A slider under it does the same for keyboard and screen reader. The wheel picks
  * a hue; the colour is lifted where needed so text on it and in it still reads (src/domain/accent.ts).
- * Brass and the named metals (White, Silver, Copper, Rose gold) are swatches under it, since no hue gives them.
+ * Brass and the named presets (White, Jade, Cobalt, Coral) are swatches under it, one tap each.
  */
 export function AccentWheel({ settings }: { settings: Settings }) {
   const stored = settings.accentHue;
@@ -103,7 +103,7 @@ export function AccentWheel({ settings }: { settings: Settings }) {
           </div>
         </div>
       </div>
-      {/* The named metals: one tap each, the one in use filled. */}
+      {/* The named presets: one tap each, the one in use filled. */}
       <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Presets">
         <Swatch
           name="Brass"
