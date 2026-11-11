@@ -342,6 +342,8 @@ test.describe('the coach in a session', () => {
     const rest = page.getByTestId('rest-timer');
     await expect(rest).toBeVisible();
     await expect(rest.getByTestId('coach-line-set')).toHaveText(SET_LINE);
+    // It floats over the page with the timer, so it sits on a solid panel: open text there lay on top of the screen.
+    await expect(rest.locator('button', { has: page.getByTestId('coach-line-set') })).toHaveCSS('background-color', 'rgb(20, 18, 14)');
     // What the coach was told about the set.
     const asked = seen.find((s) => isMoment(s.body) && lastUserText(s.body).includes('has just logged a set'))!;
     const facts = lastUserText(asked.body);

@@ -65,8 +65,11 @@ export function RestTimerBar() {
       className={`content-max fixed inset-x-0 z-40 mx-auto px-3 ${inSession ? 'bottom-0 pb-safe' : dockShowing ? 'bottom-above-dock' : 'bottom-nav'}`}
       data-testid="rest-timer"
     >
-      {/* What the coach says about the set just logged: nothing at all unless it has something to say. */}
-      {setFacts && <CoachLine moment="set" facts={setFacts} className="mb-2" />}
+      {/* What the coach says about the set just logged: nothing at all unless it has something to say.
+          This layer floats over the page, so the note is a solid panel here, never open text on top of the screen. */}
+      {setFacts && (
+        <CoachLine moment="set" facts={setFacts} className="mb-2 rounded-card border border-line bg-surface px-4 py-3 shadow-[0_18px_40px_-20px_rgba(0,0,0,0.85)]" />
+      )}
       {/* Look A: the running timer is one solid accent block with ink on it; when the rest is over it
           turns to the shared real glass with the done tint on its border. */}
       <div
