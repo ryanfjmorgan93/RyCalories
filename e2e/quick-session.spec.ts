@@ -235,7 +235,7 @@ test('a typed request sets the chips and the plan, and a tap or another phrase r
     expect(row.sets, row.text).toBeLessThanOrEqual(3);
     expect(LIGHT_EXCLUDED).not.toContain(row.name);
   }
-  await expect(page.getByTestId('quick-estimate')).toHaveText(/^about \d+ min · 4 exercises$/);
+  await expect(page.getByTestId('quick-estimate')).toHaveText(/^About \d+ min · 4 exercises$/);
 
   // Auto hands the sizing back to the minutes, which are the thirty that "can't be bothered" said.
   await page.getByTestId('quick-count-auto').click();
@@ -535,7 +535,7 @@ test('says what there is to say and no more: a muscle with no exercise, a short 
   await expectPressed(page, 'quick-count-6');
   await expect(page.getByTestId('quick-short')).toHaveText('Only 1 available');
   await expect(rowsOf(page)).toHaveCount(1);
-  await expect(page.getByTestId('quick-estimate')).toHaveText(/^about \d+ min · 1 exercise$/);
+  await expect(page.getByTestId('quick-estimate')).toHaveText(/^About \d+ min · 1 exercise$/);
 });
 
 /** The ids of every exercise there is now: what Start makes is whatever is not among them afterwards. */
