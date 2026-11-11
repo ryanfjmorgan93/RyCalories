@@ -33,7 +33,7 @@ export function SwapExerciseSheet({
   return (
     <Sheet open={open} onClose={onClose} title="Swap exercise">
       {candidates.length === 0 ? (
-        <div className="px-1 py-4 text-sm text-muted">No other {muscleGroup} exercise to swap in.</div>
+        <div className="py-4 text-sm text-muted">No other {muscleGroup} exercise to swap in.</div>
       ) : (
         <>
           <TextInput value={q} onChange={setQ} placeholder="Search" />

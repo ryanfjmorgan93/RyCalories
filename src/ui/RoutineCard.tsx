@@ -76,7 +76,7 @@ export function RoutineCard({
               )}
               {item.lastTop && (
                 <div className="mt-0.5 break-words text-sm text-muted" data-testid={`routine-top-${routine.name}`}>
-                  Last: {item.lastTop}
+                  Last: {keepTogether(item.lastTop)}
                 </div>
               )}
               <div className="mt-0.5 break-words text-xs text-muted">{detail}</div>
@@ -103,7 +103,7 @@ export function RoutineCard({
               )}
               {item.lastTop && (
                 <div className="mt-0.5 break-words text-sm text-muted" data-testid={`routine-top-${routine.name}`}>
-                  Last: {item.lastTop}
+                  Last: {keepTogether(item.lastTop)}
                 </div>
               )}
               <div className="mt-0.5 break-words text-xs text-muted">{detail}</div>
@@ -164,4 +164,9 @@ function RoutinePlan({ routineId, name, settings }: { routineId: string; name: s
       })}
     </div>
   );
+}
+
+/** "75 kg × 8" never breaks between the number, its unit and the reps: no-break spaces inside it. */
+function keepTogether(s: string): string {
+  return s.replace(/(\d) (kg) × (\d)/g, '$1\u00a0$2\u00a0×\u00a0$3');
 }

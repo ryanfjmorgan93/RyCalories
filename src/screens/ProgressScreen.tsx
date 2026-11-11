@@ -270,7 +270,7 @@ function MaintenanceCard({ trend, bodyweight, today }: { trend: Trend; bodyweigh
         </>
       ) : (
         <div className="text-sm text-muted num tabular-nums" data-testid="maintenance-gate">
-          {gate}
+          {gate}.
         </div>
       )}
     </Card>
@@ -286,8 +286,8 @@ function TrainingCard({ trend }: { trend: Trend }) {
           {trend.sessions}
         </span>
       </div>
-      <div className="mt-1 flex items-baseline justify-between text-xs text-muted">
-        <span>Per week</span>
+      <div className="mt-2 flex items-baseline justify-between text-xs text-muted">
+        <span className="label">Per week</span>
         <span className="num tabular-nums" data-testid="sessions-per-week">
           {fmtNum(Math.round(trend.sessionsPerWeek * 10) / 10)}
         </span>

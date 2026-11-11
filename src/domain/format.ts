@@ -214,7 +214,7 @@ export function fmtSetsLine(sets: SetLine[], kind: ExerciseKind): string {
 // Nutrition
 
 export function fmtKcal(n: number): string {
-  return `${Math.round(n)} kcal`;
+  return `${fmtNum(Math.round(n))} kcal`;
 }
 
 /** Macro grams, one decimal at most: 24 g, 5.4 g. */

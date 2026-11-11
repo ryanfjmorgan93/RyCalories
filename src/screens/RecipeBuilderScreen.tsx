@@ -109,7 +109,7 @@ function finiteOrNull(n: number): number | null {
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
-      <div className="mb-1 px-1 label">{label}</div>
+      <div className="mb-1 label">{label}</div>
       {children}
     </div>
   );
@@ -252,8 +252,8 @@ function QuestionCardBody({
                     />
                   </Field>
                 ) : (
-                  <button type="button" onClick={() => setEditingUnitGrams(true)} className="px-1 text-left text-sm text-muted" data-testid="question-unit">
-                    ≈{fmtGrams(ingredient.unit.unitGrams)} each
+                  <button type="button" onClick={() => setEditingUnitGrams(true)} className="text-left text-sm text-muted" data-testid="question-unit">
+                    ≈ {fmtGrams(ingredient.unit.unitGrams)} each
                   </button>
                 )}
               </>
@@ -371,7 +371,7 @@ function IngredientPickerSheet({
             ))}
           </Card>
         )}
-        {query.trim() && results.length === 0 && <div className="px-1 text-sm text-muted">No matches.</div>}
+        {query.trim() && results.length === 0 && <div className="text-sm text-muted">No matches.</div>}
 
         <div className={lookupEnabled ? 'grid grid-cols-2 gap-3' : 'grid gap-3'}>
           {lookupEnabled && (

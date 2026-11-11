@@ -239,15 +239,15 @@ describe('groupsInList', () => {
 
 describe('libraryCountsLine', () => {
   it('states the counts once the catalogue has loaded', () => {
-    expect(libraryCountsLine({ owned: 27, library: 794 }, 'ready')).toBe('27 yours · 794 in the library');
+    expect(libraryCountsLine({ owned: 27, library: 794 }, 'ready')).toBe('27 of yours · 794 in the library');
   });
 
   it('does not claim a total while the catalogue is still loading', () => {
-    expect(libraryCountsLine({ owned: 27, library: 276 }, 'loading')).toBe('27 yours · 276 in the library so far');
+    expect(libraryCountsLine({ owned: 27, library: 276 }, 'loading')).toBe('27 of yours · 276 in the library so far');
   });
 
   it('says so when the catalogue could not be loaded', () => {
-    expect(libraryCountsLine({ owned: 27, library: 276 }, 'failed')).toBe('27 yours · 276 in the library · catalogue not loaded');
+    expect(libraryCountsLine({ owned: 27, library: 276 }, 'failed')).toBe('27 of yours · 276 in the library · catalogue not loaded');
   });
 });
 

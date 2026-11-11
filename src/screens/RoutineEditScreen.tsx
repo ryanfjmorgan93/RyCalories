@@ -308,7 +308,7 @@ function RoutineSettingsSheet({ open, routine, onClose }: { open: boolean; routi
 }
 
 function FieldLabel({ children }: { children: string }) {
-  return <div className="mb-1 mt-3 px-1 label">{children}</div>;
+  return <div className="mb-1 mt-3 label">{children}</div>;
 }
 
 function UpIcon() {

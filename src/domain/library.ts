@@ -239,7 +239,7 @@ export const CATALOGUE_NOT_LOADED = 'catalogue not loaded';
  * on its way the line says the count is what has arrived so far, and if it never arrives it says so.
  */
 export function libraryCountsLine(counts: { owned: number; library: number }, status: CatalogueStatus): string {
-  const base = `${counts.owned} yours · ${counts.library} in the library`;
+  const base = `${counts.owned} of yours · ${counts.library} in the library`;
   if (status === 'loading') return `${base} so far`;
   if (status === 'failed') return `${base} · ${CATALOGUE_NOT_LOADED}`;
   return base;

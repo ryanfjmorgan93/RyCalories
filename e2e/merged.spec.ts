@@ -62,7 +62,7 @@ test('a day of training and eating reads back as one record', async ({ page }) =
   // The Food screen knows a lower-body session happened, and raises the protein target for it.
   await page.goto('/food');
   await expect(page.getByText('Leg day', { exact: true })).toBeVisible();
-  await expect(page.getByTestId('calories-bar')).toContainText('2500 kcal');
+  await expect(page.getByTestId('calories-bar')).toContainText('2,500 kcal');
   await expect(page.getByTestId('protein-bar')).toContainText('210 g / 200 g');
   await expect(page.getByTestId('remaining')).toHaveText('600 kcal over');
 
@@ -74,7 +74,7 @@ test('a day of training and eating reads back as one record', async ({ page }) =
 
   // Progress puts both halves in one window, over the days that were logged.
   await page.goto('/progress');
-  await expect(page.getByTestId('avg-kcal')).toHaveText('2500 kcal');
+  await expect(page.getByTestId('avg-kcal')).toHaveText('2,500 kcal');
   await expect(page.getByTestId('avg-protein')).toHaveText('210 g');
   await expect(page.getByTestId('sessions')).toHaveText('1');
   await expect(page.getByTestId('days-logged')).toHaveText('1 of 28');

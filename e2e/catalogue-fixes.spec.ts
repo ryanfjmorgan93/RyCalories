@@ -82,7 +82,7 @@ test.describe('catalogue photographs that are not 3:2', () => {
     const box = await thumb.boundingBox();
     expect(Math.abs(box!.width / box!.height - 1.5)).toBeLessThan(0.05);
 
-    // Controls: line art has always been shown whole; a bundled square photograph fills its square.
+    // Controls: line art has always been shown whole; a bundled square photograph fills its (3:2) box.
     // The neck photograph is the seeded Neck exercise's own picture, so it is the owner's row that shows it.
     // (A diagram exercise with a robot render shows the render instead; Hindu push-up has none.)
     await page.getByTestId('exercise-search').fill('hindu push');

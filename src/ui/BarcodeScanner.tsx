@@ -192,11 +192,11 @@ export function BarcodeScanner({
             )}
           </div>
         )}
-        {cameraError === 'no-media' && <div className="px-1 text-sm text-muted">Camera not available on this device.</div>}
-        {cameraError === 'denied' && <div className="px-1 text-sm text-muted">Camera not available.</div>}
+        {cameraError === 'no-media' && <div className="text-sm text-muted">Camera not available on this device.</div>}
+        {cameraError === 'denied' && <div className="text-sm text-muted">Camera not available.</div>}
 
         <div className="grid gap-2">
-          <div className="px-1 label">Or enter the barcode</div>
+          <div className="label">Or enter the barcode</div>
           <input
             data-testid="barcode-input"
             type="text"

@@ -172,7 +172,7 @@ function QuickSessionBody({ onClose }: { onClose: () => void }) {
                 <div className="flex items-center justify-between gap-3">
                   {plan.rows.length > 0 ? (
                     <div className="num text-sm font-semibold" data-testid="quick-estimate">
-                      about {plan.estimateMin} min · {plural(plan.rows.length, 'exercise')}
+                      About {plan.estimateMin} min · {plural(plan.rows.length, 'exercise')}
                     </div>
                   ) : own ? null : (
                     <div className="text-sm font-semibold text-warn" data-testid="quick-empty">

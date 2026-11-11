@@ -189,7 +189,7 @@ export function PasteRoutineSheet({
         }
       >
         {(pending > 0 || parsed.ignored.length > 0 || catalogueMissing) && (
-          <div className="mt-2 px-1 text-sm text-muted" data-testid="paste-facts">
+          <div className="mt-2 text-sm text-muted" data-testid="paste-facts">
             {[
               pending > 0 ? `${fmtNum(pending)} to choose` : '',
               parsed.ignored.length > 0 ? `${fmtNum(parsed.ignored.length)} ${parsed.ignored.length === 1 ? 'line' : 'lines'} not used` : '',

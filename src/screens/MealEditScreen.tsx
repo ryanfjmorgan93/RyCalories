@@ -114,7 +114,7 @@ function NewMeal() {
           else nav('/food');
         }}
       />
-      <div className="px-4">
+      <div className="px-4 pt-3">
         <MealFields name={name} slot={slot} onName={setName} onSlot={setSlot} />
         <div className="h-4" />
         <ItemList

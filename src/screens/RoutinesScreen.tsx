@@ -46,7 +46,7 @@ export function RoutinesScreen() {
 
   const subtitleFor = (r: Routine) => {
     const n = rxCounts?.get(r.id) ?? 0;
-    return `${n} ${n === 1 ? 'exercise' : 'exercises'}${r.targetMinutes ? ` · target ${r.targetMinutes} min` : ''}${r.isLowerBody ? ' · lower' : ''}`;
+    return `${n} ${n === 1 ? 'exercise' : 'exercises'}${r.targetMinutes ? ` · ${r.targetMinutes} min` : ''}${r.isLowerBody ? ' · lower' : ''}`;
   };
 
   return (
@@ -258,7 +258,7 @@ function NewRoutineSheet({ open, onClose }: { open: boolean; onClose: () => void
 }
 
 function FieldLabel({ children }: { children: string }) {
-  return <div className="mb-1 mt-3 px-1 label">{children}</div>;
+  return <div className="mb-1 mt-3 label">{children}</div>;
 }
 
 function UpIcon() {

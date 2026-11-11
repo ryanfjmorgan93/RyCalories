@@ -590,7 +590,7 @@ function DecisionCard({
   );
 }
 
-/** "PR weight 100 kg" · "PR e1RM 118 kg" · "PR set volume 800" · "PR reps 9 × 100 kg". */
+/** "PR weight 100 kg" · "PR e1RM 118 kg" · "PR set volume 800 kg" · "PR reps 9 × 100 kg". */
 function recordChipLabel(r: PersonalRecord): string {
   let base: string;
   switch (r.kind) {
@@ -601,7 +601,7 @@ function recordChipLabel(r: PersonalRecord): string {
       base = `PR e1RM ${fmtKg(r.value)}`;
       break;
     case 'set_volume':
-      base = `PR set volume ${fmtNum(r.value)}`;
+      base = `PR set volume ${fmtNum(r.value)} kg`;
       break;
     case 'reps_at_weight':
       base = `PR reps ${fmtNum(r.value)} × ${fmtKg(r.weight)}`;

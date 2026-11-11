@@ -79,7 +79,7 @@ export function LineChart({
           <line x1={padL} x2={w - padR} y1={y(tv)} y2={y(tv)} stroke="var(--c-line)" strokeWidth="1" />
           <text x={padL - 6} y={y(tv) + 4} textAnchor="end" fontSize="10" fill="var(--c-muted)">
             {fmtNum(tv)}
-            {unit}
+            {unit ? ` ${unit}` : ''}
           </text>
         </g>
       ))}
@@ -92,7 +92,7 @@ export function LineChart({
         {fmtDate(first.t)}
       </text>
       <text x={w - padR} y={h - 6} fontSize="10" fill="var(--c-muted)" textAnchor="end">
-        {fmtDate(last.t)}
+        {fmtDate(last.t) === fmtDate(first.t) ? '' : fmtDate(last.t)}
       </text>
     </svg>
   );

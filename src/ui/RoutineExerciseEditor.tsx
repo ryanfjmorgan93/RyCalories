@@ -195,7 +195,7 @@ export function RoutineExerciseEditor({
             <NumberInput value={rest} onChange={setRest} mode="numeric" min={0} placeholder={`default ${restDefault} s`} testId="rx-rest" />
           </div>
         </div>
-        <div className="mt-1 px-1 text-xs text-muted">Empty rest uses the exercise default ({restDefault} s).</div>
+        <div className="mt-1 text-xs text-muted">Empty rest uses the exercise default ({restDefault} s).</div>
 
         <div className="mt-4">
           <Label>Cue</Label>
@@ -244,7 +244,7 @@ export function RoutineExerciseEditor({
 }
 
 function Label({ children }: { children: string }) {
-  return <div className="mb-1 px-1 label">{children}</div>;
+  return <div className="mb-1 label">{children}</div>;
 }
 
 function clampInt(n: number, min: number, max: number): number {

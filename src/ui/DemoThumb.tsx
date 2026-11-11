@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { demoFrameSrc, demoPicture, pictureFitClass, robotSrc } from './demoPicture';
 import { ExerciseHero } from './ExerciseHero';
 
-/** Height in px is the size; a catalogue photograph (3:2) gets the width to match, a diagram is square. */
+/** Height in px is the size, and every thumbnail is the 3:2 box, so the names beside a list of them start on one edge. */
 const SIZES = {
-  sm: { square: 'h-10 w-10', wide: 'h-10 w-15' },
-  md: { square: 'h-12 w-12', wide: 'h-12 w-18' },
-  lg: { square: 'h-14 w-14', wide: 'h-14 w-21' },
+  sm: { wide: 'h-10 w-15' },
+  md: { wide: 'h-12 w-18' },
+  lg: { wide: 'h-14 w-21' },
 } as const;
 
 /**
@@ -25,8 +25,9 @@ export function DemoThumb({ demo, size = 'md', className = '' }: { demo: string 
   const pic = demoPicture(demo);
   const src = demoFrameSrc(demo, 1);
   if (!pic || !src) return null;
-  const box = pic.shape === 'wide' ? SIZES[size].wide : SIZES[size].square;
+  const box = SIZES[size].wide;
   if (failed === src) return <span data-testid="demo-missing" aria-hidden="true" className={`${box} block shrink-0 rounded-lg bg-surface-2 ${className}`} />;
   // A catalogue photograph is shown whole on the box's surface colour; line art is too.
+  // Line art is shown whole inside the box; a photograph fills it.
   return <img src={src} alt="" loading="lazy" onError={() => setFailed(src)} className={`${box} shrink-0 rounded-lg bg-surface-2 ${pictureFitClass(pic)} ${className}`} />;
 }

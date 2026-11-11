@@ -120,7 +120,7 @@ test.describe('InBody import', () => {
     await expect(page.getByTestId('goal-targets')).toContainText('2,650 kcal');
 
     await page.goto('/food');
-    await expect(page.getByTestId('calories-bar')).toContainText('2650 kcal');
+    await expect(page.getByTestId('calories-bar')).toContainText('2,650 kcal');
     await expect(page.getByTestId('carbs-bar')).toBeVisible();
     await expect(page.getByTestId('fat-bar')).toContainText('75');
     await page.goto('/');

@@ -64,7 +64,7 @@ function expectedCounts(owned: RawExercise[]): { owned: number; library: number 
     library: diagrams.filter((d) => !taken(d.slug, d.name)).length + catalogue.filter((e) => !taken(keyOf(e), e.name)).length,
   };
 }
-const countsText = (c: { owned: number; library: number }) => `${c.owned} yours · ${c.library} in the library`;
+const countsText = (c: { owned: number; library: number }) => `${c.owned} of yours · ${c.library} in the library`;
 
 /** Catalogue entries the owner does not have yet, by name, in the order a person would look for them. */
 function libraryEntries(owned: RawExercise[], muscle?: string): CatalogueEntry[] {

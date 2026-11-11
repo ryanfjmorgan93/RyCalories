@@ -31,7 +31,7 @@ export function FoodWeekStrip({ date, today, onPick }: { date: string; today: st
 
   return (
     <Card className="p-3" data-testid="week-strip">
-      <div className="flex items-baseline justify-between px-1 pb-2">
+      <div className="flex items-baseline justify-between pb-2">
         <span className="label">Last 7 days</span>
         <span className="text-[11px] text-muted">
           {anyTarget && <span className="mr-2">┄ target</span>}

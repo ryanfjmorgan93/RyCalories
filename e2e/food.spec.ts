@@ -226,7 +226,7 @@ test.describe('nutrition', () => {
     // And no clock time, because the only time on record is when the row was typed — today.
     for (const t of order) expect(t).not.toMatch(/\d{2}:\d{2}/);
 
-    await expect(page.getByTestId('calories-bar')).toContainText('1900 kcal');
+    await expect(page.getByTestId('calories-bar')).toContainText('1,900 kcal');
   });
 
   test('a food eaten before is one tap the next time', async ({ page }) => {
@@ -533,7 +533,7 @@ test.describe('nutrition', () => {
     await page.getByRole('radio', { name: '2 weeks' }).click();
 
     // The average is of the two logged days (2,800), not of fourteen days with twelve zeros (400).
-    await expect(page.getByTestId('avg-kcal')).toHaveText('2800 kcal');
+    await expect(page.getByTestId('avg-kcal')).toHaveText('2,800 kcal');
     await expect(page.getByTestId('days-logged')).toHaveText('2 of 14');
     await expect(page.getByTestId('thin-coverage')).toBeVisible();
   });

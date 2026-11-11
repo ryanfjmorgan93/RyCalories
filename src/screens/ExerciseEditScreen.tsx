@@ -326,7 +326,7 @@ export function ExerciseEditScreen() {
             {!isNew && (
               <div className="mt-6">
                 {usage && (
-                  <div className="mb-3 px-1 text-sm text-muted">
+                  <div className="mb-3 text-sm text-muted">
                     In {usage.routines} {usage.routines === 1 ? 'routine' : 'routines'} · {usage.sets} logged {usage.sets === 1 ? 'set' : 'sets'}
                   </div>
                 )}

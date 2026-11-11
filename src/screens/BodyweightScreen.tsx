@@ -316,7 +316,7 @@ function EditSheetBody({ entry, onClose }: { entry: Bodyweight; onClose: () => v
       >
         <NumberField value={kg} onChange={setKg} step={0.1} min={1} max={500} label="Weight" unit="kg" testId="bw-edit-kg" />
         <div className="mt-3">
-          <div className="mb-1 px-1 label">Note</div>
+          <div className="mb-1 label">Note</div>
           <TextInput value={note} onChange={setNote} placeholder="Optional" />
         </div>
       </Sheet>

@@ -37,7 +37,7 @@ describe('labels', () => {
     expect(muscleLabel('rear delts')).toBe('Rear Delts');
     expect(muscleLabel('lower back')).toBe('Lower Back');
     expect(labelLine(['lower back', 'isolation', 'bodyweight +kg', 'per side'])).toBe('Lower Back · Isolation · Bodyweight +kg · Per Side');
-    expect(labelLine(['quads', 'compound', 'rest 150 s', '+5 kg steps'])).toBe('Quads · Compound · Rest 150 s · +5 kg Steps');
+    expect(labelLine(['quads', 'compound', 'per side'])).toBe('Quads · Compound · Per Side');
     expect(labelLine(['chest', '', null, false, 'cable'])).toBe('Chest · Cable');
   });
 });

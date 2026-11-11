@@ -91,7 +91,7 @@ export function ExercisesScreen() {
         }
       />
       <div className="px-4">
-        <div className="px-1 pb-2 pt-1 text-sm text-muted" data-testid="exercise-counts">
+        <div className="pb-2 pt-1 text-sm text-muted" data-testid="exercise-counts">
           {loading ? 'Loading…' : libraryCountsLine(counts, status)}
         </div>
         <TextInput value={q} onChange={setQ} placeholder="Search" testId="exercise-search" />

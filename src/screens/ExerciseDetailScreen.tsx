@@ -87,7 +87,7 @@ export function ExerciseDetailScreen() {
         }
       />
       <div className="px-4">
-        <div className="px-1 text-sm text-muted" data-testid="exercise-meta">
+        <div className="text-sm text-muted" data-testid="exercise-meta">
           {/* Each part stays on one line ("+5 kg Steps"); the line breaks between parts. */}
           {metaLine(exercise)
             .split(' · ')
@@ -234,9 +234,8 @@ function metaLine(e: Exercise): string {
   else if (e.kind === 'timed') parts.push('timed');
   else parts.push('reps');
   if (e.unilateral) parts.push('per side');
-  parts.push(`rest ${Math.round(e.defaultRestSec)} s`);
-  parts.push(`+${fmtNum(e.defaultIncrement)} kg steps`);
-  return labelLine(parts);
+  // The descriptors are capitalised like everywhere else; the figures after them are not words to capitalise.
+  return [labelLine(parts), `Rest ${Math.round(e.defaultRestSec)} s`, `+${fmtNum(e.defaultIncrement)} kg a step`].join(' · ');
 }
 
 // ---------------------------------------------------------------------------
@@ -334,14 +333,14 @@ function RoutineCard({ usage, kind, onLockIn, onUnlock }: { usage: RoutineUsage;
 }
 
 const RULE_LABEL: Record<ProgressionRule, string> = {
-  increase: 'up',
-  hold: 'hold',
-  hold_missing_sets: 'hold (missed sets)',
-  hold_hard: 'hold (marked Hard)',
-  calibrating: 'calibrating',
-  not_applicable: 'no decision',
-  lock_in: 'locked in',
-  deload: 'deload',
+  increase: 'Up',
+  hold: 'Hold',
+  hold_missing_sets: 'Hold (missed sets)',
+  hold_hard: 'Hold (marked Hard)',
+  calibrating: 'Calibrating',
+  not_applicable: 'No decision',
+  lock_in: 'Locked in',
+  deload: 'Deload',
 };
 
 function DecisionRow({ d, kind }: { d: ProgressionDecision; kind: ExerciseKind }) {

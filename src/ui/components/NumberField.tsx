@@ -75,7 +75,7 @@ export function NumberField({
   const txt = size === 'lg' ? 'text-2xl' : 'text-xl';
   return (
     <div className={`min-w-0 ${className}`}>
-      {label && <div className="mb-1 px-1 label">{label}</div>}
+      {label && <div className="mb-1 label">{label}</div>}
       <div className={`flex ${h} items-stretch overflow-hidden rounded-control border border-line bg-surface-2 ${disabled ? 'opacity-50' : ''}`}>
         <button
           type="button"

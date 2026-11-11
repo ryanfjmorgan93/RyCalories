@@ -77,7 +77,7 @@ export function CoachThread({ c, onReview }: { c: CoachConversation; onReview?: 
 
   return (
     <div className="flex min-h-[40dvh] flex-col gap-3 pb-2" data-testid="coach-thread">
-      {empty && <div className="py-10 text-center text-sm text-muted">Ask about training or food, or tell the coach what you ate.</div>}
+      {empty && <div className="py-6 text-sm text-muted">Ask about training or food, or tell the coach what you ate.</div>}
       {rows.map((row, i) => {
         if (row.kind === 'day') {
           return (
@@ -186,7 +186,7 @@ function ClaudeBubble({ message }: { message: CoachMessage }) {
         className={`whitespace-pre-wrap text-base ${mine ? 'max-w-[85%] rounded-2xl rounded-br-md border border-line bg-surface-2 px-4 py-2.5 leading-snug text-fg' : 'max-w-full border-l border-accent/50 pl-3.5 leading-relaxed text-fg'}`}
       >{mine ? message.text : withBold(message.text)}</div>
       {!mine && message.actions && message.actions.length > 0 && (
-        <ul className="mt-1.5 max-w-[88%] space-y-0.5 px-1" data-testid="coach-actions">
+        <ul className="mt-1.5 max-w-full space-y-0.5 pl-[15px]" data-testid="coach-actions">
           {message.actions.map((line, i) => (
             <li key={i} className="flex items-start gap-1.5 text-sm text-ok">
               <span className="mt-0.5 shrink-0">
@@ -198,7 +198,7 @@ function ClaudeBubble({ message }: { message: CoachMessage }) {
         </ul>
       )}
       {!mine && message.sources && message.sources.length > 0 && (
-        <ul className="mt-1 max-w-[88%] px-1" data-testid="coach-sources">
+        <ul className="mt-1 max-w-full pl-[15px]" data-testid="coach-sources">
           {message.sources.map((s) => (
             <li key={s.url}>
               <a href={s.url} target="_blank" rel="noopener noreferrer" className="inline-block break-words py-1.5 text-sm font-semibold text-accent">
@@ -237,11 +237,11 @@ function BuildView({
         <RoutineBubble key={i} routine={r} />
       ))}
       {entry.edit && (
-        <div className="px-1 text-xs text-muted" data-testid="coach-edit">
+        <div className="text-xs text-muted" data-testid="coach-edit">
           {entry.edit}
         </div>
       )}
-      <div className="px-1 text-xs text-muted" data-testid="coach-read">
+      <div className="text-xs text-muted" data-testid="coach-read">
         Read: {entry.read}
       </div>
       {entry.unread.length > 0 && (

@@ -62,7 +62,7 @@ export function LinkSheet({ text, onText, onSubmit, onClose }: { text: string; o
       }
     >
       <div className="grid gap-3" data-testid="link-sheet">
-        <div className="px-1 text-sm text-muted">The product&rsquo;s page on the shop&rsquo;s site.</div>
+        <div className="text-sm text-muted">The product&rsquo;s page on the shop&rsquo;s site.</div>
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
             <TextInput value={text} onChange={onText} placeholder="https://" testId="link-input" autoFocus />
@@ -134,7 +134,7 @@ export function DescribeSheet({
       }
     >
       <div className="grid gap-3" data-testid="describe-sheet">
-        <div className="px-1 text-xs text-muted" data-testid="describe-where">
+        <div className="text-xs text-muted" data-testid="describe-where">
           {where}
         </div>
         <div className="flex items-start gap-2">
@@ -155,7 +155,7 @@ export function DescribeSheet({
           )}
         </div>
         {error && (
-          <div className="px-1 text-sm text-danger" role="alert" data-testid="describe-mic-error">
+          <div className="text-sm text-danger" role="alert" data-testid="describe-mic-error">
             {error}
           </div>
         )}

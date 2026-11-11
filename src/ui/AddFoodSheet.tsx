@@ -265,7 +265,7 @@ export function AddFoodSheet({
       <Sheet open onClose={onClose} title="Add food">
         <div className="grid gap-4" data-testid="add-food-sheet">
           <div className="grid gap-2">
-            <div className="flex items-baseline justify-between px-1">
+            <div className="flex items-baseline justify-between">
               <span className="label">Log to</span>
               <span className="text-xs text-muted" data-testid="add-food-day">
                 {fmtDayKey(date, today, addDays(today, -1))}
@@ -285,7 +285,7 @@ export function AddFoodSheet({
               <div className={`grid gap-2 ${gridCols(1 + hooks)}`}>
                 {lookupEnabled && (
                   <Button size="md" variant="outline" full disabled={scanning} onClick={() => setScannerOpen(true)} data-testid="add-food-scan">
-                    {scanning ? 'Looking up…' : 'Barcode'}
+                    {scanning ? 'Looking up…' : 'Scan barcode'}
                   </Button>
                 )}
                 {onPhoto && (
@@ -300,7 +300,7 @@ export function AddFoodSheet({
                 )}
                 {onLink && (
                   <Button size="md" variant="outline" full onClick={() => handOff(onLink)} data-testid="add-food-link">
-                    Link
+                    Paste a link
                   </Button>
                 )}
               </div>
@@ -330,12 +330,12 @@ export function AddFoodSheet({
                     {onlineState === 'searching' ? 'Looking up…' : 'Search online'}
                   </Button>
                   {onlineState === 'none' && (
-                    <div className="px-1 text-xs text-muted" data-testid="add-food-online-none">
+                    <div className="text-xs text-muted" data-testid="add-food-online-none">
                       No matching product.
                     </div>
                   )}
                   {onlineState === 'unavailable' && (
-                    <div className="px-1 text-xs text-muted" data-testid="add-food-online-unavailable">
+                    <div className="text-xs text-muted" data-testid="add-food-online-unavailable">
                       Lookup unavailable.
                     </div>
                   )}
@@ -662,7 +662,7 @@ function ShareOfPack({ choice, unit, onLog }: { choice: FoodChoice; unit: UnitOp
   return (
     <div className="grid gap-3" data-testid="some-panel">
       <label className="grid gap-2">
-        <span className="px-1 label">How much of the {unit.noun}</span>
+        <span className="label">How much of the {unit.noun}</span>
         <input
           type="range"
           min={5}
@@ -711,7 +711,7 @@ function GramsPanel({ choice, start, onLog }: { choice: FoodChoice; start: numbe
   return (
     <div className="grid gap-3" data-testid="grams-panel">
       <div>
-        <div className="mb-1 px-1 label">Weight (g)</div>
+        <div className="mb-1 label">Weight (g)</div>
         <NumberInput value={grams} onChange={setGrams} mode="numeric" min={0} placeholder="100" testId="amount-grams-field" />
       </div>
       <Preview choice={choice} grams={g} />

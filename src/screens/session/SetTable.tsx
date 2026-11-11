@@ -150,7 +150,7 @@ function LaterRowView({ row, kind, cols }: { row: PendingRow; kind: Exercise['ki
   return (
     <div className="grid min-h-[46px] items-center gap-1.5 border-b border-line px-1 opacity-45" style={{ gridTemplateColumns: cols }}>
       <RowBadge tone="dim">{row.position + 1}</RowBadge>
-      <span className="truncate px-1 text-sm text-dim">{row.previousText || '—'}</span>
+      <span className="truncate text-sm text-dim">{row.previousText || '—'}</span>
       <span className="num truncate text-center text-xl font-light text-dim" style={VALUE_SPAN}>
         {ghostLabel(kind, row.ghostWeight, row.ghostReps, row.ghostDistanceM, row.ghostSeconds)}
       </span>
@@ -259,7 +259,7 @@ function LiveRowView({
           type="button"
           data-testid="plate-line"
           onClick={plateLine.onOpen}
-          className="ml-9 self-start break-words px-1 text-left text-xs text-muted underline decoration-dotted underline-offset-2"
+          className="ml-9 self-start break-words text-left text-xs text-muted underline decoration-dotted underline-offset-2"
         >
           {plateLine.label}
         </button>

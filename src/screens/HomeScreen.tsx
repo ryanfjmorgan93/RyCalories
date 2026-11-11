@@ -14,7 +14,7 @@ import { fmtDateLong, fmtDateTime, fmtKg, fmtMinutes, fmtNum, plural } from '@/d
 import { mostRestedRegion, openFacts } from '@/domain/homeToday';
 import { regionRecency } from '@/domain/routineOrder';
 import { isConsecutiveLower } from '@/domain/schedule';
-import { daysBetween, dateKeyToDate, isoToDateKey } from '@/domain/dates';
+import { daysBetween, dateKeyToDate, fmtDateKey, isoToDateKey } from '@/domain/dates';
 import { weeklyDelta, bandStatus } from '@/domain/bodyweight';
 import { lastWeekReading, weighInDue } from '@/domain/weighIn';
 import type { Routine } from '@/domain/types';
@@ -375,7 +375,7 @@ function BodyweightQuickAdd() {
   return (
     <Card className="p-4">
       <div className="flex items-end gap-4">
-        <Stat label="Latest" value={latest ? fmtKg(latest.kg) : '—'} sub={latest ? `${latest.date}${latest.source === 'health-connect' ? ' · Health Connect' : ''}` : 'no readings'} />
+        <Stat label="Latest" value={latest ? fmtKg(latest.kg) : '—'} sub={latest ? `${fmtDateKey(latest.date)}${latest.source === 'health-connect' ? ' · Health Connect' : ''}` : 'no readings'} />
         {delta && (
           <Stat
             label="7-day"

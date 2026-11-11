@@ -345,7 +345,7 @@ export function FoodItemSheet({
           <Field label="Food">
             <TextInput value={d.name} onChange={(v) => setSearchable('name', v)} placeholder="Chicken thigh" testId="food-name" autoFocus={!item} />
             {needsName && (
-              <div className="mt-1 px-1 text-xs text-muted" data-testid="food-needs-name">
+              <div className="mt-1 text-xs text-muted" data-testid="food-needs-name">
                 Needs a name
               </div>
             )}
@@ -381,32 +381,32 @@ export function FoodItemSheet({
                 />
               )}
               {lookup === 'none' && (
-                <div className="px-1 text-xs text-muted" data-testid="lookup-none">
+                <div className="text-xs text-muted" data-testid="lookup-none">
                   No matching product{d.brand?.trim() ? ` from ${d.brand.trim()}` : ''}.
                 </div>
               )}
               {lookup === 'notfound' && (
-                <div className="px-1 text-xs text-muted" data-testid="lookup-notfound">
+                <div className="text-xs text-muted" data-testid="lookup-notfound">
                   Not in the database. Type the name and figures from the pack.
                 </div>
               )}
               {lookup === 'nofigures' && (
-                <div className="px-1 text-xs text-muted" data-testid="lookup-nofigures">
+                <div className="text-xs text-muted" data-testid="lookup-nofigures">
                   No figures in the database. Type them from the pack.
                 </div>
               )}
               {lookup === 'offline' && (
-                <div className="px-1 text-xs text-muted" data-testid="lookup-offline">
+                <div className="text-xs text-muted" data-testid="lookup-offline">
                   No connection. Type the figures from the pack.
                 </div>
               )}
               {lookup === 'unavailable' && (
-                <div className="px-1 text-xs text-muted" data-testid="lookup-unavailable">
+                <div className="text-xs text-muted" data-testid="lookup-unavailable">
                   Lookup unavailable. Try again, or type the figures from the pack.
                 </div>
               )}
               {lookup === 'invalid' && (
-                <div className="px-1 text-xs text-muted" data-testid="lookup-invalid">
+                <div className="text-xs text-muted" data-testid="lookup-invalid">
                   Not a product barcode.
                 </div>
               )}
@@ -472,9 +472,9 @@ export function FoodItemSheet({
           )}
 
           <div>
-            <div className="mb-2 px-1 label">Nutrition {per}</div>
+            <div className="mb-2 label">Nutrition {per}</div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Calories">
+              <Field label="Calories (kcal)">
                 <NumberInput value={d.kcal} onChange={(v) => setNutrition('kcal', v)} mode="numeric" min={0} placeholder="0" testId="food-kcal" />
               </Field>
               <Field label="Protein (g)">
@@ -559,7 +559,7 @@ function UnitChips({
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
-      <div className="mb-1 px-1 label">{label}</div>
+      <div className="mb-1 label">{label}</div>
       {children}
     </div>
   );

@@ -145,7 +145,7 @@ test.describe('Progress: maintenance calories', () => {
   test('shows the figure, the days and weigh-ins it stands on, and the rate at the logged intake', async ({ page }) => {
     const from = await openProgress(page, [6, 7, 13], WEIGH_INS_FIRST_AND_LAST);
     // Eating counts today's breakfast as a logged day: (24 * 2,400 + 400) / 25.
-    await expect(page.getByTestId('avg-kcal')).toHaveText('2320 kcal');
+    await expect(page.getByTestId('avg-kcal')).toHaveText('2,320 kcal');
 
     await expect(page.getByTestId('maintenance-kcal')).toHaveText(FIGURE);
     await expect(page.getByTestId('maintenance-basis')).toHaveText(
@@ -159,7 +159,7 @@ test.describe('Progress: maintenance calories', () => {
   test('with no weigh-ins it says so and shows no figure', async ({ page }) => {
     await openProgress(page, [6, 7, 13, 20], []);
 
-    await expect(page.getByTestId('maintenance-gate')).toHaveText('No weigh-ins in the first and last weeks');
+    await expect(page.getByTestId('maintenance-gate')).toHaveText('No weigh-ins in the first and last weeks.');
     await expect(page.getByTestId('maintenance-kcal')).toHaveCount(0);
     await expect(page.getByTestId('maintenance-basis')).toHaveCount(0);
     await expect(page.getByTestId('maintenance-rate')).toHaveCount(0);
@@ -169,7 +169,7 @@ test.describe('Progress: maintenance calories', () => {
     // Ten finished days unlogged leaves 17 of 27; 22 are needed.
     await openProgress(page, [1, 3, 6, 7, 9, 11, 13, 16, 18, 20], WEIGH_INS_FIRST_AND_LAST);
 
-    await expect(page.getByTestId('maintenance-gate')).toHaveText('Needs 22 of 27 days logged (17 of 27)');
+    await expect(page.getByTestId('maintenance-gate')).toHaveText('Needs 22 of 27 days logged (17 of 27).');
     await expect(page.getByTestId('maintenance-kcal')).toHaveCount(0);
   });
 
@@ -182,7 +182,7 @@ test.describe('Progress: maintenance calories', () => {
     await page.getByRole('radio', { name: '2 weeks' }).click();
     // The 14-day window is offsets 14-27. Its week-groups' centres can sit at most 13 days apart, so
     // however the weigh-ins fall it can never meet the 14-day span: it says so rather than "(10)".
-    await expect(page.getByTestId('maintenance-gate')).toHaveText('Needs the 4 or 8 week window');
+    await expect(page.getByTestId('maintenance-gate')).toHaveText('Needs the 4 or 8 week window.');
     await expect(page.getByTestId('maintenance-kcal')).toHaveCount(0);
 
     await page.getByRole('radio', { name: '4 weeks' }).click();

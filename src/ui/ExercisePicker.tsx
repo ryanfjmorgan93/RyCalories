@@ -81,7 +81,7 @@ export function ExercisePicker({
     <Sheet open={open} onClose={onClose} title={title}>
       <TextInput value={q} onChange={setQ} placeholder="Search" testId="picker-search" />
       {status === 'failed' && (
-        <div className="mt-2 px-1 text-sm text-muted" data-testid="picker-status">
+        <div className="mt-2 text-sm text-muted" data-testid="picker-status">
           Catalogue not loaded
         </div>
       )}

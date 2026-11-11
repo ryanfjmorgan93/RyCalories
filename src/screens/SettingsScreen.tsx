@@ -324,7 +324,7 @@ type TargetKey =
 
 // The owner's own targets: one daily calorie figure, held (no steps), and the macros.
 const TARGET_FIELDS: { key: TargetKey; label: string; mode?: 'numeric' }[] = [
-  { key: 'calorieStart', label: 'Calories', mode: 'numeric' },
+  { key: 'calorieStart', label: 'Calories (kcal)', mode: 'numeric' },
   { key: 'proteinTarget', label: 'Protein (g)', mode: 'numeric' },
   { key: 'carbTarget', label: 'Carbs (g)', mode: 'numeric' },
   { key: 'fatTarget', label: 'Fat (g)', mode: 'numeric' },
@@ -385,7 +385,7 @@ function TargetsCard({ settings }: { settings: Settings }) {
 
   return (
     <Card className="p-4" data-testid="targets-card">
-      <div className="mb-2 px-1 label">Goal</div>
+      <div className="mb-2 label">Goal</div>
       <div className="flex flex-wrap gap-2">
         {GOALS.map((g) => (
           <Chip key={g.goal} active={settings.goal === g.goal} onClick={() => void pick(g.goal)} testId={`goal-${g.goal}`}>
@@ -453,7 +453,7 @@ function AboutYouCard({ settings }: { settings: Settings }) {
       <Field label="Year of birth">
         <NumberInput value={year} onChange={setYear} mode="numeric" placeholder="none" testId="birth-year" onBlur={saveYear} />
       </Field>
-      <div className="mt-3 mb-1 px-1 label">Compare lifts with</div>
+      <div className="mt-3 mb-1 label">Compare lifts with</div>
       <Segmented
         value={settings.sex ?? ''}
         onChange={(sex) => void saveSettings({ sex: sex as 'male' | 'female' })}
@@ -462,7 +462,7 @@ function AboutYouCard({ settings }: { settings: Settings }) {
           { value: 'female', label: 'Women', testId: 'sex-female' },
         ]}
       />
-      <p className="mt-2 px-1 text-xs text-muted">Used only on Progress, to compare your squat, bench and deadlift with lifters at meets.</p>
+      <p className="mt-2 text-xs text-muted">Used only on Progress, to compare your squat, bench and deadlift with lifters at meets.</p>
     </Card>
   );
 }
@@ -472,7 +472,7 @@ const ABOUT_YOU_OWNED_KEYS: (keyof Settings)[] = ['birthYear'];
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block min-w-0">
-      <div className="mb-1 px-1 label">{label}</div>
+      <div className="mb-1 label">{label}</div>
       {children}
     </label>
   );
@@ -635,7 +635,7 @@ function PlatesCard({ settings }: { settings: Settings }) {
   return (
     <Card className="p-4" data-testid="plates-card">
       <NumberField
-        label="Bar (kg)"
+        label="Bar"
         value={barKg}
         onChange={(v) => {
           setBarKg(v);
@@ -718,7 +718,7 @@ function ProgressionCard({ settings }: { settings: Settings }) {
         </Field>
       </div>
       <Divider />
-      <div className="mt-3 mb-1 label">Weekly set targets</div>
+      <div className="mb-1 mt-6 label">Weekly set targets</div>
       <div className="grid grid-cols-2 gap-x-3 gap-y-3">
         {MUSCLE_GROUPS.filter((g) => g !== 'full body' && g !== 'other').map((g) => (
           <Field key={g} label={muscleLabel(g)}>

@@ -18,7 +18,8 @@ const LIFT_STANDARDS_ATTRIBUTION = {
   licence: 'Contributed to the public domain. Built into src/data/liftStandards.json by scripts/lift-standards.py.',
 };
 
-const ALL_ATTRIBUTIONS = [...ATTRIBUTIONS, EXERCISE_CATALOGUE_ATTRIBUTION, UK_FOOD_TABLE_ATTRIBUTION, LIFT_STANDARDS_ATTRIBUTION];
+// free-exercise-db is both the diagrams' instructions and the library: credited once, as the library.
+const ALL_ATTRIBUTIONS = [...ATTRIBUTIONS.filter((a) => a.url !== EXERCISE_CATALOGUE_ATTRIBUTION.url), EXERCISE_CATALOGUE_ATTRIBUTION, UK_FOOD_TABLE_ATTRIBUTION, LIFT_STANDARDS_ATTRIBUTION];
 
 /** Third-party attribution and the one fact about what this app sends off the device. */
 export function AboutCard() {
