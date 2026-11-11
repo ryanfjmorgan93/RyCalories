@@ -77,7 +77,7 @@ export function renderRecovery(error: unknown, attemptedVersion: number): void {
   root.innerHTML = '';
   const wrap = document.createElement('div');
   wrap.style.cssText =
-    'min-height:100dvh;background:#0b0b0d;color:#f4f4f5;padding:24px;box-sizing:border-box;' +
+    'min-height:100dvh;background:#0a0907;color:#f3efe6;padding:24px;box-sizing:border-box;' +
     'font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.5';
 
   const h = document.createElement('h1');
@@ -87,21 +87,21 @@ export function renderRecovery(error: unknown, attemptedVersion: number): void {
   const p = document.createElement('p');
   p.textContent =
     'Your data has not been changed. Export it now, then send the details below so the problem can be fixed.';
-  p.style.cssText = 'color:#9a9aa4;margin:0 0 20px';
+  p.style.cssText = 'color:#a39d90;margin:0 0 20px';
 
   const detail = document.createElement('pre');
   detail.textContent = `Database: ${DB_NAME}\nAttempted version: ${attemptedVersion}\n${message}`;
   detail.style.cssText =
-    'background:#151518;border:1px solid #2b2b33;border-radius:12px;padding:12px;' +
-    'font-size:12px;white-space:pre-wrap;word-break:break-word;margin:0 0 20px;color:#f4f4f5';
+    'background:#14120e;border:1px solid #2a2620;border-radius:12px;padding:12px;' +
+    'font-size:12px;white-space:pre-wrap;word-break:break-word;margin:0 0 20px;color:#f3efe6';
 
   const status = document.createElement('div');
-  status.style.cssText = 'margin-top:14px;font-size:14px;color:#9a9aa4;min-height:20px';
+  status.style.cssText = 'margin-top:14px;font-size:14px;color:#a39d90;min-height:20px';
 
   const btn = document.createElement('button');
   btn.textContent = 'Export raw backup';
   btn.style.cssText =
-    'width:100%;height:56px;border:0;border-radius:16px;background:#ff8a2a;color:#140a02;' +
+    'width:100%;height:56px;border:0;border-radius:999px;background:#f3efe6;color:#0a0907;' +
     'font-size:18px;font-weight:800;cursor:pointer';
   btn.onclick = () => {
     btn.disabled = true;
@@ -125,7 +125,7 @@ export function renderRecovery(error: unknown, attemptedVersion: number): void {
   copy.textContent = 'Copy error details';
   copy.style.cssText =
     'width:100%;height:48px;margin-top:10px;border:1px solid #2b2b33;border-radius:16px;' +
-    'background:transparent;color:#f4f4f5;font-size:16px;font-weight:600;cursor:pointer';
+    'background:transparent;color:#f3efe6;font-size:16px;font-weight:600;cursor:pointer';
   copy.onclick = () => {
     void navigator.clipboard
       ?.writeText(detail.textContent ?? '')
