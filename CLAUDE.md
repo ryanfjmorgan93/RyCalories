@@ -195,10 +195,14 @@ The owner does not check on device. Correctness has to come from the code and th
   ("Level 3 at 75 kg × 7"), counted by the same sum as the level. On Home
   (`ui/LevelsCard.tsx`, read by `db/gameQueries.ts` in one pass over the tables) every level above 1
   is added into a total level in a hexagon, the cabinet opens the badges, and under the routine that
-  leads the strength figure (`ui/StrengthBody.tsx`, `domain/strengthBody.ts`; asked for in November
-  2026 in place of today's hand) lights legs, chest and back in the accent by how the squat, bench
-  and deadlift rank against lifters of the owner's sex, weight and age (the standards below; no open
-  data has height), and every other muscle in cream by the owner's own best Level on it; a Level up panel stands on
+  leads stands the weekly boss (`ui/BossCard.tsx`, `domain/boss.ts`, `db/bossQueries.ts`;
+  docs/superpowers/specs/2026-11-12-boss-fight-design.md; chosen by the owner in November 2026 over
+  today's hand and a strength figure, both rejected): the owner's best set on one lift their plan can
+  beat, by the Level's set size; the fewest planned reps that beat it are the attack, Fight starts
+  its routine, health falls only as a set gets closer and is 0 only when beaten, a win is said at
+  the set and on the summary and brings the next boss, and Monday brings a new one. One row per
+  boss is stored (Dexie `bosses`, in the backup); beaten, health and the attack are read from the
+  sets and the live plan. A Level up panel stands on
   the session card and the summary (`ui/GameMarks.tsx`, docs/DESIGN.md §6). `src/domain/badges.ts` is the badge ladders (asked for in November
   2026): sessions finished, tonnes lifted, the total level, and for a barbell lift its heaviest
   counted set in 20 kg steps from 60 kg. A badge is read off the data, never stored, so it follows

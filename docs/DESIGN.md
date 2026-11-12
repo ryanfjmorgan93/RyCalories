@@ -231,11 +231,13 @@ with a soft shadow; that pairing is checked by eye in the screenshots, not by th
   total-level badge). It is a `progressbar`; the percentage is what a screen reader hears.
 - **`Medallion`**: a ringed disc for a badge's mark or a lift's level; dashed for one not yet held.
 - **`HexPanel`**: a moment the game marks, as a solid hexagon, a title and what did it: Level up
-  (above), and Protein hit on the Food day, with the blocks to the next protein badge.
+  (above), Boss beaten on the summary, and Protein hit on the Food day, with the blocks to the next
+  protein badge.
 - **Home** (`src/ui/LevelsCard.tsx`): `LevelHeader` (the hexagon, badges held, sessions, tonnes
-  lifted, blocks to the next total-level badge) above the routines; the strength figure
-  (`src/ui/StrengthBody.tsx`, November 2026, in place of today's hand) under the routine that leads,
-  so Start stays in reach: the robot with legs, chest and back lit in the accent by rank against
-  lifters like the owner and every other muscle lit in cream (screen) by their own Level, a tap
-  naming which and why, then one row per ranked lift; `Cabinet`, each ladder's highest badge and the nearest next one, which
+  lifted, blocks to the next total-level badge) above the routines; the weekly boss
+  (`src/ui/BossCard.tsx`, November 2026, in place of today's hand and the strength figure) under the
+  routine that leads, so Start stays in reach: a framed plaque with the lift's robot render on top
+  (a hexagon with the boss weight when it has none), the best set it is, health in ten dark-red
+  blocks (`Segments` rounded up), the attack and Fight as the cream pill; then "Bosses beaten" as a
+  row of medallions; `Cabinet`, each ladder's highest badge and the nearest next one, which
   opens every ladder in a sheet.
