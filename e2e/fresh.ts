@@ -156,7 +156,7 @@ export async function denyCamera(browser: Browser, context: BrowserContext, page
 export interface StoreSpec {
   name: string;
   keyPath: string;
-  indexes: { name: string; keyPath: string | string[] }[];
+  indexes: { name: string; keyPath: string | string[]; unique?: boolean }[];
 }
 
 /**
@@ -291,6 +291,10 @@ export const IRON_SCHEMA_V5: StoreSpec[] = [
 ];
 
 export const IRON_SCHEMA_V6: StoreSpec[] = [...IRON_SCHEMA_V5, { name: 'problemReports', keyPath: 'id', indexes: [{ name: 'at', keyPath: 'at' }] }];
+export const IRON_SCHEMA_V7: StoreSpec[] = [
+  ...IRON_SCHEMA_V6,
+  { name: 'bosses', keyPath: 'id', indexes: [{ name: 'week', keyPath: 'week' }, { name: '[week+exerciseId]', keyPath: ['week', 'exerciseId'], unique: true }] },
+];
 
 /** Creates `iron` as raw IndexedDB at `version`, with `schema`, populated with `data`. Must run on a page that has never booted the app (see file header). */
 export async function createRawIronDb(page: Page, version: number, schema: StoreSpec[], data: Record<string, unknown[]>): Promise<void> {
@@ -302,7 +306,7 @@ export async function createRawIronDb(page: Page, version: number, schema: Store
           const db = req.result;
           for (const store of schema) {
             const os = db.createObjectStore(store.name, { keyPath: store.keyPath });
-            for (const idx of store.indexes) os.createIndex(idx.name, idx.keyPath);
+            for (const idx of store.indexes) os.createIndex(idx.name, idx.keyPath, { unique: !!idx.unique });
           }
         };
         req.onsuccess = () => {

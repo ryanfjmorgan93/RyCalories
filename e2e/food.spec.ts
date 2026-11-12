@@ -191,7 +191,7 @@ test.describe('nutrition', () => {
     // segment, so anchor to the end to tell "1 meal" apart from "1 meals".
     await expect(page.getByTestId('data-counts')).toHaveText(/· 1 meal$/);
     // v6 (problem reports) is the current schema — see src/db/db.ts's DB_VERSION.
-    await expect(page.getByTestId('db-version')).toHaveText('Database v6');
+    await expect(page.getByTestId('db-version')).toHaveText('Database v7');
   });
 
   test('a back-filled day reads in meal order, without a misleading time', async ({ page }) => {

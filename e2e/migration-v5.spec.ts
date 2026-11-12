@@ -151,8 +151,8 @@ test.describe('v4 → v5 migration (supplements)', () => {
     await waitForHistoryCheckSettled(page);
 
     const raw = await readRawIron(page);
-    // The current schema (v6, raw 60): an install this far behind upgrades straight through.
-    expect(raw.version).toBe(60);
+    // The current schema (v7, raw 70): an install this far behind upgrades straight through.
+    expect(raw.version).toBe(70);
     for (const name of ['supplements', 'supplementLogs']) {
       expect(Object.keys(raw.tables)).toContain(name);
       expect(raw.tables[name]).toEqual([]);
