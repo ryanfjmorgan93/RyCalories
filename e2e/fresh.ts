@@ -464,14 +464,3 @@ export async function centreOf(locator: Locator): Promise<{ x: number; y: number
   if (!box) throw new Error('No bounding box');
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
-
-/**
- * Tap a muscle on a body figure. A region is often a left and right part in one path, so its own
- * centre falls in the gap between them: tap inside the left part instead.
- */
-export async function tapMuscle(scope: Page | Locator, group: string): Promise<void> {
-  const region = scope.locator(`[data-muscle="${group}"]`).first();
-  const box = await region.boundingBox();
-  if (!box) throw new Error(`${group} region not found`);
-  await region.click({ position: { x: box.width * 0.2, y: box.height * 0.5 } });
-}

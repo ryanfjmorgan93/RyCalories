@@ -9,7 +9,7 @@ import type { Exercise, Settings } from '@/domain/types';
 let tablePromise: Promise<LiftTable> | null = null;
 
 /** The meet table (100 KB), loaded once on first use and shared by the session's line and Home's figure. */
-export function liftTable(): Promise<LiftTable> {
+function liftTable(): Promise<LiftTable> {
   tablePromise ??= import('@/data/liftStandards.json').then((m) => m.default as LiftTable);
   return tablePromise;
 }

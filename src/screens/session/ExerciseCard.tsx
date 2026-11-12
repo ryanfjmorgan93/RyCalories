@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import type { MomentFacts } from '@/ai/moments';
 import { db } from '@/db/db';
 import { levelChange, recordsForNewSets } from '@/db/recordsQueries';
+import { bossBeatenBy } from '@/db/bossQueries';
 import {
   deleteSet,
   logSet,
@@ -429,9 +430,11 @@ export function ExerciseCard({
     const newRecords = await recordsForNewSets(exercise.id, session.id, [newSet], { calibrating: rx?.mode === 'calibrating' });
     const change = await levelChange(exercise.id, session.id, [newSet.id]);
     const up = levelUp(change.from, change.to);
-    if (newRecords.length > 0 || up) {
+    const bossDown = await bossBeatenBy(newSet.id);
+    if (newRecords.length > 0 || up || bossDown) {
       const set = fmtSetsLine([newSet], kind);
-      toast(newRecords.length === 0 ? `Level ${up!.to} · ${set}` : up ? `Record · ${set} · Level ${up.to}` : `Record · ${set}`, 'ok');
+      const said = newRecords.length > 0 ? (up ? `Record · ${set} · Level ${up.to}` : `Record · ${set}`) : up ? `Level ${up.to} · ${set}` : null;
+      toast(said ? (bossDown ? `${said} · Boss beaten` : said) : `Boss beaten · ${set}`, 'ok');
       flashAmbient('record');
     }
 

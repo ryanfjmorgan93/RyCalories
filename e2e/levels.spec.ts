@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { clickIfPresent, fresh, logOneSet, tapMuscle } from './fresh';
+import { clickIfPresent, fresh, logOneSet } from './fresh';
 
 /**
  * The Level under an exercise in a session, the level-up and new badges on the summary, and Home's
@@ -89,16 +89,9 @@ test('a Level under the exercise: three sessions set the start, the fourth level
   await expect(page.getByTestId('summary-badge')).toHaveCount(0);
   await save(page);
 
-  // Home: the total, the strength figure and the badges. (After the third session these read 0 and
-  // Level 1, so they cannot be met by what was there before.) No sex is set, so the squat's muscles are
-  // lit by its own Level, and the figure says what ranking them needs.
+  // Home: the total and the badges. (After the third session these read 0 and Level 1, so they cannot
+  // be met by what was there before.)
   await expect(page.getByTestId('total-level')).toHaveText('1');
-  const body = page.getByTestId('strength-body');
-  await expect(body.getByTestId('strength-needs')).toHaveText('Ranking legs, chest and back needs your sex.Settings');
-  await tapMuscle(body, 'quads');
-  await expect(body.getByTestId('strength-readout')).toHaveText('Quads · Level 2 on Barbell Back Squat, against your own start');
-  await tapMuscle(body, 'chest');
-  await expect(body.getByTestId('strength-readout')).toHaveText('Chest · nothing logged for it yet');
   // The cabinet: the squat's highest mark, then the next badge nearest (four sessions of ten is
   // further along than 106 kg of the way from 100 to 120), as its mark "10" and "6 to go".
   await expect(page.getByTestId('badges-row')).toHaveText('100 kgBarbell Back Squat106 to go');

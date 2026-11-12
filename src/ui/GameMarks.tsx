@@ -16,13 +16,16 @@ export function Hex({ size, solid, children, className = '' }: { size: 'lg' | 'm
   );
 }
 
-/** Ten blocks, some lit: how far from one mark to the next. `percent` is what a screen reader hears. */
-export function Segments({ percent, label, className = '', testId }: { percent: number; label: string; className?: string; testId?: string }) {
-  const lit = Math.floor(percent / 10);
+/**
+ * Ten blocks, some lit: how far from one mark to the next. `percent` is what a screen reader hears.
+ * `up` lights a block for any part of ten (a boss's health: never shown empty until it is 0).
+ */
+export function Segments({ percent, label, className = '', testId, up, fill = 'bg-accent' }: { percent: number; label: string; className?: string; testId?: string; up?: boolean; fill?: string }) {
+  const lit = (up ? Math.ceil : Math.floor)(percent / 10);
   return (
     <div className={`flex gap-[3px] ${className}`} role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} data-testid={testId}>
       {Array.from({ length: 10 }, (_, i) => (
-        <span key={i} className={`h-full flex-1 ${i < lit ? 'bg-accent' : 'bg-line'}`} />
+        <span key={i} className={`h-full flex-1 ${i < lit ? fill : 'bg-line'}`} />
       ))}
     </div>
   );

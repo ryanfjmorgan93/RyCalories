@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { MomentFacts } from '@/ai/moments';
 import { sessionGame } from '@/db/gameQueries';
+import { sessionBosses } from '@/db/bossQueries';
 import { backupAfterSessionFinish } from '@/db/historySafety';
 import { buildSummary, discardSession, finishSession, type SessionSummary, type SummaryItem } from '@/db/repo';
 import { decisionLine, effortReason, fmtDate, fmtDuration, fmtKg, fmtNum, fmtWeight, plural } from '@/domain/format';
@@ -14,6 +15,7 @@ import { useSessionDraft } from '@/state/sessionDraft';
 import { useTimer } from '@/state/timer';
 import { Button } from '@/ui/components/Button';
 import { LevelUpPanel } from '@/ui/LevelLine';
+import { HexPanel } from '@/ui/GameMarks';
 import { Card, SectionTitle } from '@/ui/components/Card';
 import { Chip } from '@/ui/components/Chip';
 import { NumberField, TextInput } from '@/ui/components/NumberField';
@@ -172,6 +174,7 @@ export function SummaryScreen() {
   );
   // The badges this session added and what it did to the total level (db/gameQueries.ts).
   const game = useLiveQuery(() => (id ? sessionGame(id) : undefined), [id]);
+  const bosses = useLiveQuery(() => (id ? sessionBosses(id) : undefined), [id]);
   const reducedMotion = usePrefersReducedMotion();
   const revealT = useCountProgress(!!summary);
   const confettiPieces = useMemo(() => buildConfetti(), []);
@@ -337,6 +340,10 @@ export function SummaryScreen() {
           </div>
         )}
 
+        {bosses?.map((b) => (
+          <HexPanel key={b.name} mark={<RecordIcon className="text-accent-fg" />} title="Boss beaten" detail={`${b.name} · ${fmtKg(b.by.weight)} × ${b.by.reps}`} testId="summary-boss" />
+        ))}
+
         {game && game.badges.length > 0 && (
           <div className="flex flex-col gap-2">
             <SectionTitle className="!pb-0">New badges</SectionTitle>
@@ -438,9 +445,10 @@ function HeroStat({ value, label, testId }: { value: string; label: string; test
   );
 }
 
-function RecordIcon() {
+/** The record medal; `className` sets its colour (the accent by default, the dark ink on a solid hexagon). */
+function RecordIcon({ className = 'mt-0.5 text-record' }: { className?: string }) {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" className="mt-0.5 shrink-0 text-record">
+    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" className={`shrink-0 ${className}`}>
       <circle cx="12" cy="14.5" r="5.5" fill="none" stroke="currentColor" strokeWidth="2" />
       <path d="M8.6 9.6 6 3.5h4l2 4 2-4h4l-2.6 6.1" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
     </svg>

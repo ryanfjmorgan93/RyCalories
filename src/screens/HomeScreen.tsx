@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { GOALS } from '@/domain/goalTargets';
 import { useNavigate } from 'react-router-dom';
@@ -21,7 +21,8 @@ import type { Routine } from '@/domain/types';
 import { Button } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row, SectionTitle, Stat } from '@/ui/components/Card';
 import { Cabinet, LevelHeader } from '@/ui/LevelsCard';
-import { StrengthBody } from '@/ui/StrengthBody';
+import { BossCard } from '@/ui/BossCard';
+import { bossesBeaten, ensureBoss, loadBoss } from '@/db/bossQueries';
 import { loadGame } from '@/db/gameQueries';
 import { StreakDots } from '@/ui/components/CalendarHeatmap';
 import { Chip } from '@/ui/components/Chip';
@@ -69,6 +70,13 @@ export function HomeScreen() {
   // Every routine, most rested first. The order is the whole suggestion: sessions are picked by feel.
   const routines = useLiveQuery(() => loadHomeRoutines(todayKey), [todayKey]);
   const game = useLiveQuery(() => loadGame(), []);
+  // The week's boss: picked when there is none live (it writes, so not inside a live query), and
+  // looked at again whenever the game moves, so a boss beaten makes way for the next.
+  useEffect(() => {
+    if (settings) void ensureBoss(todayKey, settings);
+  }, [todayKey, settings, game]);
+  const boss = useLiveQuery(() => (settings ? loadBoss(todayKey, settings) : undefined), [todayKey, settings]);
+  const beatenBosses = useLiveQuery(() => bossesBeaten(), []);
 
   const starting = useRef(false);
   const start = async (r: Routine) => {
@@ -184,9 +192,9 @@ export function HomeScreen() {
           {(routines ?? []).map((item, i) => (
             <Fragment key={item.routine.id}>
               <RoutineCard hero={i === 0} item={item} settings={settings} active={!!active} onStart={() => void start(item.routine)} />
-              {/* The day's numbers and the strength figure sit under the routine that leads, so Start stays in reach above them. */}
+              {/* The day's numbers and the boss sit under the routine that leads, so Start stays in reach above them. */}
               {i === 0 && todayOverlay}
-              {i === 0 && game && settings && <StrengthBody game={game} settings={settings} />}
+              {i === 0 && boss !== undefined && beatenBosses && <BossCard view={boss} beaten={beatenBosses} active={!!active} onFight={(r) => void start(r)} />}
             </Fragment>
           ))}
           {routines && routines.length === 0 && <EmptyState>No routines. Add one from the Routines tab.</EmptyState>}

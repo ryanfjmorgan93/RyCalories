@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
 import { liftStanding, type LiftTable } from '../src/domain/liftStandards';
 import { strengthStanding } from '../src/domain/standards';
-import { clickIfPresent, fresh, tapMuscle } from './fresh';
+import { clickIfPresent, fresh } from './fresh';
 
 /**
  * In a session, the squat shows its level under its name once Settings → About you has a sex and
@@ -58,12 +58,4 @@ test('the squat shows its level and the next mark under its name in the session'
   await expect(line).toContainText(`${s.level} · ${s.head}`);
   await expect(line).toContainText(s.next!);
   await expect(line).toContainText('the average competition powerlifter (men 24–34, 74 kg)');
-
-  // Home's strength figure ranks the squat's muscles by the same sum, in the accent.
-  await page.goto('/');
-  const body = page.getByTestId('strength-body');
-  await expect(body.getByTestId('strength-squat')).toHaveText(`Quads and GlutesBarbell Back Squat · ${s.head}${s.next}${s.level}`);
-  await expect(body.getByTestId('strength-needs')).toHaveCount(0);
-  await tapMuscle(body, 'glutes');
-  await expect(body.getByTestId('strength-readout')).toHaveText('Glutes · Squat: Highly advanced, against lifters like you');
 });
