@@ -28,6 +28,16 @@ interface LevelSet {
   reps: number;
 }
 
+/** A set's size: weight × (1 + reps ÷ 30), so it holds past 12 reps. */
+export function setSize(weight: number, reps: number): number {
+  return weight * (1 + reps / 30);
+}
+
+/** Bigger by more than float noise: 20 × 10 and 25 × 2 are the same size. */
+export function bigger(a: number, b: number): boolean {
+  return a > b + 1e-9;
+}
+
 export interface Level {
   level: number;
   /** Whole % the best set is over the start, rounded down. */
@@ -56,9 +66,9 @@ export function levelFor(
 ): Level | null {
   if (kind === 'carry' || kind === 'timed') return null;
   if (kind === 'bodyweight_plus' && opts.bodyweightKg === undefined) return null;
-  const size = (s: LevelSet) => ((kind === 'bodyweight_plus' ? opts.bodyweightKg! : 0) + s.weight) * (1 + s.reps / 30);
-  // By more than float noise: 20 × 10 and 25 × 2 are the same size, and the earlier of two equal sets stands.
-  const bigger = (a: LevelSet, b: LevelSet) => size(a) > size(b) + 1e-9;
+  const size = (s: LevelSet) => setSize((kind === 'bodyweight_plus' ? opts.bodyweightKg! : 0) + s.weight, s.reps);
+  // The earlier of two equal sets stands.
+  const biggerSet = (a: LevelSet, b: LevelSet) => bigger(size(a), size(b));
   // Each session's best set, oldest first.
   const bests = [...sessions]
     .sort((a, b) => a.startedAt.localeCompare(b.startedAt))
@@ -67,12 +77,12 @@ export function levelFor(
       for (const s of session.sets) {
         if (!countsForRecords(s.type) || !s.reps || s.reps < 1) continue;
         const set = { weight: s.weight, reps: s.reps };
-        if (size(set) > 0 && (top === null || bigger(set, top))) top = set;
+        if (size(set) > 0 && (top === null || biggerSet(set, top))) top = set;
       }
       return top ? [top] : [];
     });
   if (bests.length === 0) return null;
-  const top = (sets: LevelSet[]) => sets.reduce((a, b) => (bigger(b, a) ? b : a));
+  const top = (sets: LevelSet[]) => sets.reduce((a, b) => (biggerSet(b, a) ? b : a));
   const best = top(bests);
   if (bests.length < START_SESSIONS) return { level: 1, gainPct: 0, fill: 0, best, start: best, startIn: START_SESSIONS - bests.length, next: null };
   const start = top(bests.slice(0, START_SESSIONS));
