@@ -7,6 +7,7 @@ import { DEFAULT_SETTINGS } from '@/domain/types';
 import { isNative, shareTextFile } from '@/state/native';
 import type {
   BodyScan,
+  Boss,
   CoachMessage,
   CoachNote,
   Bodyweight,
@@ -30,8 +31,8 @@ import type {
 
 /** Bumped whenever the set of tables changes, so a restore can reason about what it is holding.
  * 1 = workouts only (pre-merge). 2 = +nutrition. 3 = +recipes. 4 = +body scans and the coach.
- * 5 = +supplements. 6 = +problem reports. */
-export const BACKUP_VERSION = 6;
+ * 5 = +supplements. 6 = +problem reports. 7 = +bosses. */
+export const BACKUP_VERSION = 7;
 
 export interface Backup {
   app: 'iron';
@@ -64,12 +65,14 @@ export interface Backup {
     supplementLogs?: SupplementLog[];
     // Problem reports. Optional so a version 1–5 backup still satisfies the type.
     problemReports?: ProblemReport[];
+    // Weekly bosses. Optional so a version 1–6 backup still satisfies the type.
+    bosses?: Boss[];
   };
 }
 
 /** Full JSON backup of every table. */
 export async function exportBackup(): Promise<Backup> {
-  const [exercises, routines, routineExercises, sessions, setLogs, decisions, bodyweight, settings, meals, mealItems, foods, productCache, phases, recipes, bodyScans, coachMessages, coachNotes, supplements, supplementLogs, problemReports] =
+  const [exercises, routines, routineExercises, sessions, setLogs, decisions, bodyweight, settings, meals, mealItems, foods, productCache, phases, recipes, bodyScans, coachMessages, coachNotes, supplements, supplementLogs, problemReports, bosses] =
     await Promise.all([
       db.exercises.toArray(),
       db.routines.toArray(),
@@ -91,6 +94,7 @@ export async function exportBackup(): Promise<Backup> {
       db.supplements.toArray(),
       db.supplementLogs.toArray(),
       db.problemReports.toArray(),
+      db.bosses.toArray(),
     ]);
   return {
     app: 'iron',
@@ -117,6 +121,7 @@ export async function exportBackup(): Promise<Backup> {
       supplements,
       supplementLogs,
       problemReports,
+      bosses,
     },
   };
 }

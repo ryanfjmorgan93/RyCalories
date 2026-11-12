@@ -90,6 +90,17 @@ describe('backup covers every table', () => {
     expect(await db.mealItems.count()).toBe(1);
   });
 
+  it('round-trips the weekly bosses', async () => {
+    const boss = { id: 'b1', week: '2026-09-07', exerciseId: 'e1', weight: 100, reps: 5, appearedAt: '2026-09-09T12:00:00.000Z' };
+    await db.bosses.put(boss);
+    const backup = await exportBackup();
+    expect(backup.tables.bosses).toEqual([boss]);
+    await wipeAll();
+    expect(await db.bosses.count()).toBe(0);
+    await importBackup(backup, 'replace');
+    expect(await db.bosses.get('b1')).toEqual(boss);
+  });
+
   it('round-trips recipe rows', async () => {
     await db.recipes.put(RECIPE);
     const backup = await exportBackup();

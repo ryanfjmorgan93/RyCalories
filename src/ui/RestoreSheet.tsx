@@ -35,6 +35,7 @@ const TABLE_LABELS: Record<TableName, string> = {
   supplements: 'Supplements',
   supplementLogs: 'Supplement ticks',
   problemReports: 'Problem reports',
+  bosses: 'Bosses',
 };
 
 /**

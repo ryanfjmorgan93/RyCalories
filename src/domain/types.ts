@@ -272,6 +272,22 @@ export type ProblemSource = 'coach' | 'error';
  * Something in the app that did not work, kept on the phone until the owner shares it (Settings →
  * Problem reports). Never holds the Claude key (src/domain/problemReports.ts scrubs it).
  */
+/**
+ * A weekly boss as it appeared (docs/superpowers/specs/2026-11-12-boss-fight-design.md): the lift
+ * and the best set it was. Whether it is beaten, its health and the attack are read from the sets
+ * and the plan, never stored.
+ */
+export interface Boss {
+  id: string;
+  /** The Monday's date key (`mondayOf`). */
+  week: string;
+  exerciseId: string;
+  weight: number;
+  reps: number;
+  /** ISO time it appeared; only sets completed after it can beat it. */
+  appearedAt: string;
+}
+
 export interface ProblemReport {
   id: string;
   /** ISO time it was recorded. */

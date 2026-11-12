@@ -3,6 +3,7 @@ import { installLossGuardMiddleware } from './lossGuard';
 import type {
   BodyScan,
   Bodyweight,
+  Boss,
   CoachMessage,
   CoachNote,
   Exercise,
@@ -36,7 +37,7 @@ import type {
  * pre-migration backup silently never fires for that upgrade. `src/db/db.test.ts` asserts this
  * against the live `db.verno` so the two cannot drift apart unnoticed.
  */
-export const DB_VERSION = 6;
+export const DB_VERSION = 7;
 
 /** The IndexedDB database name, exported so callers that must talk to it raw (recovery, the
  * pre-migration backup) do not each hardcode it. src/boot/recovery.ts keeps its own copy
@@ -64,6 +65,7 @@ export class IronDB extends Dexie {
   supplements!: EntityTable<Supplement, 'id'>;
   supplementLogs!: EntityTable<SupplementLog, 'id'>;
   problemReports!: EntityTable<ProblemReport, 'id'>;
+  bosses!: EntityTable<Boss, 'id'>;
 
   constructor(name = DB_NAME) {
     super(name);
@@ -125,6 +127,12 @@ export class IronDB extends Dexie {
     this.version(6).stores({
       problemReports: 'id, at',
     });
+
+    // Version 7 adds the weekly bosses. Additive DELTA with no upgrade callback, as above. The
+    // unique [week+exerciseId] lets two picks racing on Home write one row between them.
+    this.version(7).stores({
+      bosses: 'id, week, &[week+exerciseId]',
+    });
   }
 }
 
@@ -159,5 +167,6 @@ export const TABLE_NAMES = [
   'supplements',
   'supplementLogs',
   'problemReports',
+  'bosses',
 ] as const;
 export type TableName = (typeof TABLE_NAMES)[number];
