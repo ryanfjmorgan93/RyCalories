@@ -33,6 +33,15 @@ here, building is still the Ponytail way, and any subagent they start runs on So
 `/setup-matt-pocock-skills` has not been run, so the ticket skills (`/to-spec`, `/to-tickets`,
 `/triage`) have no issue tracker yet.
 
+Superpowers 7.0.2 (obra/superpowers at 22f0b46, MIT, licence in
+`.claude/skills/SUPERPOWERS-LICENSE`) sits beside them, copied by hand at the owner's request in
+November 2026 without its session-start hook: `/brainstorming` (thinking a feature through before
+it is built), `/writing-plans`, `/systematic-debugging`, `/test-driven-development`,
+`/verification-before-completion` and the rest. Its skills call each other `superpowers:<name>`;
+here each is plain `<name>`. Where it differs from this file, this file wins: building is still
+the Ponytail way, any subagent it starts runs on Sonnet, and its design docs go in
+`docs/superpowers/specs/`.
+
 ## Verification
 
 The owner does not check on device. Correctness has to come from the code and the tests.
