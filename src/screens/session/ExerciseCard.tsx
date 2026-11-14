@@ -653,7 +653,7 @@ export function ExerciseCard({
     <div ref={ref} className="pt-3" data-current={isCurrent ? 'true' : undefined}>
       <Card framed className={`overflow-hidden ${isCurrent ? 'border-accent shadow-[0_0_0_1px_var(--c-accent)]' : ''}`} data-testid={testId} data-current={isCurrent ? 'true' : undefined}>
         {/* The lift in play as an object: its render with nothing written over it, then its name. */}
-        <ExerciseHero demo={exercise.demo} className={robotSrc(exercise.demo) ? 'h-40' : 'h-12'}>
+        <ExerciseHero demo={exercise.demo} arena className={robotSrc(exercise.demo) ? 'h-56' : 'h-12'}>
           <div className="absolute right-1 top-1 flex">
             <IconButton label="Collapse" aria-expanded="true" className="text-fg" onClick={withToggleFocus(() => (reopened ? setReopened(false) : onToggleGroupExpand()))}>
               <ChevronIcon expanded />
@@ -665,7 +665,7 @@ export function ExerciseCard({
         </ExerciseHero>
         <button type="button" className="block w-full px-4 pb-1 pt-3 text-left" onClick={() => nav(`/exercises/${exercise.id}`)}>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <h2 className="disp text-[1.75rem]">{exercise.name}</h2>
+            <h2 className="serif text-[2rem]">{exercise.name}</h2>
             {chips}
           </div>
           <div className="num mt-1 text-sm text-muted">{subtitle}</div>

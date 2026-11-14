@@ -14,6 +14,35 @@ Every value below lives in `src/index.css` as a custom property on `:root`, re-e
 `@theme inline` where a Tailwind utility is useful. Retune a value there and every screen follows.
 The file is the source of truth; the tables are a map of what exists and why.
 
+**v5, the Third Space layer (November 2026).** After four concept rounds the owner asked for the
+register of their gym (Third Space) laid over this system and said "build it all". What changed:
+
+- **A serif for the big lines only**: Newsreader Variable (OFL, `@fontsource-variable/newsreader`,
+  bundled, optical size 72), weight 300, `.serif`. Home's welcome, a screen's sentence (Food's
+  "351 kcal left.", Progress's "80.9 kg, up 0.58 a week."), a routine's, a lift's or a boss's name,
+  a session's title. Never a label, a button or a figure read mid-set: those stay Space Grotesk.
+- **Two-tone sentences**: the fact in cream, then the next clause in `.serif-quiet` (cream at 55%).
+  Facts only, never advice (the coach is the one voice that speaks).
+- **Caps for sections and tabs**: `.cap` and `SectionTitle`, 11px, 500, uppercase, tracking .2em,
+  cream. `.label` (a figure's or column's name) is now sentence case, 13px, muted.
+- **Underlined tabs** for anything that switches a view (`Segmented tabs`: Home's This week /
+  Badges, Progress's range, the body map, the exercise chart, the library scope, the short
+  session's mode). A choice that sets a value stays the pill segment.
+- **Soft plates**: `--r-card` 1.5rem, no border, a 5% inset highlight on top.
+- **The primary pill carries its icon in a dark well** flush right (`Button icon`): Start (arrow),
+  Add food (plus), Fight (swords, in boss red), Save session (tick).
+- **The tab bar is a floating glass island** with uppercase 9px labels; the coach disc sits beside
+  it in the same row. Home, Food and Progress open straight on the stage with no top bar (a strip
+  of the stage colour covers the status bar).
+- **The arena**: Home's lead routine and the open exercise in a session stand under a ring of
+  ceiling lights (`ExerciseHero arena`), whole on the floor. The boss's arena is lit and toned red
+  (`.boss-stage`, `--c-boss` `#c9533f`, the boss's colour only).
+- **Home** opens on the total level in a small hexagon, the welcome and the date, the quote, then
+  This week (a Monday-to-Sunday strip of rings, brass for a day trained) or Badges.
+- **A boss beaten** is the summary's moment: the medal in a solid hexagon in a pool of brass, then
+  "Boss beaten." in the serif and the sets that did it.
+- **The rest timer** is a glass island with a brass ring.
+
 ## 1. The look in one paragraph
 
 A warm black stage and cream ink, and the content sits straight on the stage: an **open ledger**,
@@ -49,6 +78,7 @@ a person outside the "How to" sheet.
 | `--c-accent` / `--c-accent-fg` | `#c9a45c` / `#000000` | The accent and the ink on it. Overridden at runtime by the colour wheel (§5) |
 | `--c-ok`, `--c-warn`, `--c-danger`, `--c-info` | unchanged | State colours; `--c-done` = ok, `--c-rest` = info |
 | `--c-record` / `--c-record-fg` | the accent and its ink | A record is the game's metal, so it follows the wheel |
+| `--c-boss` | `#c9533f` | The weekly boss only: its health, its best set, its arena, the swords on Fight |
 
 ### Glass
 
@@ -66,13 +96,15 @@ decoration. <Ambient/> still keeps a faint accent glow from two corners (`--amb-
 
 | Token / class | Value | Used for |
 |---|---|---|
-| `--r-card` | 0.875rem | Framed objects, sheets. A plaque (level up, record, badge) is square |
+| `--r-card` | 1.5rem | Framed objects, sheets. A plaque (level up, record, badge) is square |
 | Buttons | `rounded-full` | Every `Button` is a pill, at least 44px tall |
 | `--font-sans` | `'Space Grotesk Variable'` | Everything. `@fontsource-variable/space-grotesk`, bundled: weights 300–700 in one file |
 | `.disp` | 300, sentence case, leading 1.15, tracking −.03em | Headlines: TopBar and sheet titles, the name of a lift or routine |
 | `.fig` | 300, leading 1, tracking −.035em, tabular | A figure that is the point of its screen: calories left, a bodyweight, a session's total, the weight being lifted. Size from a text utility |
 | `.num` | tabular, tracking −.02em | Every other number |
-| `.label` | 11px, 500, uppercase, tracking .14em, `--c-muted` | Column and figure labels; in the accent for a section (`SectionTitle`) |
+| `.label` | 13px, 400, sentence case, `--c-muted` | Column and figure labels |
+| `.cap` | 11px, 500, uppercase, tracking .2em, cream | Section heads (`SectionTitle`) and tabs (v5) |
+| `--font-serif`, `.serif` | Newsreader Variable 300, opsz 72, tracking −.015em, leading 1.12, balanced | The big lines only (v5, above) |
 | Weights | 300 / 400 / 500 / 600 | `font-semibold` is mapped to 500 and `font-bold`, `font-extrabold` to 600 in `@theme`, so no screen can go heavier |
 | `.plate` | `margin-inline: -1rem`; a hairline between two in a row | The open `Card` (§4) |
 
@@ -231,13 +263,14 @@ with a soft shadow; that pairing is checked by eye in the screenshots, not by th
   total-level badge). It is a `progressbar`; the percentage is what a screen reader hears.
 - **`Medallion`**: a ringed disc for a badge's mark or a lift's level; dashed for one not yet held.
 - **`HexPanel`**: a moment the game marks, as a solid hexagon, a title and what did it: Level up
-  (above), Boss beaten on the summary, and Protein hit on the Food day, with the blocks to the next
-  protein badge.
-- **Home** (`src/ui/LevelsCard.tsx`): `LevelHeader` (the hexagon, badges held, sessions, tonnes
-  lifted, blocks to the next total-level badge) above the routines; the weekly boss
-  (`src/ui/BossCard.tsx`, November 2026, in place of today's hand and the strength figure) under the
-  routine that leads, so Start stays in reach: a framed plaque with the lift's robot render on top
-  (a hexagon with the boss weight when it has none), the best set it is, health in ten dark-red
-  blocks (`Segments` rounded up), the attack and Fight as the cream pill; then "Bosses beaten" as a
-  row of medallions; `Cabinet`, each ladder's highest badge and the nearest next one, which
-  opens every ladder in a sheet.
+  (above), and Protein hit on the Food day, with the blocks to the next protein badge. A boss
+  beaten is bigger on the summary (v5, above).
+- **Home** (`src/ui/LevelsCard.tsx`): `LevelMark` (the total level in a small hexagon) at the head;
+  under the tabs, This week (`WeekStrip`) or Badges: `LevelHeader` (badges held, sessions, tonnes
+  lifted, blocks to the next total-level badge) and `Cabinet`, each ladder's highest badge and the
+  nearest next one, which opens every ladder in a sheet. The weekly boss (`src/ui/BossCard.tsx`,
+  November 2026, in place of today's hand and the strength figure) stands under the routine that
+  leads, so Start stays in reach: the days it has left, its render in the red arena (a hexagon with
+  the boss weight when it has none), its name in the serif, health in ten red blocks (`Segments`
+  rounded up), your attack against its best set, and Fight with the swords; then "Bosses beaten" as
+  a row of medallions.

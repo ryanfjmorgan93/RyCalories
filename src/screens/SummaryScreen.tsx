@@ -15,13 +15,13 @@ import { useSessionDraft } from '@/state/sessionDraft';
 import { useTimer } from '@/state/timer';
 import { Button } from '@/ui/components/Button';
 import { LevelUpPanel } from '@/ui/LevelLine';
-import { HexPanel } from '@/ui/GameMarks';
+import { Hex } from '@/ui/GameMarks';
 import { Card, SectionTitle } from '@/ui/components/Card';
 import { Chip } from '@/ui/components/Chip';
 import { NumberField, TextInput } from '@/ui/components/NumberField';
 import { Confirm } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
-import { TopBar } from '@/ui/components/TopBar';
+import { TickIcon, TopBar } from '@/ui/components/TopBar';
 import { CoachLine } from '@/ui/CoachLine';
 
 interface Choice {
@@ -272,7 +272,7 @@ export function SummaryScreen() {
       <TopBar title="Summary" subtitle={summary.session.title} back={`/session/${summary.session.id}`} />
       <div className="px-4">
         <div className="pt-1">
-          <h1 className="disp break-words text-[2.5rem]">{summary.session.title}</h1>
+          <h1 className="serif break-words text-[2.5rem]">{summary.session.title}</h1>
           <div className="mt-1.5 flex items-center gap-2">
             <span className="text-sm text-muted">{fmtDate(summary.session.startedAt, { weekday: 'short', day: 'numeric', month: 'short' })}</span>
             {summary.session.deload && (
@@ -285,8 +285,28 @@ export function SummaryScreen() {
 
         {/* data-settled marks the end of the count-up, so a screenshot or test can wait for the final figures;
             data-game says the badges have been worked out, so "no new badge" can be told from "not yet". */}
-        <div
-          className="mt-4 grid grid-cols-3 gap-3 border-t border-line"
+        {/* A boss beaten is the moment (v5): the medal in its hexagon in a pool of brass light, then
+            the win said in the serif, brass then quieter. */}
+        {bosses?.map((b) => (
+          <section key={b.name} className="relative isolate pt-6" data-testid="summary-boss">
+            <div
+              aria-hidden="true"
+              className="absolute -inset-x-4 -top-2 bottom-0 -z-10"
+              style={{ background: 'radial-gradient(ellipse 46% 42% at 22% 30%, color-mix(in srgb, var(--c-accent) 16%, transparent), transparent 72%)' }}
+            />
+            <Hex size="lg" solid>
+              <RecordIcon className="h-11 w-11 text-accent-fg" />
+            </Hex>
+            <p className="serif mt-4 text-[2.75rem] text-accent">Boss beaten.</p>
+            <p className="serif serif-quiet mt-1 text-[1.625rem]">
+              {`Your ${fmtKg(b.by.weight)} × ${b.by.reps} beat ${b.name} at ${fmtKg(b.weight)} × ${b.reps}.`.replace(/(\d) (kg) × (\d)/g, '$1\u00a0$2\u00a0×\u00a0$3')}
+            </p>
+          </section>
+        ))}
+
+        <Card
+          framed
+          className="mt-6 grid grid-cols-3 gap-3 px-5"
           data-testid="summary-hero"
           data-settled={revealT >= 1 ? 'true' : 'false'}
           data-game={game === undefined ? 'loading' : 'ready'}
@@ -294,7 +314,7 @@ export function SummaryScreen() {
           <HeroStat testId="summary-time" value={fmtDuration(summary.durationSec * revealT)} label="Time" />
           <HeroStat testId="summary-sets" value={String(Math.round(summary.workingSetsDone * revealT))} label="Sets" />
           <HeroStat testId="summary-kg" value={fmtNum(Math.round(volumeKg * revealT))} label="kg lifted" />
-        </div>
+        </Card>
 
         {/* What the coach makes of the session: nothing at all unless it has something to say. */}
         {sessionFacts && <CoachLine moment="session" facts={sessionFacts} className="mt-4" />}
@@ -339,10 +359,6 @@ export function SummaryScreen() {
             ))}
           </div>
         )}
-
-        {bosses?.map((b) => (
-          <HexPanel key={b.name} mark={<RecordIcon className="text-accent-fg" />} title="Boss beaten" detail={`${b.name} · ${fmtKg(b.by.weight)} × ${b.by.reps}`} testId="summary-boss" />
-        ))}
 
         {game && game.badges.length > 0 && (
           <div className="flex flex-col gap-2">
@@ -406,7 +422,7 @@ export function SummaryScreen() {
         <TextInput value={notes} onChange={setNotes} placeholder="Optional" multiline />
 
         <div className="mt-6 grid gap-3">
-          <Button size="xl" variant="primary" full onClick={() => void save()} disabled={saving || invalid} data-testid="save-session">
+          <Button size="xl" variant="primary" full icon={<TickIcon />} onClick={() => void save()} disabled={saving || invalid} data-testid="save-session">
             Save session
           </Button>
           <Button size="md" variant="ghost" full onClick={() => setDiscardOpen(true)}>
@@ -437,7 +453,7 @@ export function SummaryScreen() {
 function HeroStat({ value, label, testId }: { value: string; label: string; testId?: string }) {
   return (
     <div className="flex min-w-0 flex-col gap-1.5 py-4">
-      <span className="fig text-[2.5rem]" data-testid={testId}>
+      <span className="fig text-[2.25rem]" data-testid={testId}>
         {value}
       </span>
       <span className="text-sm text-muted">{label}</span>

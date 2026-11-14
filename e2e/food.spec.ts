@@ -585,7 +585,7 @@ test.describe('nutrition', () => {
     // The day's protein target is the seed's (a leg day's or not); read it off the bar the foods have reached.
     await expect(page.getByTestId('protein-bar')).toContainText('35 g');
     const target = Number((await page.getByTestId('protein-bar').innerText()).match(/\/\s*([\d,]+) g/)![1]);
-    await expect(page.getByTestId('protein-left')).toHaveText(`${target - 35} g left`);
+    await expect(page.getByTestId('protein-left')).toHaveText(`${target - 35} g of protein left`);
 
     // A tap on a food opens it here, on the day: halve the oats and the day follows.
     await foods.nth(0).click();
@@ -593,7 +593,7 @@ test.describe('nutrition', () => {
     await page.getByTestId('save-food').click();
     await expect(foods).toHaveText(['Oats50 g190 kcal', 'Whey1 scoop120 kcal']);
     // 5.5 g from the oats is shown as 6, as on the bar, so the two never disagree: 6 + 24.
-    await expect(page.getByTestId('protein-left')).toHaveText(`${target - 30} g left`);
+    await expect(page.getByTestId('protein-left')).toHaveText(`${target - 30} g of protein left`);
 
     // Removing one says so with an Undo, which puts it back where it was.
     await foods.nth(0).click();
@@ -654,7 +654,7 @@ test.describe('nutrition', () => {
     // One day hit of the ten the first badge takes.
     await expect(page.getByTestId('protein-hit')).toHaveText(`${target}GProtein hit250 g of ${target} g10 days of protein hit9 to go`);
     // Over says over, by how much.
-    await expect(page.getByTestId('protein-left')).toHaveText(`${250 - target} g over`);
+    await expect(page.getByTestId('protein-left')).toHaveText(`${250 - target} g of protein over`);
   });
 
   test('there is nothing to copy before anything has been eaten', async ({ page }) => {

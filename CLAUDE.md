@@ -77,7 +77,10 @@ The owner does not check on device. Correctness has to come from the code and th
   October 2026), phone-first with big tap targets. The look is the owner's pick of November 2026
   (docs/DESIGN.md): warm black, cream, brass by default, Space Grotesk, and an open ledger: content
   straight on the stage under a labelled hairline, a frame only round an object (`Card framed`),
-  light figures, nothing written over a robot render.
+  light figures, nothing written over a robot render. Over it, since November 2026, the Third Space
+  layer (docs/DESIGN.md, v5): Newsreader serif for the big lines only, never a label, button or
+  figure; uppercase caps for section heads and view tabs; the tab bar a floating island with the
+  coach disc beside it; the lead routine and the session's lift in a lit arena; red only for the boss.
 - **The coach may speak first; nothing else lectures.** Since October 2026 (docs/adr/0002) the
   coach (Claude) speaks at defined moments (CONTEXT.md: Moment) like a good personal trainer:
   to the point, encouraging, the odd motivational line, now and then asking how the owner is

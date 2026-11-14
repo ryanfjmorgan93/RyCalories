@@ -34,7 +34,7 @@ import { Card, Divider, EmptyState, Row } from '@/ui/components/Card';
 import { MacroLine, MacroSplit, TargetBar } from '@/ui/components/MacroBar';
 import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
-import { BackIcon, ChevronIcon, MoreIcon, TopBar } from '@/ui/components/TopBar';
+import { BackIcon, ChevronIcon, MoreIcon, PlusIcon } from '@/ui/components/TopBar';
 import { AddFoodSheet } from '@/ui/AddFoodSheet';
 import { UsualMeals } from '@/ui/UsualMeals';
 import { FoodCoachLines } from '@/ui/FoodCoachLines';
@@ -120,11 +120,13 @@ export function FoodScreen() {
 
   return (
     <div>
-      <TopBar title="Food" />
+      {/* Open on the stage, no bar (v5), like Home. */}
+      <div aria-hidden="true" className="fixed inset-x-0 top-0 z-30 h-[var(--inset-top)] bg-bg" />
+      <h1 className="sr-only">Food</h1>
 
-      <div className="px-4">
+      <div className="pt-safe px-4">
         {/* Day navigation. Forward is capped at today: there is no logging food you have not eaten. */}
-        <div className="flex items-center gap-1">
+        <div className="-mx-2 flex items-center gap-1 pt-3">
           <IconButton label="Previous day" onClick={() => setDate(addDays(date, -1))} data-testid="prev-day">
             <BackIcon />
           </IconButton>
@@ -132,7 +134,7 @@ export function FoodScreen() {
             type="button"
             onClick={() => setDate(today)}
             disabled={isToday}
-            className="min-w-0 flex-1 break-words py-2 text-center text-lg disabled:opacity-100"
+            className="min-h-11 min-w-0 flex-1 break-words text-center text-[11px] font-medium uppercase tracking-[0.2em] disabled:opacity-100"
             data-testid="day-label"
           >
             {fmtDayKey(date, today, yesterday)}
@@ -166,7 +168,7 @@ export function FoodScreen() {
         )}
         {/* One button for the usual case: search or scan, tap an amount, done. Meals stay the
             grouping — Add meal is still here, for composing one by hand. */}
-        <Button size="lg" variant="primary" full onClick={() => setAddFood({})} data-testid="add-food-button">
+        <Button size="lg" variant="primary" full icon={<PlusIcon />} onClick={() => setAddFood({})} data-testid="add-food-button">
           Add food
         </Button>
         <div className="mt-3 grid grid-cols-3 gap-3">
@@ -335,16 +337,29 @@ function DaySummary({ date, today }: { date: string; today: string }) {
         </HexPanel>
       )}
 
-      <Card className="px-4 pb-2 pt-1">
-        {/* What is left leads, as the two numbers the day is steered by, each over its own bar. Over
-            says over: a zero here would be the tidy lie the bars are written not to tell. */}
+      {/* What is left leads, as a sentence in the serif (v5): the calories, then the protein, quieter.
+          Over says over: a zero here would be the tidy lie the bars are written not to tell. */}
+      {view && (view.calories || view.proteinTarget !== null) && (
+        <div className="serif pb-5 pt-2 text-[2.25rem]">
+          {view.calories && (
+            <p>
+              <Left left={view.calories.kcal - eaten.kcal} text={fmtKcal} testId="remaining" />.
+            </p>
+          )}
+          {view.proteinTarget !== null && (
+            <p className="serif-quiet">
+              <Left left={view.proteinTarget - eaten.protein} text={(n) => `${fmtGrams(n)} of protein`} testId="protein-left" />.
+            </p>
+          )}
+        </div>
+      )}
+
+      <Card framed className="px-5 pb-4 pt-3">
         <div className="grid grid-cols-2 gap-x-5 gap-y-5">
           <div className="min-w-0">
-            {view?.calories && <Left label="Calories" left={view.calories.kcal - eaten.kcal} text={fmtKcal} testId="remaining" />}
             <TargetBar compact label="Calories" value={eaten.kcal} target={view?.calories?.kcal ?? null} unit="kcal" testId="calories-bar" />
           </div>
           <div className="min-w-0">
-            {view && view.proteinTarget !== null && <Left label="Protein" left={view.proteinTarget - eaten.protein} text={fmtGrams} testId="protein-left" />}
             <TargetBar compact label="Protein" value={eaten.protein} target={view?.proteinTarget ?? null} unit="g" testId="protein-bar" />
           </div>
           {settings?.carbTarget !== undefined && <TargetBar label="Carbs" value={eaten.carbs} target={settings.carbTarget} unit="g" testId="carbs-bar" />}
@@ -359,18 +374,13 @@ function DaySummary({ date, today }: { date: string; today: string }) {
   );
 }
 
-/** One of the day's two leading numbers: how much of a target is left, or how far over it the day is. */
-function Left({ label, left, text, testId }: { label: string; left: number; text: (n: number) => string; testId: string }) {
+/** How much of a target is left, or how far over it the day is, in the day's sentence. */
+function Left({ left, text, testId }: { left: number; text: (n: number) => string; testId: string }) {
   const over = left < 0;
-  // "351 kcal" as a big figure and its small unit; the words stay one string for a screen reader.
-  const [figure, ...unit] = text(Math.abs(left)).split(' ');
   return (
-    <div className="mb-3 min-w-0">
-      <div className="label">{label}</div>
-      <div className={`num mt-1.5 whitespace-nowrap ${over ? 'text-warn' : ''}`} data-testid={testId}>
-        <span className="fig text-[2.75rem]">{figure}</span> <span className="text-sm text-muted">{[...unit, over ? 'over' : 'left'].join(' ')}</span>
-      </div>
-    </div>
+    <span className={`num ${over ? 'text-warn' : ''}`} data-testid={testId}>
+      {text(Math.abs(left))} {over ? 'over' : 'left'}
+    </span>
   );
 }
 

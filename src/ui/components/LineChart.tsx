@@ -72,11 +72,17 @@ export function LineChart({
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="block w-full" style={{ height }} role="img" aria-label="Line chart">
       {band && (
-        <rect x={padL} y={y(band.max)} width={w - padL - padR} height={Math.max(0, y(band.min) - y(band.max))} fill="var(--c-ok)" opacity="0.12" />
+        // The target band (v5): a faint cream field between two dashed edges, so the line reads against it.
+        <g>
+          <rect x={padL} y={y(band.max)} width={w - padL - padR} height={Math.max(0, y(band.min) - y(band.max))} fill="var(--c-fg)" opacity="0.04" />
+          {[band.min, band.max].map((v) => (
+            <line key={v} x1={padL} x2={w - padR} y1={y(v)} y2={y(v)} stroke="var(--c-fg)" strokeOpacity="0.3" strokeDasharray="2 4" />
+          ))}
+        </g>
       )}
       {ticks.map((tv) => (
         <g key={tv}>
-          <line x1={padL} x2={w - padR} y1={y(tv)} y2={y(tv)} stroke="var(--c-line)" strokeWidth="1" />
+          <line x1={padL} x2={w - padR} y1={y(tv)} y2={y(tv)} stroke="var(--c-line)" strokeWidth="1" strokeOpacity="0.6" />
           <text x={padL - 6} y={y(tv) + 4} textAnchor="end" fontSize="10" fill="var(--c-muted)">
             {fmtNum(tv)}
             {unit ? ` ${unit}` : ''}
@@ -84,7 +90,9 @@ export function LineChart({
         </g>
       ))}
       {secondary && secondary.length > 1 && <path d={path(secondary)} fill="none" stroke="var(--c-muted)" strokeWidth="2" strokeDasharray="4 4" strokeLinejoin="round" />}
-      <path d={path(points)} fill="none" stroke={stroke} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+      {/* The line's own soft light under it, then the line. */}
+      <path d={path(points)} fill="none" stroke={stroke} strokeWidth="6" strokeOpacity="0.3" strokeLinejoin="round" strokeLinecap="round" style={{ filter: 'blur(3px)' }} />
+      <path d={path(points)} fill="none" stroke={stroke} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
       {points.map((p, i) => (
         <circle key={i} cx={x(p.t)} cy={y(p.y)} r={points.length > 40 ? 2 : 3.5} fill="var(--c-bg)" stroke={stroke} strokeWidth="2" />
       ))}

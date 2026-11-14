@@ -51,7 +51,7 @@ test('a weekly boss: the squat\'s best set after three sessions, Fight starts it
   // A record, no level (2.9% over the start), and the boss falls.
   await expect(page.getByText('Record · 100 × 6 · Boss beaten', { exact: true })).toBeVisible();
   await finish(page);
-  await expect(page.getByTestId('summary-boss')).toHaveText('Boss beatenBarbell Back Squat · 100 kg × 6');
+  await expect(page.getByTestId('summary-boss')).toHaveText('Boss beaten.Your 100\u00a0kg\u00a0×\u00a06 beat Barbell Back Squat at 100\u00a0kg\u00a0×\u00a05.');
   await save(page);
 
   // No other lift has its start, so the beaten boss stays up, marked, without Fight.

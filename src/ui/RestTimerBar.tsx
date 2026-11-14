@@ -75,7 +75,7 @@ export function RestTimerBar() {
       <div
         role="timer"
         aria-label={done ? 'Rest over' : `Rest, ${fmtDuration(remaining)} left`}
-        className={`mb-3 flex items-center gap-2 rounded-card border p-2 pl-3 ${done ? 'glass-fixed' : 'border-accent bg-accent text-accent-fg'}`}
+        className={`mb-3 flex items-center gap-2 rounded-full border p-2 pl-3 ${done ? 'glass-fixed' : 'glass-fixed !border-accent/40 text-fg'}`}
         style={done ? { borderColor: `color-mix(in srgb, ${tint} 35%, transparent)` } : undefined}
       >
         {!done && (
@@ -87,7 +87,7 @@ export function RestTimerBar() {
                 cy="24"
                 r={RING_R}
                 fill="none"
-                stroke="currentColor"
+                stroke="var(--c-accent)"
                 strokeWidth="4"
                 strokeLinecap="round"
                 strokeDasharray={RING_CIRCUMFERENCE}
@@ -104,7 +104,7 @@ export function RestTimerBar() {
               type="button"
               aria-label="15 seconds less"
               onClick={() => add(-15)}
-              className="h-11 min-w-11 rounded-full bg-black/12 px-3 text-base font-semibold active:brightness-90"
+              className="h-11 min-w-11 rounded-full bg-fg/10 px-3 text-base font-semibold active:brightness-90"
             >
               −15
             </button>
@@ -112,11 +112,11 @@ export function RestTimerBar() {
               type="button"
               aria-label="15 seconds more"
               onClick={() => add(15)}
-              className="h-11 min-w-11 rounded-full bg-black/12 px-3 text-base font-semibold active:brightness-90"
+              className="h-11 min-w-11 rounded-full bg-fg/10 px-3 text-base font-semibold active:brightness-90"
             >
               +15
             </button>
-            <button type="button" onClick={skip} className="h-11 rounded-full bg-black/12 px-4 text-base font-semibold active:brightness-90">
+            <button type="button" onClick={skip} className="h-11 rounded-full bg-fg/10 px-4 text-base font-semibold active:brightness-90">
               Skip
             </button>
           </>

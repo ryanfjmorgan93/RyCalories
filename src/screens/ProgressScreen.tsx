@@ -20,7 +20,7 @@ import { CalendarHeatmap, StreakDots } from '@/ui/components/CalendarHeatmap';
 import { Card, Divider, EmptyState, Row, SectionTitle } from '@/ui/components/Card';
 import { Segmented } from '@/ui/components/Chip';
 import { LineChart, type ChartPoint } from '@/ui/components/LineChart';
-import { BackIcon, ChevronIcon, TopBar } from '@/ui/components/TopBar';
+import { BackIcon, ChevronIcon } from '@/ui/components/TopBar';
 import { useCalendar, useExercises, useMuscleRecency, useRecentRecords, useSettings, useToday, useWeeklySets } from '@/ui/hooks';
 
 type Window = '14' | '28' | '56';
@@ -80,16 +80,14 @@ export function ProgressScreen() {
 
   return (
     <div>
-      <TopBar
-        title="Progress"
-        right={
-          <div className="mr-1 flex gap-0.5">
-            <Button size="md" variant="ghost" onClick={() => openCoach()} data-testid="coach-open">
-              Coach
-            </Button>
-          </div>
-        }
-      />
+      {/* Open on the stage, no bar (v5): the name in caps, the coach beside it. */}
+      <div aria-hidden="true" className="fixed inset-x-0 top-0 z-30 h-[var(--inset-top)] bg-bg" />
+      <header className="pt-safe flex min-h-14 items-center justify-between px-4 pt-3">
+        <h1 className="cap">Progress</h1>
+        <Button size="md" variant="ghost" className="-mr-3" onClick={() => openCoach()} data-testid="coach-open">
+          Coach
+        </Button>
+      </header>
       <div className="px-4">
         <Segmented tabs value={window} onChange={setWindow} options={WINDOWS} />
         <div className="h-4" />
@@ -182,30 +180,31 @@ function BodyweightCard({
   const delta = weeklyDelta(bodyweight, today);
   const status = delta ? bandStatus(delta.deltaKg, settings.weeklyGainTargetMin, settings.weeklyGainTargetMax) : null;
 
+  const latest = bodyweight.reduce((a, b) => (b.date > a.date ? b : a));
+  const band = `${fmtNum(settings.weeklyGainTargetMin)} to ${fmtNum(settings.weeklyGainTargetMax)} kg`;
+
   return (
-    <Card className="p-4">
-      <LineChart
-        points={line}
-        secondary={points}
-        band={{ min: settings.bodyweightTargetMin, max: settings.bodyweightTargetMax }}
-        unit="kg"
-      />
-      <div className="mt-3 flex items-baseline justify-between">
-        <span className="label">Per week</span>
-        {delta ? (
-          <span
-            className={`fig text-2xl ${status === 'in' ? 'text-ok' : 'text-warn'}`}
-            data-testid="weekly-delta"
-          >
-            {delta.deltaKg > 0 ? '+' : ''}
-            {fmtNum(delta.deltaKg)} kg
-          </span>
-        ) : (
-          // Two readings a few days apart is not a rate. Saying so beats printing one.
-          <span className="text-sm text-muted">Not enough readings yet</span>
-        )}
+    <>
+      {/* The trend said first, in the serif (v5): the last reading and the rate, then the rate against
+          the owner's own band, quieter. Two readings a few days apart is not a rate; it says so. */}
+      <div className="serif pb-5 text-[2rem]">
+        <p data-testid="weekly-delta">
+          <span className="num">{fmtNum(latest.kg)}</span> kg
+          {delta && (delta.deltaKg === 0 ? ', level' : `, ${delta.deltaKg > 0 ? 'up' : 'down'} ${fmtNum(Math.abs(delta.deltaKg))} a week`)}.
+        </p>
+        <p className="serif-quiet">
+          {!delta ? 'Not enough readings for a rate yet.' : `${status === 'in' ? 'Within' : status === 'above' ? 'Above' : 'Below'} your ${band}.`}
+        </p>
       </div>
-    </Card>
+      <Card framed className="p-4">
+        <LineChart
+          points={line}
+          secondary={points}
+          band={{ min: settings.bodyweightTargetMin, max: settings.bodyweightTargetMax }}
+          unit="kg"
+        />
+      </Card>
+    </>
   );
 }
 
