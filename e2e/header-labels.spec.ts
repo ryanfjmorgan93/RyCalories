@@ -81,7 +81,8 @@ test.describe('header labels', () => {
     await page.goto('/food');
     // Positive signal: the body's own labelled "Add meal" button, not anything in the header.
     await expect(page.getByTestId('add-meal-button')).toBeVisible();
-    await assertHeaderLabelledAtBothWidths(page);
+    // Food opens on the stage with no top bar (v5): only the day chevrons, which are allowed icons.
+    await expect(page.locator('header')).toHaveCount(0);
   });
 
   test('Routines', async ({ page }) => {
