@@ -2,6 +2,10 @@
 /* Space Grotesk Variable, bundled locally (offline): one family, weights 300–700, for headlines,
    numbers and text alike (docs/DESIGN.md §2). The owner's pick, November 2026. */
 @import '@fontsource-variable/space-grotesk/index.css';
+/* Newsreader Variable (OFL), bundled locally, with its optical-size axis: the serif for the big lines
+   only (a greeting, a screen's sentence, a routine's or a boss's name), never a label, a button or a
+   figure read mid-set. Third Space's register, the owner's pick of November 2026. */
+@import '@fontsource-variable/newsreader/opsz.css';
 
 /* Palette as runtime variables. Dark only: the trophy-room look (docs/DESIGN.md), a warm black
    stage that content sits on directly, hairline rules, cream ink and one accent, brass by default. */
@@ -23,6 +27,8 @@
   --c-ok-fg: #03210e;
   --c-warn: #fbbf24;
   --c-danger: #f87171;
+  /* The weekly boss's red, and only the boss's (v5). */
+  --c-boss: #c9533f;
   --c-info: #7dd3fc;
   /* A Toggle's knob: white in both themes (the usual switch convention — a light disc against a
      coloured or grey track either way), tokenised so it is never a bare `bg-white` in the
@@ -50,7 +56,8 @@
   --blur-over: 10px;
 
   /* Radii */
-  --r-card: 0.875rem;
+  /* Third Space's soft plates (v5, November 2026). */
+  --r-card: 1.5rem;
   --r-control: 0.875rem;
   --r-pill: 1.25rem;
 
@@ -93,13 +100,15 @@
   --inset-top: env(safe-area-inset-top, 0px);
   --inset-bottom: env(safe-area-inset-bottom, 0px);
   /* The tab bar's own row, and the floating session dock that sits above it while a workout runs. */
-  --nav-h: 4rem;
+  /* The floating tab island (4rem) and the gap under it. */
+  --nav-h: 4.75rem;
   --dock-h: 3.5rem;
   /* The rest timer card, margin included. */
   --timer-h: 4.875rem;
 }
 
 @theme inline {
+  --font-serif: 'Newsreader Variable', Georgia, 'Times New Roman', serif;
   --font-sans: 'Space Grotesk Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
     'Noto Sans', sans-serif;
   --color-bg: var(--c-bg);
@@ -115,6 +124,7 @@
   --color-ok-fg: var(--c-ok-fg);
   --color-warn: var(--c-warn);
   --color-danger: var(--c-danger);
+  --color-boss: var(--c-boss);
   --color-info: var(--c-info);
   --color-done: var(--c-done);
   --color-record: var(--c-record);
@@ -277,13 +287,36 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* The small uppercase label with open tracking that heads a column, a figure or a section. */
+  /* A figure's or a column's name: small, sentence case, muted. */
   .label {
+    font-size: 13px;
+    font-weight: 400;
+    letter-spacing: 0;
+    color: var(--c-muted);
+  }
+
+  /* A section's name, as Third Space sets it: small, uppercase, wide open, in cream. Kept to the
+     section heads and the tabs, so it stays a voice rather than a texture. */
+  .cap {
     font-size: 11px;
     font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--c-muted);
+    letter-spacing: 0.2em;
+    color: var(--c-fg);
+  }
+
+  /* The serif's big line: light, at display optical size, balanced so no word is left alone. */
+  .serif {
+    font-family: var(--font-serif);
+    font-weight: 300;
+    font-variation-settings: 'opsz' 72;
+    letter-spacing: -0.015em;
+    line-height: 1.12;
+    text-wrap: balance;
+  }
+  /* The second clause of a two-tone sentence: the same line, quieter. */
+  .serif-quiet {
+    color: color-mix(in srgb, var(--c-fg) 55%, var(--c-bg));
   }
 
   /* An open block of content (Card): no box. It sits straight on the stage, pulled out by the
@@ -304,6 +337,17 @@
       radial-gradient(140% 70% at 50% 122%, color-mix(in srgb, var(--c-accent) 80%, transparent) 0%,
         color-mix(in srgb, var(--c-accent) 30%, transparent) 40%, transparent 68%),
       linear-gradient(180deg, rgba(0, 0, 0, 0.35) 0%, transparent 30%, rgba(0, 0, 0, 0.85) 100%);
+  }
+
+  /* The boss's stage (v5): the same render, lit red from the floor and toned red, so the one colour
+     that is only ever the boss's is the room it stands in. */
+  .boss-stage img {
+    filter: grayscale(1) sepia(1) saturate(5.5) hue-rotate(-38deg) brightness(0.62) contrast(1.25);
+  }
+  .boss-stage .ember-glow {
+    background:
+      radial-gradient(60% 65% at 50% 110%, color-mix(in srgb, var(--c-boss) 45%, transparent), transparent 70%),
+      linear-gradient(180deg, transparent 70%, rgba(10, 9, 7, 0.9) 100%);
   }
 
   /* A glass card that sits over a render: thinner, with a light blur so the robot shows through.

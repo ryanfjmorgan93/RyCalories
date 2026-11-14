@@ -7,6 +7,8 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
   size?: Size;
   full?: boolean;
+  /** A primary's icon, set in its own dark well flush to the right (v5). */
+  icon?: ReactNode;
   children: ReactNode;
 }
 
@@ -29,14 +31,19 @@ const sizes: Record<Size, string> = {
   xl: 'h-16 px-7 text-xl rounded-full',
 };
 
-export function Button({ variant = 'secondary', size = 'md', full, className = '', children, ...rest }: ButtonProps) {
+export function Button({ variant = 'secondary', size = 'md', full, icon, className = '', children, ...rest }: ButtonProps) {
   return (
     <button
       type="button"
       {...rest}
-      className={`inline-flex items-center justify-center gap-2 select-none whitespace-nowrap transition-[filter,background-color] duration-150 disabled:opacity-40 disabled:pointer-events-none ${variants[variant]} ${sizes[size]} ${full ? 'w-full' : ''} ${className}`}
+      className={`inline-flex items-center gap-2 select-none whitespace-nowrap transition-[filter,background-color,transform] duration-150 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none ${icon ? 'justify-between !pl-6 !pr-1.5' : 'justify-center'} ${variants[variant]} ${sizes[size]} ${full ? 'w-full' : ''} ${className}`}
     >
       {children}
+      {icon && (
+        <span aria-hidden="true" className="flex aspect-square h-[calc(100%-0.5rem)] items-center justify-center rounded-full bg-bg text-fg">
+          {icon}
+        </span>
+      )}
     </button>
   );
 }

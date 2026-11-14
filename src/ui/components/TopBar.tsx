@@ -100,3 +100,28 @@ export function TrashIcon() {
   );
 }
 
+
+/** The icons that sit in a primary's well (v5): fine 1.5 strokes on a 24 grid. */
+function WellGlyph({ children }: { children: ReactNode }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {children}
+    </svg>
+  );
+}
+export function ArrowIcon() {
+  return <WellGlyph><path d="M5 12h14M13 6l6 6-6 6" /></WellGlyph>;
+}
+export function PlusIcon() {
+  return <WellGlyph><path d="M12 5v14M5 12h14" /></WellGlyph>;
+}
+export function TickIcon() {
+  return <WellGlyph><path d="m5 12.5 4.5 4.5L19 7.5" /></WellGlyph>;
+}
+export function SwordsIcon() {
+  return (
+    <WellGlyph>
+      <path d="M14.5 17.5 3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M9.5 14.5 3 21M5 14l-2 2 5 5 2-2M14.5 9.5 21 3v3l-6.5 6.5" />
+    </WellGlyph>
+  );
+}

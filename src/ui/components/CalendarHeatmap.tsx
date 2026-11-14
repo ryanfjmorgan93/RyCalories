@@ -69,3 +69,30 @@ export function StreakDots({ thisWeek, target, streak, className = '' }: { thisW
     </div>
   );
 }
+
+/**
+ * This week on Home (v5, after the owner's Third Space reference): the count and any streak as
+ * StreakDots says them, over Monday to Sunday, each day a ring filled in brass when a session was
+ * finished on it, today's ring in cream, the days still to come dimmer.
+ */
+export function WeekStrip({ week, today, thisWeek, target, streak }: { week: CalendarDay[]; today: string; thisWeek: number; target: number; streak: number }) {
+  return (
+    <div className="rounded-card bg-surface px-5 pb-5 pt-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]" data-testid="week-strip">
+      <div className="label" data-testid="streak-line">
+        This week {thisWeek} of {target}
+        {streak > 0 && ` · ${streak}-week streak`}
+      </div>
+      <div className="mt-5 grid grid-cols-7">
+        {week.map((d, i) => (
+          <div key={d.date} className="flex flex-col items-center gap-2">
+            <span
+              aria-hidden="true"
+              className={`h-3.5 w-3.5 rounded-full border ${d.sessions.length > 0 ? 'border-accent bg-accent' : d.date === today ? 'border-fg' : 'border-fg/25'}`}
+            />
+            <span className={`text-[11px] ${d.date > today ? 'text-dim' : 'text-muted'}`}>{WEEKDAY_INITIALS[i]}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

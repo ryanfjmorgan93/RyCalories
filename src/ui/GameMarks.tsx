@@ -7,8 +7,8 @@ import type { ReactNode } from 'react';
  */
 
 /** A level in its hexagon: an accent rim round the stage colour, or solid accent for a level-up. */
-export function Hex({ size, solid, children, className = '' }: { size: 'lg' | 'md'; solid?: boolean; children: ReactNode; className?: string }) {
-  const box = size === 'lg' ? 'h-[116px] w-[104px]' : 'h-[60px] w-[54px]';
+export function Hex({ size, solid, children, className = '' }: { size: 'lg' | 'md' | 'sm'; solid?: boolean; children: ReactNode; className?: string }) {
+  const box = size === 'lg' ? 'h-[116px] w-[104px]' : size === 'md' ? 'h-[60px] w-[54px]' : 'h-12 w-11';
   return (
     <div className={`hex flex shrink-0 items-center justify-center bg-accent ${box} ${className}`}>
       <div className={`hex flex flex-col items-center justify-center ${solid ? 'h-full w-full text-accent-fg' : 'h-[calc(100%-5px)] w-[calc(100%-5px)] bg-bg text-fg'}`}>{children}</div>

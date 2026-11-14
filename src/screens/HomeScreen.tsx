@@ -20,16 +20,16 @@ import { lastWeekReading, weighInDue } from '@/domain/weighIn';
 import type { Routine } from '@/domain/types';
 import { Button } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row, SectionTitle, Stat } from '@/ui/components/Card';
-import { Cabinet, LevelHeader } from '@/ui/LevelsCard';
+import { Cabinet, LevelHeader, LevelMark, started } from '@/ui/LevelsCard';
 import { BossCard } from '@/ui/BossCard';
 import { bossesBeaten, ensureBoss, loadBoss } from '@/db/bossQueries';
 import { loadGame } from '@/db/gameQueries';
-import { StreakDots } from '@/ui/components/CalendarHeatmap';
-import { Chip } from '@/ui/components/Chip';
+import { WeekStrip } from '@/ui/components/CalendarHeatmap';
+import { Chip, Segmented } from '@/ui/components/Chip';
 import { NumberInput } from '@/ui/components/NumberField';
 import { Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
-import { ChevronIcon, TopBar } from '@/ui/components/TopBar';
+import { ChevronIcon } from '@/ui/components/TopBar';
 import { CoachLine } from '@/ui/CoachLine';
 import { QuickSessionSheet } from '@/ui/QuickSessionSheet';
 import { RestoreSheet } from '@/ui/RestoreSheet';
@@ -60,6 +60,7 @@ export function HomeScreen() {
   const settings = useSettings();
   const [pending, setPending] = useState<Routine | null>(null);
   const [quickOpen, setQuickOpen] = useState(false);
+  const [tab, setTab] = useState<'week' | 'badges'>('week');
 
   // From the hook, never a bare toDateKey(): nothing on this screen is time-driven, so a plain
   // render-time read freezes on the day the screen mounted. Left open overnight it would show
@@ -171,10 +172,14 @@ export function HomeScreen() {
 
   return (
     <div>
-      <TopBar
-        title={welcomeLine(new Date().getHours())}
-        subtitle={new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }).format(dateKeyToDate(todayKey))}
-      />
+      {/* Open on the stage, no bar (v5): the level, then the welcome and the date as one two-tone serif sentence. */}
+      <header className="pt-safe px-4">
+        {/* Nothing scrolls under the status bar with no bar of its own to cover it. */}
+        <div aria-hidden="true" className="fixed inset-x-0 top-0 z-30 h-[var(--inset-top)] bg-bg" />
+        <div className="flex min-h-12 items-center pt-4">{game && <LevelMark game={game} />}</div>
+        <h1 className="serif mt-5 text-[2.25rem]">{welcomeLine(new Date().getHours())}</h1>
+        <p className="serif serif-quiet text-[2.25rem]">{new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }).format(dateKeyToDate(todayKey))}.</p>
+      </header>
       <div className="px-4">
         <QuoteOfTheDay today={todayKey} />
         <HistoryNoticeCard />
@@ -183,9 +188,31 @@ export function HomeScreen() {
 
         {review && <WeeklyReviewCard review={review} />}
 
-        {calendar && <StreakDots thisWeek={calendar.thisWeek} target={calendar.weeklyTarget} streak={calendar.streak} className="mt-3" />}
-
-        {game && <LevelHeader game={game} />}
+        {/* This week, and the badges a tab away once there are any. */}
+        {game && started(game) && (
+          <Segmented
+            tabs
+            className="mt-8"
+            value={tab}
+            onChange={setTab}
+            options={[
+              { value: 'week', label: 'This week', testId: 'tab-week' },
+              { value: 'badges', label: 'Badges', testId: 'tab-badges' },
+            ]}
+          />
+        )}
+        {tab === 'badges' && game && started(game) ? (
+          <div className="mt-5">
+            <LevelHeader game={game} />
+            <Cabinet game={game} />
+          </div>
+        ) : (
+          calendar && (
+            <div className={game && started(game) ? 'mt-4' : 'mt-8'}>
+              <WeekStrip week={calendar.grid[calendar.grid.length - 1]} today={todayKey} thisWeek={calendar.thisWeek} target={calendar.weeklyTarget} streak={calendar.streak} />
+            </div>
+          )
+        )}
 
         <SectionTitle right={<Button size="sm" variant="ghost" className="-my-2 -mr-3" onClick={() => nav('/routines')}>Edit</Button>}>Routines</SectionTitle>
         <div className="space-y-3" data-testid="routines-list">
@@ -194,7 +221,7 @@ export function HomeScreen() {
               <RoutineCard hero={i === 0} item={item} settings={settings} active={!!active} onStart={() => void start(item.routine)} />
               {/* The day's numbers and the boss sit under the routine that leads, so Start stays in reach above them. */}
               {i === 0 && todayOverlay}
-              {i === 0 && boss !== undefined && beatenBosses && <BossCard view={boss} beaten={beatenBosses} active={!!active} onFight={(r) => void start(r)} />}
+              {i === 0 && boss !== undefined && beatenBosses && <BossCard view={boss} beaten={beatenBosses} active={!!active} today={todayKey} onFight={(r) => void start(r)} />}
             </Fragment>
           ))}
           {routines && routines.length === 0 && <EmptyState>No routines. Add one from the Routines tab.</EmptyState>}
@@ -209,8 +236,6 @@ export function HomeScreen() {
 
         {/* With no routine to lay them over, the day's numbers stand on their own. */}
         {todayOverlay && (!routines || routines.length === 0) && <div className="mt-3">{todayOverlay}</div>}
-
-        {game && <Cabinet game={game} />}
 
         {/* The daily reminders sit under the training, small: not the first thing on opening the app. */}
         <SupplementsCard today={todayKey} />
@@ -440,9 +465,9 @@ function TodayFigure({ label, value, target, ratio, sub }: { label: string; valu
 function QuoteOfTheDay({ today }: { today: string }) {
   const q = quoteOfTheDay(today);
   return (
-    <figure className="pt-4" data-testid="quote-of-the-day">
-      <blockquote className="text-[17px] font-light leading-snug tracking-[-0.01em] text-fg">“{q.text}”</blockquote>
-      <figcaption className="mt-1.5 text-xs text-muted">{q.author}</figcaption>
+    <figure className="pt-5" data-testid="quote-of-the-day">
+      <blockquote className="max-w-[36ch] text-[15px] leading-snug text-muted">“{q.text}”</blockquote>
+      <figcaption className="mt-1 text-xs text-dim">{q.author}</figcaption>
     </figure>
   );
 }

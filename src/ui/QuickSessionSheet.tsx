@@ -193,7 +193,7 @@ function QuickSessionBody({ onClose }: { onClose: () => void }) {
           </div>
         }
       >
-        <Segmented value={mode} onChange={setMode} options={MODES} />
+        <Segmented tabs value={mode} onChange={setMode} options={MODES} />
 
         {!own && (
           <>

@@ -95,7 +95,7 @@ export function ExercisesScreen() {
           {loading ? 'Loading…' : libraryCountsLine(counts, status)}
         </div>
         <TextInput value={q} onChange={setQ} placeholder="Search" testId="exercise-search" />
-        <Segmented className="mt-3" value={scope} onChange={setScope} options={SCOPES} />
+        <Segmented tabs className="mt-3" value={scope} onChange={setScope} options={SCOPES} />
 
         <div className="no-scrollbar -mx-4 mt-3 flex gap-2 overflow-x-auto px-4">
           <Chip className="min-h-11" active={filter === 'all'} onClick={() => setFilter('all')}>

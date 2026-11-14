@@ -91,7 +91,7 @@ export function ProgressScreen() {
         }
       />
       <div className="px-4">
-        <Segmented value={window} onChange={setWindow} options={WINDOWS} />
+        <Segmented tabs value={window} onChange={setWindow} options={WINDOWS} />
         <div className="h-4" />
 
         {data === undefined && <div className="py-8 text-center text-sm text-muted">Loading…</div>}

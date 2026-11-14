@@ -6,7 +6,7 @@ import type { Settings } from '@/domain/types';
 import { Button } from '@/ui/components/Button';
 import { Card } from '@/ui/components/Card';
 import { Chip } from '@/ui/components/Chip';
-import { ChevronIcon } from '@/ui/components/TopBar';
+import { ArrowIcon, ChevronIcon } from '@/ui/components/TopBar';
 import { heroDemo, robotSrc } from '@/ui/demoPicture';
 import { ExerciseHero, RobotThumb } from '@/ui/ExerciseHero';
 import { useNextSessionPlan } from '@/ui/hooks';
@@ -42,11 +42,11 @@ export function RoutineCard({
     .filter(Boolean)
     .join(' · ');
 
-  const startButton = (variant: 'primary' | 'outline') =>
+  const startButton = () =>
     !active && (
       <Button
-        size={variant === 'primary' ? 'md' : 'sm'}
-        variant={variant}
+        size="sm"
+        variant="outline"
         data-testid={`start-${routine.name}`}
         disabled={empty}
         onClick={(e) => {
@@ -60,28 +60,46 @@ export function RoutineCard({
   const demo = heroDemo(item.demos);
 
   return (
-    <Card framed={hero} data-testid={`routine-card-${routine.name}`} className={hero ? 'overflow-hidden border-accent/60' : ''}>
+    <Card framed={hero} data-testid={`routine-card-${routine.name}`} className={hero ? 'overflow-hidden' : ''}>
       {hero ? (
-        // The most rested routine leads Home as an object: its lead lift's robot render (or the glow)
-        // with nothing written over it, then the name, how rested it is, what it holds, and Start as the cream pill.
+        // The most rested routine leads Home as an object: its lead lift's robot render under the arena's
+        // lights (or the glow), nothing written over it, then the name in the serif, how rested it is, and
+        // Start as the full-width cream pill.
         <>
-          <ExerciseHero demo={demo} className={robotSrc(demo) ? 'h-44' : 'h-16'} />
-          <div className="flex items-end gap-3 px-4 pb-4 pt-3">
-            <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} data-testid={`routine-toggle-${routine.name}`} className="min-w-0 flex-1 text-left">
-              <div className="disp break-words text-[2rem]">{routine.name}</div>
-              {item.label && (
-                <div className="mt-1 text-sm text-fg/85" data-testid={`routine-rest-${routine.name}`}>
-                  {item.label}
-                </div>
-              )}
+          <ExerciseHero demo={demo} arena className={robotSrc(demo) ? 'h-72' : 'h-16'} />
+          <div className="px-5 pb-5 pt-4">
+            <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} data-testid={`routine-toggle-${routine.name}`} className="block w-full text-left">
+              <div className="serif break-words text-[2.375rem]">{routine.name}</div>
+              <div className="mt-2 flex items-baseline justify-between gap-3">
+                {item.label ? (
+                  <div className="label min-w-0" data-testid={`routine-rest-${routine.name}`}>
+                    {item.label}
+                  </div>
+                ) : (
+                  <span />
+                )}
+                <div className="num shrink-0 text-xs text-muted">{detail}</div>
+              </div>
               {item.lastTop && (
-                <div className="mt-0.5 break-words text-sm text-muted" data-testid={`routine-top-${routine.name}`}>
+                <div className="mt-1 break-words text-[13px] text-muted" data-testid={`routine-top-${routine.name}`}>
                   Last: {keepTogether(item.lastTop)}
                 </div>
               )}
-              <div className="mt-0.5 break-words text-xs text-muted">{detail}</div>
             </button>
-            {!active && startButton('primary')}
+            {!active && (
+              <Button
+                size="lg"
+                full
+                variant="primary"
+                icon={<ArrowIcon />}
+                className="mt-5"
+                data-testid={`start-${routine.name}`}
+                disabled={empty}
+                onClick={onStart}
+              >
+                Start
+              </Button>
+            )}
           </div>
         </>
       ) : (
@@ -110,7 +128,7 @@ export function RoutineCard({
             </div>
             <ChevronIcon className={`shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
           </button>
-          {!active && <div className="flex items-center pl-1 pr-4">{startButton('outline')}</div>}
+          {!active && <div className="flex items-center pl-1 pr-4">{startButton()}</div>}
         </div>
       )}
       {open && <RoutinePlan routineId={routine.id} name={routine.name} settings={settings} />}

@@ -2,24 +2,23 @@ import type { HTMLAttributes, ReactNode } from 'react';
 
 /**
  * A block of content. By default it is open: no box, straight on the stage (`.plate` in
- * src/index.css), headed by a SectionTitle's rule and parted from a neighbour by a hairline.
+ * src/index.css), headed by a SectionTitle and parted from a neighbour by a hairline.
  * `framed` is for an object you pick up or act on (the lift in play, a notice, something the coach
- * drafted): a solid panel with a hairline edge.
+ * drafted): a soft dark plate with a lit top edge and no outline, as Third Space draws its cards.
  */
 export function Card({ className = '', framed = false, children, ...rest }: HTMLAttributes<HTMLDivElement> & { children: ReactNode; framed?: boolean }) {
   return (
-    <div {...rest} className={`${framed ? 'rounded-card border border-line bg-surface' : 'plate'} ${className}`}>
+    <div {...rest} className={`${framed ? 'rounded-card bg-surface shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]' : 'plate'} ${className}`}>
       {children}
     </div>
   );
 }
 
-/** A section's head: its name in the accent, a hairline running out to the edge, and what sits at the end of it. */
+/** A section's head: its name in small open capitals (`.cap`), and what sits at the far end of the line. */
 export function SectionTitle({ children, right, className = '' }: { children: ReactNode; right?: ReactNode; className?: string }) {
   return (
-    <div className={`flex min-h-6 items-center gap-3 pb-2 pt-8 ${className}`}>
-      <h2 className="label shrink-0 !text-accent">{children}</h2>
-      <span aria-hidden="true" className="h-px min-w-4 flex-1 bg-line" />
+    <div className={`flex min-h-6 items-center justify-between gap-3 pb-3 pt-8 ${className}`}>
+      <h2 className="cap shrink-0">{children}</h2>
       {right}
     </div>
   );

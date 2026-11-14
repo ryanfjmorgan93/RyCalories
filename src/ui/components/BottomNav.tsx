@@ -9,31 +9,36 @@ const tabs = [
 ];
 
 /**
- * The tab bar: an edge-to-edge strip of real glass under a hairline, each tab a fine line icon over
- * its name. The tab you are on has its icon in the accent and its name in cream. The row stays
- * --nav-h (4rem) tall, so every `pb-safe-nav*` padding and the rest timer's stacking line up as before.
+ * The tab bar (v5, November 2026): an island of real glass floating above the bottom edge, each tab
+ * a fine line icon over its name in small capitals. The tab you are on sits on a soft lit pill with
+ * its icon in the accent. The island leaves room at its right for the coach's disc (CoachFab), which
+ * floats in the same row, so neither covers the page. --nav-h is the island plus the gap under it.
  */
 export function BottomNav() {
   return (
-    <nav aria-label="Main" className="pb-safe glass-fixed fixed inset-x-0 bottom-0 z-30 border-t">
-      <div className="content-max mx-auto flex h-16 items-stretch px-1">
-        {tabs.map(({ to, label, icon: Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === '/'}
-            className={({ isActive }) => `flex flex-1 flex-col items-center justify-center gap-1 text-[11px] tracking-[0.02em] ${isActive ? 'font-medium text-fg' : 'text-muted'}`}
-          >
-            {({ isActive }) => (
-              <>
-                <span className={isActive ? 'text-accent' : ''}>
-                  <Icon />
-                </span>
-                <span>{label}</span>
-              </>
-            )}
-          </NavLink>
-        ))}
+    <nav aria-label="Main" className="pointer-events-none fixed inset-x-0 bottom-0 z-30" style={{ paddingBottom: 'calc(var(--inset-bottom) + 0.75rem)' }}>
+      <div className="content-max mx-auto px-4 pr-[5.25rem]">
+        <div className="glass-fixed pointer-events-auto grid h-16 grid-cols-5 items-center rounded-full px-1 shadow-[inset_0_0_0_1px_rgba(243,239,230,0.09),0_24px_48px_-16px_rgba(0,0,0,0.9)]">
+          {tabs.map(({ to, label, icon: Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === '/'}
+              className={({ isActive }) =>
+                `flex h-14 flex-col items-center justify-center gap-1 rounded-full text-[9px] font-medium uppercase tracking-[0.08em] ${isActive ? 'bg-fg/[0.08] text-fg' : 'text-muted'}`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <span className={isActive ? 'text-accent' : ''}>
+                    <Icon />
+                  </span>
+                  <span>{label}</span>
+                </>
+              )}
+            </NavLink>
+          ))}
+        </div>
       </div>
     </nav>
   );

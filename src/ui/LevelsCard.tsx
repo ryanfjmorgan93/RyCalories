@@ -2,47 +2,46 @@ import { useState } from 'react';
 import type { Game } from '@/db/gameQueries';
 import { badgeCount, nearestBadge } from '@/domain/badges';
 import { fmtNum } from '@/domain/format';
-import { SectionTitle } from './components/Card';
 import { Sheet } from './components/Sheet';
 import { Hex, Medallion, Segments } from './GameMarks';
 
 /**
  * Home's game, read off what was trained (db/gameQueries.ts): the total level in its hexagon with
  * the way to the next total-level badge, and the cabinet of badges, whose ladders open in a sheet.
- * (The strength figure between them is ui/StrengthBody.tsx.) Each shows nothing until there is
- * something true to show.
+ * Each shows nothing until there is something true to show.
  */
 
-const started = (game: Game) => badgeCount(game.ladders) > 0 || game.levels.some((l) => l.level.startIn === 0);
+export const started = (game: Game) => badgeCount(game.ladders) > 0 || game.levels.some((l) => l.level.startIn === 0);
 
-/** The total level, what has been done to earn it, and the blocks to the next total-level badge. */
+/** The total level as a small hexagon at the head of Home (v5), once there is one to show. */
+export function LevelMark({ game }: { game: Game }) {
+  if (!started(game)) return null;
+  return (
+    <div className="flex items-center gap-3">
+      <Hex size="sm">
+        <span className="num text-[17px] font-light leading-none" data-testid="total-level">
+          {game.total}
+        </span>
+      </Hex>
+      <span className="label">Total level</span>
+    </div>
+  );
+}
+
+/** What has been done to earn the total level, and the blocks to the next total-level badge. */
 export function LevelHeader({ game }: { game: Game }) {
   if (!started(game)) return null;
   const next = game.ladders.find((l) => l.id === 'level')?.next;
   return (
-    <section className="mt-4" data-testid="levels-card">
-      <div className="flex items-center gap-4">
-        <Hex size="lg">
-          <span className="text-[9px] font-medium uppercase tracking-[0.13em] text-muted">Total level</span>
-          <span className="num text-[44px] font-light leading-none" data-testid="total-level">
-            {game.total}
-          </span>
-        </Hex>
-        <div className="num min-w-0 space-y-1 text-sm text-muted">
-          <div>
-            <span className="text-lg font-medium text-fg">{badgeCount(game.ladders)}</span> badges held
-          </div>
-          <div>
-            <span className="text-lg font-medium text-fg">{game.sessions}</span> sessions
-          </div>
-          <div>
-            <span className="text-lg font-medium text-fg">{fmtNum(Math.round(game.liftedKg / 100) / 10)}</span> tonnes lifted
-          </div>
-        </div>
+    <section data-testid="levels-card">
+      <div className="num grid grid-cols-3 gap-3">
+        <Figure value={badgeCount(game.ladders)} label="badges held" />
+        <Figure value={game.sessions} label="sessions" />
+        <Figure value={fmtNum(Math.round(game.liftedKg / 100) / 10)} label="tonnes lifted" />
       </div>
       {next && (
         <>
-          <Segments percent={Math.min(99, Math.floor(next.done * 100 + 1e-6))} label={`To ${next.name}`} className="mt-3 h-2" />
+          <Segments percent={Math.min(99, Math.floor(next.done * 100 + 1e-6))} label={`To ${next.name}`} className="mt-5 h-2" />
           <div className="num mt-1.5 flex justify-between text-xs text-muted">
             <span>Badge at level {next.chip}</span>
             <span className="text-accent">{next.toGo}</span>
@@ -50,6 +49,15 @@ export function LevelHeader({ game }: { game: Game }) {
         </>
       )}
     </section>
+  );
+}
+
+function Figure({ value, label }: { value: number | string; label: string }) {
+  return (
+    <div>
+      <div className="text-[28px] font-light leading-none tracking-[-0.02em] text-fg">{value}</div>
+      <div className="mt-1.5 text-xs text-muted">{label}</div>
+    </div>
   );
 }
 
@@ -61,8 +69,7 @@ export function Cabinet({ game }: { game: Game }) {
   if (badges === 0 && !nearest) return null;
   if (!started(game)) return null;
   return (
-    <section>
-      <SectionTitle right={<span className="num pb-px text-xs text-muted">{badges} held</span>}>The cabinet</SectionTitle>
+    <section className="mt-6">
       <button type="button" className="no-scrollbar flex min-h-11 w-full gap-3 overflow-x-auto text-left" onClick={() => setOpen(true)} data-testid="badges-row">
         {game.ladders
           .filter((l) => l.chips.length > 0)

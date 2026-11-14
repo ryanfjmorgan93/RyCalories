@@ -175,6 +175,7 @@ export function BodyMap({
   return (
     <div>
       <Segmented
+        tabs
         value={mode}
         onChange={setMode}
         options={[

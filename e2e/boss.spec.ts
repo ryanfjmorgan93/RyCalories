@@ -41,7 +41,7 @@ test('a weekly boss: the squat\'s best set after three sessions, Fight starts it
   // 100 × 5 is a size of 116.67; the plan's 100 kg × 6 is 120, the fewest reps that beat it.
   const boss = page.getByTestId('boss');
   await expect(boss.getByTestId('boss-name')).toHaveText('Barbell Back Squat');
-  await expect(boss.getByTestId('boss-best')).toHaveText(`Best 100 kg × 5 · ${fmtDateKey(toDateKey(new Date()))}`);
+  await expect(boss.getByTestId('boss-best')).toHaveText(`Boss100 kg × 5Best · ${fmtDateKey(toDateKey(new Date()))}`);
   await expect(boss.getByTestId('boss-health')).toHaveAttribute('aria-valuenow', '100');
   await expect(boss.getByTestId('boss-attack')).toHaveText('Your attack100 kg × 6Lower (Squat)');
 

@@ -35,20 +35,22 @@ function RobotMark({ size }: { size: number }) {
 }
 
 /**
- * The way to the coach from every screen: a quiet dark disc bottom-right with the coach's mark, opening the coach sheet (its text field and microphone are inside). It sits above whatever
- * else is pinned to the bottom: the tab bar, the session dock and a running rest timer, using the
- * same height variables they do, so the four never overlap. Hidden while the sheet is open.
+ * The way to the coach from every screen: a glass disc with the coach's mark, opening the coach
+ * sheet (its text field and microphone are inside). Off a session it floats in the tab island's row,
+ * to its right, so it never covers the page; in a session it sits above a running rest timer.
+ * Hidden while the sheet is open.
  */
-export function CoachFab({ inSession = false, dock = false, testId = 'coach-fab' }: { inSession?: boolean; dock?: boolean; testId?: string }) {
+export function CoachFab({ inSession = false, testId = 'coach-fab' }: { inSession?: boolean; testId?: string }) {
   const open = useCoachSheet((s) => s.open);
   const openCoach = useCoachSheet((s) => s.openCoach);
   const resting = useTimer((s) => s.endsAt !== null);
   if (open) return null;
+  // Off the session the disc floats in the tab island's row, to its right; in a session, above the
+  // rest timer as before.
   const stack = [
     'var(--inset-bottom)',
-    inSession ? '0.75rem' : 'var(--nav-h) + 0.75rem',
-    dock && !inSession ? 'var(--dock-h) + 0.5rem' : null,
-    resting ? 'var(--timer-h)' : null,
+    '0.75rem',
+    inSession && resting ? 'var(--timer-h)' : null,
   ]
     .filter(Boolean)
     .join(' + ');
@@ -59,7 +61,7 @@ export function CoachFab({ inSession = false, dock = false, testId = 'coach-fab'
         aria-label="Coach"
         data-testid={testId}
         onClick={() => openCoach()}
-        className="pointer-events-auto flex h-14 w-14 items-center justify-center rounded-full border border-fg/15 bg-surface text-fg shadow-[0_10px_24px_-10px_rgba(0,0,0,0.9)] transition-transform duration-150 active:scale-95"
+        className="glass-fixed pointer-events-auto flex h-16 w-16 items-center justify-center rounded-full text-fg shadow-[inset_0_0_0_1px_rgba(243,239,230,0.09),0_24px_48px_-16px_rgba(0,0,0,0.9)] transition-transform duration-150 active:scale-95"
       >
         <CoachMark size={28} />
       </button>

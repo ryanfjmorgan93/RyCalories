@@ -109,7 +109,7 @@ export function ExerciseDetailScreen() {
 
         <SectionTitle>Chart</SectionTitle>
         <div data-testid="chart-mode">
-          <Segmented value={chartMode} onChange={setChartMode} options={CHART_MODES} />
+          <Segmented tabs value={chartMode} onChange={setChartMode} options={CHART_MODES} />
         </div>
         <div className="h-3" />
         <Card className="p-3">

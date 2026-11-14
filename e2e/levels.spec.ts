@@ -94,6 +94,7 @@ test('a Level under the exercise: three sessions set the start, the fourth level
   await expect(page.getByTestId('total-level')).toHaveText('1');
   // The cabinet: the squat's highest mark, then the next badge nearest (four sessions of ten is
   // further along than 106 kg of the way from 100 to 120), as its mark "10" and "6 to go".
+  await page.getByTestId('tab-badges').click();
   await expect(page.getByTestId('badges-row')).toHaveText('100 kgBarbell Back Squat106 to go');
   await page.getByTestId('badges-row').click();
   await expect(page.getByTestId('badge-ladder')).toHaveText([

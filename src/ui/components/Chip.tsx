@@ -48,12 +48,33 @@ export function Segmented<T extends string>({
   onChange,
   options,
   className = '',
+  tabs = false,
 }: {
   value: T;
   onChange: (v: T) => void;
   options: { value: T; label: ReactNode; testId?: string }[];
   className?: string;
+  /** Switches what a screen shows (a range, a view) rather than setting a value: drawn as Third Space's underlined caps (v5). */
+  tabs?: boolean;
 }) {
+  if (tabs)
+    return (
+      <div className={`flex gap-7 border-b border-line ${className}`} role="radiogroup">
+        {options.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={o.value === value}
+            data-testid={o.testId}
+            onClick={() => onChange(o.value)}
+            className={`-mb-px min-h-11 border-b text-[11px] font-medium uppercase tracking-[0.2em] transition-colors ${o.value === value ? 'border-fg text-fg' : 'border-transparent text-muted'}`}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    );
   return (
     <div className={`grid h-12 w-full rounded-full border border-fg/20 p-1 ${className}`} style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }} role="radiogroup">
       {options.map((o) => (

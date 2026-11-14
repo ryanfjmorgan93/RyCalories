@@ -62,7 +62,7 @@ function Shell() {
       {/* Room to scroll the last row clear of the floating coach button. */}
       {pathname !== '/coach' && <div aria-hidden="true" className="h-18" />}
       {dock && <SessionDock session={dock} />}
-      {pathname !== '/coach' && <CoachFab dock={!!dock} />}
+      {pathname !== '/coach' && <CoachFab />}
       <BottomNav />
     </div>
   );
