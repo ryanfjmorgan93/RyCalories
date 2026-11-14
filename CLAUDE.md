@@ -42,6 +42,12 @@ here each is plain `<name>`. Where it differs from this file, this file wins: bu
 the Ponytail way, any subagent it starts runs on Sonnet, and its design docs go in
 `docs/superpowers/specs/`.
 
+Unslop (heydamir/unslop at 97daa3e, CC BY 4.0, licence in `.claude/skills/UNSLOP-LICENSE`), copied
+by hand at the owner's request in November 2026: `/unslop` finds and fixes what makes a screen look
+AI-made. Where it differs from this file or docs/DESIGN.md, they win: the owner's own look stays,
+including the uppercase brass labels and the hexagons it would otherwise flag, and building is still
+the Ponytail way.
+
 ## Verification
 
 The owner does not check on device. Correctness has to come from the code and the tests.
