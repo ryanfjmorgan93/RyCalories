@@ -1,0 +1,33 @@
+name: Delete old artifacts
+
+# A one-off clean-up (November 2026): GitHub warned the owner their Actions storage, 0.5 GB shared by
+# every repo, was 90% full, mostly 90 days of APK artifacts from this repo. The APK step now keeps
+# one for a day. This deletes every artifact older than a day: it runs when this file is pushed, and
+# by hand from the Actions tab if it is ever needed again.
+on:
+  push:
+    branches: ['claude/workout-logger-progression-rgm067']
+    paths: ['.github/workflows/delete-old-artifacts.yml']
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  delete:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete artifacts older than a day
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          cutoff=$(date -u -d '1 day ago' +%Y-%m-%dT%H:%M:%SZ)
+          gh api --paginate "repos/$REPO/actions/artifacts?per_page=100" \
+            --jq ".artifacts[] | select(.created_at < \"$cutoff\") | \"\(.id) \(.size_in_bytes)\"" > old.txt
+          count=$(wc -l < old.txt)
+          mb=$(awk '{s+=$2} END {printf "%.0f", s/1048576}' old.txt)
+          echo "Deleting $count artifacts older than $cutoff, ${mb} MB."
+          while read -r id size; do gh api -X DELETE "repos/$REPO/actions/artifacts/$id"; done < old.txt
+          left=$(gh api "repos/$REPO/actions/artifacts?per_page=1" --jq '.total_count')
+          echo "Artifacts left: $left"

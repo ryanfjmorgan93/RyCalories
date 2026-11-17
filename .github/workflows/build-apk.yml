@@ -67,11 +67,14 @@ jobs:
           cp android/app/build/outputs/apk/release/app-release.apk iron-${{ github.sha }}.apk
           cp android/app/build/outputs/apk/release/app-release.apk iron.apk
 
+      # Kept a day: long enough to fetch and check the build just pushed. The account's Actions
+      # storage is 0.5 GB shared by every repo, and 90 days of 18 MB APKs filled it (November 2026).
+      # The iron-latest release below keeps the newest APK for good, outside that storage.
       - uses: actions/upload-artifact@v4
         with:
           name: iron-apk
           path: iron-${{ github.sha }}.apk
-          retention-days: 90
+          retention-days: 1
 
       # Every push also refreshes a rolling "iron-latest" release so the APK has a stable download link.
       # (The "latest" tag belongs to the meal-tracker app in this repo; keep the two apart.)
@@ -94,7 +97,7 @@ jobs:
 
       # The rolling release accumulated eleven SHA-named APKs before it carried a stable filename.
       # Prune anything that is not the current one, so the release page always offers exactly one
-      # file and there is nothing to choose between. Workflow artifacts keep the per-commit builds.
+      # file and there is nothing to choose between.
       - name: Prune stale release assets
         if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/claude/workout-logger')
         env:
