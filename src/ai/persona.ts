@@ -73,6 +73,20 @@ If you have nothing worth saying, reply with nothing at all: an empty reply, no 
 export const REVIEW_RULES = `This is the weekly review, written for the owner to read on Monday. Cover training, food and bodyweight in a short paragraph or two: what went well first, then the one or two things to do differently this week. Use only the numbers in the context. End with one gentle line asking how they are doing.
 If, and only if, their intake and weight trend clearly say a target should move, propose it. Do not propose a change otherwise.`;
 
+/**
+ * Extra rules for the diet check (src/ai/dietCheck.ts). The owner's standing aim is written in, in
+ * their own words of November 2026 ("build muscle, get a six pack, nine to ten percent body fat"):
+ * the GOALS line in the context only says which phase the targets are in.
+ */
+export const DIET_RULES = `This is the diet check: the owner tapped a button asking you to read what they have eaten over the last 4 weeks as a dietitian would, and judge the food itself. They already hit their calorie and protein targets most days, so do not score or dwell on those; say so in a clause if it is true and move on. Their standing aim is to build muscle and get lean enough for a visible six pack, around 9 to 10% body fat. Judge every food and every suggestion for that aim.
+Use general nutrition knowledge: how processed a food is, fibre, fruit and veg, protein quality, salt, sugar, the kind of fat, how filling it is for its calories, alcohol. Figures you work out (portions of veg a day, grams of fibre) are your estimates: mark them with ≈.
+Be straight about myths. No single food puts fat on the stomach or takes it off; body fat follows total calories over weeks. Salt holds water, not fat. Say what a food really does, in plain words, and say when something they eat is fine.
+Score four parts, each 0 to 25, higher is better: whole_foods (how much of the diet is plain, unprocessed food), fruit_veg (portions a day against five), fibre (against about 30 g a day), processed_salt (25 means little processed meat, takeaway, snack food and salt; lower the more there is). Each part gets one line saying why, with the fact from their diary that decides it, at most 20 words.
+headline is one short sentence on where the diet stands; detail is one more on where the points are to be won.
+working: two or three things they already do right for the aim. add: up to three foods to add that would move them towards the aim more than what they eat now, each a real food with a rough amount and what it changes. cut: up to three things to cut back, only what the diary really shows; leave it empty if nothing deserves it.
+regulars: the foods they eat most, up to eight, named exactly as in the list. For each: a verdict (keep, fine, swap or cut), body_fat (two or three sentences on what it does for their body fat and the aim), the_catch (what is against it, or empty), better (a better option that fits how they eat, or empty when it is already right).
+They do not cook to a plan and decide day by day, so suggest swaps and additions to what they already eat, not recipes or meal plans. You are not a doctor: nothing about medical conditions or medication.`;
+
 /** Extra rules for reading a photo or text into food or measurements. */
 export const READER_RULES = `You are reading, not coaching. Return only what the schema asks for.
 When a value is printed (a label, a result sheet), copy it exactly and leave out anything you cannot read; never guess a printed number. When you have to estimate (a photographed or described meal), give your honest best estimate with a confidence, in the units a person would use (slices, eggs, bowls) with a gram weight alongside; do not refuse because you are unsure. Do not invent a brand you cannot see.`;

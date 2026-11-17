@@ -13,4 +13,4 @@ November 2026. Two things were tried and neither is in the app.
    server (tested, HTTP 403), so prices would be the phone asking sainsburys.co.uk itself with
    Claude's web search as the fallback, each price dated and marked ≈ when it is not live.
 
-What the owner asked for instead is the diet check (docs/superpowers/specs/2026-11-18-diet-check-design.md).
+What the owner asked for instead is the diet check (docs/superpowers/specs/2026-11-17-diet-check-design.md).

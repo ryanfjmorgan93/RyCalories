@@ -484,6 +484,8 @@ export interface Settings {
   /** Year of birth and sex, used only to compare lifts with lifters at meets (src/domain/liftStandards.ts). Absent = not given. */
   birthYear?: number;
   sex?: 'male' | 'female';
+  /** The last diet check, kept so the screen and a food's sheet read it without asking again (src/ai/dietCheck.ts). */
+  dietCheck?: import('./dietCheck').DietCheck;
   // `weeklyShop`, `shop` and `shopFoods` may sit on a row written by build 163 (the weekly shop
   // list, removed at the owner's request, November 2026). Nothing reads them.
 }
