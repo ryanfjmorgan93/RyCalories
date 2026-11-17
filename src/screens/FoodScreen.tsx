@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
-import { addDays, isoToDateKey } from '@/domain/dates';
+import { addDays, dateKeyToDate, isoToDateKey } from '@/domain/dates';
 import { fmtDayKey, fmtGrams, fmtKcal, fmtNum, fmtTime, plural } from '@/domain/format';
 import { ESTIMATE_MARK, isEstimate } from '@/domain/claudeFood';
 import { ZERO } from '@/domain/food';
@@ -32,6 +32,7 @@ import {
 import { Button, IconButton } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row } from '@/ui/components/Card';
 import { MacroLine, TargetBar } from '@/ui/components/MacroBar';
+import { WeeklyShopRow } from '@/ui/WeeklyShopRow';
 import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { BackIcon, ChevronIcon, MoreIcon, PlusIcon } from '@/ui/components/TopBar';
@@ -91,6 +92,7 @@ export function FoodScreen() {
 
   const yesterday = addDays(today, -1);
   const isToday = date === today;
+  const sunday = dateKeyToDate(today).getDay() === 0;
 
   // "Copy yesterday" shows on an empty day whose previous day has food. Both counts come from one
   // live query that says which day it answered for: dexie-react-hooks keeps its previous result
@@ -151,6 +153,8 @@ export function FoodScreen() {
             NOT keyed: it reads a window ending on the day, and keeping it mounted lets it move from
             one window to the next without blanking. The actions sit above the meals, so Add food
             stays in reach however long the day's list grows; the week sits under them. */}
+        {/* The weekly shop leads on a Sunday, the day it is bought; the rest of the week it waits at the foot. */}
+        {isToday && sunday && <WeeklyShopRow today={today} className="mb-6 mt-2" />}
         <DaySummary key={`summary-${date}`} date={date} today={today} />
         <FoodCoachLines date={date} today={today} />
         {isToday && <UsualMeals date={date} slot={defaultSlot()} />}
@@ -185,6 +189,7 @@ export function FoodScreen() {
         <div className="h-8" />
         <DayMeals key={`meals-${date}`} date={date} isToday={isToday} onMenu={setMenuFor} />
         <div className="h-4" />
+        {isToday && !sunday && <WeeklyShopRow today={today} className="mb-4" />}
         <FoodWeekStrip date={date} today={today} onPick={setDate} />
         <div className="h-8" />
       </div>

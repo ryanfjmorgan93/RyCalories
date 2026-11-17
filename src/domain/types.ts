@@ -484,6 +484,12 @@ export interface Settings {
   /** Year of birth and sex, used only to compare lifts with lifters at meets (src/domain/liftStandards.ts). Absent = not given. */
   birthYear?: number;
   sex?: 'male' | 'female';
+  /** The weekly shop (a test feature, docs/superpowers/specs/2026-11-17-weekly-shop-design.md): shown unless false. */
+  weeklyShop?: boolean;
+  /** The week being shopped for (its Monday) and the owner's changes to its lines, by food key. */
+  shop?: { week: string; lines: Record<string, import('./weeklyShop').LineState> };
+  /** The owner's pack and aisle fixes per food key, kept across weeks. */
+  shopFoods?: Record<string, import('./weeklyShop').FoodFix>;
 }
 
 export const DEFAULT_SETTINGS: Omit<Settings, 'id' | 'createdAt'> = {

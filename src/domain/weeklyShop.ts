@@ -4,7 +4,7 @@
  * the week's targets. Pure: the eating, the remembered packs and what the owner changed come in.
  */
 import { addMacros, scaleMacros, ZERO, type Macros } from './food';
-import { addDays, mondayOf } from './dates';
+import { addDays, dateKeyToDate, mondayOf } from './dates';
 
 export const AISLES = ['Fruit and veg', 'Meat and fish', 'Dairy and eggs', 'Bakery', 'Cupboard', 'Frozen', 'Other'] as const;
 export type Aisle = (typeof AISLES)[number];
@@ -32,6 +32,23 @@ export function aisleOfCode(code: string): Aisle {
     default:
       return 'Other';
   }
+}
+
+/** Words that say where a food is, first match wins: a guess the owner can change per food. */
+const AISLE_WORDS: [Aisle, RegExp][] = [
+  ['Frozen', /\bfrozen\b/],
+  ['Meat and fish', /\b(chicken|beef|pork|lamb|mince|steak|turkey|ham|bacon|sausages?|salmon|tuna|cod|haddock|prawns?|fish|duck)\b/],
+  ['Dairy and eggs', /\b(milk|yogh?urt|cheese|cheddar|mozzarella|feta|eggs?|butter|cream|skyr|quark|kefir|fromage)\b/],
+  ['Bakery', /\b(bread|bagels?|wraps?|tortillas?|rolls?|pittas?|muffins?|croissants?|crumpets?)\b/],
+  ['Fruit and veg', /\b(apples?|bananas?|berries|blueberries|strawberries|raspberries|grapes|oranges?|pears?|melon|mango|kiwi|lemons?|limes?|avocados?|potatoes?|sweet potato|onions?|garlic|carrots?|broccoli|spinach|kale|lettuce|salad|tomatoes?|peppers?|cucumber|courgettes?|mushrooms?|peas|sweetcorn|vegetables?|veg)\b/],
+  ['Cupboard', /\b(oats?|porridge|rice|pasta|noodles|cereal|granola|whey|protein powder|oil|beans|lentils|chickpeas|nuts?|almonds|peanut butter|honey|jam|sauce|stock|flour|sugar|chocolate|crisps|biscuits?|coffee|tea)\b/],
+];
+
+/** A food's aisle from its name: the UK table's group when the name is one of its foods, else its words. */
+export function aisleOfName(name: string, tableCode: string | undefined): Aisle | undefined {
+  if (tableCode) return aisleOfCode(tableCode);
+  const n = name.toLowerCase();
+  return AISLE_WORDS.find(([, re]) => re.test(n))?.[0];
 }
 
 /** One food eaten in the window, already one that can be bought (not a Claude estimate). */
@@ -217,3 +234,10 @@ export function weekText(line: ShopLine): string {
   return fmtWeight(line.week);
 }
 
+
+/** The week shopped for, from its Monday: "23 to 29 Nov", or "30 Nov to 6 Dec" across a month. */
+export function fmtWeekRange(monday: string): string {
+  const day = (k: string, month: boolean) => new Intl.DateTimeFormat('en-GB', month ? { day: 'numeric', month: 'short' } : { day: 'numeric' }).format(dateKeyToDate(k));
+  const sunday = addDays(monday, 6);
+  return `${day(monday, monday.slice(5, 7) !== sunday.slice(5, 7))} to ${day(sunday, true)}`;
+}

@@ -463,4 +463,12 @@ test('capture every screen for a design session', async ({ page, browser, contex
   await page.waitForURL(/\/food\/recipes$/);
   await expect(page.getByTestId('recipe-row-Omelette')).toBeVisible();
   await shot(page, 'recipes-list');
+
+  // 38 Weekly shop — the plan, then in the shop
+  await page.goto('/food/shop');
+  await expect(page.getByTestId('shop-line').first()).toBeVisible();
+  await shot(page, 'weekly-shop-plan', { full: true });
+  await page.getByTestId('shop-tab-shop').click();
+  await expect(page.getByTestId('shop-trolley')).toBeVisible();
+  await shot(page, 'weekly-shop-in-the-shop', { full: true });
 });

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { Macros } from './food';
 import {
   aisleOfCode,
+  aisleOfName,
+  fmtWeekRange,
   fmtWeight,
   moreOfTheSame,
   packText,
@@ -39,6 +41,19 @@ describe('aisleOfCode', () => {
     expect(aisleOfCode('13-010')).toBe('Fruit and veg');
     expect(aisleOfCode('11-001')).toBe('Cupboard');
     expect(aisleOfCode('15-001')).toBe('Other');
+  });
+});
+
+describe('aisleOfName', () => {
+  it('takes the UK table\'s group first, then the words, else no guess', () => {
+    expect(aisleOfName('Rice, white, basmati, raw', '11-857')).toBe('Cupboard');
+    expect(aisleOfName('Chicken thigh', undefined)).toBe('Meat and fish');
+    expect(aisleOfName('Greek yoghurt 0%', undefined)).toBe('Dairy and eggs');
+    expect(aisleOfName('Frozen peas', undefined)).toBe('Frozen');
+    expect(aisleOfName('Wholemeal bread', undefined)).toBe('Bakery');
+    expect(aisleOfName('Bananas', undefined)).toBe('Fruit and veg');
+    expect(aisleOfName('Porridge oats', undefined)).toBe('Cupboard');
+    expect(aisleOfName('Protein shake', undefined)).toBeUndefined();
   });
 });
 
@@ -141,5 +156,12 @@ describe('fmtWeight', () => {
     expect(fmtWeight(560)).toBe('560 g');
     expect(fmtWeight(1400)).toBe('1.4 kg');
     expect(fmtWeight(2250)).toBe('2.3 kg');
+  });
+});
+
+describe('fmtWeekRange', () => {
+  it('names the month once, or both across a month', () => {
+    expect(fmtWeekRange('2026-11-23')).toBe('23 to 29 Nov');
+    expect(fmtWeekRange('2026-11-30')).toBe('30 Nov to 6 Dec');
   });
 });

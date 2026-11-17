@@ -300,7 +300,7 @@ test.describe('the coach in a session', () => {
     await closeSheet(page);
     await page.goto('/food');
     // The Food screen reads the same rows: one item left in dinner.
-    await expect(page.getByRole('button', { name: /^Dinner Dinner · .* · 1 item$/ })).toBeVisible();
+    await expect(page.getByTestId('meal-row').filter({ hasText: 'Dinner' })).toContainText('1 item');
   });
 
   test('"start push day" starts the session and the app opens it; a calorie target asked for is set at once', async ({ page }) => {
