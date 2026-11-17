@@ -36,7 +36,7 @@ async function logMeal(page: Page, date: string, meal: { name: string; food: str
 }
 
 /** The meal's row on the Food screen, found through its own "more" button. */
-const mealRow = (page: Page, name: string) => page.locator('div.min-h-14', { has: page.getByTestId(`meal-more-${name}`) });
+const mealRow = (page: Page, name: string) => page.getByTestId('meal-row').filter({ hasText: name });
 
 test.describe('copy yesterday', () => {
   test.beforeEach(async ({ page }) => {

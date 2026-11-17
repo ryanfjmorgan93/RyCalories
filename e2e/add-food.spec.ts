@@ -116,7 +116,7 @@ test.describe('add food', () => {
     // Two eggs at 50 g, at the table's 131 kcal per 100 g.
     await expect(page.getByTestId('calories-bar')).toContainText('131 kcal');
     await expect(page.getByTestId('meal-more-Lunch')).toBeVisible();
-    await expect(page.getByText(/^Lunch · .*1 item$/)).toBeVisible();
+    await expect(page.getByTestId('meal-row').filter({ hasText: 'Lunch' })).toContainText('1 item');
     await expect(page.getByTestId('toast')).toContainText('Logged to Lunch · 131 kcal');
 
     const meals = await rawMeals(page);
@@ -170,7 +170,7 @@ test.describe('add food', () => {
     await expect(page.getByTestId('calories-bar')).toContainText('396 kcal');
 
     // One meal, two foods — not a meal each.
-    await expect(page.getByText(/^Dinner · .*2 items$/)).toBeVisible();
+    await expect(page.getByTestId('meal-row').filter({ hasText: 'Dinner' })).toContainText('2 items');
     expect(await rawMeals(page)).toHaveLength(1);
   });
 

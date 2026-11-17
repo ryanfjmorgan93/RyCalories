@@ -173,7 +173,7 @@ test.describe('Claude logs food', () => {
     // The eggs are the UK table's (131 kcal per 100 g, two at 50 g); the toast is Claude's 210.
     await expect(page.getByTestId('calories-bar')).toContainText('341 kcal');
     await expect(page.getByTestId('meal-more-Dinner')).toBeVisible();
-    await expect(page.getByText(/^Dinner · .*2 items$/)).toBeVisible();
+    await expect(page.getByTestId('meal-row').filter({ hasText: 'Dinner' })).toContainText('2 items');
     await expect(page.getByText('≈ 341 kcal')).toBeVisible();
 
     const meals = await rawAll<RawMeal>(page, 'meals');
