@@ -17,6 +17,9 @@ const tabs = [
 export function BottomNav() {
   return (
     <nav aria-label="Main" className="pointer-events-none fixed inset-x-0 bottom-0 z-30" style={{ paddingBottom: 'calc(var(--inset-bottom) + 0.75rem)' }}>
+      {/* The page fades out under the island and the coach's disc, so neither sits on top of a
+          chart or a row half-seen through the glass: the band they float in is the stage. */}
+      <div aria-hidden="true" className="absolute inset-x-0 bottom-0 -z-10 h-[calc(100%+2.5rem)] bg-gradient-to-t from-bg from-55% to-transparent" />
       <div className="content-max mx-auto px-4 pr-[5.25rem]">
         <div className="glass-fixed pointer-events-auto grid h-16 grid-cols-5 items-center rounded-full px-1 shadow-[inset_0_0_0_1px_rgba(243,239,230,0.09),0_24px_48px_-16px_rgba(0,0,0,0.9)]">
           {tabs.map(({ to, label, icon: Icon }) => (

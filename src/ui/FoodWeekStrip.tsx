@@ -11,7 +11,7 @@ const BAR_PX = 56;
 
 /**
  * Seven days of calories against each day's own target, ending today. Tapping a day shows it.
- * It never flatters (see `domain/foodWeek.ts`): a day with nothing logged is an empty dashed box
+ * It never flatters (see `domain/foodWeek.ts`): a day with nothing logged is a faint stub on the floor
  * and a dash, not a short bar and a zero, and a day over its target is drawn to its real height
  * in the warning colour with the real figure under it.
  */
@@ -30,10 +30,10 @@ export function FoodWeekStrip({ date, today, onPick }: { date: string; today: st
   const anyUnlogged = week?.some((d) => d.state === 'unlogged') ?? false;
 
   return (
-    <Card className="p-3" data-testid="week-strip">
-      <div className="flex items-baseline justify-between pb-2">
-        <span className="label">Last 7 days</span>
-        <span className="text-[11px] text-muted">
+    <Card framed className="px-3 pb-3 pt-4" data-testid="week-strip">
+      <div className="flex items-baseline justify-between px-2 pb-3">
+        <span className="text-[11px] font-medium uppercase tracking-[0.2em]">Last 7 days</span>
+        <span className="text-[11px] text-dim">
           {anyTarget && <span className="mr-2">┄ target</span>}
           {anyUnlogged && <span>— not logged</span>}
         </span>
@@ -78,23 +78,23 @@ function Cell({
       aria-pressed={selected}
       data-testid={`week-day-${day.date}`}
       data-state={day.state}
-      className={`flex min-h-[7rem] min-w-0 flex-col items-center justify-end gap-1 rounded-control px-0.5 pb-1 pt-1 active:bg-surface-2 ${selected ? 'bg-surface-2 ring-1 ring-accent' : ''}`}
+      className={`flex min-h-[7rem] min-w-0 flex-col items-center justify-end gap-1.5 rounded-control px-0.5 pb-1.5 pt-1 active:bg-fg/[0.06] ${selected ? 'bg-fg/[0.06]' : ''}`}
     >
       <div className="relative w-full" style={{ height: BAR_PX }}>
         {day.state === 'unlogged' ? (
-          <div className="absolute inset-x-2 bottom-0 top-3 rounded-md border border-dashed border-line" />
+          <div className="absolute inset-x-3 bottom-0 h-1 rounded-full bg-fg/[0.08]" />
         ) : (
           <div
-            className={`absolute inset-x-2 bottom-0 rounded-t-md ${over ? 'bg-warn' : 'bg-accent'}`}
+            className={`absolute inset-x-3 bottom-0 rounded-[4px] ${over ? 'bg-warn' : 'bg-accent'}`}
             style={{ height: `${Math.max(day.heightPct, day.kcal ? 4 : 0)}%`, minHeight: day.kcal ? 3 : 0 }}
           />
         )}
         {day.targetPct !== undefined && (
-          <div className="absolute inset-x-0 border-t border-dashed border-fg/70" style={{ bottom: `${day.targetPct}%` }} />
+          <div className="absolute inset-x-1 border-t border-dashed border-fg/35" style={{ bottom: `${day.targetPct}%` }} />
         )}
       </div>
-      <span className={`text-xs ${today ? 'font-extrabold text-fg' : 'font-semibold text-muted'}`}>{day.weekday}</span>
-      <span className={`num text-[11px] leading-none tabular-nums ${over ? 'font-bold text-warn' : day.state === 'unlogged' ? 'text-dim' : 'text-fg'}`}>
+      <span className={`text-xs ${today || selected ? 'font-medium text-fg' : 'text-muted'}`}>{day.weekday}</span>
+      <span className={`num text-[11px] leading-none tabular-nums ${over ? 'font-medium text-warn' : day.state === 'unlogged' ? 'text-dim' : 'text-muted'}`}>
         {day.state === 'unlogged' ? '—' : fmtNum(day.kcal ?? 0)}
       </span>
     </button>

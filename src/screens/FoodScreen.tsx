@@ -31,7 +31,7 @@ import {
 } from '@/db/foodRepo';
 import { Button, IconButton } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row } from '@/ui/components/Card';
-import { MacroLine, MacroSplit, TargetBar } from '@/ui/components/MacroBar';
+import { MacroLine, TargetBar } from '@/ui/components/MacroBar';
 import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { BackIcon, ChevronIcon, MoreIcon, PlusIcon } from '@/ui/components/TopBar';
@@ -156,35 +156,33 @@ export function FoodScreen() {
         {isToday && <UsualMeals date={date} slot={defaultSlot()} />}
         <div className="h-4" />
 
-        {copyable > 0 && (
-          // Its own full-width row above the others: "Copy yesterday · 2 meals" does not fit
-          // beside Repeat and Recipes on a phone. It says "yesterday" only while today is the day
-          // shown; on any other day the source is the day before that one, and it says so.
-          <div className="pb-3">
-            <Button size="lg" variant="secondary" full disabled={copyingDay} onClick={() => void copyPreviousDay()} data-testid="copy-yesterday">
-              {`Copy ${isToday ? 'yesterday' : 'day before'} · ${plural(copyable, 'meal')}`}
-            </Button>
-          </div>
-        )}
         {/* One button for the usual case: search or scan, tap an amount, done. Meals stay the
             grouping — Add meal is still here, for composing one by hand. */}
         <Button size="lg" variant="primary" full icon={<PlusIcon />} onClick={() => setAddFood({})} data-testid="add-food-button">
           Add food
         </Button>
-        <div className="mt-3 grid grid-cols-3 gap-3">
-          <Button size="lg" variant="secondary" full className="px-2 text-base" onClick={() => nav(`/food/new?date=${date}`)} data-testid="add-meal-button">
+        <div className="mt-2.5 grid grid-cols-3 gap-2">
+          <Button size="md" variant="secondary" full className="px-2 text-[15px] font-medium" onClick={() => nav(`/food/new?date=${date}`)} data-testid="add-meal-button">
             Add meal
           </Button>
           {/* Most food is repeat food. Composing yesterday's breakfast again from scratch is six
               taps; this is two. */}
-          <Button size="lg" variant="secondary" full className="px-2 text-base" onClick={() => setRepeatOpen(true)} data-testid="repeat-meal">
+          <Button size="md" variant="secondary" full className="px-2 text-[15px] font-medium" onClick={() => setRepeatOpen(true)} data-testid="repeat-meal">
             Copy a meal
           </Button>
-          <Button size="lg" variant="secondary" full className="px-2 text-base" onClick={() => nav(`/food/recipes?date=${date}`)} data-testid="recipes-button">
+          <Button size="md" variant="secondary" full className="px-2 text-[15px] font-medium" onClick={() => nav(`/food/recipes?date=${date}`)} data-testid="recipes-button">
             Recipes
           </Button>
         </div>
-        <div className="h-4" />
+        {copyable > 0 && (
+          // Its own row: "Copy yesterday · 2 meals" does not fit beside the others on a phone. It
+          // says "yesterday" only while today is the day shown; on any other day the source is the
+          // day before that one, and it says so.
+          <Button size="md" variant="ghost" full className="mt-1 text-[15px] font-medium !text-fg/80" disabled={copyingDay} onClick={() => void copyPreviousDay()} data-testid="copy-yesterday">
+            {`Copy ${isToday ? 'yesterday' : 'day before'} · ${plural(copyable, 'meal')}`}
+          </Button>
+        )}
+        <div className="h-8" />
         <DayMeals key={`meals-${date}`} date={date} isToday={isToday} onMenu={setMenuFor} />
         <div className="h-4" />
         <FoodWeekStrip date={date} today={today} onPick={setDate} />
@@ -354,21 +352,18 @@ function DaySummary({ date, today }: { date: string; today: string }) {
         </div>
       )}
 
-      <Card framed className="px-5 pb-4 pt-3">
-        <div className="grid grid-cols-2 gap-x-5 gap-y-5">
-          <div className="min-w-0">
-            <TargetBar compact label="Calories" value={eaten.kcal} target={view?.calories?.kcal ?? null} unit="kcal" testId="calories-bar" />
+      {/* The day's ledger: each figure named, against its target, over a bar. Carbs and fat get a
+          bar only once they have a target; before that their grams are one quiet line. */}
+      <Card framed className="space-y-4 px-5 py-5">
+        <TargetBar label="Calories" value={eaten.kcal} target={view?.calories?.kcal ?? null} unit="kcal" testId="calories-bar" />
+        <TargetBar label="Protein" value={eaten.protein} target={view?.proteinTarget ?? null} unit="g" testId="protein-bar" />
+        {settings?.carbTarget !== undefined && <TargetBar label="Carbs" value={eaten.carbs} target={settings.carbTarget} unit="g" testId="carbs-bar" />}
+        {settings?.fatTarget !== undefined && <TargetBar label="Fat" value={eaten.fat} target={settings.fatTarget} unit="g" testId="fat-bar" />}
+        {(settings?.carbTarget === undefined || settings?.fatTarget === undefined) && (
+          <div className="num text-[13px] text-muted">
+            Carbs {fmtGrams(eaten.carbs)} · Fat {fmtGrams(eaten.fat)}
           </div>
-          <div className="min-w-0">
-            <TargetBar compact label="Protein" value={eaten.protein} target={view?.proteinTarget ?? null} unit="g" testId="protein-bar" />
-          </div>
-          {settings?.carbTarget !== undefined && <TargetBar label="Carbs" value={eaten.carbs} target={settings.carbTarget} unit="g" testId="carbs-bar" />}
-          {settings?.fatTarget !== undefined && <TargetBar label="Fat" value={eaten.fat} target={settings.fatTarget} unit="g" testId="fat-bar" />}
-        </div>
-        <div className="mt-5">
-          <MacroSplit m={eaten} />
-          <MacroLine m={eaten} className="mt-2 block text-xs text-muted" />
-        </div>
+        )}
       </Card>
     </>
   );
@@ -397,46 +392,47 @@ function DayMeals({ date, isToday, onMenu }: { date: string; isToday: boolean; o
     <>
       {meals === undefined && <div className="py-8 text-center text-sm text-muted">Loading…</div>}
       {meals && meals.length === 0 && <EmptyState>Nothing logged{isToday ? ' today' : ''}.</EmptyState>}
+      {/* Each meal as a heading (its name, when, its calories) over a card of its foods; a tap on
+          the heading opens the meal, a tap on a food opens that food without leaving the day. */}
       {meals && meals.length > 0 && (
-        <Card>
-          {meals.map((m, i) => (
-            <div key={m.meal.id}>
-              {i > 0 && <Divider />}
-              <Row
-                onClick={() => nav(`/food/${m.meal.id}`)}
-                testId="meal-row"
-                title={<span className="text-xl font-normal tracking-[-0.01em]">{m.meal.name}</span>}
-                subtitle={<MealSubtitle m={m} />}
-                right={
-                  <div className="-mr-2 flex items-center gap-1">
-                    <div className="text-right">
-                      <div className="num text-lg tabular-nums">
-                        {m.items.some(isEstimate) ? `${ESTIMATE_MARK} ` : ''}
-                        {fmtKcal(m.macros.kcal)}
-                      </div>
-                      <MacroLine m={m.macros} className="text-[11px] text-muted" />
-                    </div>
-                    <IconButton label={`More for ${m.meal.name}`} onClick={() => onMenu(m)} data-testid={`meal-more-${m.meal.name}`}>
-                      <MoreIcon />
-                    </IconButton>
-                  </div>
-                }
-              />
-              {/* The foods in it, each with its amount: a tap opens that food to change or remove, without leaving the day. */}
-              {m.items.map((item) => (
-                <button key={item.id} type="button" onClick={() => setEditing(item)} className="flex min-h-11 w-full items-center gap-3 px-4 py-1.5 text-left active:bg-surface-2" data-testid="meal-food">
-                  <span className="min-w-0 flex-1 truncate text-sm text-fg/85">{item.name}</span>
-                  <span className="num max-w-[40%] shrink-0 truncate rounded-full border border-fg/20 px-3 py-1 text-xs">{item.portion}</span>
-                  <span className="num w-[4.5rem] shrink-0 text-right text-sm text-muted">
-                    {isEstimate(item) ? `${ESTIMATE_MARK} ` : ''}
-                    {fmtKcal(sumItems([item]).kcal)}
+        <div className="space-y-6">
+          {meals.map((m) => (
+            <section key={m.meal.id}>
+              <div className="flex items-center gap-1">
+                <button type="button" onClick={() => nav(`/food/${m.meal.id}`)} className="flex min-h-12 min-w-0 flex-1 items-center justify-between gap-3 text-left" data-testid="meal-row">
+                  <span className="min-w-0">
+                    <span className="block break-words text-lg font-medium leading-tight">{m.meal.name}</span>
+                    <MealSubtitle m={m} />
+                  </span>
+                  <span className="shrink-0 text-right">
+                    <span className="num block text-[15px]">
+                      {m.items.some(isEstimate) ? `${ESTIMATE_MARK} ` : ''}
+                      {fmtKcal(m.macros.kcal)}
+                    </span>
+                    <MacroLine m={m.macros} className="block text-[11px] text-dim" />
                   </span>
                 </button>
-              ))}
-              {m.items.length > 0 && <div className="h-1.5" />}
-            </div>
+                <IconButton label={`More for ${m.meal.name}`} onClick={() => onMenu(m)} className="-mr-2" data-testid={`meal-more-${m.meal.name}`}>
+                  <MoreIcon />
+                </IconButton>
+              </div>
+              {m.items.length > 0 && (
+                <Card framed className="mt-2 divide-y divide-line/70">
+                  {m.items.map((item) => (
+                    <button key={item.id} type="button" onClick={() => setEditing(item)} className="flex min-h-12 w-full items-center gap-3 px-4 text-left active:bg-fg/[0.04]" data-testid="meal-food">
+                      <span className="min-w-0 flex-1 truncate text-[15px]">{item.name}</span>
+                      <span className="num max-w-[40%] shrink-0 truncate text-[13px] text-muted">{item.portion}</span>
+                      <span className="num w-[4.5rem] shrink-0 text-right text-[13px] text-muted">
+                        {isEstimate(item) ? `${ESTIMATE_MARK} ` : ''}
+                        {fmtKcal(sumItems([item]).kcal)}
+                      </span>
+                    </button>
+                  ))}
+                </Card>
+              )}
+            </section>
           ))}
-        </Card>
+        </div>
       )}
 
       <FoodItemSheet
@@ -469,9 +465,11 @@ function DayMeals({ date, isToday, onMenu }: { date: string; isToday: boolean; o
  */
 function MealSubtitle({ m }: { m: MealWithItems }) {
   const sameDay = isoToDateKey(m.meal.loggedAt) === m.meal.date;
-  const parts = [m.meal.slot ? capitalise(m.meal.slot) : '', sameDay ? fmtTime(m.meal.loggedAt) : ''].filter(Boolean);
+  // The slot only when the name does not already say it ("Breakfast · Breakfast" said nothing).
+  const slot = m.meal.slot && capitalise(m.meal.slot) !== m.meal.name ? capitalise(m.meal.slot) : '';
+  const parts = [slot, sameDay ? fmtTime(m.meal.loggedAt) : ''].filter(Boolean);
   parts.push(`${m.items.length} ${m.items.length === 1 ? 'item' : 'items'}`);
-  return <span>{parts.join(' · ')}</span>;
+  return <span className="mt-0.5 block text-[13px] text-muted">{parts.join(' · ')}</span>;
 }
 
 /** Pick a meal eaten before and put it on this day. */
