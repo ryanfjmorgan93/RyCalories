@@ -66,8 +66,10 @@ export function RestTimerBar() {
       data-testid="rest-timer"
     >
       {/* What the coach says about the set just logged: nothing at all unless it has something to say.
-          This layer floats over the page, so the note is a solid panel here, never open text on top of the screen. */}
-      {setFacts && (
+          This layer floats over the page, so the note is a solid panel here, never open text on top of the screen.
+          Only on the session itself: on Home or Food it covered half the screen for the whole rest (the owner's
+          screenshot, November 2026), and the set it talks about is not on those screens. */}
+      {setFacts && inSession && (
         <CoachLine moment="set" facts={setFacts} className="mb-2 rounded-card border border-line bg-surface px-4 py-3 shadow-[0_18px_40px_-20px_rgba(0,0,0,0.85)]" />
       )}
       {/* Look A: the running timer is one solid accent block with ink on it; when the rest is over it

@@ -352,6 +352,16 @@ test.describe('the coach in a session', () => {
     expect(facts).toContain('of: 4');
     expect(facts).toContain('repRange: 6–8');
 
+    // Off the session (Home, mid-rest) the timer stays but the note does not cover the screen. The timer
+    // and the note are drawn together, so with the timer up on Home the note's absence is settled.
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(rest).toBeVisible();
+    await expect(rest.getByTestId('coach-line-set')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Resume' }).click();
+    await expect(page).toHaveURL(/\/session\/[^/]+$/);
+    await expect(rest.getByTestId('coach-line-set')).toHaveText(SET_LINE);
+
     // Tapping it opens the conversation.
     await rest.getByTestId('coach-line-set').click();
     await expect(page.getByTestId('coach-thread')).toBeVisible();
