@@ -323,7 +323,7 @@ test.describe('Claude logs food', () => {
   /** The page as Claude reads it: the pack, and how the chicken is eaten (a fillet, its weight worked out). */
   const PAGE_LABEL = { ...LABEL, unit_name: 'fillet', unit_plural: 'fillets', unit_grams: 133.3 };
 
-  test("a pasted product link is read as the pack's label, on to the amount step, with the unit it is eaten in", async ({ page }) => {
+  test("a pasted product link is read as the pack's label, on to the amount step, with the unit it is eaten in", async ({ page, context }) => {
     await useKey(page);
     await routeShop(page);
     const claude = await mockClaude(page, { label: PAGE_LABEL });
@@ -332,7 +332,12 @@ test.describe('Claude logs food', () => {
     await page.getByTestId('slot-dinner').click();
     await page.getByTestId('add-food-link').click();
     await expect(page.getByTestId('link-read')).toBeDisabled();
-    await page.getByTestId('link-input').fill(SHOP);
+    // The Paste button, in a browser, reads the web clipboard. (The APK reads Android's own through
+    // @capacitor/clipboard instead, src/platform/clipboard.test.ts; no browser test can reach that.)
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.evaluate((url) => navigator.clipboard.writeText(url), SHOP);
+    await page.getByTestId('link-paste').click();
+    await expect(page.getByTestId('link-input')).toHaveValue(SHOP);
     await page.getByTestId('link-read').click();
 
     await expect(page.getByTestId('amount-name')).toHaveText('Tesco Chicken Breast Fillets');

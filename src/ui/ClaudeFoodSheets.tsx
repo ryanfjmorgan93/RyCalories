@@ -1,3 +1,4 @@
+import { canReadClipboard, readClipboard } from '@/platform/clipboard';
 import { useEffect, useRef } from 'react';
 import { loggedLine } from '@/domain/claudeFood';
 import type { ReadLogged } from '@/state/claudeFood';
@@ -41,11 +42,12 @@ function MicIcon({ active }: { active: boolean }) {
  */
 /** Paste a product page's link (the shop's page, when the pack has gone): Claude reads its nutrition like a label. */
 export function LinkSheet({ text, onText, onSubmit, onClose }: { text: string; onText: (text: string) => void; onSubmit: () => void; onClose: () => void }) {
-  const canPaste = typeof navigator !== 'undefined' && typeof navigator.clipboard?.readText === 'function';
+  const canPaste = canReadClipboard();
   const paste = async () => {
     try {
-      const copied = (await navigator.clipboard.readText()).trim();
+      const copied = (await readClipboard()).trim();
       if (copied) onText(copied);
+      else toast('Nothing copied yet. Copy the page\u2019s link first');
     } catch {
       toast('Long-press the box to paste');
     }
