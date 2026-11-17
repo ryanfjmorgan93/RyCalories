@@ -148,6 +148,15 @@ The owner does not check on device. Correctness has to come from the code and th
   the weight of one, worked out from the page where it can: an estimate, offered as chips beside
   the pack like the UK table's item weights (`LabelNutrition.unit`). A meal Claude read from a photo or a sentence is listed
   food by food and stays until Keep, Undo or Adjust is tapped (it is on the day already).
+  `dietCheck.ts` is the diet check (asked for in November 2026, in place of a weekly shop that
+  was built and removed; docs/superpowers/specs/2026-11-17-diet-check-design.md): on a tap from
+  Food, the coach reads the last 28 days of the diary food by food (`db/dietQueries.ts`,
+  `ai/dietCheck.ts`, one Sonnet request, `DIET_RULES` in the persona) and scores the food itself,
+  not the calories: four parts out of 25 (whole foods, fruit and veg, fibre, processed and salt),
+  what is working, what to add and cut back, and a verdict on the foods eaten most, each opening
+  to what it does for the owner's body fat (`screens/DietCheckScreen.tsx`). The score is the parts
+  added up and a food's count comes from the diary, never from Claude; the answer is kept in the
+  Settings row until the next tap. It never runs by itself.
   `recipe.ts`, `mealText.ts`, `ingredientMatch.ts`, `foodUnits.ts` and `foodChoice.ts` are food:
   natural units, matching to remembered foods and the UK table, and the one item shape every way of
   logging produces.

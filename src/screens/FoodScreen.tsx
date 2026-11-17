@@ -32,6 +32,7 @@ import {
 import { Button, IconButton } from '@/ui/components/Button';
 import { Card, Divider, EmptyState, Row } from '@/ui/components/Card';
 import { MacroLine, TargetBar } from '@/ui/components/MacroBar';
+import { DietCheckRow } from '@/ui/DietCheckRow';
 import { Confirm, Sheet } from '@/ui/components/Sheet';
 import { toast } from '@/ui/components/Toast';
 import { BackIcon, ChevronIcon, MoreIcon, PlusIcon } from '@/ui/components/TopBar';
@@ -185,6 +186,7 @@ export function FoodScreen() {
         <div className="h-8" />
         <DayMeals key={`meals-${date}`} date={date} isToday={isToday} onMenu={setMenuFor} />
         <div className="h-4" />
+        {isToday && <DietCheckRow className="mb-4" />}
         <FoodWeekStrip date={date} today={today} onPick={setDate} />
         <div className="h-8" />
       </div>

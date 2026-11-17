@@ -28,6 +28,7 @@ import { MealEditScreen } from './screens/MealEditScreen';
 import { ProgressScreen } from './screens/ProgressScreen';
 import { CoachScreen } from './screens/CoachScreen';
 import { RecipesScreen } from './screens/RecipesScreen';
+import { DietCheckScreen } from './screens/DietCheckScreen';
 import { RecipeBuilderScreen } from './screens/RecipeBuilderScreen';
 import { useAndroidBackButton } from './ui/useAndroidBackButton';
 import { ShareTargetListener } from './platform/shareTarget';
@@ -164,6 +165,7 @@ export function App() {
           <Route path="food/new" element={<MealEditScreen />} />
           {/* Static, so they outrank food/:id (React Router ranks a literal segment above a
               dynamic one regardless of declaration order — kept here first anyway for clarity). */}
+          <Route path="food/diet" element={<DietCheckScreen />} />
           <Route path="food/recipes" element={<RecipesScreen />} />
           <Route path="food/recipes/new" element={<RecipeBuilderScreen />} />
           <Route path="food/recipes/:id/edit" element={<RecipeBuilderScreen />} />

@@ -62,6 +62,11 @@ A batch the owner cooks from ingredients and splits into portions; a portion is 
 food item, and can sit inside a Usual meal.
 _Avoid_: Usual meal, dish
 
+**Diet check**:
+The coach's reading of the last 4 weeks of food, asked for on a tap: a score for the food itself
+(not the calories), what to add and cut back, and a verdict on each regular food.
+_Avoid_: Diet score (the score is one part of it), nutrition report
+
 **Logged day**:
 A day with any food logged. Averages count logged days only, and so do the food badges.
 _Avoid_: Tracked day, complete day
