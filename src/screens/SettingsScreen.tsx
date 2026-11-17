@@ -220,13 +220,6 @@ function AdvancedSection({ settings }: { settings: Settings }) {
               label="Look up labels online"
               sub="See About for everything that leaves the device."
             />
-            <Toggle
-              checked={settings.weeklyShop !== false}
-              onChange={(weeklyShop) => void saveSettings({ weeklyShop })}
-              label="Weekly shop (test)"
-              sub="On Food: what to buy on Sunday, from what you eat."
-              testId="weekly-shop-switch"
-            />
           </Card>
 
           <SectionTitle>Plates</SectionTitle>

@@ -62,11 +62,6 @@ A batch the owner cooks from ingredients and splits into portions; a portion is 
 food item, and can sit inside a Usual meal.
 _Avoid_: Usual meal, dish
 
-**Weekly shop**:
-The food to buy for the coming week, in packs, worked out from what the owner already eats so the
-week's eating reaches their targets. Its totals are always read against the week's targets.
-_Avoid_: Basket, grocery list, meal plan
-
 **Logged day**:
 A day with any food logged. Averages count logged days only, and so do the food badges.
 _Avoid_: Tracked day, complete day

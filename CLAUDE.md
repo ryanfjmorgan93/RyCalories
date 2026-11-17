@@ -148,15 +148,6 @@ The owner does not check on device. Correctness has to come from the code and th
   the weight of one, worked out from the page where it can: an estimate, offered as chips beside
   the pack like the UK table's item weights (`LabelNutrition.unit`). A meal Claude read from a photo or a sentence is listed
   food by food and stays until Keep, Undo or Adjust is tapped (it is on the day already).
-  `weeklyShop.ts` is the weekly shop (a test feature asked for in November 2026;
-  docs/superpowers/specs/2026-11-17-weekly-shop-design.md): what to buy on Sunday for the week
-  after, in packs, from the foods eaten in the 28 days before today that can be bought (Claude's
-  estimates left out, a recipe share as its ingredients), per logged day × 7, read against the
-  daily targets × 7, with More of the same for protein. `db/shopQueries.ts` reads it;
-  `screens/WeeklyShopScreen.tsx` is Plan and In the shop; a row on Food leads on Sundays and sits
-  at the foot otherwise; a switch in Settings → Advanced hides it. The week's changes and the
-  per-food pack and aisle fixes live in the Settings row. Nothing leaves the device; prices
-  through Claude are the next step, not built.
   `recipe.ts`, `mealText.ts`, `ingredientMatch.ts`, `foodUnits.ts` and `foodChoice.ts` are food:
   natural units, matching to remembered foods and the UK table, and the one item shape every way of
   logging produces.
